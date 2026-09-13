@@ -21,6 +21,8 @@ import Modal from "@/components/common/Modal";
 import ComposeEmailModal from "@/components/screens/ComposeEmailModal";
 import BrochuresPanel from "@/components/screens/BrochuresPanel";
 import { BounceBadge } from "@/components/common/BouncedEmail";
+import { ReplyBadge, FollowUpCell } from "@/components/common/MarketingBadges";
+import { REPLY_STATUSES, replyText, suggestFollowUp } from "@/lib/marketing";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -51,6 +53,9 @@ export type Form = {
   notes: string;
   next_action_date: string;
   email_bounced: boolean;
+  reply_status: string;
+  reply_date: string;
+  reply_note: string;
   owner_id: number | "";
 };
 
@@ -66,6 +71,9 @@ export const emptyForm: Form = {
   notes: "",
   next_action_date: "",
   email_bounced: false,
+  reply_status: "",
+  reply_date: "",
+  reply_note: "",
   owner_id: "",
 };
 
@@ -83,6 +91,9 @@ function rowToForm(r: MarketingRow): Form {
     notes: r.notes ?? "",
     next_action_date: r.next_action_date ?? "",
     email_bounced: r.email_bounced ?? false,
+    reply_status: r.reply_status ?? "",
+    reply_date: r.reply_date ?? "",
+    reply_note: r.reply_note ?? "",
     owner_id: r.owner_id || "",
   };
 }
@@ -100,6 +111,9 @@ function formToBody(f: Form): MarketingSave {
     notes: f.notes,
     next_action_date: f.next_action_date,
     email_bounced: f.email_bounced,
+    reply_status: f.reply_status,
+    reply_date: f.reply_date,
+    reply_note: f.reply_note.trim(),
     owner_id: f.owner_id === "" ? null : f.owner_id,
   };
 }
@@ -176,7 +190,21 @@ export default function MarketingScreen() {
     { key: "activity_type", label: "Activity", text: (r) => r.activity_type || "", filter: "facet" },
     { key: "channel", label: "Channel", text: (r) => r.channel || "", filter: "facet" },
     { key: "subject", label: "Subject", text: (r) => r.subject || "" },
-    { key: "next_action_date", label: "Follow-up", text: (r) => r.next_action_date || "", filter: "date" },
+    {
+      key: "reply_status",
+      label: "Reply",
+      text: (r) => replyText(r.reply_status),
+      filter: "facet",
+      emptyLabel: "No reply logged",
+      render: (r) => <ReplyBadge status={r.reply_status || ""} />,
+    },
+    {
+      key: "next_action_date",
+      label: "Follow-up",
+      text: (r) => r.next_action_date || "",
+      filter: "date",
+      render: (r) => <FollowUpCell date={r.next_action_date || ""} />,
+    },
     { key: "owner", label: "PIC", text: (r) => r.owner || "", filter: "facet" },
   ];
 
@@ -304,6 +332,26 @@ export function MarketingForm({
   const { data: users } = useCachedData("assignable-users", fetchAssignableUsers);
 
   const valid = form.customer_id !== "" || form.prospect_name.trim() !== "";
+  const replyPick = REPLY_STATUSES.find((r) => r.value === form.reply_status) ?? null;
+
+  /** 답장 종류 선택 — 받은 날과 후속일, 그리고 죽은 주소 표시까지 한 번에 세운다. */
+  function pickReply(value: string) {
+    // 무응답은 "답장 받은 날"이 없다 — 확인한 날을 적되 비워 둘 수도 있게 둔다.
+    const date = value === "no_reply" ? form.reply_date : form.reply_date || today();
+    setForm({
+      ...form,
+      reply_status: value,
+      reply_date: date,
+      next_action_date: suggestFollowUp(value, date),
+      // 더는 쓰지 않는 주소라는 답장은 반송과 같은 사실 — 명부까지 닿도록 함께 켠다.
+      email_bounced: value === "invalid" ? true : form.email_bounced,
+    });
+  }
+
+  function clearReply() {
+    // 반송 표시는 손대지 않는다 — 주소의 사정은 답장 분류와 별개로 남을 수 있다.
+    setForm({ ...form, reply_status: "", reply_date: "", reply_note: "" });
+  }
 
   async function save() {
     if (!valid) {
@@ -379,14 +427,16 @@ export function MarketingForm({
               <input
                 type="checkbox"
                 checked={form.email_bounced}
-                disabled={!canEdit}
+                disabled={!canEdit || form.reply_status === "invalid"}
                 onChange={(e) => setForm({ ...form, email_bounced: e.target.checked })}
               />
               ⚠ Address not found (bounced)
             </label>
             {form.email_bounced ? (
               <span className="hint-inline">
-                Also flagged on this address in the customer contact list.
+                {form.reply_status === "invalid"
+                  ? "Kept on because the reply said this address is no longer in use."
+                  : "Also flagged on this address in the customer contact list."}
               </span>
             ) : null}
           </div>
@@ -450,6 +500,61 @@ export function MarketingForm({
             value={form.next_action_date}
             onChange={(v) => setForm({ ...form, next_action_date: v })}
           />
+          {/* 답장 — 보낸 뒤 무엇이 돌아왔는가. 종류마다 다시 두드릴 시기가 달라서,
+              하나를 고르면 위 Follow-up date 가 그 종류에 맞는 날로 함께 채워진다
+              (그 자리에서 다시 고쳐 적을 수 있다). */}
+          <div className="form-field reply-block" style={{ gridColumn: "1 / -1" }}>
+            <span>Reply received</span>
+            <div className="check-group">
+              {REPLY_STATUSES.map((r) => (
+                <label
+                  key={r.value}
+                  className={`check-chip reply-chip ${r.tone}${form.reply_status === r.value ? " on" : ""}`}
+                  title={r.hint}
+                >
+                  <input
+                    type="radio"
+                    name="reply_status"
+                    checked={form.reply_status === r.value}
+                    onChange={() => pickReply(r.value)}
+                  />
+                  {r.label}
+                </label>
+              ))}
+              {form.reply_status ? (
+                <button type="button" className="chip-clear" onClick={clearReply} disabled={!canEdit}>
+                  Clear
+                </button>
+              ) : null}
+            </div>
+            {replyPick ? <span className="hint-inline">{replyPick.hint}</span> : null}
+          </div>
+          {form.reply_status ? (
+            <>
+              <Field
+                label={form.reply_status === "no_reply" ? "Checked on" : "Reply date"}
+                type="date"
+                value={form.reply_date}
+                onChange={(v) =>
+                  setForm({
+                    ...form,
+                    reply_date: v,
+                    // 답장 날짜를 고쳐 적으면 후속일도 그 날 기준으로 다시 센다.
+                    next_action_date: suggestFollowUp(form.reply_status, v) || form.next_action_date,
+                  })
+                }
+              />
+              <Field
+                label={
+                  form.reply_status === "auto_reply"
+                    ? "Alternate contact (from the auto-reply)"
+                    : "Reply note"
+                }
+                value={form.reply_note}
+                onChange={(v) => setForm({ ...form, reply_note: v })}
+              />
+            </>
+          ) : null}
         </div>
         <label className="form-field" style={{ marginTop: 10 }}>
           <span>Notes</span>

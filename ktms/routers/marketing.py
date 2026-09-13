@@ -12,6 +12,7 @@ from _core import (
     Form,
     HTTPException,
     List,
+    MARKETING_REPLY_STATUSES,
     MarketingActivity,
     MarketingActivityCreate,
     MarketingAsset,
@@ -23,6 +24,7 @@ from _core import (
     _kst_iso,
     _marketing_row,
     _marketing_scoped,
+    _norm_reply_status,
     _resolve_email_template,
     _schedule_guard,
     _schedule_row,
@@ -81,9 +83,16 @@ def create_marketing(body: MarketingActivityCreate, user: dict = Depends(get_cur
             notes=body.notes or "",
             next_action_date=body.next_action_date or "",
             email_bounced=bool(body.email_bounced),
+            reply_status=_norm_reply_status(body.reply_status),
+            reply_date=(body.reply_date or "").strip(),
+            reply_note=(body.reply_note or "").strip()[:200],
             # 담당자(PIC): 지정값 우선, 없으면 작성자 본인.
             owner_id=body.owner_id or user.get("id") or None,
         )
+        # "더는 쓰지 않는 주소"라는 답장은 반송과 같은 사실을 말한다 — 그 주소로는
+        # 다시 보내지 말라는 것. 명부에도 닿도록 반송 표시를 함께 세운다.
+        if m.reply_status == "invalid":
+            m.email_bounced = True
         s.add(m)
         s.flush()
         # 반송 표시는 고객 담당자 명부(customers.bad_emails)에도 옮겨 붙는다.
@@ -115,6 +124,11 @@ def update_marketing(row_id: int, body: MarketingActivityCreate):
         m.notes = body.notes or ""
         m.next_action_date = body.next_action_date or ""
         m.email_bounced = bool(body.email_bounced)
+        m.reply_status = _norm_reply_status(body.reply_status)
+        m.reply_date = (body.reply_date or "").strip()
+        m.reply_note = (body.reply_note or "").strip()[:200]
+        if m.reply_status == "invalid":
+            m.email_bounced = True   # 폐기된 주소 → 반송과 같이 명부까지 표시
         m.owner_id = body.owner_id or None   # 담당자(PIC) 재지정(미지정 허용)
         s.flush()
         # 주소를 바꿔 적었다면 옛 주소도 다시 셈한다 — 그 주소에 걸려 있던 반송 표시가
@@ -175,6 +189,17 @@ def marketing_overview(user: dict = Depends(get_current_user)):
             if r["activity_type"]:
                 by_type[r["activity_type"]] = by_type.get(r["activity_type"], 0) + 1
 
+        # 답장 집계는 보낸 달과 무관하게 전체 기준 — 지난달에 보낸 메일의 답장도
+        # 이번 달에 들어오기 때문이다. unclassified = 아직 어느 쪽인지 적지 않은 건.
+        by_reply = {k: 0 for k in MARKETING_REPLY_STATUSES}
+        unclassified = 0
+        for r in rows:
+            st = r.get("reply_status") or ""
+            if st in by_reply:
+                by_reply[st] += 1
+            else:
+                unclassified += 1
+
         return {
             "recent": rows[:20],
             "follow_ups": follow_ups[:20],
@@ -184,6 +209,7 @@ def marketing_overview(user: dict = Depends(get_current_user)):
                 "by_channel": by_channel,
                 "by_type": by_type,
             },
+            "replies": {"by_status": by_reply, "unclassified": unclassified},
         }
     finally:
         s.close()

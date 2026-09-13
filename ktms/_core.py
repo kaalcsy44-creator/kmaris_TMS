@@ -2789,6 +2789,21 @@ class MarketingActivityCreate(BaseModel):
     owner_id: int | None = None      # 담당자(PIC). None/0=미지정(생성 시 작성자로 대체)
     # 반송(Address not found) 표시. 저장할 때 그 주소가 고객 담당자 명부에도 옮겨 붙는다.
     email_bounced: bool | None = False
+    # 답장 분류(MARKETING_REPLY_STATUSES) + 받은 날 + 답장이 알려 준 것.
+    reply_status: str | None = ""
+    reply_date: str | None = ""
+    reply_note: str | None = ""
+
+
+# 홍보 메일에 돌아온 답장의 종류. 값이 곧 다음 할 일을 가른다 — 문의가 온 건은
+# 바로 붙고, 나중에 주겠다는 건은 한참 뒤에 다시 찾아가고, 죽은 주소는 명부에서
+# 지워야 한다. 빈 값은 "아직 분류하지 않음"(보낸 직후의 상태)이다.
+MARKETING_REPLY_STATUSES = ("inquiry", "later", "auto_reply", "invalid", "no_reply")
+
+
+def _norm_reply_status(v: str | None) -> str:
+    v = (v or "").strip()
+    return v if v in MARKETING_REPLY_STATUSES else ""
 
 
 def _marketing_target_name(m: MarketingActivity, cust_names: dict) -> str:
@@ -2814,6 +2829,9 @@ def _marketing_row(m: MarketingActivity, cust_names: dict, user_names: dict) -> 
         "notes": m.notes or "",
         "next_action_date": m.next_action_date or "",
         "email_bounced": bool(getattr(m, "email_bounced", False)),
+        "reply_status": getattr(m, "reply_status", "") or "",
+        "reply_date": getattr(m, "reply_date", "") or "",
+        "reply_note": getattr(m, "reply_note", "") or "",
         "owner_id": m.owner_id or 0,
         "owner": user_names.get(m.owner_id, "") if m.owner_id else "",
     }
@@ -4109,6 +4127,8 @@ __all__ = [
     "_manual_doc_no",
     "_marketing_row",
     "_marketing_scoped",
+    "_norm_reply_status",
+    "MARKETING_REPLY_STATUSES",
     "_month_key",
     "_new_tmp_rfq_no",
     "_normalize_perms",

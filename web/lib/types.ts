@@ -2043,6 +2043,10 @@ export type MarketingRow = {
   next_action_date: string;
   /** 이 발송이 "Address not found"로 반송됐는가(수신 거부·없는 주소). */
   email_bounced: boolean;
+  /** 돌아온 답장의 종류(lib/marketing 의 ReplyStatus). 빈 값 = 아직 분류 안 함. */
+  reply_status: string;
+  reply_date: string;   // 답장 받은 날
+  reply_note: string;   // 답장이 알려 준 것(대체 담당자 주소 등)
   owner_id: number;
   owner: string;
 };
@@ -2165,6 +2169,8 @@ export type MarketingOverview = {
     by_channel: Record<string, number>;
     by_type: Record<string, number>;
   };
+  /** 답장 집계(전체 기준) — by_status[reply_status], unclassified = 미분류 건수. */
+  replies?: { by_status: Record<string, number>; unclassified: number };
 };
 
 // ── 프로젝트 메일 이력(회사 메일함 IMAP 동기화) ───────────────────────────────

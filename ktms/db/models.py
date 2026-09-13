@@ -808,6 +808,16 @@ class MarketingActivity(Base):
     # 명부(customers.bad_emails)에도 반송 표시로 옮겨 붙는다 — 반송은 이 활동 한 건의
     # 사정이 아니라 그 주소의 사정이라, 다음에 누가 그 사람에게 보내려 할 때 보여야 한다.
     email_bounced    = Column(Boolean, default=False)
+    # 보낸 메일에 상대가 어떻게 답했는가. 빈 값 = 아직 분류하지 않은 건(보낸 직후).
+    #   inquiry    문의를 바로 보내옴        later      다음 건이 생기면 주겠다
+    #   auto_reply 부재중 자동응답(다른 담당자로) invalid   더는 쓰지 않는 주소
+    #   no_reply   기다렸으나 답이 없음
+    # 무엇을 언제 다시 해야 하는지가 답장 종류에 따라 갈리므로, 다음 할 일
+    # (next_action_date)은 이 값을 고를 때 함께 정한다.
+    reply_status     = Column(String(20))
+    reply_date       = Column(String(10))    # 답장 받은 날 YYYY-MM-DD
+    # 답장이 알려 준 것 — 자동응답이 가리킨 대체 담당자 주소, 다시 연락할 시기 등.
+    reply_note       = Column(String(200))
     owner_id         = Column(Integer, ForeignKey("users.id"), nullable=True)  # 담당자(PIC)
     created_at       = Column(DateTime, default=datetime.utcnow)
 

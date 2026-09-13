@@ -29,6 +29,8 @@ import type {
 import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen";
 import BriefingTab from "@/components/screens/BriefingTab";
 import { MarketingForm, emptyForm as emptyMarketingForm } from "@/components/screens/MarketingScreen";
+import { ReplyBadge, FollowUpCell } from "@/components/common/MarketingBadges";
+import { REPLY_STATUSES, replyText } from "@/lib/marketing";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend, Cell, LabelList,
@@ -390,7 +392,8 @@ function HomeTab() {
     { key: "customer", label: "Target", text: (r) => r.customer || "", filter: "facet", render: (r) => (r.is_prospect ? <span>{r.customer || "—"}</span> : <CustomerName name={r.customer || ""} />) },
     { key: "activity_type", label: "Activity", text: (r) => r.activity_type || "", filter: "facet" },
     { key: "channel", label: "Channel", text: (r) => r.channel || "", filter: "facet" },
-    { key: "next_action_date", label: "Follow-up", text: (r) => r.next_action_date || "", filter: "date" },
+    { key: "reply_status", label: "Reply", text: (r) => replyText(r.reply_status), filter: "facet", emptyLabel: "No reply logged", render: (r) => <ReplyBadge status={r.reply_status || ""} /> },
+    { key: "next_action_date", label: "Follow-up", text: (r) => r.next_action_date || "", filter: "date", render: (r) => <FollowUpCell date={r.next_action_date || ""} /> },
     { key: "pic", label: "PIC", text: (r) => r.owner || "", filter: "facet" },
   ];
 
@@ -830,6 +833,11 @@ function MarketingCardBody({
 }) {
   const t = today();
   const dueFollowUps = data.follow_ups.filter((r) => r.next_action_date && r.next_action_date <= t).length;
+  // 답장 집계 — 온 답장 수와, 그중 바로 문의로 이어진 건수를 함께 보여 준다.
+  const byReply = data.replies?.by_status ?? {};
+  const replied = REPLY_STATUSES.filter((r) => r.value !== "no_reply")
+    .reduce((sum, r) => sum + (byReply[r.value] || 0), 0);
+  const inquiries = byReply["inquiry"] || 0;
   const topChannels = Object.entries(data.month.by_channel)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
@@ -841,6 +849,7 @@ function MarketingCardBody({
       <div className="home-marketing-summary" style={{ display: "flex", gap: 16, flexWrap: "wrap", padding: "0 4px 8px", fontSize: 13 }}>
         <span>This month: <b>{data.month.total}</b></span>
         <span>Follow-ups: <b>{data.follow_ups.length}</b>{dueFollowUps > 0 ? <b className="home-late"> ({dueFollowUps} due)</b> : null}</span>
+        <span>Replies: <b>{replied}</b>{inquiries > 0 ? <b style={{ color: "#137a44" }}> ({inquiries} inquiry)</b> : null}</span>
         {topChannels ? <span style={{ color: "#64748b" }}>{topChannels}</span> : null}
       </div>
       <FilterTable

@@ -925,6 +925,9 @@ export type MarketingSave = {
   notes?: string;
   next_action_date?: string;
   email_bounced?: boolean;
+  reply_status?: string;
+  reply_date?: string;
+  reply_note?: string;
   owner_id?: number | null;
 };
 

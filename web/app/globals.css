@@ -16873,3 +16873,66 @@ input.mail-bad {
 }
 .bounce-check.on { color: #b03535; }
 .bounce-check input { margin: 0; }
+
+/* ── 홍보 메일의 답장 표시 ─────────────────────────────────────────────────────
+   보낸 메일에 무엇이 돌아왔는지(Reply)와 언제 다시 두드릴지(Follow-up)를 목록에서
+   한눈에 가른다 — 문의가 온 건(win)은 초록, 나중에 주겠다는 건(warm)은 호박색,
+   자동응답(info)은 파랑, 죽은 주소(bad)는 붉은색, 무응답(mute)은 회색. */
+.reply-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.reply-badge.win  { background: #e3f5ea; color: #137a44; border-color: #bfe5cf; }
+.reply-badge.warm { background: #fdf1dc; color: #9a6510; border-color: #f2ddb6; }
+.reply-badge.info { background: #e4edfb; color: #1d4ed8; border-color: #c9dcf7; }
+.reply-badge.bad  { background: #fdeaea; color: #b03535; border-color: #f0c9c9; }
+.reply-badge.mute { background: #eef1f5; color: #64748b; border-color: #dde3ea; }
+
+/* 편집창의 답장 선택 칩 — 고른 것만 그 종류의 색을 입는다. */
+.reply-chip.on.win  { background: #e3f5ea; border-color: #56a97c; color: #137a44; }
+.reply-chip.on.warm { background: #fdf1dc; border-color: #d9a441; color: #9a6510; }
+.reply-chip.on.info { background: #e4edfb; border-color: var(--blue, #0055a8); color: #1d4ed8; }
+.reply-chip.on.bad  { background: #fdeaea; border-color: #d17878; color: #b03535; }
+.reply-chip.on.mute { background: #eef1f5; border-color: #9aa6b4; color: #4b5563; }
+.reply-block .check-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.chip-clear {
+  padding: 5px 11px;
+  font-size: 12.5px;
+  color: #64748b;
+  background: #fff;
+  border: 1px dashed #c7d0de;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.chip-clear:hover { border-color: #b03535; color: #b03535; }
+
+/* Follow-up 칸 — 날짜 옆에 남은 기간을 붙여, 지난 건이 눈에 먼저 들어오게 한다. */
+.fu-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.fu-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.6;
+  border: 1px solid transparent;
+}
+.fu-badge.overdue { background: #fdeaea; color: #b03535; border-color: #f0c9c9; }
+.fu-badge.today   { background: #fdf1dc; color: #9a6510; border-color: #f2ddb6; }
+.fu-badge.soon    { background: #e4edfb; color: #1d4ed8; border-color: #c9dcf7; }
+.fu-badge.later   { background: #eef1f5; color: #64748b; border-color: #dde3ea; }
