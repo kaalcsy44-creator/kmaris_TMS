@@ -25,7 +25,7 @@ import os
 import re
 from datetime import datetime, timedelta
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from db.models import EmailMessage, MarketingActivity
 from services import mail_sync
@@ -81,9 +81,13 @@ _DAEMON = re.compile(
 _BOUNCE = re.compile(
     r"(undeliverable|undelivered mail|delivery (status notification|has failed|failure)"
     r"|failure notice|returned to sender|mail delivery (failed|subsystem)"
-    r"|address not found|recipient address rejected|user unknown"
+    r"|address not found|recipient (address )?rejected|user unknown"
     r"|does ?n(o|')t exist|no such (user|address|mailbox)|mailbox (is )?unavailable"
-    r"|550[ -]?5\.[01]\.[01])", re.I)
+    # 실제로 받아 본 문면들 — MS 365 는 "couldn't be delivered … wasn't found at",
+    # Gmail 은 "Address not found", Mimecast 는 "550 Invalid Recipient" 로 온다.
+    r"|could ?n(o|')t be delivered|was ?n(o|')t (delivered|found)|was not delivered"
+    r"|invalid recipient|unknown to address|access denied"
+    r"|550[ -]?5\.[0145]\.[01])", re.I)
 
 # 사람이 알려 주는 폐기 주소 — 퇴사·부서 이동으로 그 주소를 더는 쓰지 않는다.
 _RETIRED = re.compile(
@@ -122,6 +126,10 @@ _LATER = re.compile(
     r"|future (requirement|enquir|inquir|business|reference))", re.I)
 
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+
+# 메일 서버가 보낸 통을 DB 에서 고르는 낱말(LIKE 로 쓰므로 정규식과 따로 둔다).
+_DAEMON_SENDERS = ("mailer-daemon", "postmaster", "mail-delivery", "maildelivery",
+                   "delivery-status", "delivery-subsystem")
 
 
 def _alt_contact(text: str, exclude: set[str]) -> str:
@@ -326,9 +334,12 @@ def _candidate_messages(s, addrs: set[str], since: str = "") -> list[_Msg]:
     addr_list = sorted(addrs)
     for i in range(0, len(addr_list), 200):     # IN 절이 너무 길어지지 않게 나눠 묻는다
         rows += q.filter(func.lower(EmailMessage.from_addr).in_(addr_list[i:i + 200])).all()
-    # 반송 통지는 보낸 사람이 메일 서버라 주소로는 못 걸린다 — 동기화가 홍보용으로
-    # 담아 둔 것(match_by="marketing")을 함께 본다(겹치는 통은 아래에서 걸러진다).
-    rows += q.filter(EmailMessage.match_by == "marketing").all()
+    # 반송 통지는 보낸 사람이 메일 서버라 주소로는 못 걸린다. 홍보용으로 담아 둔 것
+    # (match_by="marketing")과, 메일 서버가 보낸 통을 함께 본다 — 뒤엣것까지 보는
+    # 이유: 반송은 우리가 보낸 메일의 답신 자리에 와서 스레드로 딜에 붙는 일이 있고,
+    # 그러면 match_by 는 "thread" 가 된다. 어느 주소의 반송인지는 문면이 말해 준다.
+    daemon = or_(*[EmailMessage.from_addr.ilike(f"%{p}%") for p in _DAEMON_SENDERS])
+    rows += q.filter(daemon).all()
     seen: set[int] = set()
     uniq = [_Msg(*r) for r in rows if not (r[0] in seen or seen.add(r[0]))]
     uniq.sort(key=lambda m: (m.sent_at, m.id))

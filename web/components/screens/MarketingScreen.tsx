@@ -354,6 +354,9 @@ function DetectRepliesButton({ onDone }: { onDone: () => void }) {
         .map(([k, n]) => `${k.replace("_", " ")} ${n}`)
         .join(" · ");
       const parts = [
+        // 메일함에서 새로 담아 온 통수 — 반송 통지는 이 길로만 들어온다.
+        r.scanned?.error ? `mailbox: ${r.scanned.error}` :
+          r.scanned?.stored ? `${r.scanned.stored} fetched from mailbox` : "",
         r.linked ? `${r.linked} repl${r.linked === 1 ? "y" : "ies"} linked` : "no new replies",
         kinds,
         r.unclassified ? `${r.unclassified} to classify` : "",
@@ -371,7 +374,7 @@ function DetectRepliesButton({ onDone }: { onDone: () => void }) {
   return (
     <span className="detect-replies">
       <button className="btn" onClick={run} disabled={busy}
-              title="Scan the synced mailbox for replies to these emails">
+              title="Search the mailbox for replies and bounce notices to these emails">
         {busy ? "Scanning…" : "Detect replies"}
       </button>
       {msg ? <span className="hint-inline">{msg}</span> : null}

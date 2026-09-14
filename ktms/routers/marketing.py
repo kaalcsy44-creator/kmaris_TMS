@@ -50,7 +50,7 @@ from _core import (
 from fastapi import Body
 
 from db.models import EmailMessage
-from services import marketing_reply
+from services import mail_sync, marketing_reply
 
 
 
@@ -169,20 +169,29 @@ def delete_marketing(row_id: int):
 
 
 @app.post("/api/admin/marketing/detect-replies", dependencies=[Depends(require_token)])
-def marketing_detect_replies(mark_no_reply: bool = True):
-    """메일함에 담긴 수신 메일에서 홍보 메일의 답장을 찾아 활동에 붙인다.
+def marketing_detect_replies(mark_no_reply: bool = True, scan: bool = True):
+    """홍보 메일의 답장을 찾아 활동에 붙인다 — 메일함까지 직접 뒤진다.
 
-    메일을 새로 가져오지는 않는다(그건 Mail 의 Sync 몫이다) — 이미 담아 둔 것에서
-    찾는다. 하루 한 번 도는 자동 정리와 Mail 의 Sync 뒤에도 같은 일이 돌아가므로,
-    이 버튼은 "지금 당장 다시 훑어라"는 뜻이다."""
+    두 단계다. ① scan: 메일함에서 홍보 주소의 답장과 반송 통지를 직접 찾아 담는다.
+    정기 동기화는 이미 읽은 UID 구간을 다시 보지 않으므로, 홍보 주소를 저장 범위에
+    넣기 전에 지나간 반송은 이 길로만 들어온다. ② 담긴 메일을 훑어 분류한다.
+
+    메일함을 못 열어도 ②는 돈다 — 이미 담아 둔 것에서 찾는 일은 메일서버와 무관하다."""
     s = get_session()
     try:
+        scanned = None
+        if scan:
+            try:
+                scanned = mail_sync.scan_marketing_inbox(s)
+            except Exception as exc:      # 계정 미설정·연결 실패 — 분류는 그대로 진행
+                s.rollback()
+                scanned = {"error": str(exc)[:200]}
         try:
             result = marketing_reply.detect_replies(s, mark_no_reply=mark_no_reply)
         except Exception as exc:
             s.rollback()
             raise HTTPException(status_code=400, detail=f"답장 감지 실패: {exc}") from exc
-        return {"ok": True, **result}
+        return {"ok": True, **result, "scanned": scanned}
     finally:
         s.close()
 

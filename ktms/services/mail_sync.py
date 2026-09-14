@@ -240,15 +240,23 @@ def marketing_addresses(s) -> set[str]:
 # 반송 통지를 보내오는 쪽 — 사람이 아니라 메일 서버다. 이 주소들은 어느 거래처에도
 # 걸리지 않으므로, 홍보 주소가 본문에 적혀 있을 때만 담는다.
 _DAEMON_RE = re.compile(
-    r"(mailer-daemon|postmaster|mail\.?delivery|delivery-?(status|subsystem))", re.I)
+    r"(mailer-daemon|postmaster|mail\.?delivery|delivery-?(status|subsystem)"
+    r"|bounce|no-?reply|donotreply)", re.I)
 _ADDR_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 
 
-def _bounce_for_marketing(msg: Message, marketing: set[str]) -> bool:
-    """이 반송 통지가 우리 홍보 메일의 것인가 — 되돌아온 주소가 문면에 적혀 있는가."""
+def _bounce_for_marketing(msg: Message, marketing: set[str]) -> str:
+    """이 반송 통지가 되돌려 보낸 홍보 수신 주소. 우리 홍보 메일의 것이 아니면 빈 문자열.
+
+    반송 통지에는 보낸 이(메일 서버) 말고 '배달되지 못한 주소'가 문면에 적혀 있다 —
+    그 주소가 곧 이 통지가 말하는 대상이다."""
     body, _ = body_and_attachments(msg)
     text = _hdr(msg, "Subject") + " " + body[:8000]
-    return any(a.strip().lower() in marketing for a in _ADDR_RE.findall(text)[:60])
+    for hit in _ADDR_RE.findall(text)[:60]:
+        a = hit.strip().lower()
+        if a in marketing:
+            return a
+    return ""
 
 
 # ── 등록되지 않은 상대 주소 ───────────────────────────────────────────────────
@@ -429,6 +437,87 @@ def fetch_address(s, addr: str, rfq_id: int | None = None, limit: int = 300) -> 
                 out["scanned"] += 1
                 out[_store_message(s, email.message_from_bytes(raw[0][1]), folder, own,
                                    parties, docs, None, vessels, linked)] += 1
+            s.commit()
+    finally:
+        try:
+            conn.logout()
+        except Exception:
+            pass
+    return out
+
+
+_UID_RE = re.compile(rb"UID\s+(\d+)")
+
+
+def scan_marketing_inbox(s, max_fetch: int = 400) -> dict:
+    """홍보 메일의 답장·반송을 메일함에서 직접 찾아 담는다.
+
+    정기 동기화는 "어디까지 읽었는지"를 UID 로 기억하고 그 앞은 다시 보지 않는다. 그래서
+    홍보 수신 주소를 저장 범위에 넣기 전에 지나간 구간의 답장·반송은 영영 들어오지
+    않는다 — 반송 통지(mailer-daemon·postmaster)가 특히 그렇다. 그때 쓰는 길이다.
+
+    창 안의 메일을 통째로 다시 받지 않는다. 머리글(From·Message-ID)만 한 번에 훑어
+    **홍보 주소에서 온 것과 반송 통지**만 고르고, 그중 아직 담지 않은 것만 본문을
+    받는다 — 900통짜리 창에서 실제로 내려받는 건 대개 수십 통이다.
+
+    반환: {scanned, picked, stored, dup, skipped}"""
+    marketing = marketing_addresses(s)
+    out = {"scanned": 0, "picked": 0, "stored": 0, "dup": 0, "skipped": 0}
+    if not marketing:
+        return out
+    cfg = mail_config()
+    if not cfg["user"] or not cfg["password"]:
+        raise RuntimeError("IMAP 계정이 설정되지 않았습니다 — IMAP_USER/IMAP_PASSWORD "
+                           "(또는 SMTP_USER/SMTP_PASSWORD) 환경변수를 확인하세요.")
+    own = own_addresses(s)
+    parties = party_index(s)
+    docs = doc_no_index(s)
+    vessels = vessel_index(s)
+    linked = address_link_map(s)
+
+    conn = _connect(cfg)
+    try:
+        for folder in _folders(conn, cfg):
+            typ, _ = conn.select(f'"{folder}"', readonly=True)
+            if typ != "OK":
+                continue
+            window = _window_uids(conn, cfg["since_days"])
+            out["scanned"] += len(window)
+            picked: list[int] = []
+            for i in range(0, len(window), 300):
+                chunk = window[i:i + 300]
+                typ, data = conn.uid(
+                    "FETCH", ",".join(str(u) for u in chunk),
+                    "(BODY.PEEK[HEADER.FIELDS (FROM MESSAGE-ID)])")
+                if typ != "OK":
+                    continue
+                for item in data or []:
+                    if not isinstance(item, tuple) or len(item) < 2:
+                        continue
+                    m = _UID_RE.search(item[0] or b"")
+                    if not m:
+                        continue
+                    head = email.message_from_bytes(item[1] or b"")
+                    frm = (_addr_list(head, "From") or [""])[0]
+                    if not (frm in marketing or _DAEMON_RE.search(frm or "")):
+                        continue
+                    mid = _fit_id(_hdr(head, "Message-ID"))
+                    # 이미 담아 둔 통은 본문을 다시 받지 않는다(이 조회의 값어치가 거기 있다).
+                    if mid and s.query(EmailMessage.id).filter_by(message_id=mid).first():
+                        out["dup"] += 1
+                        continue
+                    picked.append(int(m.group(1)))
+            # 한 번에 받는 통수를 묶어 둔다 — 첫 조회에서 몇 백 통을 내려받다 끊기면
+            # 그때까지 담은 것만 남고 어디까지 했는지 알 수 없다. 최근 것부터 가져간다.
+            for uid in sorted(picked)[-max(1, max_fetch):]:
+                typ, raw = conn.uid("FETCH", str(uid), "(RFC822)")
+                if typ != "OK" or not raw or not isinstance(raw[0], tuple):
+                    continue
+                out["picked"] += 1
+                outcome = _store_message(
+                    s, email.message_from_bytes(raw[0][1]), folder, own, parties, docs,
+                    None, vessels, linked, marketing)
+                out[outcome] += 1
             s.commit()
     finally:
         try:
@@ -1051,11 +1140,17 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
     link_rfq = next((linked[a] for a in counterparts if a in (linked or {})), None)
     # 홍보 메일을 보낸 주소와 오간 메일 — 답장을 마케팅 활동에 붙이려면 담아야 한다.
     mkt = bool(marketing) and any(a in (marketing or set()) for a in counterparts)
-    if not party and not known_thread and link_rfq is None and not mkt:
-        # 반송 통지는 보낸 사람이 메일 서버라 위 어디에도 걸리지 않는다. 되돌아온
-        # 주소가 홍보 수신 주소면 그 발송의 반송으로 보고 담는다.
-        if marketing and direction == "in" and _DAEMON_RE.search(from_addr or ""):
-            mkt = _bounce_for_marketing(msg, marketing)
+    # 반송 통지는 보낸 사람이 메일 서버라 위 어디에도 걸리지 않는다. 되돌아온 주소가
+    # 홍보 수신 주소면 그 발송의 반송으로 보고 담는다. 스레드가 붙든 말든 먼저 본다 —
+    # 반송은 우리가 보낸 그 메일의 답신 자리에 오므로 스레드로는 딜에 붙어 버리는데,
+    # 홍보 발송의 반송은 그 딜의 이력이 아니다(아래 bounced_for 참고).
+    bounced_for = ""
+    if marketing and direction == "in" and _DAEMON_RE.search(from_addr or ""):
+        bounced_for = _bounce_for_marketing(msg, marketing)
+        # 등록된 거래처의 주소가 되돌아온 것이라면 그건 딜 메일의 반송이다 — 종전대로.
+        if bounced_for in (parties or {}):
+            bounced_for = ""
+        mkt = mkt or bool(bounced_for)
     if not party and not known_thread and link_rfq is None and not mkt:
         # 등록된 거래처와도, 담아 둔 스레드와도 무관한 메일. 버리되 상대는 세어 둔다 —
         # 받은 메일이면 보낸 사람이, 보낸 메일이면 받는 사람이 '아직 모르는 거래처'다.
@@ -1069,6 +1164,10 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
     body, attachments = body_and_attachments(msg)
     truncated = len(body) > MAX_BODY_CHARS
     rfq_id, match_by = match_project(s, parents, subject, body, docs, attachments, vessels)
+    # 홍보 발송의 반송 통지는 딜 이력이 아니다. 스레드를 타고 딜에 붙었더라도 떼어
+    # 낸다 — 안 그러면 한 번의 홍보 발송이 남긴 반송 스무 통이 그 딜의 이력에 쌓인다.
+    if bounced_for:
+        rfq_id, match_by = None, None
     # 홍보 주소라서 담는 통인가 — 거래처도 딜도 없는, 회사소개 메일의 답장.
     mkt_only = bool(mkt) and not party and rfq_id is None
     # 붙여 둔 딜은 마지막 수단이다 — 스레드·문서번호·선박이 다른 딜을 가리키면 그쪽이 옳다.

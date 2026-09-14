@@ -945,7 +945,7 @@ export type MarketingReplyMail = {
   attachments?: string[];
 };
 
-/** 답장 자동 감지 결과 — 붙인 건수와 분류별 내역. */
+/** 답장 자동 감지 결과 — 메일함에서 새로 담은 통수 + 붙인 건수와 분류별 내역. */
 export type MarketingDetectResult = {
   ok: boolean;
   checked: number;
@@ -953,6 +953,15 @@ export type MarketingDetectResult = {
   classified: Record<string, number>;
   unclassified: number;
   no_reply: number;
+  /** 메일함 직접 조회 결과. error 가 있으면 메일함을 못 열었다는 뜻(분류는 그대로 돈다). */
+  scanned?: {
+    scanned?: number;
+    picked?: number;
+    stored?: number;
+    dup?: number;
+    skipped?: number;
+    error?: string;
+  } | null;
 };
 
 export function fetchMarketing(): Promise<{ rows: MarketingRow[] }> {
