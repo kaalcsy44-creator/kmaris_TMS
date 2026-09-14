@@ -278,8 +278,19 @@ def _propagate_bounced(s, addrs: set[str]) -> int:
     return n
 
 
+# 이 답장들은 어느 딜의 이력도 될 수 없다 — 폐기된 주소, 부재중 자동응답, 지금은
+# 건이 없다는 답, 무응답. 미분류함(딜을 아직 못 정한 메일)에 세워 두면 사람이 처리할
+# 수 없는 줄만 쌓인다. 반대로 '문의가 왔다'와 '아직 못 가른 답장'은 그대로 둔다 —
+# 그것이 곧 새 딜의 출발점이라, 딜을 세운 뒤 그 메일을 붙여야 하기 때문이다.
+_NOT_DEAL_REPLIES = ("invalid", "auto_reply", "later", "no_reply")
+
+
 def _apply(s, a: MarketingActivity, msg: "_Msg", day: str, status: str, note: str,
            bounced: set[str] | None = None) -> None:
+    if status in _NOT_DEAL_REPLIES:
+        (s.query(EmailMessage).filter_by(id=msg.id)
+         .update({"rfq_id": None, "not_deal": True, "match_by": "marketing"},
+                 synchronize_session=False))
     a.reply_email_id = msg.id
     a.reply_date = day
     a.reply_auto = True

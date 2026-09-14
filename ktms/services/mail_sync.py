@@ -237,6 +237,31 @@ def marketing_addresses(s) -> set[str]:
     return out
 
 
+def marketing_subject_keys(s) -> set[str]:
+    """홍보 발송의 제목(정규화) — 그 대화에 속한 통을 알아보는 기준.
+
+    홍보 메일은 **한 제목을 200명에게** 보낸다. 그런데 딜을 찾는 규칙 중 '제목이 같고
+    후보 딜이 하나면 붙인다'는 그런 편지를 위해 만든 것이 아니다 — 그 제목의 메일 한
+    통이 어떤 딜에 붙어 있으면, 같은 제목의 나머지 200통이 줄줄이 그 딜로 끌려간다
+    (실제로 한 딜의 이력 229통 중 219통이 홍보 발송이 된 일이 있다)."""
+    out = set()
+    for (subj,) in s.query(MarketingActivity.subject).distinct().all():
+        key = subject_key(subj or "")
+        if key:
+            out.add(key)
+    return out
+
+
+def _in_blast_thread(s, parents: list[str]) -> bool:
+    """이 통의 윗대가 홍보 대화인가 — 답장·자동응답·반송은 제목이 달라지므로 줄로 잇는다."""
+    if not parents:
+        return False
+    return bool(s.query(EmailMessage.id)
+                .filter(EmailMessage.message_id.in_(parents[:20]),
+                        EmailMessage.not_deal.is_(True))
+                .first())
+
+
 # 반송 통지를 보내오는 쪽 — 사람이 아니라 메일 서버다. 이 주소들은 어느 거래처에도
 # 걸리지 않으므로, 홍보 주소가 본문에 적혀 있을 때만 담는다.
 _DAEMON_RE = re.compile(
@@ -474,6 +499,7 @@ def scan_marketing_inbox(s, max_fetch: int = 400) -> dict:
     docs = doc_no_index(s)
     vessels = vessel_index(s)
     linked = address_link_map(s)
+    blast_subjects = marketing_subject_keys(s)
 
     conn = _connect(cfg)
     try:
@@ -516,7 +542,7 @@ def scan_marketing_inbox(s, max_fetch: int = 400) -> dict:
                 out["picked"] += 1
                 outcome = _store_message(
                     s, email.message_from_bytes(raw[0][1]), folder, own, parties, docs,
-                    None, vessels, linked, marketing)
+                    None, vessels, linked, marketing, blast_subjects)
                 out[outcome] += 1
             s.commit()
     finally:
@@ -1108,7 +1134,8 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
                    unknown: dict[str, dict] | None = None,
                    vessels: dict[str, set[int]] | None = None,
                    linked: dict[str, int] | None = None,
-                   marketing: set[str] | None = None) -> str:
+                   marketing: set[str] | None = None,
+                   blast_subjects: set[str] | None = None) -> str:
     """메일 1통 저장. 반환: stored | skipped(관계없는 메일) | dup(이미 있음).
 
     unknown 을 넘기면 저장하지 않은 메일의 상대 주소를 거기에 세어 둔다 — 아직
@@ -1164,12 +1191,19 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
     body, attachments = body_and_attachments(msg)
     truncated = len(body) > MAX_BODY_CHARS
     rfq_id, match_by = match_project(s, parents, subject, body, docs, attachments, vessels)
-    # 홍보 발송의 반송 통지는 딜 이력이 아니다. 스레드를 타고 딜에 붙었더라도 떼어
-    # 낸다 — 안 그러면 한 번의 홍보 발송이 남긴 반송 스무 통이 그 딜의 이력에 쌓인다.
-    if bounced_for:
+    # 홍보 대화인가 — 그 제목으로 나간 발송이거나, 그 발송에서 갈라진 답장·자동응답·반송.
+    blast = bool(blast_subjects) and subject_key(subject) in (blast_subjects or set())
+    # 답장·자동응답·반송은 제목이 달라진다("Automatic reply:", "Undeliverable:", 인코딩된
+    # 제목). 그래서 받은 메일은 윗대를 한 번 물어본다 — 홍보 대화에서 갈라진 것인가.
+    if not blast and parents and direction == "in":
+        blast = _in_blast_thread(s, parents)
+    # 홍보 대화와 홍보 발송의 반송은 딜 이력이 아니다. 제목이 같다는 이유로, 또는
+    # 스레드를 타고 딜에 붙었더라도 떼어 낸다 — 안 그러면 한 번의 홍보 발송이 남긴
+    # 이백 통이 그 딜의 이력을 덮는다.
+    if bounced_for or blast:
         rfq_id, match_by = None, None
     # 홍보 주소라서 담는 통인가 — 거래처도 딜도 없는, 회사소개 메일의 답장.
-    mkt_only = bool(mkt) and not party and rfq_id is None
+    mkt_only = (bool(mkt) or blast) and rfq_id is None and (not party or blast)
     # 붙여 둔 딜은 마지막 수단이다 — 스레드·문서번호·선박이 다른 딜을 가리키면 그쪽이 옳다.
     if rfq_id is None and link_rfq is not None:
         rfq_id, match_by = link_rfq, "address"
@@ -1239,6 +1273,7 @@ def _sync_mailbox(s, folder_limit: int | None = None) -> dict:
     vessels = vessel_index(s)
     linked = address_link_map(s)
     marketing = marketing_addresses(s)
+    blast_subjects = marketing_subject_keys(s)
     budget = folder_limit or cfg["max_per_sync"]
     # scanned = 훑은 통수. stored 가 0 일 때 "메일함을 못 읽은 것"인지 "읽었지만 등록된
     # 거래처와 오간 게 없던 것"인지 화면이 구분해 말할 수 있어야 한다.
@@ -1282,7 +1317,7 @@ def _sync_mailbox(s, folder_limit: int | None = None) -> dict:
                         continue
                     outcome = _store_message(
                         s, email.message_from_bytes(data[0][1]), folder, own, parties, docs,
-                        unknown, vessels, linked, marketing)
+                        unknown, vessels, linked, marketing, blast_subjects)
                     counts[outcome] += 1
                     result[outcome] += 1
                 # 읽은 구간 [backfill_uid, last_uid] 를 이번에 집은 만큼 넓힌다.
