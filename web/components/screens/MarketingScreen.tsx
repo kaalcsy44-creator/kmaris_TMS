@@ -275,7 +275,9 @@ export default function MarketingScreen({ onFill }: { onFill?: (v: boolean) => v
       )}
 
       {adding ? (
-        <Modal title="Add marketing activity" onClose={close} form>
+        // maxWidth 840 = 폼 기본폭(560)의 1.5배 — 답장 종류 칩이 한 줄에 서고, 붙어
+        // 있는 답장 원문도 읽을 만한 폭이 된다.
+        <Modal title="Add marketing activity" onClose={close} form maxWidth={840}>
           <MarketingForm
             initial={{ ...emptyForm, owner_id: getUser()?.id ?? "" }}
             customers={customers ?? []}
@@ -289,7 +291,7 @@ export default function MarketingScreen({ onFill }: { onFill?: (v: boolean) => v
       ) : null}
 
       {editing ? (
-        <Modal title={`Marketing — ${editing.customer || "activity"}`} onClose={close} form>
+        <Modal title={`Marketing — ${editing.customer || "activity"}`} onClose={close} form maxWidth={840}>
           <MarketingForm
             initial={rowToForm(editing)}
             customers={customers ?? []}

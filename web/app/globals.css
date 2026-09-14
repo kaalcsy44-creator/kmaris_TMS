@@ -6276,8 +6276,11 @@ input[type="month"] { font-family: inherit; }
   background: #e1ecf9;
   font-weight: 600;
 }
-/* 체크박스는 입력칸 스타일(100% 너비/높이)에서 제외 */
-.form-field input[type="checkbox"] {
+/* 체크박스·라디오는 입력칸 스타일(100% 너비/34px 높이)에서 제외.
+   라디오를 빼먹으면 크롬이 그 상자만큼 동그라미를 키워, 글자가 아래로 밀려난다
+   (동그라미 하나가 칸 한 줄을 통째로 먹는다). */
+.form-field input[type="checkbox"],
+.form-field input[type="radio"] {
   width: auto;
   height: auto;
   margin: 0;
@@ -16894,6 +16897,14 @@ input.mail-bad {
 .reply-badge.bad  { background: #fdeaea; color: #b03535; border-color: #f0c9c9; }
 .reply-badge.mute { background: #eef1f5; color: #64748b; border-color: #dde3ea; }
 
+/* 답장 종류 칩의 동그라미 — 글자 왼쪽에 작게. 칩 자체가 이미 고른 것을 색으로
+   말하므로, 표식은 확인용이면 충분하다. */
+.reply-chip input[type="radio"] {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  accent-color: var(--blue, #0055a8);
+}
 /* 편집창의 답장 선택 칩 — 고른 것만 그 종류의 색을 입는다. */
 .reply-chip.on.win  { background: #e3f5ea; border-color: #56a97c; color: #137a44; }
 .reply-chip.on.warm { background: #fdf1dc; border-color: #d9a441; color: #9a6510; }
