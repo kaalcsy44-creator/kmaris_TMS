@@ -2793,6 +2793,7 @@ class MarketingActivityCreate(BaseModel):
     reply_status: str | None = ""
     reply_date: str | None = ""
     reply_note: str | None = ""
+    reply_email_id: int | None = None
 
 
 # 홍보 메일에 돌아온 답장의 종류. 값이 곧 다음 할 일을 가른다 — 문의가 온 건은
@@ -2832,6 +2833,10 @@ def _marketing_row(m: MarketingActivity, cust_names: dict, user_names: dict) -> 
         "reply_status": getattr(m, "reply_status", "") or "",
         "reply_date": getattr(m, "reply_date", "") or "",
         "reply_note": getattr(m, "reply_note", "") or "",
+        # 메일함에서 찾아낸 답장 원문(있으면 편집창에서 열어 볼 수 있다)과,
+        # 그 분류를 기계가 했는지(사람이 확인하면 False 가 된다).
+        "reply_email_id": getattr(m, "reply_email_id", None) or 0,
+        "reply_auto": bool(getattr(m, "reply_auto", False)),
         "owner_id": m.owner_id or 0,
         "owner": user_names.get(m.owner_id, "") if m.owner_id else "",
     }

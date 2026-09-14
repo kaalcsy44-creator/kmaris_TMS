@@ -153,6 +153,9 @@ _MIGRATIONS = {
         "reply_status": "VARCHAR(20)",
         "reply_date": "VARCHAR(10)",
         "reply_note": "VARCHAR(200)",
+        # 메일함에서 찾아낸 답장(email_messages.id)과, 그 분류를 기계가 했는지.
+        "reply_email_id": "INTEGER",
+        "reply_auto": "BOOLEAN DEFAULT FALSE",
     },
     "item_master": {
         # 품목 분류 연결(대>중>소 트리의 가장 깊은 노드 id). FK 는 신규 DB 모델에서만 강제.

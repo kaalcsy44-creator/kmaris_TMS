@@ -16936,3 +16936,61 @@ input.mail-bad {
 .fu-badge.today   { background: #fdf1dc; color: #9a6510; border-color: #f2ddb6; }
 .fu-badge.soon    { background: #e4edfb; color: #1d4ed8; border-color: #c9dcf7; }
 .fu-badge.later   { background: #eef1f5; color: #64748b; border-color: #dde3ea; }
+
+/* 답장이 왔지만 종류를 못 가른 줄 — 사람을 부르는 색(그래서 다른 분류와 다르다). */
+.reply-badge.review {
+  background: #ece9fd;
+  color: #5b34d6;
+  border-color: #d5ccfa;
+}
+/* 기계가 고른 값에 찍는 점 — 아직 사람이 확인하지 않았다는 표시. */
+.reply-auto-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+  vertical-align: middle;
+}
+.detect-replies {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.hint-inline.auto-note { color: #5b34d6; }
+
+/* 편집창에 붙는 답장 원문 — 분류가 맞는지 눈으로 보는 자리. */
+.reply-mail {
+  margin-top: 8px;
+  border: 1px solid #d7e2ee;
+  border-left: 3px solid #5b34d6;
+  border-radius: 8px;
+  background: #fbfcfe;
+  padding: 9px 11px;
+}
+.reply-mail-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+}
+.reply-mail-head .muted { font-size: 11.5px; }
+.reply-mail-files {
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: #5c6b7d;
+}
+.reply-mail-body {
+  margin: 7px 0 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #2b3a4d;
+}

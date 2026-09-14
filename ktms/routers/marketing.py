@@ -49,6 +49,9 @@ from _core import (
 )
 from fastapi import Body
 
+from db.models import EmailMessage
+from services import marketing_reply
+
 
 
 @app.get("/api/admin/marketing", dependencies=[Depends(require_token)])
@@ -86,6 +89,8 @@ def create_marketing(body: MarketingActivityCreate, user: dict = Depends(get_cur
             reply_status=_norm_reply_status(body.reply_status),
             reply_date=(body.reply_date or "").strip(),
             reply_note=(body.reply_note or "").strip()[:200],
+            reply_email_id=body.reply_email_id or None,
+            reply_auto=False,      # 사람이 적은 값 — 자동 감지가 덮지 않는다
             # 담당자(PIC): 지정값 우선, 없으면 작성자 본인.
             owner_id=body.owner_id or user.get("id") or None,
         )
@@ -127,6 +132,10 @@ def update_marketing(row_id: int, body: MarketingActivityCreate):
         m.reply_status = _norm_reply_status(body.reply_status)
         m.reply_date = (body.reply_date or "").strip()
         m.reply_note = (body.reply_note or "").strip()[:200]
+        m.reply_email_id = body.reply_email_id or None
+        # 사람이 한 번 저장하면 그 행의 분류는 사람 것이다 — 다음 자동 감지가
+        # 제 판단으로 덮어쓰지 않는다(services/marketing_reply.py 참고).
+        m.reply_auto = False
         if m.reply_status == "invalid":
             m.email_bounced = True   # 폐기된 주소 → 반송과 같이 명부까지 표시
         m.owner_id = body.owner_id or None   # 담당자(PIC) 재지정(미지정 허용)
@@ -155,6 +164,55 @@ def delete_marketing(row_id: int):
         sync_bounced_email(s, addr)
         s.commit()
         return {"ok": True}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/marketing/detect-replies", dependencies=[Depends(require_token)])
+def marketing_detect_replies(mark_no_reply: bool = True):
+    """메일함에 담긴 수신 메일에서 홍보 메일의 답장을 찾아 활동에 붙인다.
+
+    메일을 새로 가져오지는 않는다(그건 Mail 의 Sync 몫이다) — 이미 담아 둔 것에서
+    찾는다. 하루 한 번 도는 자동 정리와 Mail 의 Sync 뒤에도 같은 일이 돌아가므로,
+    이 버튼은 "지금 당장 다시 훑어라"는 뜻이다."""
+    s = get_session()
+    try:
+        try:
+            result = marketing_reply.detect_replies(s, mark_no_reply=mark_no_reply)
+        except Exception as exc:
+            s.rollback()
+            raise HTTPException(status_code=400, detail=f"답장 감지 실패: {exc}") from exc
+        return {"ok": True, **result}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/marketing/{row_id:int}/reply", dependencies=[Depends(require_token)])
+def marketing_reply_message(row_id: int):
+    """그 활동에 붙은 답장 원문 — 편집창에서 분류가 맞는지 눈으로 확인하는 자리."""
+    s = get_session()
+    try:
+        m = s.query(MarketingActivity).filter_by(id=row_id).first()
+        if not m:
+            raise HTTPException(status_code=404, detail="마케팅 활동을 찾을 수 없습니다.")
+        if not getattr(m, "reply_email_id", None):
+            return {"found": False}
+        msg = s.query(EmailMessage).filter_by(id=m.reply_email_id).first()
+        if not msg:
+            return {"found": False}
+        return {
+            "found": True,
+            "id": msg.id,
+            "subject": msg.subject or "",
+            "from_addr": msg.from_addr or "",
+            "from_name": msg.from_name or "",
+            "sent_at": msg.sent_at or "",
+            # 본문은 앞부분만 — 분류가 맞는지 보는 데는 첫 화면이면 충분하고,
+            # 인용된 원문까지 실어 보내면 목록 화면이 무거워진다.
+            "body": (msg.body_text or "")[:4000],
+            "truncated": bool(msg.truncated) or len(msg.body_text or "") > 4000,
+            "attachments": [a.get("name", "") for a in (msg.attachments or [])][:10],
+        }
     finally:
         s.close()
 
@@ -193,12 +251,16 @@ def marketing_overview(user: dict = Depends(get_current_user)):
         # 이번 달에 들어오기 때문이다. unclassified = 아직 어느 쪽인지 적지 않은 건.
         by_reply = {k: 0 for k in MARKETING_REPLY_STATUSES}
         unclassified = 0
+        needs_review = 0
         for r in rows:
             st = r.get("reply_status") or ""
             if st in by_reply:
                 by_reply[st] += 1
             else:
                 unclassified += 1
+                # 답장은 왔는데 어느 쪽인지 기계가 못 가른 건 — 사람이 봐야 하는 줄.
+                if r.get("reply_email_id"):
+                    needs_review += 1
 
         return {
             "recent": rows[:20],
@@ -209,7 +271,8 @@ def marketing_overview(user: dict = Depends(get_current_user)):
                 "by_channel": by_channel,
                 "by_type": by_type,
             },
-            "replies": {"by_status": by_reply, "unclassified": unclassified},
+            "replies": {"by_status": by_reply, "unclassified": unclassified,
+                        "needs_review": needs_review},
         }
     finally:
         s.close()

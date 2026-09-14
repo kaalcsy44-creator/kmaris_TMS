@@ -2047,6 +2047,10 @@ export type MarketingRow = {
   reply_status: string;
   reply_date: string;   // 답장 받은 날
   reply_note: string;   // 답장이 알려 준 것(대체 담당자 주소 등)
+  /** 메일함에서 찾아낸 답장(email_messages.id). 0 = 사람이 손으로 적은 건. */
+  reply_email_id: number;
+  /** 이 분류를 기계가 했는가 — 사람이 한 번 저장하면 false 가 된다. */
+  reply_auto: boolean;
   owner_id: number;
   owner: string;
 };
@@ -2170,7 +2174,12 @@ export type MarketingOverview = {
     by_type: Record<string, number>;
   };
   /** 답장 집계(전체 기준) — by_status[reply_status], unclassified = 미분류 건수. */
-  replies?: { by_status: Record<string, number>; unclassified: number };
+  replies?: {
+    by_status: Record<string, number>;
+    unclassified: number;
+    /** 답장은 왔는데 기계가 종류를 못 가른 건 — 사람이 봐야 하는 줄. */
+    needs_review?: number;
+  };
 };
 
 // ── 프로젝트 메일 이력(회사 메일함 IMAP 동기화) ───────────────────────────────

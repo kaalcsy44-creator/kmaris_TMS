@@ -21,8 +21,9 @@ import Modal from "@/components/common/Modal";
 import ComposeEmailModal from "@/components/screens/ComposeEmailModal";
 import BrochuresPanel from "@/components/screens/BrochuresPanel";
 import { BounceBadge } from "@/components/common/BouncedEmail";
-import { ReplyBadge, FollowUpCell } from "@/components/common/MarketingBadges";
+import { ReplyBadge, FollowUpCell, ReplyMailPanel } from "@/components/common/MarketingBadges";
 import { REPLY_STATUSES, replyText, suggestFollowUp } from "@/lib/marketing";
+import { detectMarketingReplies, type MarketingDetectResult } from "@/lib/api";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -56,6 +57,9 @@ export type Form = {
   reply_status: string;
   reply_date: string;
   reply_note: string;
+  reply_email_id: number;
+  /** 지금 화면에 뜬 분류를 기계가 골랐는가(저장하면 사람이 확인한 값이 된다). */
+  reply_auto: boolean;
   owner_id: number | "";
 };
 
@@ -74,6 +78,8 @@ export const emptyForm: Form = {
   reply_status: "",
   reply_date: "",
   reply_note: "",
+  reply_email_id: 0,
+  reply_auto: false,
   owner_id: "",
 };
 
@@ -94,6 +100,8 @@ function rowToForm(r: MarketingRow): Form {
     reply_status: r.reply_status ?? "",
     reply_date: r.reply_date ?? "",
     reply_note: r.reply_note ?? "",
+    reply_email_id: r.reply_email_id ?? 0,
+    reply_auto: r.reply_auto ?? false,
     owner_id: r.owner_id || "",
   };
 }
@@ -114,6 +122,7 @@ function formToBody(f: Form): MarketingSave {
     reply_status: f.reply_status,
     reply_date: f.reply_date,
     reply_note: f.reply_note.trim(),
+    reply_email_id: f.reply_email_id || null,
     owner_id: f.owner_id === "" ? null : f.owner_id,
   };
 }
@@ -193,10 +202,16 @@ export default function MarketingScreen() {
     {
       key: "reply_status",
       label: "Reply",
-      text: (r) => replyText(r.reply_status),
+      text: (r) => replyText(r.reply_status, !!r.reply_email_id),
       filter: "facet",
       emptyLabel: "No reply logged",
-      render: (r) => <ReplyBadge status={r.reply_status || ""} />,
+      render: (r) => (
+        <ReplyBadge
+          status={r.reply_status || ""}
+          detected={!!r.reply_email_id}
+          auto={!!r.reply_auto}
+        />
+      ),
     },
     {
       key: "next_action_date",
@@ -240,11 +255,16 @@ export default function MarketingScreen() {
           defaultSortDir="desc"
           empty="No marketing activities yet."
           actions={
-            can("marketing", "create") ? (
-              <button className="btn" onClick={() => setAdding(true)}>
-                + Add activity
-              </button>
-            ) : null
+            <>
+              {can("marketing", "edit") ? (
+                <DetectRepliesButton onDone={reload} />
+              ) : null}
+              {can("marketing", "create") ? (
+                <button className="btn" onClick={() => setAdding(true)}>
+                  + Add activity
+                </button>
+              ) : null}
+            </>
           }
         />
       )}
@@ -309,6 +329,49 @@ export default function MarketingScreen() {
   );
 }
 
+/** 이미 담아 둔 수신 메일에서 홍보 메일의 답장을 찾아 붙인다.
+ *
+ *  메일을 새로 가져오는 것은 Mail 화면의 Sync 몫이고, 그 뒤에(그리고 매일 도는 자동
+ *  정리 뒤에) 같은 일이 서버에서 저절로 돌아간다. 이 버튼은 "방금 들어온 답장을 지금
+ *  당장 표에 반영하라"는 자리다. */
+function DetectRepliesButton({ onDone }: { onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function run() {
+    setBusy(true);
+    setMsg("");
+    try {
+      const r: MarketingDetectResult = await detectMarketingReplies();
+      const kinds = Object.entries(r.classified || {})
+        .map(([k, n]) => `${k.replace("_", " ")} ${n}`)
+        .join(" · ");
+      const parts = [
+        r.linked ? `${r.linked} repl${r.linked === 1 ? "y" : "ies"} linked` : "no new replies",
+        kinds,
+        r.unclassified ? `${r.unclassified} to classify` : "",
+        r.no_reply ? `${r.no_reply} marked no reply` : "",
+      ].filter(Boolean);
+      setMsg(parts.join(" · "));
+      onDone();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Detection failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="detect-replies">
+      <button className="btn" onClick={run} disabled={busy}
+              title="Scan the synced mailbox for replies to these emails">
+        {busy ? "Scanning…" : "Detect replies"}
+      </button>
+      {msg ? <span className="hint-inline">{msg}</span> : null}
+    </span>
+  );
+}
+
 export function MarketingForm({
   initial,
   customers,
@@ -350,7 +413,7 @@ export function MarketingForm({
 
   function clearReply() {
     // 반송 표시는 손대지 않는다 — 주소의 사정은 답장 분류와 별개로 남을 수 있다.
-    setForm({ ...form, reply_status: "", reply_date: "", reply_note: "" });
+    setForm({ ...form, reply_status: "", reply_date: "", reply_note: "", reply_email_id: 0 });
   }
 
   async function save() {
@@ -528,8 +591,18 @@ export function MarketingForm({
               ) : null}
             </div>
             {replyPick ? <span className="hint-inline">{replyPick.hint}</span> : null}
+            {form.reply_email_id ? (
+              <>
+                {initial.reply_auto ? (
+                  <span className="hint-inline auto-note">
+                    Read from the reply below — check it and save to confirm.
+                  </span>
+                ) : null}
+                {rowId ? <ReplyMailPanel rowId={rowId} /> : null}
+              </>
+            ) : null}
           </div>
-          {form.reply_status ? (
+          {form.reply_status || form.reply_email_id ? (
             <>
               <Field
                 label={form.reply_status === "no_reply" ? "Checked on" : "Reply date"}

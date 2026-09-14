@@ -31,7 +31,7 @@ import threading
 from datetime import datetime
 
 from db.models import AppSetting, EmailMessage
-from services import mail_sync
+from services import mail_sync, marketing_reply
 from services.mail_summary import ROLLUP_KEY, build_project_rollup, ensure_summaries
 
 STATE_KEY = "mail_auto_sync"      # {last_run_date, last_run_at, result, error}
@@ -151,6 +151,14 @@ def run_once(s) -> dict:
         out["auto_matched"] = mail_sync.auto_match(s)["total"]
     except Exception as exc:
         out["error"] = f"auto-match: {exc}"[:300]
+
+    # 홍보 메일의 답장 — 새로 담은 수신 메일에서 찾아 마케팅 활동에 붙이고, 기다릴
+    # 만큼 기다린 발송은 '무응답'으로 적는다(services/marketing_reply.py).
+    try:
+        out["marketing_replies"] = marketing_reply.detect_replies(s)
+    except Exception as exc:
+        s.rollback()
+        out["error"] = (out["error"] or "") + f" marketing: {exc}"[:200]
 
     # 새 메일의 통별 요약 — 딜에 붙은 것부터. 카드 요약의 재료라 먼저 채운다.
     try:

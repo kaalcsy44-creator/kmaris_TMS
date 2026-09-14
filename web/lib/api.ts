@@ -928,7 +928,31 @@ export type MarketingSave = {
   reply_status?: string;
   reply_date?: string;
   reply_note?: string;
+  reply_email_id?: number | null;
   owner_id?: number | null;
+};
+
+/** 편집창에서 열어 보는 답장 원문(메일함에서 찾아 붙인 것). */
+export type MarketingReplyMail = {
+  found: boolean;
+  id?: number;
+  subject?: string;
+  from_addr?: string;
+  from_name?: string;
+  sent_at?: string;
+  body?: string;
+  truncated?: boolean;
+  attachments?: string[];
+};
+
+/** 답장 자동 감지 결과 — 붙인 건수와 분류별 내역. */
+export type MarketingDetectResult = {
+  ok: boolean;
+  checked: number;
+  linked: number;
+  classified: Record<string, number>;
+  unclassified: number;
+  no_reply: number;
 };
 
 export function fetchMarketing(): Promise<{ rows: MarketingRow[] }> {
@@ -948,6 +972,14 @@ export function updateMarketing(
 }
 export function deleteMarketing(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/marketing/${id}`);
+}
+/** 이미 담아 둔 수신 메일에서 홍보 메일의 답장을 찾아 활동에 붙인다(메일을 새로
+ *  가져오지는 않는다 — 그건 Mail 의 Sync 몫). */
+export function detectMarketingReplies(): Promise<MarketingDetectResult> {
+  return post("/api/admin/marketing/detect-replies", {});
+}
+export function fetchMarketingReplyMail(id: number): Promise<MarketingReplyMail> {
+  return get<MarketingReplyMail>(`/api/admin/marketing/${id}/reply`);
 }
 
 // ── 홍보 이메일(회사소개·브로슈어) 발송 + 첨부 자료 라이브러리 ────────────────────

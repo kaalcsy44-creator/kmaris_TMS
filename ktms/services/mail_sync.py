@@ -44,8 +44,9 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from db.models import (
-    AppSetting, Customer, CustomerContact, EmailMessage, EmailSyncState, Order,
-    PurchaseOrder, Quotation, RFQ, User, Vendor, VendorContact, VendorRFQ, Vessel, WorkType,
+    AppSetting, Customer, CustomerContact, EmailMessage, EmailSyncState,
+    MarketingActivity, Order, PurchaseOrder, Quotation, RFQ, User, Vendor,
+    VendorContact, VendorRFQ, Vessel, WorkType,
 )
 
 # 본문 보관 상한 — 요약과 원문 확인에는 충분하고, 첨부 인용문이 통째로 들어오는
@@ -220,6 +221,34 @@ def own_addresses(s) -> set[str]:
         if mail and mail.strip():
             out.add(mail.strip().lower())
     return {a for a in out if "@" in a}
+
+
+def marketing_addresses(s) -> set[str]:
+    """회사소개 메일을 보낸 주소들 — 그 답장은 거래처로 등록돼 있지 않아도 담는다.
+
+    잠정 고객사는 대개 Settings 에 등록돼 있지 않다. 그 주소를 저장 범위에서 빼 두면
+    애써 보낸 홍보 메일의 답장만 통째로 사라져, 마케팅 표에는 영영 '무응답'만 남는다.
+    담되 딜에는 붙이지 않는다(not_deal) — 아직 어느 딜도 아닌 메일이다."""
+    out = set()
+    for (addr,) in s.query(MarketingActivity.recipient_email).distinct().all():
+        a = (addr or "").strip().lower()
+        if a and "@" in a:
+            out.add(a)
+    return out
+
+
+# 반송 통지를 보내오는 쪽 — 사람이 아니라 메일 서버다. 이 주소들은 어느 거래처에도
+# 걸리지 않으므로, 홍보 주소가 본문에 적혀 있을 때만 담는다.
+_DAEMON_RE = re.compile(
+    r"(mailer-daemon|postmaster|mail\.?delivery|delivery-?(status|subsystem))", re.I)
+_ADDR_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+
+
+def _bounce_for_marketing(msg: Message, marketing: set[str]) -> bool:
+    """이 반송 통지가 우리 홍보 메일의 것인가 — 되돌아온 주소가 문면에 적혀 있는가."""
+    body, _ = body_and_attachments(msg)
+    text = _hdr(msg, "Subject") + " " + body[:8000]
+    return any(a.strip().lower() in marketing for a in _ADDR_RE.findall(text)[:60])
 
 
 # ── 등록되지 않은 상대 주소 ───────────────────────────────────────────────────
@@ -989,7 +1018,8 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
                    parties: dict[str, tuple[str, int, str]], docs: dict[str, int],
                    unknown: dict[str, dict] | None = None,
                    vessels: dict[str, set[int]] | None = None,
-                   linked: dict[str, int] | None = None) -> str:
+                   linked: dict[str, int] | None = None,
+                   marketing: set[str] | None = None) -> str:
     """메일 1통 저장. 반환: stored | skipped(관계없는 메일) | dup(이미 있음).
 
     unknown 을 넘기면 저장하지 않은 메일의 상대 주소를 거기에 세어 둔다 — 아직
@@ -1019,7 +1049,14 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
         s.query(EmailMessage.id).filter(EmailMessage.message_id.in_(parents)).first())
     # 사람이 딜에 붙여 둔 주소면 거래처로 등록되지 않았어도 담는다.
     link_rfq = next((linked[a] for a in counterparts if a in (linked or {})), None)
-    if not party and not known_thread and link_rfq is None:
+    # 홍보 메일을 보낸 주소와 오간 메일 — 답장을 마케팅 활동에 붙이려면 담아야 한다.
+    mkt = bool(marketing) and any(a in (marketing or set()) for a in counterparts)
+    if not party and not known_thread and link_rfq is None and not mkt:
+        # 반송 통지는 보낸 사람이 메일 서버라 위 어디에도 걸리지 않는다. 되돌아온
+        # 주소가 홍보 수신 주소면 그 발송의 반송으로 보고 담는다.
+        if marketing and direction == "in" and _DAEMON_RE.search(from_addr or ""):
+            mkt = _bounce_for_marketing(msg, marketing)
+    if not party and not known_thread and link_rfq is None and not mkt:
         # 등록된 거래처와도, 담아 둔 스레드와도 무관한 메일. 버리되 상대는 세어 둔다 —
         # 받은 메일이면 보낸 사람이, 보낸 메일이면 받는 사람이 '아직 모르는 거래처'다.
         if unknown is not None:
@@ -1032,6 +1069,8 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
     body, attachments = body_and_attachments(msg)
     truncated = len(body) > MAX_BODY_CHARS
     rfq_id, match_by = match_project(s, parents, subject, body, docs, attachments, vessels)
+    # 홍보 주소라서 담는 통인가 — 거래처도 딜도 없는, 회사소개 메일의 답장.
+    mkt_only = bool(mkt) and not party and rfq_id is None
     # 붙여 둔 딜은 마지막 수단이다 — 스레드·문서번호·선박이 다른 딜을 가리키면 그쪽이 옳다.
     if rfq_id is None and link_rfq is not None:
         rfq_id, match_by = link_rfq, "address"
@@ -1054,7 +1093,10 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
         rfq_id=rfq_id,
         customer_id=party[1] if party and party[0] == "customer" else None,
         vendor_id=party[1] if party and party[0] == "vendor" else None,
-        match_by=match_by,
+        match_by=match_by or ("marketing" if mkt_only else None),
+        # 홍보 메일의 답장만으로 담은 통은 딜 메일이 아니다 — 미분류 함에 줄만 쌓이지
+        # 않게 내려 둔다. 마케팅 화면이 대신 이 메일을 활동에 붙여 보여 준다.
+        not_deal=mkt_only,
     )
     # 유일 제약은 마지막 방어선으로 남겨 둔다 — 앞의 조회를 빠져나간 중복(같은 메일이
     # 두 폴더에 있거나, 잘린 Message-ID 가 겹치는 경우)이 한 통이라도 있으면 폴더 전체가
@@ -1097,6 +1139,7 @@ def _sync_mailbox(s, folder_limit: int | None = None) -> dict:
     docs = doc_no_index(s)
     vessels = vessel_index(s)
     linked = address_link_map(s)
+    marketing = marketing_addresses(s)
     budget = folder_limit or cfg["max_per_sync"]
     # scanned = 훑은 통수. stored 가 0 일 때 "메일함을 못 읽은 것"인지 "읽었지만 등록된
     # 거래처와 오간 게 없던 것"인지 화면이 구분해 말할 수 있어야 한다.
@@ -1140,7 +1183,7 @@ def _sync_mailbox(s, folder_limit: int | None = None) -> dict:
                         continue
                     outcome = _store_message(
                         s, email.message_from_bytes(data[0][1]), folder, own, parties, docs,
-                        unknown, vessels, linked)
+                        unknown, vessels, linked, marketing)
                     counts[outcome] += 1
                     result[outcome] += 1
                 # 읽은 구간 [backfill_uid, last_uid] 를 이번에 집은 만큼 넓힌다.

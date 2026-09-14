@@ -818,6 +818,12 @@ class MarketingActivity(Base):
     reply_date       = Column(String(10))    # 답장 받은 날 YYYY-MM-DD
     # 답장이 알려 준 것 — 자동응답이 가리킨 대체 담당자 주소, 다시 연락할 시기 등.
     reply_note       = Column(String(200))
+    # 메일함에서 찾아낸 그 답장(email_messages.id). 사람이 손으로 적은 건은 비어 있다.
+    # 값이 있으면 편집창에서 원문을 그대로 열어 분류가 맞는지 확인할 수 있다.
+    reply_email_id   = Column(Integer, ForeignKey("email_messages.id"), nullable=True)
+    # 이 분류를 기계가 했는가(services/marketing_reply.py). 사람이 한 번 저장하면
+    # False 가 되고, 그 뒤로 자동 감지는 이 행의 분류를 덮지 않는다.
+    reply_auto       = Column(Boolean, default=False)
     owner_id         = Column(Integer, ForeignKey("users.id"), nullable=True)  # 담당자(PIC)
     created_at       = Column(DateTime, default=datetime.utcnow)
 

@@ -78,6 +78,8 @@ services:
       #   MAIL_SYNC_AT       06:00 KST 실행 시각. 이 시각을 지나면 그날 몫을 돌린다
       #   MAIL_AUTO_DIGESTS  10    한 번에 만들 대시보드 요약 수(딜당 AI 호출 1회)
       #   MAIL_AUTO_CHECK_MIN 10   "오늘 몫을 했나" 확인 주기(분)
+      #   MARKETING_NO_REPLY_DAYS 21  홍보 메일을 보낸 뒤 이 날수가 지나도록 답이
+      #                            없으면 마케팅 표에 '무응답'으로 적는다(자동 감지).
       # IMAP 계정은 별도 키가 없으면 위 SMTP_USER / SMTP_PASSWORD 를 그대로 쓴다
       # (다른 계정으로 읽으려면 IMAP_USER / IMAP_PASSWORD 를 추가한다).
       - key: PYTHON_VERSION

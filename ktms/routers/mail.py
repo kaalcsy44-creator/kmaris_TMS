@@ -29,7 +29,7 @@ from _core import (
     require_token,
 )
 from services.mail_summary import ROLLUP_KEY as _ROLLUP_KEY, build_project_rollup, ensure_summaries
-from services import mail_auto, mail_sync
+from services import mail_auto, mail_sync, marketing_reply
 
 # 한 번의 동기화 뒤 자동으로 요약할 메일 수 상한(프로젝트에 붙은 것 우선).
 _AUTO_SUMMARY_LIMIT = 30
@@ -420,6 +420,13 @@ def mail_sync_now(summarize: bool = True):
         # 방금 담은 메일이 옛 메일의 근거가 되기도 한다(끊긴 스레드의 뒷부분이 먼저
         # 들어오는 일이 흔하다) — 담은 뒤 한 번 돌려 붙일 수 있는 것을 붙인다.
         result["auto_matched"] = mail_sync.auto_match(s)["total"]
+        # 방금 담은 메일 중에 홍보 메일의 답장이 있으면 마케팅 표에 바로 붙인다 —
+        # 사람이 두 화면을 오가며 맞춰 적지 않아도 되게. 실패해도 동기화는 성공이다.
+        try:
+            result["marketing_replies"] = marketing_reply.detect_replies(s)
+        except Exception as exc:
+            s.rollback()
+            print(f"[WARN] marketing reply detection skipped: {exc}", file=sys.stderr)
         if summarize and result.get("stored"):
             fresh = (s.query(EmailMessage)
                      .filter(EmailMessage.summary.is_(None), EmailMessage.rfq_id.isnot(None))
