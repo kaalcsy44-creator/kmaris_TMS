@@ -127,7 +127,7 @@ function formToBody(f: Form): MarketingSave {
   };
 }
 
-export default function MarketingScreen() {
+export default function MarketingScreen({ onFill }: { onFill?: (v: boolean) => void }) {
   const router = useRouter();
   const params = useSearchParams();
   const idParam = params.get("id");
@@ -138,6 +138,8 @@ export default function MarketingScreen() {
   const [composing, setComposing] = useState(false);
   // 화면 탭: 활동 목록(List) / 브로슈어·회사소개서 라이브러리(Brochures).
   const [view, setView] = useState<"list" | "brochures">("list");
+  // 표가 본문인 탭에서만 화면을 채우는 배치를 쓴다(껍데기가 알아야 하는 값).
+  useEffect(() => { onFill?.(view === "list"); }, [view, onFill]);
 
   const rows = useMemo(() => data?.rows ?? [], [data]);
 
@@ -247,6 +249,9 @@ export default function MarketingScreen() {
       ) : (
         <FilterTable
           tableId="marketing"
+          // 205줄짜리 표다 — 페이지가 아니라 표가 굴러야 머리줄이 남고, 가로 막대가
+          // 표 바로 아래(화면 안)에 선다.
+          scrollBody
           rows={rows}
           columns={columns}
           getRowKey={(r) => r.id}

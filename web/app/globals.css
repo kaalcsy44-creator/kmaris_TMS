@@ -16994,3 +16994,56 @@ input.mail-bad {
   line-height: 1.55;
   color: #2b3a4d;
 }
+
+/* ── 목록 표만 굴리기(pl-scroll) ───────────────────────────────────────────────
+   마케팅 활동은 205줄이다. 페이지째 굴리면 두 가지가 불편해진다 — 아래로 갈수록 열
+   이름이 사라지고, 무엇보다 **가로 막대가 문서 맨 아래**에 있어 오른쪽 칸(Reply·PIC)을
+   보려면 205줄을 다 내려간 다음 옆으로 밀어야 한다.
+   표 상자에 높이를 주어 그 안에서만 굴리면, 세로 막대도 가로 막대도 그 상자에 붙는다 —
+   가로 막대가 언제나 표 바로 아래, 화면 안에 있다.
+
+   높이는 화면에서 위쪽 붙박이(상단바 58 + 페이지 여백 16 + 탭줄 62 + 도구줄 60)를 뺀
+   만큼에 바닥 여백을 조금 남긴 값이다. 화면이 짧으면 그 뺄셈이 음수에 가까워지므로
+   바닥(min-height)을 깔아 둔다 — 그때는 페이지가 대신 굴러가는 편이 낫다. */
+.pl-table-wrap.pl-scroll {
+  max-height: calc(100vh - 252px);
+  min-height: 300px;
+  overflow: auto;
+}
+/* 화면을 채우는 배치(page-fill) 안에서는 그 어림값을 쓰지 않는다 — 남은 높이는 flex 가
+   정확히 알고 있고, 어림값이 실제보다 크면 페이지가 그만큼 길어져 바깥에 세로 막대가
+   하나 더 생긴다(표 상자에 하나, 문서에 하나). 굴리는 자리는 하나여야 한다. */
+.page-fill > .action-tabs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.page-fill .pl-table-wrap.pl-scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+/* 머리줄은 상자 위에 붙여 둔다. .pl-th 는 제 규칙에서 position:relative 를 받으므로
+   (폭 조절 손잡이의 기준점) 여기서 다시 못 박지 않으면 그 칸만 굴러 올라간다. */
+.pl-table-wrap.pl-scroll table.pipeline thead th.pl-th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  /* border-collapse 표에서 아래 테두리는 칸이 아니라 표 격자에 그려져 함께 붙어 오지
+     않는다 — 굴리면 머리줄 밑줄만 사라진다. 그림자로 같은 자리에 한 줄 더 긋는다. */
+  box-shadow: inset 0 -2px 0 var(--line-strong);
+}
+
+/* ── 마케팅 활동 표의 칸 폭 ───────────────────────────────────────────────────
+   제목은 한 통의 홍보 메일에 한 번 정해지고 205줄이 모두 같은 글이다. 그 한 줄이
+   칸 폭을 정하게 두면(fixed 레이아웃 + max-content) 표의 절반을 제목이 먹고, 정작
+   훑어야 할 Reply·Follow-up·PIC 이 화면 밖으로 밀려난다. 폭을 못 박고 접는다. */
+/* 236px = 지금까지 제목 한 줄이 차지하던 폭(약 590px)의 2/5. 세 줄로 접힌다. */
+.pl-table-wrap[data-table="marketing"] table.pipeline col.pl-col-subject {
+  width: 236px;
+}
+.pl-table-wrap[data-table="marketing"] table.pipeline td.pl-col-subject {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

@@ -56,6 +56,7 @@ export default function FilterTable<T>({
   tableId,
   groupBy,
   groupMergeKeys,
+  scrollBody = false,
 }: {
   rows: T[];
   columns: ColumnDef<T>[];
@@ -77,6 +78,10 @@ export default function FilterTable<T>({
   defaultSortDir?: SortDir;
   /** 지정 시 컬럼 폭·순서·표시여부 커스터마이즈를 활성화(localStorage 저장 키). */
   tableId?: string;
+  /** 표만 굴린다 — 페이지가 아니라 표 상자가 세로로 굴러가고, 머리줄은 상자 위에
+   *  붙어 남는다. 가로 막대도 그 상자 바닥에 서므로 화면 안에서 바로 잡을 수 있다
+   *  (페이지째 굴리면 가로 막대가 문서 맨 아래에 있어 끝까지 내려가야 보인다). */
+  scrollBody?: boolean;
 }) {
   const [sortKey, setSortKey] = useState<string | null>(defaultSortKey);
   const [sortDir, setSortDir] = useState<SortDir>(defaultSortDir);
@@ -338,7 +343,8 @@ export default function FilterTable<T>({
         {actions ? <span className="pl-toolbar-actions">{actions}</span> : null}
       </div>
 
-      <div className="pl-table-wrap">
+      {/* data-table = 이 표가 누구인지. 표마다 다른 칸 폭 규칙이 이 이름으로 걸린다. */}
+      <div className={`pl-table-wrap${scrollBody ? " pl-scroll" : ""}`} data-table={tableId}>
         <table className={`pipeline${customize ? " customizable" : ""}`}>
           <colgroup>
             {orderedColumns.map((c) => {
