@@ -3662,9 +3662,9 @@ function CategoryPicker({
   );
 }
 
-// 새 트리는 2단이다 — 1단 대분류(K-MARIS 코드), 2단 부품. 3단(Detail)은 구 트리에만
-// 남아 있는 층이라 이름표만 남겨 둔다(내려 둔 노드를 열어 봤을 때 읽히게).
-const LEVEL_LABEL: Record<number, string> = { 1: "Major", 2: "Part", 3: "Detail" };
+// 분류는 2단이다 — 1단 대분류(K-MARIS 코드), 2단 부품. 위치 축 3단(Main>Sub>Detail)은
+// 2026-09 전환에서 걷어냈다(docs/migration-report.md).
+const LEVEL_LABEL: Record<number, string> = { 1: "Major", 2: "Part" };
 
 type CatEditor = {
   id: number | null;        // null = new
@@ -4322,9 +4322,9 @@ export function CategoriesTab() {
     const pos = sibs.findIndex((c) => c.id === node.id);
     const isFirst = pos <= 0;
     const isLast = pos >= sibs.length - 1;
-    // 새 트리(코드가 있는 노드)는 부품 아래로 더 내려가지 않는다 — 3단으로 다시
-    // 자라면 같은 부품이 층마다 갈려 전환 전의 문제로 돌아간다.
-    const canHaveKids = node.level < (node.code ? 2 : 3);
+    // 부품 아래로는 더 내려가지 않는다 — 3단으로 다시 자라면 같은 부품이 층마다
+    // 갈려(구 트리가 그랬다) 가격 이력이 쪼개진다.
+    const canHaveKids = node.level < 2;
     const isOpen = expanded.has(node.id);
     return (
       <li className={`cat-node cat-l${node.level}${node.active ? "" : " off"}`}>

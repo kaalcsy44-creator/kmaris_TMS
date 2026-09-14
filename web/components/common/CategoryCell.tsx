@@ -30,8 +30,8 @@ export type CategoryOption = {
 };
 
 /**
- * 용역 대분류의 이름. Ship View 의 BERTH 와 같은 방식이다 — 아는 이름은 알아보고,
- * 모르는 이름은 그냥 선박 계통으로 둔다(관리자가 트리를 고쳐도 화면이 무너지지 않는다).
+ * 용역 대분류의 이름 — 관리자가 코드 없이 만든 대분류를 알아보는 마지막 수단이다.
+ * 정본은 대분류가 들고 있는 tree_type 이고(K-MARIS TS·TR), 그것이 없을 때만 이름을 본다.
  */
 const SERVICE_ROOT = "SERVICE";
 
