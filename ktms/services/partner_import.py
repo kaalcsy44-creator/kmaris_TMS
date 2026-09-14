@@ -58,16 +58,18 @@ FIELDS: Dict[str, List[Field]] = {
         ("specialization", "Specialization", False, True),
         ("note", "About this company", False, True),
     ],
-    # 메이커는 담당자를 두지 않는다 — 회사 한 곳이 한 줄이라 '회사 단위'라는 구분도 없다.
+    # 메이커도 거래선과 같다 — 레코드 1건 = 담당자 1명, 뒤쪽 넷은 회사 단위 칸이다.
     "makers": [
         ("name", "Maker", False, False),
+        ("contact", "Contact", False, False),
+        ("duty", "In charge of", False, False),
         ("emails", "Email", True, False),
         ("phones", "Phone", True, False),
         ("regions", "Region", True, False),
-        ("addresses", "Address", True, False),
-        ("website", "Website", False, False),
-        ("specialization", "Makes", False, False),
-        ("note", "About this maker", False, False),
+        ("addresses", "Address", True, True),
+        ("website", "Website", False, True),
+        ("specialization", "Makes", False, True),
+        ("note", "About this maker", False, True),
     ],
 }
 
@@ -304,11 +306,10 @@ def norm_person(name: str) -> str:
 
 
 def row_key(kind: str, values: Dict[str, Any]) -> Tuple[str, str]:
-    """명부에서 한 줄을 가리키는 자연키. 거래선은 레코드 1건 = 담당자 1명이라
-    회사명만으로는 줄을 특정하지 못한다(AMCL 한 회사가 다섯 줄이다)."""
+    """명부에서 한 줄을 가리키는 자연키. 세 명부 모두 레코드 1건 = 담당자 1명이라
+    회사명만으로는 줄을 특정하지 못한다(AMCL 한 회사가 다섯 줄이다). 담당자를 적지
+    않은 줄은 사람 이름이 빈 채로 회사당 하나 — 지금까지의 메이커 명부가 그 모양이다."""
     company = norm_company(values.get("name", ""))
-    if kind == "makers":
-        return (company, "")
     return (company, norm_person(values.get("contact", "")))
 
 

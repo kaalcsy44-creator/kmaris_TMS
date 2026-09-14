@@ -35,9 +35,67 @@ export function useMakerOptions(): SettingsMaker[] {
   return data ?? [];
 }
 
+/** 회사 한 곳당 한 줄인 메이커 목록.
+ *
+ *  메이커 명부는 거래선처럼 **레코드 1건 = 담당자 1명**이라, 담당자가 셋인 회사는 세
+ *  줄이다. 고르는 자리(품목표의 Maker 칸·거래선의 'Makers supplied')가 찾는 것은 사람이
+ *  아니라 회사이므로, 같은 이름은 한 번만 세운다 — 먼저 등록된 줄(가장 작은 id)이 그
+ *  회사의 대표 줄이고, 태그도 그 id 로 붙는다. 로고·지역처럼 회사 단위 값은 담당자 줄
+ *  어디에 적혀 있어도 되므로, 비어 있지 않은 것을 끌어올려 보여 준다. */
+export function useMakerCompanies(): SettingsMaker[] {
+  const makers = useMakerOptions();
+  return useMemo(() => {
+    const byName = new Map<string, SettingsMaker>();
+    for (const m of makers) {
+      const key = norm(m.name || "");
+      if (!key) continue;
+      const seen = byName.get(key);
+      if (!seen) {
+        byName.set(key, m);
+        continue;
+      }
+      // 대표 줄은 그대로 두고, 그 줄이 비워 둔 회사 값만 형제 줄에서 메운다.
+      byName.set(key, {
+        ...seen,
+        logo: seen.logo || m.logo,
+        country: seen.country || m.country,
+        specialization: seen.specialization || m.specialization,
+        items: seen.items || m.items,
+      });
+    }
+    return [...byName.values()];
+  }, [makers]);
+}
+
+/** 태그에 적힌 id 들 → 그 회사들(대표 줄 기준, 중복 제거).
+ *
+ *  태그는 담당자 줄의 id 로 붙을 수 있다 — 거래선이 "이 회사 물건을 대 준다"고 표시할
+ *  때 고른 것이 그 회사의 어느 줄이었는지는 뜻이 없다. 같은 회사가 두 번 뜨지 않도록
+ *  이름으로 모아 대표 줄 하나로 보여 주고, 저장도 그 대표 id 로 되돌려 놓는다. */
+export function useMakerCompanyIds(): (ids?: number[] | null) => SettingsMaker[] {
+  const all = useMakerOptions();
+  const companies = useMakerCompanies();
+  return useMemo(() => {
+    const anchor = new Map(companies.map((c) => [norm(c.name || ""), c]));
+    const byId = new Map(all.map((m) => [m.id, norm(m.name || "")]));
+    return (ids?: number[] | null) => {
+      const out: SettingsMaker[] = [];
+      const seen = new Set<number>();
+      for (const id of ids ?? []) {
+        const co = anchor.get(byId.get(id) ?? "");
+        if (co && !seen.has(co.id)) {
+          seen.add(co.id);
+          out.push(co);
+        }
+      }
+      return out;
+    };
+  }, [all, companies]);
+}
+
 /** 이름 → 등록된 메이커(로고를 찾는 데 쓴다). 명부에 없으면 undefined. */
 export function useMakerByName(): (name: string) => SettingsMaker | undefined {
-  const makers = useMakerOptions();
+  const makers = useMakerCompanies();
   const byName = useMemo(() => {
     const m = new Map<string, SettingsMaker>();
     for (const k of makers) {
@@ -67,7 +125,7 @@ export default function MakerCell({
   /** 엑셀식 편집 좌표·키 핸들러(useItemGridKeys 의 cell(row, col)). 그대로 input 에 붙는다. */
   inputProps?: Record<string, unknown>;
 }) {
-  const makers = useMakerOptions();
+  const makers = useMakerCompanies();
   const makerByName = useMakerByName();
   const [open, setOpen] = useState(false);
   // 열린 뒤 직접 친 글자가 있으면 그것으로 목록을 좁히고, 토글로 막 열었으면 전체를 보인다
@@ -251,9 +309,7 @@ export function MakerBadges({
   max?: number;
   empty?: React.ReactNode;
 }) {
-  const makers = useMakerOptions();
-  const by = new Map(makers.map((m) => [m.id, m]));
-  const picked = (ids ?? []).map((id) => by.get(id)).filter((m): m is SettingsMaker => !!m);
+  const picked = useMakerCompanyIds()(ids);
   if (!picked.length) return <>{empty}</>;
   const shown = max ? picked.slice(0, max) : picked;
   const rest = picked.length - shown.length;
@@ -285,9 +341,11 @@ export function MakerTagPicker({
   onChange: (next: number[]) => void;
   disabled?: boolean;
 }) {
-  const makers = useMakerOptions();
-  const by = new Map(makers.map((m) => [m.id, m]));
-  const picked = value.map((id) => by.get(id)).filter((m): m is SettingsMaker => !!m);
+  const makers = useMakerCompanies();
+  const picked = useMakerCompanyIds()(value);
+  // 화면에 선 것과 저장할 것을 같은 값으로 맞춘다 — 담당자 줄의 id 로 붙어 있던 옛
+  // 태그도 이 자리를 한 번 지나면 회사 대표 id 로 정리된다.
+  const ids = picked.map((m) => m.id);
 
   return (
     <div className="form-field cat-picker">
@@ -299,7 +357,7 @@ export function MakerTagPicker({
             {m.name}
             {disabled ? null : (
               <button type="button" aria-label={`Remove ${m.name}`}
-                      onClick={() => onChange(value.filter((v) => v !== m.id))}>×</button>
+                      onClick={() => onChange(ids.filter((v) => v !== m.id))}>×</button>
             )}
           </span>
         )) : <span className="hint-inline">Not registered yet.</span>}
@@ -312,7 +370,7 @@ export function MakerTagPicker({
             options={makers.map((m) => ({
               id: m.id, name: m.name, sub: m.country || undefined, logo: m.logo || undefined,
             }))}
-            value={value}
+            value={ids}
             onChange={onChange}
           />
         </div>

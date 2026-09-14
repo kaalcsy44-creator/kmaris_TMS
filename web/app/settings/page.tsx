@@ -22,6 +22,7 @@ import {
   fetchSettingsUsers,
   fetchSettingsMakers,
   createSettingsMaker,
+  updateMakerCompanyInfo,
   updateSettingsMaker,
   deleteSettingsMaker,
   fetchSettingsVendors,
@@ -1014,65 +1015,109 @@ function PartnersTab() {
 }
 
 const EMPTY_MAKER: SettingsMaker = {
-  id: 0, name: "", email: "", contact_phone: "", country: "", address: "",
+  id: 0, name: "", contact: "", duty: "", email: "", contact_phone: "", country: "", address: "",
   website: "", specialization: "", note: "", logo: "",
   addresses: [], emails: [], phones: [], regions: [], category_ids: [],
 };
 
 /**
- * Maker — 물건을 만든 회사. 거래선과 같은 얼개를 쓰되 **담당자를 두지 않는다.**
+ * Maker — 물건을 만든 회사. 거래선과 같은 얼개를 그대로 쓴다(레코드 1건 = 담당자 1명).
  *
- * 거래선 목록이 회사로 묶여 있고 그 밑에 담당자 줄이 달리는 것은, 같은 회사에 영업
- * 담당이 여럿이고 우리가 그 사람 앞으로 메일을 보내기 때문이다. 메이커에는 그 창구가
- * 없다 — 부품은 거래선을 통해 산다. 그래서 회사 한 곳 = 한 줄이고, 묶음 행도 담당자별
- * 복제(Copy as new)도 회사 단위 일괄편집(Company info)도 여기엔 없다.
+ * 메이커에도 물어볼 사람이 있다 — 대리점이 없는 브랜드의 기술문의, 단종품 확인, 정품
+ * 여부. 그 창구가 영업과 기술로 갈리는 것도 거래선과 같아서, 회사 밑에 사람을 여럿
+ * 달 수 있어야 한다. 그래서 목록은 회사 줄만 세우고(flat), 담당자는 회사 창의 명단에서
+ * 보고 고친다. 담당자를 안 적은 회사는 이름만 적힌 줄 하나로 남는다 — 지금까지의 명부가
+ * 그대로 그 모양이라, 이 변화로 사라지는 줄은 없다.
  *
- * 대신 거래선의 'Projects' 자리에 Items 를 세운다 — 이 회사 물건을 우리가 몇 개나 다뤄
+ * 거래선의 'Projects' 자리에는 Items 를 세운다 — 이 회사 물건을 우리가 몇 개나 다뤄
  * 봤는가. 메이커는 딜의 상대가 아니라 품목의 출처라, 관계의 두께를 재는 자가 그것이다.
+ *
+ * **makers.id 는 회사가 아니라 담당자 줄을 가리킨다.** 거래선의 'Makers supplied' 태그가
+ * 그 id 를 들고 있으므로, 고르는 자리는 회사 단위로 모아 보여 주고(useMakerCompanies)
+ * 담당자 줄을 지울 때는 서버가 남은 줄로 그 참조를 옮긴다(delete_maker).
  */
 function MakersTab() {
   const catText = useCategoryText();
   const catNames = useCategoryNames();
-  // 열면 읽기부터 — 메이커 줄을 누르는 손짓은 대개 "이 회사가 뭘 만드는 곳이었지"를
-  // 확인하려는 것이다(고객·거래선의 회사 줄과 같은 규칙). 곧장 입력칸으로 열어 두면
-  // 확인하러 들어왔다가 잘못 눌러 값을 흘리게 된다. 고치는 길은 창 안의 ✎ 와 줄 끝의
-  // ✎ 두 갈래로 남는다. 편집 창을 여는 일은 목록이 쥐고 있어(edit) 그대로 건네받는다 —
-  // 읽기 창이 폼을 다시 만들면 같은 칸이 두 벌이 된다.
-  const [info, setInfo] = useState<{ row: SettingsMaker; edit: () => void } | null>(null);
+  const [company, setCompany] = useState<CompanyNavCtx<SettingsMaker> | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const shown = company ? company.groups[company.index] ?? [] : [];
+
   return (
     <>
-    {info ? (
-      <MakerInfoModal
-        row={info.row}
-        onEdit={() => {
-          const go = info.edit;
-          setInfo(null);
-          go();
+    {company ? (
+      <CompanyInfoModal
+        key={shown[0]?.name ?? company.index}
+        rows={shown}
+        title="🏭 Maker"
+        // 결제조건은 거래선의 칸이다 — 물건값은 거래선에게 치른다.
+        paymentTerms={false}
+        stats={["Items", shown[0]?.items
+          ? <span className="ms-badge">{shown[0]?.items}</span>
+          : null]}
+        {...companyNav(company, setCompany)}
+        // 담당자를 더하고 고치고 지우는 일이 모두 이 창 안에서 끝난다(거래선과 같다).
+        onSaveContact={company.saveRow}
+        onCreateContact={company.createRow}
+        onDeleteContact={company.removeRow}
+        tags={{
+          initial: shown.find((r) => (r.category_ids ?? []).length)?.category_ids ?? [],
         }}
-        onClose={() => setInfo(null)}
+        fields={[["website", "Website"]]}
+        areas={[
+          { key: "specialization", label: "Makes", rows: 3,
+            placeholder: "HiMSEN engine, 2-stroke engine, butterfly valve…" },
+          { key: "note", label: "About this maker", rows: 5,
+            placeholder: "What they build, which engines or equipment they are known for…" },
+        ]}
+        save={updateMakerCompanyInfo}
+        onClose={() => setCompany(null)}
+        onSaved={() => {
+          setReloadKey((k) => k + 1);
+          invalidateCache("settings-makers");
+        }}
       />
     ) : null}
     <MasterSection<SettingsMaker>
       title="Maker"
-      // 고객·거래선 제목 옆에는 "59 vendors · 74 contacts" 가 서 있는데 제조사만
-      // 비어 있었다 — 묶음(회사·담당자)이 없는 표라 그 셈을 다는 자리가 없었다.
-      countText={(shown, total) => {
-        const unit = `maker${total === 1 ? "" : "s"}`;
-        return shown === total ? `${total} ${unit}` : `${shown} of ${total} ${unit}`;
-      }}
-      onRowOpen={(row, edit) => setInfo({ row, edit })}
       empty={EMPTY_MAKER}
+      reloadKey={reloadKey}
       headCols={makerHeadCols(catNames)}
       load={fetchSettingsMakers}
       create={createSettingsMaker}
       update={updateSettingsMaker}
       remove={deleteSettingsMaker}
+      // 메이커 명부가 바뀌면 품목표의 Maker 칸과 거래선의 태그가 같이 낡는다.
+      onSaved={() => invalidateCache("settings-makers")}
       transfer={{ kind: "makers", nameOf: (r) => r.name, onDone: invalidatePartnerCaches }}
-      searchText={(r) => [r.name, r.specialization, r.note, r.country,
-                          r.regions.join(" "), r.website].join(" ")}
+      searchText={contactSearchText}
       printCols={makerPrintCols(catText)}
       importKind="makers"
       scrollBody
+      group={{
+        by: (r) => r.name,
+        cells: (rs, open) => [
+          <GroupNameCell key="n" rows={rs} open={open} />,
+          <span key="r" className="ms-group-sub">{regionSummary(rs)}</span>,
+          <span key="c" className="ms-group-sub">{nameSummary(rs)}</span>,
+          <span key="w" className="ms-group-sub"><SiteCell value={companySite(rs)} /></span>,
+          <span key="i" className="ms-group-sub">
+            {rs[0].items
+              ? <span className="ms-badge">{rs[0].items}</span>
+              : <span className="dash">—</span>}
+          </span>,
+          <span key="ct" className="ms-group-sub">
+            <CategoryBadges ids={companyIds(rs, "category_ids")} max={4} empty={<span className="dash">—</span>} />
+          </span>,
+          <span key="s" className="ms-group-sub">
+            {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
+          </span>,
+        ],
+        flat: true,
+        onRowClick: (_rs, nav) => setCompany(nav),
+        newRow: (rs) => withCompanyDefaults(EMPTY_MAKER, rs, rs[0].name),
+        summary: (g, n) => `${g} makers · ${n} contacts`,
+      }}
       columns={[
         ["name", "Company name", (r) => (
           <span className="cust-name">
@@ -1081,131 +1126,113 @@ function MakersTab() {
           </span>
         )],
         ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
+        ["contact", "Contact"],
         ["website", "Website", (r) => <SiteCell value={r.website} />, "ms-site"],
         ["items", "Items", (r) => (
           r.items ? <span className="ms-badge">{r.items}</span> : <span className="dash">—</span>
         ), "ms-deals"],
         // 분류(트리의 자리)와 Makes(자유 문장)를 가른다 — 한 칸에 뭉쳐 있으면 머리 칸
         // 필터가 둘 중 어느 것으로도 고르지 못한다(공급사 표와 같은 이유).
-        ["category_ids", "Category", (r) => (
-          <CategoryBadges ids={r.category_ids} max={4} empty={<span className="dash">—</span>} />
-        ), "ms-cat"],
+        ["category_ids", "Category", undefined, "ms-cat"],
         // Makes = 이 회사가 무엇을 만드는가. 트리에 자리가 없는 것(기종·브랜드 이름)이
         // 여기 적힌다 — "HiMSEN Engine", "2 Stroke Engine".
         ["specialization", "Makes", undefined, "ms-spec"],
       ]}
+      // 처음 등록할 때 보이는 칸 = 🏭 Maker 창이 든 칸 그대로, 그 차례대로.
       fields={[
         ["name", "Maker *"],
         ["address", "Address"],
         ["website", "Website"],
+        ["logo", "Company logo"],
+        ["category_ids", "Item categories"],
         ["specialization", "Makes"],
+        ["note", "About this maker"],
+        // 여기서부터는 사람의 것 — 회사가 이미 정해진 창(담당자 추가·수정)에서는
+        // 위의 회사 칸이 통째로 빠지고 이 아래만 남는다.
+        ["contact", "Contact name"],
+        ["duty", "In charge of"],
       ]}
       required="name"
-      renderField={({ key, label, form, setForm }) =>
+      topForm={(form, setForm) => (
+        <BusinessCardScan
+          onApply={(card) => {
+            const { next, filled } = applyBusinessCard(form, card);
+            setForm(next);
+            return filled;
+          }}
+        />
+      )}
+      renderField={({ key, label, form, setForm, rows }) => {
+        if (key === "name") {
+          return (
+            <PickOrTypeField
+              label={label}
+              value={form.name}
+              options={uniqStrings(rows.map((r) => r.name))}
+              placeholder="Select an existing maker or type a new one…"
+              onChange={(v) => setForm(withCompanyDefaults(form, rows, v))}
+            />
+          );
+        }
         // 주소는 본사·공장이 여럿일 수 있어 다중값(거래선과 같은 규칙).
-        key === "address" ? (
-          <MultiValueField
-            label={label}
-            placeholder="Head office / plant address"
-            values={form.addresses}
-            onChange={(addresses) => setForm({ ...form, addresses, address: addresses[0] ?? "" })}
-          />
-        ) : null
-      }
+        if (key === "address") {
+          return (
+            <MultiValueField
+              label={label}
+              placeholder="Head office / plant address"
+              values={form.addresses}
+              onChange={(addresses) => setForm({ ...form, addresses, address: addresses[0] ?? "" })}
+            />
+          );
+        }
+        if (key === "logo") {
+          return <LogoPasteField value={form.logo} onChange={(logo) => setForm({ ...form, logo })} />;
+        }
+        if (key === "category_ids") {
+          return (
+            <CategoryTagPicker
+              value={form.category_ids}
+              onChange={(category_ids) => setForm({ ...form, category_ids })}
+            />
+          );
+        }
+        // 만드는 것·회사 소개는 문장으로 적는 칸이다(거래선 창과 같다).
+        if (key === "specialization" || key === "note") {
+          const area = key === "specialization"
+            ? { rows: 3, placeholder: "HiMSEN engine, 2-stroke engine, butterfly valve…" }
+            : { rows: 5, placeholder: "What they build, which engines or equipment they are known for…" };
+          return (
+            <label className="form-field company-area-field">
+              <span>{label}</span>
+              <textarea
+                rows={area.rows}
+                placeholder={area.placeholder}
+                value={String(form[key] ?? "")}
+                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+              />
+            </label>
+          );
+        }
+        return null;
+      }}
+      // 회사 것은 🏭 Maker 창에서 고친다 — 회사가 이미 정해진 창(담당자 추가·수정)에서는
+      // 이 칸들이 통째로 빠지고, 회사를 새로 만드는 + New 에서만 선다.
+      companyFields={["name", "address", "website", "logo", "category_ids",
+                      "specialization", "note"]}
       extraForm={(form, setForm) => (
         <>
-          <MultiValueField label="Email" placeholder="info@maker.com" values={form.emails}
+          <MultiValueField label="Email" placeholder="name@maker.com" values={form.emails}
                            onChange={(emails) => setForm({ ...form, emails })} />
           <MultiValueField label="Phone" placeholder="+49 30 1234 5678" values={form.phones}
                            onChange={(phones) => setForm({ ...form, phones })} />
           <MultiValueField label="Region" placeholder="Germany" values={form.regions}
                            onChange={(regions) => setForm({ ...form, regions })} />
-          <CategoryTagPicker
-            value={form.category_ids}
-            onChange={(category_ids) => setForm({ ...form, category_ids })}
-          />
-          <label className="form-field company-area-field">
-            <span>About this maker</span>
-            <textarea
-              rows={4}
-              placeholder="What they build, which engines or equipment they are known for…"
-              value={form.note}
-              onChange={(e) => setForm({ ...form, note: e.target.value })}
-            />
-          </label>
-          <LogoPasteField value={form.logo} onChange={(logo) => setForm({ ...form, logo })} />
         </>
       )}
+      allowCopy
+      copyHint="Copies this info into a new record — keep the maker, change the contact/email/region for a different person."
     />
     </>
-  );
-}
-
-/**
- * 메이커 한 곳을 읽는 창 — 회사 정보 창(🏢)이 고객·거래선에게 하는 일을 메이커에게.
- *
- * 메이커에는 담당자 명단이 없어 그 창을 그대로 쓸 수 없다(그 창의 아래 절반이
- * 담당자 표다). 대신 읽는 쪽 절반만 같은 모양으로 세운다 — 같은 값을 확인하는 자리가
- * 표마다 다르게 생기면 무엇을 보는 창인지 두 번 배워야 한다.
- *
- * 고치는 폼은 만들지 않는다. 목록이 이미 그 폼을 들고 있어 ✎ 는 그것을 열 뿐이다.
- */
-function MakerInfoModal({
-  row,
-  onEdit,
-  onClose,
-}: {
-  row: SettingsMaker;
-  onEdit: () => void;
-  onClose: () => void;
-}) {
-  const site = (row.website || "").trim();
-  const mails = contactValues(row.emails, row.email);
-  const tels = contactValues(row.phones, row.contact_phone);
-  const regions = contactValues(row.regions, row.country);
-  const addrs = contactValues(row.addresses, row.address);
-  const lines = (values: string[]) =>
-    values.length ? <span className="co-lines">{values.map((v, i) => <span key={i}>{v}</span>)}</span> : null;
-
-  const shown: [string, React.ReactNode][] = [
-    ["Maker", row.name],
-    ["Region", regions.join(" · ") || null],
-    ["Address", lines(addrs)],
-    ["Website", site
-      ? <a href={siteHref(site)} target="_blank" rel="noreferrer">{site}</a>
-      : null],
-    ["Email", mails.length
-      ? <span className="co-lines">{mails.map((m) => <a key={m} href={`mailto:${m}`}>{m}</a>)}</span>
-      : null],
-    ["Phone", lines(tels)],
-    ["Item categories", row.category_ids.length ? <CategoryBadges ids={row.category_ids} /> : null],
-    ["Makes", row.specialization || null],
-    // 이 회사 물건을 우리가 몇 개나 다뤄 봤는가 — 메이커에게는 이것이 관계의 두께다
-    // (고객·거래선의 '문의 → 오더' 자리와 같다).
-    ["Items", row.items ? <span className="ms-badge">{row.items}</span> : null],
-    ["About this maker", row.note ? <span className="co-para">{row.note}</span> : null],
-  ];
-
-  return (
-    <Modal title={`🏭 Maker — ${row.name}`} onClose={onClose} form maxWidth={720}>
-      <div className="company-read">
-        {row.logo ? <img className="co-logo" src={row.logo} alt="" /> : null}
-        <dl>
-          {shown.map(([label, node]) => (
-            <div key={label} className="co-row">
-              <dt>{label}</dt>
-              <dd>{node ?? <span className="dash">—</span>}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-      <div className="form-actions">
-        {can("settings", "edit") ? (
-          <button className="btn primary" onClick={onEdit}>✎ Edit</button>
-        ) : null}
-        <button className="btn" onClick={onClose}>Close</button>
-      </div>
-    </Modal>
   );
 }
 
@@ -1720,10 +1747,12 @@ function companyNav<T extends { name: string }, S extends { groups: T[][]; index
 function CompanyInfoModal<
   T extends {
     id: number; name: string; address: string; addresses: string[];
-    payment_terms: string; logo: string;
+    logo: string;
     // 담당자 명단을 창 안에서 함께 읽는다 — 고객·거래선 두 표가 같은 칸을 갖고 있다.
     contact: string; duty: string; email: string; contact_phone: string;
     emails: string[]; phones: string[]; regions: string[]; country: string;
+    // 결제조건은 고객·거래선에만 있다(물건값을 치르는 상대) — 제조사 명부에는 없다.
+    payment_terms?: string;
     // 반송된 주소들(고객사 전용). 거래선 표에는 이 칸이 없어 선택 항목으로 둔다.
     bad_emails?: string[];
   }
@@ -1742,6 +1771,8 @@ function CompanyInfoModal<
   onDeleteContact,
   tags,
   makerTags,
+  title = "🏢 Company info",
+  paymentTerms = true,
 }: {
   rows: T[];
   fields: [keyof T & keyof CompanyInfoSave, string][];
@@ -1772,6 +1803,10 @@ function CompanyInfoModal<
   };
   /** 대 줄 수 있는 제조사(거래선 전용). tags 와 같은 규약 — 안 주면 칸이 아예 없다. */
   makerTags?: { initial: number[] };
+  /** 창 제목 앞머리. 명부마다 다른 이름으로 부른다(제조사 창은 🏭 Maker). */
+  title?: string;
+  /** 결제조건 칸을 세울지 — 제조사 명부에는 그 칸이 없다(값을 치르는 상대가 아니다). */
+  paymentTerms?: boolean;
 }) {
   // 저장 뒤에도 창이 남으므로 회사명을 상태로 든다. 이름을 바꿔 저장하면 제목·읽기
   // 화면이 새 이름이 되어야 하고, 그 다음 저장의 조회 키도 새 이름이어야 한다.
@@ -1930,7 +1965,9 @@ function CompanyInfoModal<
   }
 
   // 담당자별로 값이 다른 필드 — 저장하면 하나로 통일된다는 걸 미리 알린다.
-  const mixed = [...fields, ["payment_terms", "Payment terms"] as (typeof fields)[number],
+  const mixed = [...fields,
+                 ...(paymentTerms
+                     ? [["payment_terms", "Payment terms"] as (typeof fields)[number]] : []),
                  ...(areas ?? []).map((a) => [a.key, a.label] as (typeof fields)[number])]
     .filter(([k]) => uniqStrings(rows.map((r) => String(r[k as keyof T] ?? ""))).length > 1)
     .map(([, label]) => label);
@@ -1977,7 +2014,8 @@ function CompanyInfoModal<
           : v;
         return [label, node] as [string, React.ReactNode];
       }),
-      ["Payment terms", vals.payment_terms || null],
+      ...(paymentTerms
+          ? [["Payment terms", vals.payment_terms || null] as [string, React.ReactNode]] : []),
       ...(tags ? [["Item categories",
                    catIds.length ? <CategoryBadges ids={catIds} /> : null,
                   ] as [string, React.ReactNode]] : []),
@@ -1991,7 +2029,7 @@ function CompanyInfoModal<
     // 폼 팝업 기본폭(560px)보다 넓게 — 아래 담당자 표가 이름·담당분야·메일·연락처·
     // 지역 다섯 칸이라 기본폭에서는 칸마다 두세 줄로 접힌다.
     return (
-      <Modal title={`🏢 Company info — ${origName}`} onClose={onClose} form maxWidth={960}>
+      <Modal title={`${title} — ${origName}`} onClose={onClose} form maxWidth={960}>
         {prev || next ? (
           <div className="co-nav">
             <button type="button" className="btn tiny" disabled={!prev}
@@ -2221,7 +2259,7 @@ function CompanyInfoModal<
   }
 
   return (
-    <Modal title={`🏢 Company info — ${origName}`} onClose={onClose} form maxWidth={960}>
+    <Modal title={`${title} — ${origName}`} onClose={onClose} form maxWidth={960}>
       <div className="ms-copy-hint">
         Applies to all {rows.length} contacts of this company at once.
         {mixed.length ? ` Currently different per contact: ${mixed.join(", ")} — saving will make them the same.` : ""}
@@ -2242,10 +2280,12 @@ function CompanyInfoModal<
             onChange={(v) => setVals({ ...vals, [String(key)]: v })}
           />
         ))}
-        <PaymentTermsField
-          value={vals.payment_terms ?? ""}
-          onChange={(v) => setVals({ ...vals, payment_terms: v })}
-        />
+        {paymentTerms ? (
+          <PaymentTermsField
+            value={vals.payment_terms ?? ""}
+            onChange={(v) => setVals({ ...vals, payment_terms: v })}
+          />
+        ) : null}
         <LogoPasteField value={vals.logo ?? ""} onChange={(v) => setVals({ ...vals, logo: v })} />
         {tags ? (
           <CategoryTagPicker value={catIds} onChange={setCatIds} suggestions={tags.suggestions} />
@@ -3151,13 +3191,14 @@ const vendorHeadCols = (
     emptyLabel: "Unspecified" },
 ];
 
-/** 제조사 목록의 머리 칸 규칙 — 거래선과 같은 얼개에서 담당자 열만 빠졌다. */
+/** 제조사 목록의 머리 칸 규칙 — 거래선과 같은 얼개, 배지 열의 뜻만 다르다(Items). */
 const makerHeadCols = (
   catNames: (ids?: number[] | null) => string[],
 ): HeadCol<SettingsMaker>[] => [
   { key: "name", text: (r) => r.name || "" },
   { key: "country", text: (r) => r.country || "", filter: "facet",
     facetValues: partyRegions, emptyLabel: "No region" },
+  { key: "contact", text: (r) => r.contact || "", emptyLabel: "No contact" },
   { key: "website", text: (r) => siteLabel(r.website || "") },
   { key: "items", text: (r) => String(r.items ?? 0), sortValue: (r) => r.items ?? 0,
     filter: "facet", emptyLabel: "No item yet" },
@@ -3170,9 +3211,9 @@ const makerHeadCols = (
 /** 회사 단위 태그(분류·제조사)를 담당자 줄들에서 읽는다 — 가진 줄 중 첫 번째.
  *  회사정보 창이 그렇게 읽고 그렇게 저장하므로, 목록도 같은 규칙이어야 둘이 다른 말을
  *  하지 않는다(담당자마다 값이 갈려 있어도 저장하면 하나로 통일된다). */
-function companyIds(
-  rows: SettingsVendor[],
-  key: "category_ids" | "maker_ids",
+function companyIds<K extends string>(
+  rows: ({ [P in K]?: number[] })[],
+  key: K,
 ): number[] {
   return rows.find((r) => (r[key] ?? []).length)?.[key] ?? [];
 }
@@ -3257,6 +3298,8 @@ const vendorPrintCols = (
 const makerPrintCols = (cat: (ids?: number[] | null) => string): PrintCol<SettingsMaker>[] => [
   { label: "Maker", value: (r) => r.name, width: 2.4 },
   { label: "Region", value: (r) => partyRegions(r).filter(Boolean).join(" · "), width: 1.3 },
+  { label: "Contact", value: (r) => r.contact, width: 1.6 },
+  { label: "In charge of", value: (r) => r.duty, width: 1.3 },
   { label: "Email", value: (r) => contactValues(r.emails, r.email).join(", "), width: 2.4 },
   { label: "Phone", value: (r) => contactValues(r.phones, r.contact_phone).join(", "), width: 1.6 },
   { label: "Address", value: (r) => contactValues(r.addresses, r.address).join(" / "), width: 3 },

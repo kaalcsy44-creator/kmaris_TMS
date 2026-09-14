@@ -782,9 +782,10 @@ def delete_vendor(row_id: int):
 
 
 # ── Maker(제조사) ─────────────────────────────────────────────────────────────
-# 거래선과 나란한 또 하나의 상대처지만 담당자를 두지 않는다 — 부품은 거래선을 통해 사고
-# 메이커에는 우리가 직접 두드리는 창구가 없다. 회사 한 곳 = 한 줄이라, 고객·거래선 쪽의
-# 회사 단위 일괄편집(company-info)도 여기엔 없다.
+# 거래선·고객과 같은 규약을 쓴다 — 레코드 1건 = 담당자 1명, 회사 단위 값은 같은 이름의
+# 레코드 전부에 한꺼번에 반영(company-info). 메이커에도 물어볼 사람이 있고(기술문의·
+# 단종품 확인) 그 창구가 영업과 기술로 갈리기 때문이다. 담당자를 안 적은 회사는 이름만
+# 적힌 줄 하나로 남는다 — 지금까지의 명부가 그대로 그 모양이다.
 
 
 def _maker_item_counts(s) -> dict[str, int]:
@@ -804,6 +805,8 @@ def _maker_item_counts(s) -> dict[str, int]:
 def _maker_row(m, counts: dict[str, int]) -> dict:
     return {
         "id": m.id, "name": m.name,
+        "contact": getattr(m, "contact", None) or "",
+        "duty": getattr(m, "duty", None) or "",
         "email": m.email or "",
         "contact_phone": getattr(m, "contact_phone", None) or "",
         "country": m.country or "", "address": m.address or "",
@@ -827,7 +830,28 @@ def settings_makers():
     s = get_session()
     try:
         counts = _maker_item_counts(s)
-        return [_maker_row(m, counts) for m in s.query(Maker).order_by(Maker.name).all()]
+        rows = s.query(Maker).order_by(Maker.name, Maker.id).all()
+        return [_maker_row(m, counts) for m in rows]
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/settings/makers/company-info", dependencies=[Depends(require_token)])
+def update_maker_company(body: CompanyInfoSave):
+    """회사 단위 값을 같은 이름의 메이커 레코드 전부에 반영(거래선과 같은 규약).
+
+    결제조건(payment_terms)은 받지 않는다 — 메이커에는 그 칸이 없다(물건값은 거래선에게
+    치른다). maker_ids 도 없다: '누구 것을 대 주나'는 거래선의 칸이고, 메이커가 제 자신을
+    가리킬 일은 없다."""
+    s = get_session()
+    try:
+        rows = _company_rows(s, Maker, body.name)
+        if not rows:
+            raise HTTPException(status_code=404, detail="해당 회사로 등록된 제조사가 없습니다.")
+        name = _apply_company_info(
+            rows, body, ("specialization", "category_ids", "website", "note", "logo"))
+        s.commit()
+        return {"ok": True, "updated": len(rows), "name": name}
     finally:
         s.close()
 
@@ -838,7 +862,9 @@ def create_maker(body: MakerCreate):
         raise HTTPException(status_code=400, detail="이름을 입력하세요.")
     s = get_session()
     try:
-        m = Maker(name=body.name.strip(), email=body.email or "",
+        m = Maker(name=body.name.strip(),
+                  contact=body.contact or "", duty=body.duty or "",
+                  email=body.email or "",
                   contact_phone=body.contact_phone or "",
                   country=body.country or "", address=body.address or "",
                   website=body.website or "", specialization=body.specialization or "",
@@ -860,6 +886,8 @@ def update_maker(row_id: int, body: MakerCreate):
         if not m:
             raise HTTPException(status_code=404, detail="Maker를 찾을 수 없습니다.")
         m.name = body.name.strip()
+        m.contact = body.contact or ""
+        m.duty = body.duty or ""
         m.email = body.email or ""
         m.contact_phone = body.contact_phone or ""
         m.country = body.country or ""
@@ -884,17 +912,40 @@ def delete_maker(row_id: int):
     """명부에서만 지운다 — 품목의 maker 칸(자유 텍스트)은 그대로 남는다.
 
     지운다고 그 부품을 그 회사가 만들지 않은 것이 되지는 않는다. 명부는 '아는 회사의
-    목록'이고 품목에 적힌 이름은 그 부품의 사실이라, 둘의 수명이 다르다."""
+    목록'이고 품목에 적힌 이름은 그 부품의 사실이라, 둘의 수명이 다르다.
+
+    지우는 단위는 담당자 한 줄이다. 그 회사에 다른 담당자가 남아 있으면 회사는 명부에
+    그대로 서 있어야 하므로, 이 줄을 가리키던 거래선의 참조(maker_ids·maker_id)를 남은
+    줄로 옮긴다 — 안 그러면 담당자 한 명을 지웠다고 "YANMAR 를 대 주는 곳" 태그가 조용히
+    사라진다."""
     s = get_session()
     try:
         m = s.query(Maker).filter_by(id=row_id).first()
         if not m:
             raise HTTPException(status_code=404, detail="Maker를 찾을 수 없습니다.")
+        heir = next((r for r in _company_rows(s, Maker, m.name) if r.id != m.id), None)
+        _rehome_maker_refs(s, m.id, heir.id if heir else None)
         s.delete(m)
         s.commit()
         return {"ok": True}
     finally:
         s.close()
+
+
+def _rehome_maker_refs(s, old_id: int, new_id: int | None) -> None:
+    """사라지는 메이커 줄을 가리키던 거래선의 참조를 남은 줄로 옮긴다(없으면 끊는다)."""
+    for v in s.query(Vendor).filter(Vendor.maker_id == old_id).all():
+        v.maker_id = new_id
+    for v in s.query(Vendor).all():
+        ids = [int(x) for x in (getattr(v, "maker_ids", None) or [])
+               if str(x).isdigit()]
+        if old_id not in ids:
+            continue
+        kept = [x for x in ids if x != old_id]
+        if new_id is not None and new_id not in kept:
+            kept.append(new_id)
+        v.maker_ids = kept      # JSON 칼럼은 새 리스트로 갈아 끼워야 변경이 잡힌다
+    s.flush()
 
 
 # ── 명부 사이 옮기기·복사 ──────────────────────────────────────────────────────
@@ -913,13 +964,14 @@ _PARTNER_KINDS = {"customers": Customer, "vendors": Vendor, "makers": Maker}
 _PARTNER_COMPANY_FIELDS = ("address", "website", "specialization", "note", "logo",
                            "country", "contact_phone", "email")
 _PARTNER_MULTI_FIELDS = ("addresses", "emails", "phones", "regions")
-# 사람에 딸린 값 — 메이커에는 이 자리가 없다(담당자를 두지 않는 명부라서).
+# 사람에 딸린 값. payment_terms 는 메이커에 자리가 없어 그쪽으로는 그냥 버려진다
+# (물건값은 거래선에게 치른다 — hasattr 로 걸러진다).
 _PARTNER_CONTACT_FIELDS = ("contact", "duty", "payment_terms")
 
 
 def _partner_new_row(src_row, to_kind: str, with_contact: bool):
     """원본 한 줄을 저쪽 명부의 새 줄로 옮겨 담는다. 저쪽에 없는 칸은 조용히 버린다
-    (고객의 사업자번호는 거래선 명부에 자리가 없고, 메이커에는 담당자가 없다)."""
+    (고객의 사업자번호는 거래선 명부에 자리가 없고, 메이커에는 결제조건이 없다)."""
     obj = _PARTNER_KINDS[to_kind](name=(src_row.name or "").strip())
     for f in _PARTNER_COMPANY_FIELDS:
         if hasattr(obj, f):
@@ -959,7 +1011,7 @@ def partners_transfer(body: PartnerTransfer):
 
     회사 단위인 이유: 명부의 한 줄은 담당자 한 명이고, 그 사람만 저쪽으로 보내는 것은
     뜻이 없다 — 갈래를 바꾸는 것은 언제나 회사다. 그래서 고른 회사에 딸린 담당자는
-    모두 함께 간다(메이커로 갈 때는 담당자 자리가 없어 회사 한 줄로 접힌다).
+    모두 함께 간다.
 
     이미 저쪽에 서 있는 사람은 건너뛴다. 옮기기는 원본을 지우는데, 거래 기록이 걸려
     삭제가 막힌 회사는 복사도 하지 않고 통째로 건너뛴다 — 반만 옮겨 두 명부에 같은
@@ -976,7 +1028,6 @@ def partners_transfer(body: PartnerTransfer):
 
     Src = _PARTNER_KINDS[body.source]
     Dst = _PARTNER_KINDS[body.target]
-    to_maker = body.target == "makers"
     move = body.mode == "move"
 
     s = get_session()
@@ -987,7 +1038,6 @@ def partners_transfer(body: PartnerTransfer):
             by_name.setdefault(_norm_company(r.name or ""), []).append(r)
 
         dst_all = s.query(Dst).order_by(Dst.id).all()
-        dst_names = {_norm_company(r.name or "") for r in dst_all}
         dst_people = {(_norm_company(r.name or ""), _partner_contact_key(r)) for r in dst_all}
 
         done: list[str] = []
@@ -1018,20 +1068,14 @@ def partners_transfer(body: PartnerTransfer):
                     continue
 
             made = 0
-            if to_maker:
-                # 메이커 명부는 회사 한 곳 = 한 줄이라 담당자별로 세우지 않는다.
-                if key not in dst_names:
-                    s.add(_partner_new_row(rows[0], body.target, with_contact=False))
-                    dst_names.add(key)
-                    made = 1
-            else:
-                for r in rows:
-                    ck = (key, _partner_contact_key(r))
-                    if ck in dst_people:
-                        continue           # 저쪽에 이미 서 있는 사람
-                    s.add(_partner_new_row(r, body.target, with_contact=True))
-                    dst_people.add(ck)
-                    made += 1
+            # 세 명부 모두 레코드 1건 = 담당자 1명이라, 고른 회사의 담당자가 모두 함께 간다.
+            for r in rows:
+                ck = (key, _partner_contact_key(r))
+                if ck in dst_people:
+                    continue           # 저쪽에 이미 서 있는 사람
+                s.add(_partner_new_row(r, body.target, with_contact=True))
+                dst_people.add(ck)
+                made += 1
             # 저쪽에 이미 다 서 있었다. 복사라면 할 일이 없고, 옮기기라면 아직 남았다 —
             # 옮긴다는 것은 '저쪽에 세운다'가 아니라 '이쪽에서 뺀다'까지다.
             if made == 0 and not move:
@@ -1093,6 +1137,10 @@ def maker_as_vendor(row_id: int):
         if v is None:
             v = Vendor(
                 name=(m.name or "").strip(),
+                # 메이커에 적어 둔 담당자를 그대로 들고 간다 — 직접 물어보기로 한 순간
+                # 필요한 것이 바로 그 사람이다(RFQ 수신처가 그 자리에서 정해진다).
+                contact=getattr(m, "contact", None) or "",
+                duty=getattr(m, "duty", None) or "",
                 specialization=m.specialization or "",
                 website=getattr(m, "website", None) or "",
                 note=getattr(m, "note", None) or "",

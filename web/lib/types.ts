@@ -112,8 +112,11 @@ export type SettingsVendor = {
 export type SettingsMaker = {
   id: number;
   name: string;
+  /** 담당자 이름 — 거래선과 같은 규약(레코드 1건 = 담당자 1명). 빈 값이면 회사 대표 창구. */
+  contact: string;
+  duty: string;            // 담당 분야(영업·기술·A/S)
   email: string;
-  contact_phone: string;   // 회사 대표 연락처(담당자가 아니다)
+  contact_phone: string;   // 이 담당자의 연락처(비어 있으면 회사 대표번호)
   country: string;         // 대표 지역(regions[0] 미러링)
   address: string;
   website: string;

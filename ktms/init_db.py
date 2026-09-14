@@ -157,6 +157,12 @@ _MIGRATIONS = {
         "reply_email_id": "INTEGER",
         "reply_auto": "BOOLEAN DEFAULT FALSE",
     },
+    "makers": {
+        # 담당자 — 메이커도 거래선과 같이 레코드 1건 = 담당자 1명이 됐다.
+        # 기존 행은 NULL = 회사 대표 창구(담당자 이름 없이 회사만 적힌 줄).
+        "contact": "VARCHAR(100)",
+        "duty": "VARCHAR(100)",
+    },
     "item_master": {
         # 품목 분류 연결(대>중>소 트리의 가장 깊은 노드 id). FK 는 신규 DB 모델에서만 강제.
         "category_id": "INTEGER",

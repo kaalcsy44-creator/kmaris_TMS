@@ -3343,8 +3343,10 @@ class VendorCreate(BaseModel):
 
 
 class MakerCreate(BaseModel):
-    """제조사 등록·수정. 거래선과 같은 칸을 쓰되 담당자(contact)가 없다."""
+    """제조사 등록·수정. 거래선과 같은 칸을 쓴다(담당자 포함)."""
     name: str
+    contact: str | None = ""     # 담당자 이름(없으면 회사 대표 창구 줄)
+    duty: str | None = ""        # 담당 분야
     email: str | None = ""
     contact_phone: str | None = ""
     country: str | None = ""

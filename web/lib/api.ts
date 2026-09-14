@@ -1173,6 +1173,12 @@ export function fetchSettingsMakers(): Promise<SettingsMaker[]> {
 export function createSettingsMaker(body: Omit<SettingsMaker, "id">): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/settings/makers", body);
 }
+/** 회사 단위 값을 같은 이름의 메이커 레코드 전부에 반영(거래선과 같은 규약). */
+export function updateMakerCompanyInfo(
+  body: CompanyInfoSave
+): Promise<{ ok: boolean; updated: number; name: string }> {
+  return put("/api/admin/settings/makers/company-info", body);
+}
 /** 이 메이커를 거래선 명부에도 세우고(멱등) 그 거래선을 돌려준다 — 메이커에 직접
  *  RFQ 를 보낼 때. 견적 수신·P/O·지급이 모두 거래선을 타고 흐르기 때문이다. */
 export function registerMakerAsVendor(
