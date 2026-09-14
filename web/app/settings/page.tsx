@@ -3451,6 +3451,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
       // 적은 열(분류·상대처·제조사·원산지·단위·프로젝트)은 고르는 목록으로, 품명·품번처럼
       // 행마다 다른 열과 금액 열은 정렬만 — 목록으로 만들면 행 수만큼 긴 메뉴가 된다.
       headCols={itemHeadCols}
+      printCols={itemPrintCols(kind)}
       tableClass="ms-table--items"
       fields={isService
         ? [
@@ -3652,6 +3653,68 @@ type LedgerFilter = { kind: "all" } | { kind: "cat"; id: number } | { kind: "unm
 // 좌측 선택 체크박스 열은 구조 컬럼이라 여기 넣지 않는다.
 // 기본 폭(px). 품명은 두 줄로 접히지만 분류는 한 줄이라, 접히지 않는 쪽에 폭을 준다 —
 // 계통 트리의 경로는 "Engine Room > Main Engine System" 처럼 길다.
+/* ── 품목 인쇄 칸 ──────────────────────────────────────────────────────────────
+   화면 표는 폭이 한정돼 열을 접거나 배지로 줄이지만, 종이는 접을 곳이 없다 — 접어 둔
+   값(원산지·HS 코드·마진·분류 전체 경로)까지 펴서 싣고, 배지는 글자로 풀어 적는다.
+   금액은 화면과 같은 표기(통화 + 정수)로 맞춘다 — 두 곳이 다르면 어느 쪽이 맞는지
+   확인하러 다시 화면을 봐야 한다. */
+function printPrice(p: { unit_price: number; currency: string } | null | undefined): string {
+  return p ? `${p.currency} ${fmtAmt(p.unit_price)}` : "";
+}
+function printMargin(pct: number | null | undefined, cross?: boolean): string {
+  return pct == null ? "" : `${cross ? "~" : ""}${pct.toFixed(1)}%`;
+}
+
+/** 품목 마스터(Parts·Service) 인쇄 칸. 용역 탭은 품번·제조사·원산지·HS 를 뺀다. */
+const itemPrintCols = (kind: ItemKind): PrintCol<SettingsItem>[] => {
+  const isService = kind === "service";
+  const head: PrintCol<SettingsItem>[] = [
+    // 품명은 종이에서도 가장 긴 값이라 폭을 넉넉히 준다 — 좁히면 한 줄이 대여섯 줄로
+    // 접혀 한 장에 들어가는 품목이 그만큼 줄어든다.
+    { label: "Project No.", value: (r) => itemProjects(r).join(" · "), width: 1.1 },
+    { label: "Customer", value: (r) => r.customer || "", width: 1.3 },
+    { label: "Vessel", value: (r) => itemVessels(r).join(" · "), width: 1.1 },
+    { label: isService ? "Service" : "Description", value: (r) => r.description || "", width: 3.6 },
+  ];
+  const parts: PrintCol<SettingsItem>[] = isService ? [] : [
+    { label: "Part No.", value: (r) => r.part_no || "", width: 1.2 },
+  ];
+  const mid: PrintCol<SettingsItem>[] = [
+    { label: "Category", value: (r) => r.category_path || "", width: 2.2 },
+  ];
+  const spec: PrintCol<SettingsItem>[] = isService ? [] : [
+    { label: "Maker", value: (r) => r.maker || "", width: 1.2 },
+    { label: "Origin", value: (r) => r.origin || "", width: 0.9 },
+  ];
+  const tail: PrintCol<SettingsItem>[] = [
+    { label: "Unit", value: (r) => r.unit || "", width: 0.6 },
+    ...(isService ? [] : [{ label: "HS Code", value: (r: SettingsItem) => r.hs_code || "", width: 1 }]),
+    { label: "Vendor", value: (r) => r.vendor || "", width: 1.3 },
+    { label: "Purchase Price", value: (r) => printPrice(r.buy), width: 1.2, align: "right" as const },
+    { label: "Sales Price", value: (r) => printPrice(r.sell), width: 1.2, align: "right" as const },
+    { label: "Margin", value: (r) => printMargin(r.margin_pct, r.margin_cross),
+      width: 0.7, align: "right" as const },
+    { label: "Deal", value: (r) => [DEAL_LABEL[r.deal_state || ""] || "", r.deal_note || ""]
+        .filter(Boolean).join(" — "), width: 1.1 },
+  ];
+  return [...head, ...parts, ...mid, ...spec, ...tail];
+};
+
+/** 가격 이력(카테고리 탭 오른쪽 표) 인쇄 칸 — 화면에서 숨긴 열도 종이에는 싣는다. */
+const ledgerPrintCols: PrintCol<ItemLedgerRow>[] = [
+  { label: "Part No.", value: (r) => r.part_no || "", width: 1.2 },
+  { label: "Description", value: (r) => r.description || "", width: 3 },
+  { label: "Maker", value: (r) => r.maker || "", width: 1.2 },
+  { label: "Vendor", value: (r) => r.vendor || "", width: 1.5 },
+  { label: "Buy", value: (r) => printPrice(r.buy), width: 1.2, align: "right" },
+  { label: "Customer", value: (r) => r.customer || "", width: 1.5 },
+  { label: "Sell", value: (r) => printPrice(r.sell), width: 1.2, align: "right" },
+  { label: "Margin", value: (r) => printMargin(r.margin_pct, r.margin_cross), width: 0.7, align: "right" },
+  { label: "Deals", value: (r) => `${r.buy_count}/${r.sell_count}`, width: 0.6, align: "right" },
+  { label: "Last", value: (r) => r.last_date || "", width: 0.9 },
+  { label: "Category", value: (r) => r.category_path || "", width: 2.4 },
+];
+
 const LEDGER_COLS: { key: string; label: string; width: number; numeric?: boolean }[] = [
   { key: "part_no", label: "Part No.", width: 100 },
   { key: "description", label: "Description", width: 200 },
@@ -4385,6 +4448,18 @@ export function CategoriesTab() {
                 <span className="hint-inline">Built {fmtBuiltAt(ledger.built_at)}</span>
               ) : null}
               <ColumnsButton cols={LEDGER_COLS} layout={ledgerCols} />
+              {/* 지금 보고 있는 목록 그대로(고른 분류·검색으로 좁힌 결과) 미리보고 받는다. */}
+              {filtered.length ? (
+                <PrintListButton
+                  small
+                  build={() => printBook(
+                    filterTitle, ledgerPrintCols, filtered,
+                    [filter.kind === "unmatched" ? "No master link" : "",
+                     ledger?.built_at ? `Built ${fmtBuiltAt(ledger.built_at)}` : ""]
+                      .filter(Boolean).join(" · "),
+                  )}
+                />
+              ) : null}
               {canDelete && unusedCount > 0 ? (
                 <button
                   className="btn tiny"

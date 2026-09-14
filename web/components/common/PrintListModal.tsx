@@ -31,13 +31,20 @@ function stamp(): string {
  * 인쇄물이어야 한다. 표를 그리는 쪽이 이미 걸러 둔 줄을 그대로 넘겨받아, 미리보기와
  * 파일과 화면 셋이 같은 목록을 말하게 한다.
  */
-export default function PrintListButton({ build }: { build: () => PrintBook }) {
+export default function PrintListButton({
+  build,
+  small = false,
+}: {
+  build: () => PrintBook;
+  /** 도구줄이 작은 단추로 채워진 자리(가격 이력 표)에서는 그 크기에 맞춘다. */
+  small?: boolean;
+}) {
   const [book, setBook] = useState<PrintBook | null>(null);
   return (
     <>
       <button
         type="button"
-        className="btn"
+        className={small ? "btn tiny" : "btn"}
         title="Preview and download this list (Excel · PDF)"
         onClick={() => setBook(build())}
       >
