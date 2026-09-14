@@ -317,6 +317,16 @@ class ItemCategory(Base):
     name       = Column(String(100), nullable=False)
     sort_order = Column(Integer, default=0)
     active     = Column(Boolean, default=True)
+    # ── K-MARIS 품목 분류(2026-09 전환) ────────────────────────────────────────
+    # 새 체계는 위치가 아니라 품목이 축이고 2단이다: 대분류 15종(EN·AU·…) > 부품 145종
+    # (EN-001·…). 코드가 곧 이름 노릇을 하므로 칸을 따로 둔다 — 이름은 사람이 고칠 수
+    # 있지만 코드는 브로슈어·견적서에 적히는 값이라 흔들리면 안 된다.
+    code       = Column(String(20))    # 'EN' | 'EN-001'. 구 트리 노드는 NULL
+    name_ko    = Column(String(100))   # 국문명(화면은 영문을 쓰고, 국문은 검색·인쇄에)
+    # part=품목 트리 · service=용역 트리 · attribute=분류가 아닌 속성(SB·BU, 트리에 없음).
+    # 부품/용역이 한 트리에 섞이면 부품 통계가 용역으로 오염된다(전환의 이유 중 하나).
+    tree_type  = Column(String(10))
+    hs_code    = Column(String(20))    # 참고값. 통관 적용 전 관세사 확인 필요
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -335,6 +345,13 @@ class ItemMaster(Base):
     item_type   = Column(String(10), default="part")
     # 분류(가장 깊은 선택 노드). 보통 소분류 id, 소분류 없으면 중분류 id. NULL=미분류.
     category_id = Column(Integer, ForeignKey("item_categories.id"), nullable=True)
+    # ── 2026-09 분류 전환의 흔적 ──────────────────────────────────────────────
+    # 옮기기 전 어디에 있었는지를 남긴다. 새 분류가 틀렸다는 말이 나왔을 때 되돌릴
+    # 근거이자, "이 품목이 왜 여기로 갔나"를 설명하는 유일한 기록이다(마스터플랜 §2-1).
+    legacy_category    = Column(String(300))  # 구 경로 문자열 스냅샷
+    legacy_category_id = Column(Integer)      # 구 노드 id(참조 제약은 걸지 않는다)
+    migration_status   = Column(String(12))   # MIGRATED | REVIEW
+    migration_note     = Column(String(300))  # 판정(OK/MOVE/NEW/SVC) + 이슈
     created_at  = Column(DateTime, default=datetime.utcnow)
 
 

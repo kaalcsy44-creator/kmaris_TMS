@@ -17077,3 +17077,27 @@ input.mail-bad {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* 분류를 옮기기 전 자리 — 고치는 칸이 아니라 사실의 기록이라 입력칸처럼 그리지 않는다. */
+.legacy-cat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 10px;
+  border: 1px dashed #d7e2ee;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+.legacy-cat-path {
+  font-size: 12.5px;
+  color: #45526a;
+}
+.legacy-cat-note {
+  font-size: 11.5px;
+  color: var(--muted, #6b7684);
+}
+.legacy-cat-flag {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #9a6510;
+}

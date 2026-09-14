@@ -320,6 +320,11 @@ def apply_line_categories(session, items) -> int:
     if not lines:
         return 0
 
+    # 내려 둔 구 분류(2026-09 전환)는 마스터를 되돌리지 못하게 막는다. 문서 라인에 남은
+    # 옛 노드 id 하나가, 그 문서를 다시 저장하는 순간 품목을 옛 자리로 끌고 가기 때문이다.
+    retired = {c.id for c in session.query(ItemCategory)
+               .filter(ItemCategory.active.is_(False)).all()}
+
     masters = session.query(ItemMaster).order_by(ItemMaster.id).all()
     by_key: dict[str, ItemMaster] = {}
     for m in masters:
@@ -332,6 +337,8 @@ def apply_line_categories(session, items) -> int:
         try:
             cat_id = int(line["category_id"])
         except (TypeError, ValueError):
+            continue
+        if cat_id in retired:
             continue
         master = by_key.get(key)
         if master is None:
@@ -731,6 +738,9 @@ def category_ship_map(session) -> dict:
             "id": c.id, "parent_id": c.parent_id, "level": c.level or 1,
             "name": c.name, "sort_order": c.sort_order or 0,
             "active": c.active is not False,
+            # 도면이 카드를 앉히는 기준 — 이름이 아니라 코드다(이름은 고칠 수 있다).
+            "code": getattr(c, "code", None) or "",
+            "name_ko": getattr(c, "name_ko", None) or "",
         } for c in sorted(cats, key=lambda c: (c.level or 1, c.sort_order or 0, c.id))],
         "items": items,
         # 마스터에 아직 연결되지 않은 이력 — 배에 실을 자리조차 없는 줄이라 수만 알린다.

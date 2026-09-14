@@ -23,6 +23,10 @@ export type CategoryOption = {
   rootId: number;
   /** 그 대분류 이름(대문자). 이름이 바뀌어도 트리가 무너지지 않게 이름으로만 판별한다. */
   rootName: string;
+  /** 그 대분류의 K-MARIS 코드(EN·TS…). 새 트리에서는 이름보다 이 값이 안정적이다. */
+  rootCode: string;
+  /** part | service — 부품 트리와 용역 트리를 가르는 축(구 트리는 빈 값). */
+  rootType: string;
 };
 
 /**
@@ -30,6 +34,12 @@ export type CategoryOption = {
  * 모르는 이름은 그냥 선박 계통으로 둔다(관리자가 트리를 고쳐도 화면이 무너지지 않는다).
  */
 const SERVICE_ROOT = "SERVICE";
+
+/** 이 옵션이 용역인가 — 새 트리는 대분류가 그렇다고 말해 주고(tree_type), 구 트리는
+ *  이름이 'Service' 인 대분류가 그 자리였다. 둘 다 본다(전환 중에는 둘이 함께 선다). */
+export function isServiceOption(o: { rootType?: string; rootName?: string }): boolean {
+  return o.rootType === "service" || (o.rootName || "") === SERVICE_ROOT;
+}
 
 /** 품목 식별키 — 백엔드 services.item_ledger.match_key 와 같은 규칙이어야 한다. */
 export function itemMatchKey(partNo?: string | null, description?: string | null): string {
@@ -60,6 +70,8 @@ export function useCategoryOptions(): CategoryOption[] {
         depth,
         rootId: root?.rootId ?? c.id,
         rootName: root?.rootName ?? (c.name || "").trim().toUpperCase(),
+        rootCode: root?.rootCode ?? (c.code || "").trim().toUpperCase(),
+        rootType: root?.rootType ?? (c.tree_type || ""),
       };
       out.push(opt);
       walk(c.id, path, depth + 1, root ?? opt);
@@ -123,10 +135,10 @@ export default function CategoryCell({
   const hit = effective != null ? opts.find((o) => o.id === effective) : undefined;
   const inherited = value == null && effective != null;
   // 용역 줄인가 — 고른 분류가 용역 대분류 밑이면. 부위 칸은 그때만 연다.
-  const isService = hit?.rootName === SERVICE_ROOT;
+  const isService = !!hit && isServiceOption(hit);
   const showApplied = isService && !!onAppliedToChange;
   // 부위로 고를 수 있는 것은 배 위의 계통뿐이다(용역에 용역을 걸 수는 없다).
-  const partOpts = opts.filter((o) => o.rootName !== SERVICE_ROOT);
+  const partOpts = opts.filter((o) => !isServiceOption(o));
   const appliedHit = appliedTo != null ? opts.find((o) => o.id === appliedTo) : undefined;
 
   const cat = (

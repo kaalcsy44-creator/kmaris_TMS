@@ -1,0 +1,120 @@
+no,description,maker,legacy_category,major,part_code,part_name,verdict,note
+1,Service Charge - Replacement of Liner Cooling Water Jacket O-rings (Case 1: Cylinder Cover only),,Service > Technical Service > Repair & Overhaul,TS,,,OK,
+2,Service Charge - Replacement of Liner Cooling Water Jacket O-rings (Case 2: Cylinder Liner removal),,Service > Technical Service > Repair & Overhaul,TS,,,OK,
+3,Travelling Charge,,Service > Labor & Travel > Travelling,TS,,,OK,
+4,Daily Allowance,,Service > Labor & Travel > Man-day / Overtime,TS,,,OK,
+5,Trucking Fee,,Service > Other Service > Transportation,TR,,,OK,운송비 → TR(납품지원)로 분리 권장
+6,Accommodation,,Service > Labor & Travel > Accommodation,TS,,,OK,
+7,Emergency Engine Generator Model : SCANIA Marine Engine DI13 074M (DC12 53A Model Obsoleted) ABS Class included 376kW at 1800rpm IMO Tier II emission standard,,Engine Room > Electrical Power System > Generator,EN,EN-033,주발전기 / 비상발전기,OK,비상발전기 완제품
+8,"Alternator Stamford Model : S4L1M-F1 300 kw(375kva) @1800rpm/60Hz, 450V, 3 phase ABS Class included, COO: CHINA",,Engine Room > Electrical Power System > Generator,EN,EN-033,주발전기 / 비상발전기,OK,얼터네이터 — 발전기세트 구성품
+9,"Genset fabrication and inspection : Combining Generator & Alternator / Test, CLASS",,Engine Room > Electrical Power System > Generator,TS,,,SVC,조립·검사 용역인데 Generator(부품)로 분류됨
+10,Main Starting Valve (Ball Valve & Actuator) complete assembly Make Mt.H HBB-150 &HAP-150,Mt.H,Engine Room > Starting Air System > Main Starting Valve,EN,EN-025,주 시동밸브,OK,
+11,Repair Kit for Main Starting Ball valve (with complete seal set),,Engine Room > Starting Air System > Main Starting Valve,EN,EN-025,주 시동밸브,OK,오버홀킷
+12,Labor Cost / Service Charge : STBD HH Crane Slow Heaving up Issue Inspection job,,Service > Technical Service > Inspection & Test,TS,,,OK,
+13,Travelling Charge(Round) - Busan ↔ Onsan: 10 hrs,,Service > Labor & Travel > Travelling,TS,,,OK,
+14,"BALL VALVE WITH ACTUATOR COMP. 200A, KK",KK,Engine Room > Starting Air System > Main Starting Valve,EN,EN-025,주 시동밸브,OK,Maker 필드 정상(KK)
+15,"BALL VALVE WITH ACTUATOR COMP. 200A, MT.H",MT.H,Engine Room > Starting Air System > Main Starting Valve,EN,EN-025,주 시동밸브,OK,Maker 필드 정상(MT.H)
+16,"BALL VALVE WITH ACTUATOR COMP. 50A, KK",KK,Engine Room > Starting Air System > Main Starting Valve,EN,EN-025,주 시동밸브,OK,50A — 시동공기/슬로우터닝 계통 확인 필요
+17,"BALL VALVE WITH ACTUATOR COMP. 50A, MT.H",MT.H,Engine Room > Starting Air System > Main Starting Valve,EN,EN-025,주 시동밸브,OK,50A — 계통 확인 필요
+18,"REPAIR KIT FOR BALL V/V WITH ACTUATOR 200A, KK",KK,Engine Room > Starting Air System > Main Starting Valve,EN,EN-025,주 시동밸브,OK,오버홀킷
+19,"REPAIR KIT FOR BALL V/V WITH ACTUATOR 200A, MT.H",MT.H,Engine Room > Starting Air System > Main Starting Valve,EN,EN-025,주 시동밸브,OK,오버홀킷
+20,"REPAIR KIT FOR BALL V/V WITH ACTUATOR 50A, KK",KK,Engine Room > Starting Air System > Main Starting Valve,EN,EN-025,주 시동밸브,OK,오버홀킷
+21,"REPAIR KIT FOR BALL V/V WITH ACTUATOR 50A, MT.H",MT.H,Engine Room > Starting Air System > Main Starting Valve,EN,EN-025,주 시동밸브,OK,오버홀킷
+22,"A/E No.4 LOCAL CONTROL AND MONITORING PANEL; OPERATING UNIT, MAKER: YUMYUNG, MODEL: YECS-100D;",,Electrical & Automation,EA,EA-007,PLC / 컨트롤러,OK,YUMYUNG YECS-100D 제어반
+23,"Gas-free certificate, including travel between Busan & Daesan",,Service > Labor & Travel,TS,,,OK,
+24,Diassembly of hyd. Cylinder onboard,,Deck Machinery > Crane,TS,,,SVC,분해 작업 용역인데 Deck>Crane(부품)로 분류됨
+25,Trucking (3ton) between Busan & Daesan,,Service > Labor & Travel,TR,,,OK,
+26,Shore crane service at the workboat terminal,,Deck Machinery > Crane,TS,,,SVC,육상크레인 용역인데 Deck>Crane으로 분류됨
+27,Reinstallation of hyd. Cylinder onboard,,Deck Machinery > Crane,TS,,,SVC,재설치 용역인데 Deck>Crane으로 분류됨
+28,Travel between Busan and Daesan,,Service > Labor & Travel,TS,,,OK,
+29,Hyd. cylinder overhaul at workshop,,Deck Machinery > Crane,TS,,,SVC,워크숍 오버홀 용역인데 Deck>Crane으로 분류됨
+30,Fabrication of cylinder pins,,Deck Machinery > Crane,TS,,,SVC,핀 제작 용역인데 Deck>Crane으로 분류됨
+31,Fabrication of copper bearings,,Deck Machinery > Crane,TS,,,SVC,베어링 제작 용역인데 Deck>Crane으로 분류됨
+32,Weekend and holiday surcharge for 15 - 17 August,,Service > Other Service > Misc Charge,TS,,,OK,
+33,Vehicle mileage for 2 round trips,,Service > Labor & Travel > Travelling,TS,,,OK,
+34,Hotel accommodation & meals,,Service > Labor & Travel > Accommodation,TS,,,OK,
+35,Scafolding installation and removal,,Service > Technical Service > Repair & Overhaul,TS,,,OK,
+36,Consumable materials,,Deck Machinery > Crane,TS,,,SVC,소모자재 — 품명 불명확. Deck>Crane으로 분류됨
+37,COMPLETE SLOW TURNING VALVE WITH ACTUATOR,,Engine Room > Starting Air System > Main Starting Valve,EN,EN-029,슬로우 터닝 밸브,OK,슬로우터닝밸브
+38,COMPLETE NRV WITH GASKETS,,Engine Room > Starting Air System > Main Starting Valve,EN,EN-026,시동공기 역지밸브,OK,시동공기 역지밸브(NRV)
+39,BALL (MAIN) 150A FOR ME STARTING AIR VALVE,,Engine Room > Starting Air System > Main Starting Valve,EN,EN-025,주 시동밸브,OK,150A 주시동밸브
+40,Service attendance on board (2 engineers),,Service > Technical Service > Attendance,TS,,,OK,
+41,Traveling btwn Busan and China,,Service > Labor & Travel,TS,,,OK,
+42,RU-Flex 4C*6sq >> Quoted interchangeable one_same specification,,Deck Machinery > Crane,EA,EA-010,선박용 케이블 / 글랜드,MOVE,선박용 케이블 → Deck>Crane에서 EA로
+43,RU-Flex 4C*6sq >> Quoted interchangeable one_20c*1.5sq,,Service > Labor & Travel > Accommodation,EA,EA-010,선박용 케이블 / 글랜드,MOVE,★케이블인데 Service>Accommodation으로 분류됨 — 오분류
+44,Air ticket from Busan to Shanghai,,Service > Labor & Travel > Travelling,TS,,,OK,
+45,Excess baggage charge for carrying cables with engineers,,Service > Other Service > Misc Charge,TS,,,OK,
+46,Hotel + daily allowance (2 engineers),,Service > Labor & Travel > Accommodation,TS,,,OK,
+47,Replacement for two types of Cables (1) 2engineers (2) including flight tickets(round trip btw S.Korea and China) & Accommodations (in China) (3) Carrying cables(Maker: Samwoncable) with 2 engineers - RU-Flex 4C*6sq / 50mtr - Same spec - RU-Flex 20C*1.5sq / 20Mtr (required 16C but we offered 20C) (4) Available working dates in general working hours are 23rd and 24th of August -,,Service > Technical Service > Repair & Overhaul,TS,,,OK,
+48,Travelling Charge(Round) - Busan ↔ Onsan,,Service > Labor & Travel > Travelling,TS,,,OK,
+49,Ballast Pump,SHIN SHIN MACHINERY,Other Equipment > BWTS,AU,AU-001,원심펌프,MOVE,★평형수 펌프 → Other Equipment>BWTS가 아니라 AU(펌프)
+50,NDE bearing COMPLETE,Hansung Heavy Industries,Engine Room > Electrical Power System > Generator,EN,EN-043,발전기 베어링(DE/NDE),NEW,신설 EN-043 적용 — 발전기 베어링
+51,Complete Hydraulic Actuator,NAKAKITA SEISAKUSHO,Cargo & Tank System > Valve,VP,VP-011,밸브 액추에이터(공압/유압/전동),OK,NAKAKITA 유압 액추에이터
+52,Lip Seal,,Cargo & Tank System > Valve,VP,VP-020,개스킷 / O링 / 패킹,OK,립씰
+53,"RECTIFIER RELAY UNIT ASS'Y, COMPLETE",,Deck Machinery > Winch,EA,EA-009,릴레이 / 접점,MOVE,정류·릴레이 유닛 → Deck>Winch에서 EA로
+54,"BS5R BRAKE RECTIFIER MODULE, SUCCESSOR MODEL",,Deck Machinery > Winch,EA,EA-009,릴레이 / 접점,MOVE,브레이크 정류모듈 → EA로
+55,Insulation,Hansung Heavy Industries,Engine Room > Electrical Power System > Generator,EN,EN-044,발전기 권선 / 절연물,NEW,신설 EN-044 적용 — 발전기 절연물
+56,Top part of the shell,Hansung Heavy Industries,Engine Room > Electrical Power System > Generator,EN,EN-045,발전기 프레임 / 엔드실드,NEW,신설 EN-045 적용 — 케이싱 상부
+57,Bottom part of the shell,Hansung Heavy Industries,Engine Room > Electrical Power System > Generator,EN,EN-045,발전기 프레임 / 엔드실드,NEW,신설 EN-045 적용 — 케이싱 하부
+58,PVM/PVMD 32 'Set of Seals',,Deck Machinery > Crane,VP,VP-014,밸브 오버홀 킷,OK,PVM/PVMD 32 유압 씰세트
+59,Sealing ring,,Engine Room > Main Engine System,VP,VP-020,개스킷 / O링 / 패킹,MOVE,실링링 → Main Engine System에서 VP로
+60,Switch,,Engine Room > Main Engine System,EA,EA-009,릴레이 / 접점,MOVE,스위치 → Main Engine System에서 EA로
+61,Repair Kit For Main Ball Valve (150A),,Engine Room > Main Engine System,EN,EN-025,주 시동밸브,OK,150A 주볼밸브 리페어킷
+62,"Fuel Oil Distributor Block, for Fuel Pipes",,Engine Room > Main Engine System,EN,EN-006,고압 연료관,OK,연료유 분배블록
+63,Jib Top Wire Sheave,MacGregor,Deck Machinery > Crane,DK,DK-011,시브 / 풀리,NEW,신설 DK-011 적용 — 와이어 시브
+64,Jib Top Wire Sheave,MacGregor,Deck Machinery > Crane,DK,DK-011,시브 / 풀리,NEW,신설 DK-011 적용 (중복 등록 확인 필요)
+65,RU-FLEX 16Cx1.5SQMM IEC,,Engine Room > Main Engine System,EA,EA-010,선박용 케이블 / 글랜드,MOVE,★케이블인데 Main Engine System으로 분류됨
+66,Bushing,NAKAKITA SEISAKUSHO,Cargo & Tank System > Valve,VP,VP-013,밸브 스템 / 글랜드,OK,액추에이터 부싱
+67,Valve Plug / Switching Amplifier,,Electrical & Automation,EA,EA-009,릴레이 / 접점,OK,밸브플러그/스위칭앰프
+68,Y Packing,NAKAKITA SEISAKUSHO,Cargo & Tank System > Valve,VP,VP-020,개스킷 / O링 / 패킹,OK,Y패킹
+69,O-Ring,NAKAKITA SEISAKUSHO,Cargo & Tank System > Valve,VP,VP-020,개스킷 / O링 / 패킹,OK,O링
+70,UNION NIPPLE WITH O-RING,,Engine Room > Main Engine System > Fuel,VP,VP-018,익스팬션 조인트 / 벨로우즈,OK,유니온 니플 — 배관 부속
+71,O-Ring,NAKAKITA SEISAKUSHO,Cargo & Tank System > Valve,VP,VP-020,개스킷 / O링 / 패킹,OK,O링
+72,DG3 MAIN BRG 및 CONNECTING ROD 점검 SERVICE CHARGE,,Engine Room > Main Engine System > Con. Rod,TS,,,SVC,★점검 용역인데 Main Engine>Con.Rod(부품)로 분류됨
+73,Shaft,,Engine Room > Main Engine System,AU,AU-005,펌프 샤프트 / 베어링,MOVE,펌프 샤프트 → Main Engine System에서 AU로
+74,Sleeve,,Engine Room > Main Engine System,AU,AU-005,펌프 샤프트 / 베어링,MOVE,펌프 슬리브
+75,Sleeve,,Engine Room > Main Engine System,AU,AU-005,펌프 샤프트 / 베어링,MOVE,펌프 슬리브
+76,O-Ring,,Engine Room > Main Engine System,VP,VP-020,개스킷 / O링 / 패킹,MOVE,O링(펌프 예비품 패키지)
+77,Sleeve Collar,,Engine Room > Main Engine System,AU,AU-005,펌프 샤프트 / 베어링,MOVE,슬리브 칼라
+78,Impeller Nut,,Engine Room > Main Engine System,AU,AU-004,펌프 임펠러 / 웨어링,MOVE,임펠러 너트
+79,Bearing Nut,,Engine Room > Main Engine System,AU,AU-005,펌프 샤프트 / 베어링,MOVE,베어링 너트
+80,Bearing Nut,,Engine Room > Main Engine System,AU,AU-005,펌프 샤프트 / 베어링,MOVE,베어링 너트
+81,Bearing Washer,,Engine Room > Main Engine System,AU,AU-005,펌프 샤프트 / 베어링,MOVE,베어링 와셔
+82,Bearing Collar,,Engine Room > Main Engine System,AU,AU-005,펌프 샤프트 / 베어링,MOVE,베어링 칼라
+83,Flinger,,Engine Room > Main Engine System,AU,AU-005,펌프 샤프트 / 베어링,MOVE,플링거
+84,Ball Bearing,,Engine Room > Main Engine System,AU,AU-005,펌프 샤프트 / 베어링,MOVE,볼베어링
+85,Ball Bearing,,Engine Room > Main Engine System,AU,AU-005,펌프 샤프트 / 베어링,MOVE,볼베어링
+86,Packing Ring,,Engine Room > Main Engine System,AU,AU-003,펌프 메커니컬 씰,MOVE,패킹링
+87,Packing Ring,,Engine Room > Main Engine System,AU,AU-003,펌프 메커니컬 씰,MOVE,패킹링
+88,Packing Ring,,Engine Room > Main Engine System,AU,AU-003,펌프 메커니컬 씰,MOVE,패킹링
+89,Mechanical Seal,,Engine Room > Main Engine System,AU,AU-003,펌프 메커니컬 씰,MOVE,메커니컬 씰
+90,Mechanical Seal,,Engine Room > Main Engine System,AU,AU-003,펌프 메커니컬 씰,MOVE,메커니컬 씰
+91,Bearing Collar,,Engine Room > Main Engine System,AU,AU-005,펌프 샤프트 / 베어링,MOVE,베어링 칼라
+92,Gasket,,Engine Room > Main Engine System,VP,VP-020,개스킷 / O링 / 패킹,MOVE,개스킷
+93,Gasket,,Engine Room > Main Engine System,VP,VP-020,개스킷 / O링 / 패킹,MOVE,개스킷
+94,Gasket,,Engine Room > Main Engine System,VP,VP-020,개스킷 / O링 / 패킹,MOVE,개스킷
+95,Gasket,,Engine Room > Main Engine System,VP,VP-020,개스킷 / O링 / 패킹,MOVE,개스킷
+96,TRANSPORTATION CHARGE,,Service > Other Service > Transportation,TR,,,OK,
+97,FUEL INJECTION PUMP COMPLETE,,Engine Room > Main Engine System,EN,EN-003,연료분사펌프,MOVE,연료분사펌프 → Detail 없는 Main Engine System에서 이동
+98,PLUNGER&BARREL ASSY,,Engine Room > Main Engine System,EN,EN-004,플런저 & 배럴,MOVE,플런저&배럴
+99,CONTROL RACK,,Engine Room > Main Engine System,EN,EN-039,컨트롤 랙,NEW,신설 EN-039 적용 — 컨트롤 랙
+100,CONTROL SLEEVE,,Engine Room > Main Engine System,EN,EN-040,컨트롤 슬리브,NEW,신설 EN-040 적용 — 컨트롤 슬리브
+101,AIR CYLINDER,,Engine Room > Main Engine System,EN,EN-042,연료차단 에어실린더,NEW,신설 EN-042 적용 — 연료차단 에어실린더
+102,AIR CYLINDER,,Engine Room > Main Engine System,EN,EN-042,연료차단 에어실린더,NEW,신설 EN-042 적용 (중복 확인 필요)
+103,SPRING SEAT,,Engine Room > Main Engine System,EN,EN-041,분사펌프 스프링 & 시트,NEW,신설 EN-041 적용 — 스프링 시트
+104,SPRING-PLUNGER,,Engine Room > Main Engine System,EN,EN-004,플런저 & 배럴,MOVE,플런저 스프링
+105,SPRING SEAT,,Engine Room > Main Engine System,EN,EN-041,분사펌프 스프링 & 시트,NEW,신설 EN-041 적용 (중복 확인 필요)
+106,PLUNGER GUIDE FUEL PUMP,,Engine Room > Main Engine System,EN,EN-004,플런저 & 배럴,MOVE,플런저 가이드
+107,HEX.SOCKET HEAD CAP BOLT,,Engine Room > Main Engine System,HW,HW-001,볼트 / 너트 / 와셔,NEW,★신설 대분류 HW 적용 — 육각볼트
+108,RETAINING RING,,Engine Room > Main Engine System,HW,HW-002,리테이닝링 / 키 / 핀,NEW,★신설 대분류 HW 적용 — 리테이닝 링
+109,SUSPENSION BLOCK (NO.17 ON REPRT),,Deck Machinery > Liferaft & Davit,SF,SF-006,다빗 / 진수장치 / 후크,MOVE,서스펜션 블록 → Liferaft & Davit에서 SF로
+110,"Overhaul Kit, ME Starting Valve including Kit for main ball valve and its actuator, slow turning valve and its actuator",,Engine Room > Main Engine System,EN,EN-025,주 시동밸브,OK,ME 시동밸브 오버홀킷
+111,RU-FLEX 16Cx1.5SQMM IEC 60332-3 Cat A IEC 60332-1,,Deck Machinery > Crane,EA,EA-010,선박용 케이블 / 글랜드,MOVE,케이블 → Deck>Crane에서 EA로
+112,RU-FLEX 4Cx6SQMM IEC 60332-3 Cat A IEC 60332-1,,Deck Machinery > Crane,EA,EA-010,선박용 케이블 / 글랜드,MOVE,케이블 → Deck>Crane에서 EA로
+113,"Pressure Controller, 0–250 bar",,Electrical & Automation,EA,EA-008,계측 센서(압력·온도·레벨),OK,압력 컨트롤러
+114,MAIN CONTROL VALVE OVERHAUL KIT,,Deck Machinery > Crane,VP,VP-023,유압 밸브 블록,MOVE,유압 메인컨트롤밸브 오버홀킷
+115,HOISTING MOTOR SEAL KIT,,Deck Machinery > Crane,VP,VP-024,유압 모터,NEW,신설 VP-024 적용 — 유압 모터 씰킷
+116,MAIN CONTROL VALVE OVERHAUL KIT,,Deck Machinery > Crane,VP,VP-023,유압 밸브 블록,MOVE,유압 메인컨트롤밸브 오버홀킷(중복)
+117,HOISTING MOTOR SEAL KIT,,Deck Machinery > Crane,VP,VP-024,유압 모터,NEW,신설 VP-024 적용 (중복 확인 필요)
+118,MAIN CONTROL VALVE OVERHAUL KIT,Danfoss,Deck Machinery > Crane,VP,VP-023,유압 밸브 블록,MOVE,Danfoss 메인컨트롤밸브 킷(중복)
+119,MAIN CONTROL VALVE OVERHAUL KIT,Danfoss,Deck Machinery > Crane,VP,VP-023,유압 밸브 블록,MOVE,Danfoss 메인컨트롤밸브 킷(중복)

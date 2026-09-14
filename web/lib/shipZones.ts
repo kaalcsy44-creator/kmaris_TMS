@@ -30,6 +30,7 @@ export const DECKS = [
  * 화면에서 빠지지는 않는다(관리자가 트리를 고쳐도 화면이 무너지지 않는다).
  */
 export const BERTH: Record<string, number> = {
+  // 구 트리(위치 축) — 새 분류로 옮긴 뒤에도 남는 노드가 있어 자리를 지운다.
   "BRIDGE": 0,
   "DECK MACHINERY": 0,
   "CARGO & TANK SYSTEM": 1,
@@ -40,8 +41,33 @@ export const BERTH: Record<string, number> = {
   "SERVICE": 3,
 };
 
-/** 대분류 이름 → 갑판 번호(0~3). 모르는 이름은 부두(마지막 자리)에 내려놓는다. */
-export function berthOf(name: string): number {
+/**
+ * K-MARIS 대분류 코드 → 갑판. 새 트리(품목 축)의 1단은 코드가 이름보다 안정적이라
+ * 코드로 앉힌다 — 이름은 관리자가 고칠 수 있지만 코드는 브로슈어에 적힌 값이다.
+ *
+ * 품목 축이 되었어도 배의 자리는 그대로 뜻이 있다: 펌프는 기관실에 있고 크레인은 갑판에
+ * 있다. 자리가 없는 것(체결류·용역·납품지원)은 부두에 세운다 — 배 위의 물건이 아니다.
+ */
+export const BERTH_BY_CODE: Record<string, number> = {
+  NC: 0,   // 항해·통신 — 선교
+  AO: 0,   // 거주구·의장 — 상부
+  SF: 0,   // 안전·구명·소방 — 보트갑판
+  DK: 1,   // 갑판·화물·계류
+  EN: 2,   // 엔진·동력
+  AU: 2,   // 펌프·분리·공기
+  HT: 2,   // 열교환·보일러·공조
+  VP: 2,   // 밸브·배관·유압
+  EA: 2,   // 전기·자동화
+  EV: 2,   // 환경·처리
+  HW: 3,   // 체결류·표준품 — 배의 자리가 아니다(창고·육상)
+  TS: 3,   // 기술서비스
+  TR: 3,   // 트레이딩·납품지원
+};
+
+/** 대분류 → 갑판 번호(0~3). 코드가 있으면 코드로, 없으면 이름으로. 모르면 부두. */
+export function berthOf(name: string, code?: string | null): number {
+  const c = (code || "").trim().toUpperCase();
+  if (c && BERTH_BY_CODE[c] !== undefined) return BERTH_BY_CODE[c];
   const k = (name || "").trim().toUpperCase();
   return BERTH[k] ?? DECKS.length - 1;
 }

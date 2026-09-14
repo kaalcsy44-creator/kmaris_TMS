@@ -163,9 +163,21 @@ _MIGRATIONS = {
         "contact": "VARCHAR(100)",
         "duty": "VARCHAR(100)",
     },
+    "item_categories": {
+        # K-MARIS 품목 분류(2026-09 전환) — 코드·국문명·트리 구분·HS. 구 노드는 NULL.
+        "code": "VARCHAR(20)",
+        "name_ko": "VARCHAR(100)",
+        "tree_type": "VARCHAR(10)",
+        "hs_code": "VARCHAR(20)",
+    },
     "item_master": {
         # 품목 분류 연결(대>중>소 트리의 가장 깊은 노드 id). FK 는 신규 DB 모델에서만 강제.
         "category_id": "INTEGER",
+        # 분류 전환 흔적 — 옮기기 전 자리와 판정. 기존 값은 건드리지 않는다(마스터플랜 §2-1).
+        "legacy_category": "VARCHAR(300)",
+        "legacy_category_id": "INTEGER",
+        "migration_status": "VARCHAR(12)",
+        "migration_note": "VARCHAR(300)",
         # 물품/용역 구분 — Item Master 를 Parts·Service 탭으로 가른다.
         "item_type": "VARCHAR(10) DEFAULT 'part'",
     },

@@ -202,7 +202,8 @@ export default function ShipMapTab() {
     // 카드가 흘러 들어가는 순서 = 배를 읽는 순서(선교·상부 → 갑판 → 기관 → 부두).
     const roots = (kids.get(null) ?? [])
       .filter((c) => c.active)
-      .sort((a, b) => berthOf(a.name) - berthOf(b.name) || a.sort_order - b.sort_order || a.id - b.id);
+      .sort((a, b) => berthOf(a.name, a.code) - berthOf(b.name, b.code)
+                      || a.sort_order - b.sort_order || a.id - b.id);
 
     // 옮겨 갈 수 있는 자리 — 화면에 선 순서 그대로 훑어 내려가며 경로를 쌓는다.
     // 잎만 담지 않는다: 품목은 지금도 2단(Deck Machinery > Crane)에 걸린 것이 있고,
@@ -452,7 +453,7 @@ function Zone({
   const deals = dealsOf(mine);
   const shown = busyOnly ? subs.filter((s) => (model.roll.get(s.id) ?? []).length) : subs;
 
-  const deck = DECKS[berthOf(cat.name)];
+  const deck = DECKS[berthOf(cat.name, cat.code)];
 
   return (
     <article
@@ -460,7 +461,7 @@ function Zone({
       /* 색은 카드가 아니라 갑판의 것이다 — 같은 구역 카드끼리 한 계열로 묶여야 세 단에
          흩어져 놓여도 "이 셋은 한 구역"이 먼저 읽힌다. 자리(열)는 부피가 정하므로
          구역을 자리로는 말할 수 없고, 남는 수단이 색이다. */
-      data-deck={berthOf(cat.name)}
+      data-deck={berthOf(cat.name, cat.code)}
     >
       {/* 갑판 이름표는 카드 안에 있다 — 카드가 어느 단에 놓이든 제자리를 말하도록. */}
       <div className="ship-zone-deck"><b>{deck.name}</b><span>{deck.sub}</span></div>

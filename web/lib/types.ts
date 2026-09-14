@@ -146,6 +146,10 @@ export type SettingsVessel = {
 };
 
 export type SettingsItem = {
+  /** 2026-09 분류 전환 전 자리(읽기 전용). 빈 값이면 그 전환을 거치지 않은 품목. */
+  legacy_category?: string;
+  migration_status?: string;
+  migration_note?: string;
   id: number;
   part_no: string;
   description: string;
@@ -187,11 +191,17 @@ export type SettingsItem = {
 export type ItemCategory = {
   id: number;
   parent_id: number | null;
-  level: number;      // 1=대, 2=중, 3=소
+  level: number;      // 새 트리는 1=대분류, 2=부품 (구 트리는 1=대, 2=중, 3=소)
   name: string;
   sort_order: number;
   active: boolean;
   path: string;       // "대 > 중 > 소"
+  /** K-MARIS 코드(EN · EN-001). 구 트리 노드는 빈 값 — 이름보다 이 값이 안정적이다. */
+  code?: string;
+  name_ko?: string;
+  /** part | service | "" — 부품 트리와 용역 트리를 가르는 축. */
+  tree_type?: string;
+  hs_code?: string;
 };
 
 // 품목별 구매가·판매가 이력(item_price_history) 롤업
@@ -280,6 +290,9 @@ export type ShipMap = {
     name: string;
     sort_order: number;
     active: boolean;
+    /** K-MARIS 대분류·부품 코드(EN · EN-001). 구 트리 노드는 빈 값. */
+    code?: string;
+    name_ko?: string;
   }[];
   items: ShipItem[];
   /**

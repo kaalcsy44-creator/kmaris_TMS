@@ -3500,10 +3500,38 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
             value={form.category_id}
             onChange={(category_id) => setForm({ ...form, category_id })}
           />
+          <LegacyCategoryNote row={form} />
           <ItemLinkNote row={form} />
         </>
       )}
     />
+  );
+}
+
+/**
+ * 분류를 옮기기 전에 이 품목이 있던 자리(읽기 전용).
+ *
+ * 2026-09 전환에서 119건을 위치 축(Engine Room > …)에서 품목 축(EN-001 …)으로 옮겼다.
+ * 새 자리가 틀렸다는 말이 나왔을 때 판정을 되짚을 데가 있어야 하므로, 옮기기 전 경로와
+ * 판정(OK/MOVE/NEW/SVC)을 창 안에 남겨 둔다. 고치는 칸이 아니다 — 사실의 기록이다.
+ * 전환을 거치지 않은 품목(그 뒤에 등록된 것)에는 아무것도 그리지 않는다.
+ */
+function LegacyCategoryNote({ row }: { row: SettingsItem }) {
+  const was = (row.legacy_category || "").trim();
+  if (!row.id || !was) return null;
+  const note = (row.migration_note || "").trim();
+  const review = (row.migration_status || "") === "REVIEW";
+  return (
+    <div className="form-field legacy-cat">
+      <span>Was classified as</span>
+      <div className="legacy-cat-body">
+        <span className="legacy-cat-path">{was}</span>
+        {note ? <span className="legacy-cat-note">{note}</span> : null}
+        {review ? (
+          <span className="legacy-cat-flag">Needs review — moved to the service tree</span>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -3634,7 +3662,9 @@ function CategoryPicker({
   );
 }
 
-const LEVEL_LABEL: Record<number, string> = { 1: "Main", 2: "Sub", 3: "Detail" };
+// 새 트리는 2단이다 — 1단 대분류(K-MARIS 코드), 2단 부품. 3단(Detail)은 구 트리에만
+// 남아 있는 층이라 이름표만 남겨 둔다(내려 둔 노드를 열어 봤을 때 읽히게).
+const LEVEL_LABEL: Record<number, string> = { 1: "Major", 2: "Part", 3: "Detail" };
 
 type CatEditor = {
   id: number | null;        // null = new
@@ -4292,7 +4322,9 @@ export function CategoriesTab() {
     const pos = sibs.findIndex((c) => c.id === node.id);
     const isFirst = pos <= 0;
     const isLast = pos >= sibs.length - 1;
-    const canHaveKids = node.level < 3;
+    // 새 트리(코드가 있는 노드)는 부품 아래로 더 내려가지 않는다 — 3단으로 다시
+    // 자라면 같은 부품이 층마다 갈려 전환 전의 문제로 돌아간다.
+    const canHaveKids = node.level < (node.code ? 2 : 3);
     const isOpen = expanded.has(node.id);
     return (
       <li className={`cat-node cat-l${node.level}${node.active ? "" : " off"}`}>
@@ -4382,7 +4414,7 @@ export function CategoriesTab() {
         <h3 className="form-title">Item Categories · Prices</h3>
       </div>
       <p className="hint-inline" style={{ display: "block", marginBottom: 12 }}>
-        Left: manage the classification (Main &gt; Sub &gt; Detail, ▲▼ to reorder). Click a category to list its
+        Left: manage the classification (Major &gt; Part, ▲▼ to reorder). Click a category to list its
         items with the latest purchase (buy) and sales (sell) prices on the right; click a row for the full history.
       </p>
 

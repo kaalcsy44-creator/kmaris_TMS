@@ -60,7 +60,7 @@ export function CategoryBadges({
           하나는 기관실이고 하나는 갑판이다. 화면 두 곳이 같은 것을 다르게 칠하면
           색이 뜻을 잃는다. */}
       {shown.map((o) => (
-        <span key={o.id} className="cat-tag" data-deck={berthOf(o.rootName)} title={o.path}>
+        <span key={o.id} className="cat-tag" data-deck={berthOf(o.rootName, o.rootCode)} title={o.path}>
           {leafOf(o.path)}
         </span>
       ))}
@@ -112,7 +112,7 @@ export function CategoryTagPicker({
       <span>Item categories</span>
       <div className="cat-picker-tags">
         {picked.length ? picked.map((o) => (
-          <span key={o.id} className="cat-tag cat-tag--edit" data-deck={berthOf(o.rootName)}
+          <span key={o.id} className="cat-tag cat-tag--edit" data-deck={berthOf(o.rootName, o.rootCode)}
                 title={o.path}>
             {leafOf(o.path)}
             {disabled ? null : (

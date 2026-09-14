@@ -1579,6 +1579,11 @@ def settings_item_categories():
             "id": c.id, "parent_id": c.parent_id, "level": c.level or 1,
             "name": c.name or "", "sort_order": c.sort_order or 0,
             "active": bool(c.active), "path": _category_path(cat_by_id, c.id),
+            # K-MARIS 분류(2026-09 전환) — 코드가 곧 이름 노릇을 한다(구 노드는 빈 값).
+            "code": getattr(c, "code", None) or "",
+            "name_ko": getattr(c, "name_ko", None) or "",
+            "tree_type": getattr(c, "tree_type", None) or "",
+            "hs_code": getattr(c, "hs_code", None) or "",
         } for c in cats]
     finally:
         s.close()
@@ -1701,6 +1706,11 @@ def settings_items():
                 "item_type": i.item_type or "part",
                 "category_id": i.category_id,
                 "category_path": _category_path(cat_by_id, i.category_id),
+                # 2026-09 분류 전환의 흔적 — 화면에서 읽기 전용으로 보여 준다.
+                # 새 분류가 틀렸다는 말이 나왔을 때 어디서 왔는지 아는 유일한 자리다.
+                "legacy_category": getattr(i, "legacy_category", None) or "",
+                "migration_status": getattr(i, "migration_status", None) or "",
+                "migration_note": getattr(i, "migration_note", None) or "",
                 "customer": cust.get(sm.get("customer_id") or fb.get("customer_id")) or "",
                 "vendor": vend.get(sm.get("vendor_id") or fb.get("vendor_id")) or "",
                 "buy": sm.get("buy"), "sell": sm.get("sell"),
