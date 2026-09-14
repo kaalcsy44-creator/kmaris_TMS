@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from datetime import datetime, timedelta
 
 from sqlalchemy import func, or_
@@ -206,7 +207,10 @@ def detect_replies(s, mark_no_reply: bool = True) -> dict:
            "no_reply": 무응답으로 적은 건, "checked": 살펴본 활동 수}"""
     acts = [a for a in s.query(MarketingActivity).all()
             if (a.recipient_email or "").strip() and _owned_by_machine(a)]
-    out = {"checked": len(acts), "linked": 0, "classified": {}, "unclassified": 0, "no_reply": 0}
+    out = {"checked": len(acts), "linked": 0, "classified": {}, "unclassified": 0,
+           "no_reply": 0, "bad_addresses": 0}
+    # 이번에 폐기로 판정된 주소들 — 맨 끝에 한 번에 고객 담당자 명부로 옮긴다.
+    bounced: set[str] = set()
     if not acts:
         return out
 
@@ -237,7 +241,7 @@ def detect_replies(s, mark_no_reply: bool = True) -> dict:
                 continue        # 그 발송보다 먼저 온 메일은 이 발송의 답장이 아니다
             if a.reply_email_id and (a.reply_date or "") <= day:
                 continue        # 이미 더 이른 답장을 붙여 뒀다
-            _apply(s, a, msg, day, status, note)
+            _apply(s, a, msg, day, status, note, bounced)
             out["linked"] += 1
             if status:
                 out["classified"][status] = out["classified"].get(status, 0) + 1
@@ -246,11 +250,36 @@ def detect_replies(s, mark_no_reply: bool = True) -> dict:
 
     if mark_no_reply:
         out["no_reply"] = _mark_no_reply(s, acts)
+    out["bad_addresses"] = _propagate_bounced(s, bounced)
     s.commit()
     return out
 
 
-def _apply(s, a: MarketingActivity, msg: "_Msg", day: str, status: str, note: str) -> None:
+def _propagate_bounced(s, addrs: set[str]) -> int:
+    """폐기로 판정된 주소를 고객 담당자 명부에도 반송으로 표시한다.
+
+    먼저 flush 한다 — 명부 반영은 "이 주소로 반송된 활동이 있는가"를 DB 에 물어
+    판단하므로, 방금 세운 표시가 DB 에 닿아 있어야 셈에 든다(이 세션은 autoflush 가
+    꺼져 있다). 한 주소가 실패해도 나머지는 옮긴다."""
+    if not addrs:
+        return 0
+    s.flush()
+    try:
+        from _core import sync_bounced_email
+    except Exception as exc:        # 명부 반영이 막혀도 답장 기록은 남긴다
+        print(f"[WARN] bounce sync unavailable: {exc}", file=sys.stderr)
+        return 0
+    n = 0
+    for addr in addrs:
+        try:
+            n += sync_bounced_email(s, addr)
+        except Exception as exc:
+            print(f"[WARN] bounce sync failed for {addr}: {exc}", file=sys.stderr)
+    return n
+
+
+def _apply(s, a: MarketingActivity, msg: "_Msg", day: str, status: str, note: str,
+           bounced: set[str] | None = None) -> None:
     a.reply_email_id = msg.id
     a.reply_date = day
     a.reply_auto = True
@@ -261,13 +290,13 @@ def _apply(s, a: MarketingActivity, msg: "_Msg", day: str, status: str, note: st
         a.next_action_date = follow_up_for(status, day)
         if status == "invalid":
             # 폐기된 주소는 반송과 같은 사실 — 고객 담당자 명부까지 표시가 닿아야
-            # 다음에 누가 그 사람에게 보내려 할 때 보인다.
+            # 다음에 누가 그 사람에게 보내려 할 때 보인다. 명부에 옮기는 일은 여기서
+            # 하지 않고 주소만 모아 둔다: 그 함수는 "반송으로 표시된 활동이 있는가"를
+            # DB 에 다시 물어 셈하는데, 이 세션은 autoflush 가 꺼져 있어 방금 세운
+            # 표시가 아직 DB 에 없다 — 지금 부르면 늘 "반송 아님"으로 읽힌다.
             a.email_bounced = True
-            try:
-                from _core import sync_bounced_email
-                sync_bounced_email(s, a.recipient_email or "")
-            except Exception:       # 명부 반영이 막혀도 답장 기록은 남긴다
-                pass
+            if bounced is not None:
+                bounced.add((a.recipient_email or "").strip())
     else:
         # 분류는 사람 몫으로 남기되, 답장이 온 날을 후속일로 세워 표에서 눈에 띄게 한다.
         a.reply_status = ""
