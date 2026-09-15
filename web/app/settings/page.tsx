@@ -1063,6 +1063,9 @@ function MakersTab() {
         tags={{
           initial: shown.find((r) => (r.category_ids ?? []).length)?.category_ids ?? [],
         }}
+        // 대리점은 담당자 줄마다 따로 붙는다 — 거래선이 가리키는 것은 회사가 아니라
+        // 그 줄(makers.id)이라서다. 회사 창은 회사를 보여 주는 자리이므로 모아서 센다.
+        agencies={uniqStrings(shown.flatMap((r) => r.agencies ?? []))}
         fields={[["website", "Website"]]}
         areas={[
           { key: "specialization", label: "Makes", rows: 3,
@@ -1771,6 +1774,7 @@ function CompanyInfoModal<
   onDeleteContact,
   tags,
   makerTags,
+  agencies,
   title = "🏢 Company info",
   paymentTerms = true,
 }: {
@@ -1803,6 +1807,10 @@ function CompanyInfoModal<
   };
   /** 대 줄 수 있는 제조사(거래선 전용). tags 와 같은 규약 — 안 주면 칸이 아예 없다. */
   makerTags?: { initial: number[] };
+  /** 이 제조사를 대 주는 거래선(제조사 전용) — makerTags 를 거꾸로 읽은 값이다.
+   *  고치는 칸이 아니라 읽는 칸이다: 값의 주인은 거래선의 'Makers supplied' 태그라,
+   *  여기서 고칠 수 있게 두면 같은 사실을 고치는 자리가 둘이 된다. 안 주면 칸이 없다. */
+  agencies?: string[];
   /** 창 제목 앞머리. 명부마다 다른 이름으로 부른다(제조사 창은 🏭 Maker). */
   title?: string;
   /** 결제조건 칸을 세울지 — 제조사 명부에는 그 칸이 없다(값을 치르는 상대가 아니다). */
@@ -2022,6 +2030,18 @@ function CompanyInfoModal<
       ...(makerTags ? [["Makers supplied",
                         makerIds.length ? <MakerBadges ids={makerIds} /> : null,
                        ] as [string, React.ReactNode]] : []),
+      // 대리점 — 이 브랜드를 어디서 사나. 메이커 창을 여는 가장 흔한 이유인데(명부의
+      // 제조사 대부분은 담당자도 연락처도 없다 — 우리가 직접 사는 상대가 아니라서다)
+      // 지금까지 그 답은 거래선 목록에만 흩어져 있었다.
+      ...(agencies ? [["Agency",
+                       agencies.length
+                         ? <span className="mk-tags">
+                             {agencies.map((v) => (
+                               <span key={v} className="mk-tag" title={`${v} — supplies ${origName}`}>{v}</span>
+                             ))}
+                           </span>
+                         : null,
+                      ] as [string, React.ReactNode]] : []),
       ...(stats ? [stats] : []),
       ...(areas ?? []).map((a) => [a.label, vals[String(a.key)]
         ? <span className="co-para">{vals[String(a.key)]}</span> : null] as [string, React.ReactNode]),

@@ -802,7 +802,35 @@ def _maker_item_counts(s) -> dict[str, int]:
     return out
 
 
-def _maker_row(m, counts: dict[str, int]) -> dict:
+def _maker_agencies(s) -> dict[int, list[str]]:
+    """메이커 id → 그 제조사를 대 준다고 밝혀 둔 거래선 이름.
+
+    거래선의 'Makers supplied'(Vendor.maker_ids)를 거꾸로 읽은 것이다. 같은 값이지만
+    묻는 방향이 반대라 답도 다른 것이 된다 — 거래선 쪽에서는 "이 회사가 누구 것을 대
+    주나"이고, 메이커 쪽에서는 **"이 브랜드는 어디서 사나"**다. 뒤쪽이 메이커 창을 여는
+    가장 흔한 이유인데(명부의 메이커 대부분은 담당자도 연락처도 없다 — 우리가 직접
+    사는 상대가 아니라서다), 지금까지는 그 답이 거래선 목록에만 흩어져 있었다.
+
+    거래선은 레코드 1건 = 담당자 1명이라 한 회사가 여러 줄로 선다. 이름으로 접어
+    한 번만 센다 — 담당자가 셋인 회사가 세 번 적히면 목록이 아니라 소음이 된다.
+    """
+    out: dict[int, list[str]] = {}
+    for name, maker_ids in s.query(Vendor.name, Vendor.maker_ids).all():
+        name = (name or "").strip()
+        if not name:
+            continue
+        for raw in (maker_ids or []):
+            try:
+                mid = int(raw)
+            except (TypeError, ValueError):
+                continue
+            slot = out.setdefault(mid, [])
+            if name not in slot:
+                slot.append(name)
+    return out
+
+
+def _maker_row(m, counts: dict[str, int], agencies: dict[int, list[str]] | None = None) -> dict:
     return {
         "id": m.id, "name": m.name,
         "contact": getattr(m, "contact", None) or "",
@@ -822,6 +850,8 @@ def _maker_row(m, counts: dict[str, int]) -> dict:
                          if isinstance(x, (int, float, str)) and str(x).isdigit()],
         # 이 회사가 만든 것으로 등록된 품목 수 — 거래선 목록의 'Projects' 자리에 선다.
         "items": counts.get(" ".join((m.name or "").split()).lower(), 0),
+        # 이 제조사를 대 준다고 밝혀 둔 거래선(읽기전용) — 값의 주인은 거래선 쪽 태그다.
+        "agencies": (agencies or {}).get(m.id, []),
     }
 
 
@@ -830,8 +860,9 @@ def settings_makers():
     s = get_session()
     try:
         counts = _maker_item_counts(s)
+        agencies = _maker_agencies(s)
         rows = s.query(Maker).order_by(Maker.name, Maker.id).all()
-        return [_maker_row(m, counts) for m in rows]
+        return [_maker_row(m, counts, agencies) for m in rows]
     finally:
         s.close()
 

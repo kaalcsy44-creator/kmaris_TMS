@@ -131,6 +131,10 @@ export type SettingsMaker = {
   category_ids: number[];
   /** 품목 마스터에 이 회사 이름으로 등록된 품목 수(읽기전용). */
   items?: number;
+  /** 이 제조사를 대 준다고 밝혀 둔 거래선 이름(읽기전용).
+   *  거래선의 'Makers supplied'(maker_ids)를 서버가 거꾸로 읽어 준 값이라, 여기서
+   *  고치지 않는다 — 고치는 자리는 언제나 그 거래선의 회사 창이다. */
+  agencies?: string[];
 };
 
 export type SettingsVessel = {
