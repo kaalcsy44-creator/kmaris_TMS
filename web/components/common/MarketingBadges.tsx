@@ -135,40 +135,66 @@ export function ReplyThreadPanel({ rowId }: { rowId: number }) {
   );
 }
 
-/** 대화 속 한 통. 긴 본문은 접어 둔다 — 답장은 첫 몇 줄이 전부이고 그 아래는 대개
- *  우리가 보낸 원문의 인용이라, 전부 펼쳐 두면 왕복이 몇 번이었는지가 안 보인다. */
+/** 대화 속 한 통 — 접어 둔 채로 선다.
+ *
+ *  펼쳐 두면 한 통이 화면 한 폭을 먹어, 정작 이 칸을 만든 까닭(왕복이 몇 번이었나)이
+ *  스크롤 뒤로 밀린다. 접힌 줄에는 언제·누가·무슨 말로 시작했는가만 남긴다 — 홍보
+ *  대화는 제목이 전부 같아서("RE: [K-Maris] …"), 통을 가려내는 단서는 제목이 아니라
+ *  첫 문장이다. 그래서 접힌 줄에 세우는 것은 제목이 아니라 본문 첫 줄이다.
+ *
+ *  전부 접어서 연다. 이 창을 여는 사람은 대개 한 통을 읽으러 오는 것이 아니라 어디까지
+ *  갔는지 보러 온다 — 읽을 통은 그 다음에 고른다. */
 function ThreadMail({ mail }: { mail: MarketingThreadMail }) {
   const [open, setOpen] = useState(false);
   const out = mail.direction === "out";
   const body = (mail.body || "").trim();
-  const long = body.length > 400;
   const who = out
     ? `To ${mail.to.join(", ") || "—"}`
     : `${mail.from_name ? `${mail.from_name} · ` : ""}${mail.from_addr}`;
+  // 접힌 줄에 세우는 한 줄 — 줄바꿈을 눕혀 첫 문장만 남긴다.
+  const snippet = body.replace(/\s+/g, " ").slice(0, 140);
   return (
-    <div className={`mail-msg ${out ? "is-out" : "is-in"}${mail.detected ? " is-detected" : ""}`}>
-      <div className="mail-msg-hd">
-        <span className={`mail-dir ${out ? "out" : "in"}`}>{out ? "Sent" : "Received"}</span>
-        <span className="mail-when">{(mail.sent_at || "").replace("T", " ")}</span>
-        <span className="mail-who">{who}</span>
-        {/* 이 한 통이 위 Reply 분류의 근거다 — 어느 메일을 보고 그렇게 찍혔는지
-            모르면 사람이 그 분류를 확인할 수가 없다. */}
-        {mail.detected ? <span className="mail-detected" title="The reply this activity was classified from">★ classified from this</span> : null}
-      </div>
-      <div className="mail-msg-subj">{mail.subject || "(no subject)"}</div>
-      {mail.attachments?.length ? (
-        <div className="reply-mail-files">📎 {mail.attachments.join(", ")}</div>
-      ) : null}
-      <pre className="reply-mail-body">
-        {(open || !long ? body : body.slice(0, 400)) || "(empty message)"}
-      </pre>
-      {long ? (
-        <button type="button" className="linklike" onClick={() => setOpen(!open)}>
-          {open ? "Show less" : "Show full message"}
-        </button>
-      ) : null}
-      {open && mail.truncated ? (
-        <span className="hint-inline">Only the beginning of this message is stored.</span>
+    <div className={`mail-msg ${out ? "is-out" : "is-in"}${mail.detected ? " is-detected" : ""}${open ? " is-open" : ""}`}>
+      <button
+        type="button"
+        className="mail-msg-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        title={open ? "Collapse this message" : "Open this message"}
+      >
+        <span className="mail-msg-hd">
+          <span className="mail-caret" aria-hidden="true">{open ? "▾" : "▸"}</span>
+          <span className={`mail-dir ${out ? "out" : "in"}`}>{out ? "Sent" : "Received"}</span>
+          <span className="mail-when">{(mail.sent_at || "").replace("T", " ")}</span>
+          <span className="mail-who">{who}</span>
+          {mail.attachments?.length ? (
+            <span className="mail-clip" title={mail.attachments.join(", ")}>
+              📎 {mail.attachments.length}
+            </span>
+          ) : null}
+          {/* 이 한 통이 위 Reply 분류의 근거다 — 어느 메일을 보고 그렇게 찍혔는지
+              모르면 사람이 그 분류를 확인할 수가 없다. 접혀 있어도 보여야 한다. */}
+          {mail.detected ? (
+            <span className="mail-detected" title="The reply this activity was classified from">
+              ★ classified from this
+            </span>
+          ) : null}
+        </span>
+        {!open ? (
+          <span className="mail-snip">{snippet || "(empty message)"}</span>
+        ) : null}
+      </button>
+      {open ? (
+        <div className="mail-msg-body">
+          <div className="mail-msg-subj">{mail.subject || "(no subject)"}</div>
+          {mail.attachments?.length ? (
+            <div className="reply-mail-files">📎 {mail.attachments.join(", ")}</div>
+          ) : null}
+          <pre className="reply-mail-body">{body || "(empty message)"}</pre>
+          {mail.truncated ? (
+            <span className="hint-inline">Only the beginning of this message is stored.</span>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
