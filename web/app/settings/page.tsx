@@ -1019,7 +1019,7 @@ function PartnersTab() {
 const EMPTY_MAKER: SettingsMaker = {
   id: 0, name: "", contact: "", duty: "", email: "", contact_phone: "", country: "", address: "",
   website: "", specialization: "", note: "", logo: "",
-  addresses: [], emails: [], phones: [], regions: [], category_ids: [],
+  addresses: [], emails: [], phones: [], regions: [], category_ids: [], agencies: [],
 };
 
 /**
@@ -1166,6 +1166,7 @@ function MakersTab() {
         ["website", "Website"],
         ["logo", "Company logo"],
         ["category_ids", "Item categories"],
+        ["agencies", "Agency"],
         ["specialization", "Makes"],
         ["note", "About this maker"],
         // 여기서부터는 사람의 것 — 회사가 이미 정해진 창(담당자 추가·수정)에서는
@@ -1217,6 +1218,16 @@ function MakersTab() {
             />
           );
         }
+        // 대리점 — 🏭 Maker 창이 쓰는 그 부품 그대로다. 같은 값을 받는 자리가 등록과
+        // 편집에서 다르게 생기면 무엇을 적는 칸인지 두 번 배워야 한다.
+        if (key === "agencies") {
+          return (
+            <AgencyTagPicker
+              value={form.agencies ?? []}
+              onChange={(agencies) => setForm({ ...form, agencies })}
+            />
+          );
+        }
         // 만드는 것·회사 소개는 문장으로 적는 칸이다(거래선 창과 같다).
         if (key === "specialization" || key === "note") {
           const area = key === "specialization"
@@ -1238,7 +1249,7 @@ function MakersTab() {
       }}
       // 회사 것은 🏭 Maker 창에서 고친다 — 회사가 이미 정해진 창(담당자 추가·수정)에서는
       // 이 칸들이 통째로 빠지고, 회사를 새로 만드는 + New 에서만 선다.
-      companyFields={["name", "address", "website", "logo", "category_ids",
+      companyFields={["name", "address", "website", "logo", "category_ids", "agencies",
                       "specialization", "note"]}
       extraForm={(form, setForm) => (
         <>
@@ -2506,6 +2517,13 @@ function withCompanyDefaults<T extends { name: string }>(form: T, rows: T[], nam
   if ("maker_ids" in rec && !((rec.maker_ids as number[]) ?? []).length) {
     const tagged = (mates as { maker_ids?: number[] }[]).find((r) => (r.maker_ids ?? []).length);
     if (tagged) rec.maker_ids = [...(tagged.maker_ids ?? [])];
+  }
+  // 대리점(제조사 명부)은 '첫 값'이 아니라 **모아서** 물려준다. 이 값은 줄마다 제 몫만
+  // 들고 있어서(거래선이 가리킨 그 줄에만 붙는다) 한 줄만 보면 회사의 명단이 아니다 —
+  // 대표 줄이 아닌 줄을 집으면 비어 있고, 그대로 저장하면 회사의 대리점이 지워진다.
+  if ("agencies" in rec && !((rec.agencies as string[]) ?? []).length) {
+    const all = uniqStrings((mates as { agencies?: string[] }[]).flatMap((r) => r.agencies ?? []));
+    if (all.length) rec.agencies = all;
   }
   // 주소는 회사 단위 정보(본사·지사) — 등록된 곳 전부를 그대로 물려준다.
   if ("addresses" in rec && !((rec.addresses as string[]) ?? []).length) {

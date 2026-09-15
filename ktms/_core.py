@@ -3360,6 +3360,11 @@ class MakerCreate(BaseModel):
     phones: list[str] | None = None
     regions: list[str] | None = None
     category_ids: list[int] | None = None
+    # 이 제조사를 대 주는 거래선(회사 이름). 등록 화면이 회사 정보 창과 같은 칸을 세우려면
+    # 이 값도 함께 받아야 한다 — 다만 저장되는 자리는 거래선의 'Makers supplied' 다.
+    # **등록(POST)에서만 쓴다.** 수정(PUT)은 담당자 한 줄을 고치는 자리이고 이 값은
+    # 회사 단위라, 담당자 줄을 고쳤다고 회사의 대리점 명단이 그 줄 기준으로 덮이면 안 된다.
+    agencies: list[str] | None = None
 
 
 class ConsultantCreate(BaseModel):

@@ -1053,6 +1053,17 @@ def create_maker(body: MakerCreate):
                   category_ids=list(body.category_ids or []))
         s.add(m)
         _apply_multi(m, body.emails, body.phones, body.regions, body.addresses)
+        # 대리점은 등록 화면에서만 받는다(회사 정보 창과 같은 칸을 세우기 위해). 값이
+        # 저장되는 자리는 거래선의 'Makers supplied' 라, 이 줄이 먼저 DB 에 닿아 있어야
+        # 그 회사의 줄로 찾을 수 있다 — 그래서 commit 전에 flush 한다.
+        #
+        # **빈 목록은 적용하지 않는다.** 이 함수는 명단을 정확히 그 값으로 맞추므로
+        # (없는 것은 떼어 낸다), 이미 대리점이 있는 회사에 담당자 줄을 하나 더하면서
+        # 빈 목록이 실려 오면 그 회사의 대리점이 통째로 지워진다. 새로 세우는 회사라면
+        # 뗄 것이 애초에 없으니 빈 목록을 건너뛰어 잃는 것도 없다.
+        if body.agencies:
+            s.flush()
+            _apply_maker_agencies(s, m.name, body.agencies)
         s.commit()
         return {"ok": True, "id": m.id}
     finally:
@@ -1081,6 +1092,11 @@ def update_maker(row_id: int, body: MakerCreate):
             m.logo = body.logo
         if body.category_ids is not None:
             m.category_ids = list(body.category_ids)
+        # 대리점(body.agencies)은 여기서 쓰지 않는다. 이 자리는 담당자 한 줄을 고치는
+        # 곳이고 대리점은 회사 단위 값이라, 담당자 줄을 고쳤다고 회사의 대리점 명단이
+        # 그 줄이 든 값으로 덮이면 안 된다 — 목록은 줄마다 제 몫만 들고 있어서(대표
+        # 줄에만 붙는다) 다른 줄을 고치는 순간 명단이 통째로 비어 버린다.
+        # 고치는 자리는 🏭 Maker 회사 정보 창이다.
         _apply_multi(m, body.emails, body.phones, body.regions, body.addresses)
         s.commit()
         return {"ok": True, "id": m.id}
