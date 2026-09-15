@@ -113,6 +113,7 @@ import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/comm
 import { invalidateMasterCategories } from "@/components/common/CategoryCell";
 import { CategoryBadges, CategoryTagPicker, useVendorCategoryOptions } from "@/components/common/CategoryTags";
 import { MakerBadges, MakerTagPicker, useMakerOptions } from "@/components/common/MakerCell";
+import { AgencyBadges, AgencyTagPicker } from "@/components/common/AgencyPicker";
 // 목록의 상대처는 다른 화면과 같은 모양(로고 + 이름)으로 — 같은 회사를 두 표기로 읽지 않도록.
 import CustomerName from "@/components/common/CustomerName";
 import { BounceBadge, MailAddress, hasBounced, isBounced } from "@/components/common/BouncedEmail";
@@ -1071,7 +1072,7 @@ function MakersTab() {
         }}
         // 대리점은 담당자 줄마다 따로 붙는다 — 거래선이 가리키는 것은 회사가 아니라
         // 그 줄(makers.id)이라서다. 회사 창은 회사를 보여 주는 자리이므로 모아서 센다.
-        agencies={uniqStrings(shown.flatMap((r) => r.agencies ?? []))}
+        agencies={{ initial: uniqStrings(shown.flatMap((r) => r.agencies ?? [])) }}
         fields={[["website", "Website"]]}
         areas={[
           { key: "specialization", label: "Makes", rows: 3,
@@ -1085,6 +1086,9 @@ function MakersTab() {
           savedName.current = name ?? "";
           setReloadKey((k) => k + 1);
           invalidateCache("settings-makers");
+          // 대리점을 고치면 값이 바뀐 것은 거래선 쪽 태그다 — 그 목록도 함께 씻는다.
+          invalidateCache("settings-vendors");
+          invalidateVendorLogos();
         }}
       />
     ) : null}
@@ -1843,9 +1847,12 @@ function CompanyInfoModal<
    *  남지 않아, 그 뒤로는 한쪽만 고쳐져 같은 회사가 조금씩 다른 회사가 되었다. */
   twins?: string[];
   /** 이 제조사를 대 주는 거래선(제조사 전용) — makerTags 를 거꾸로 읽은 값이다.
-   *  고치는 칸이 아니라 읽는 칸이다: 값의 주인은 거래선의 'Makers supplied' 태그라,
-   *  여기서 고칠 수 있게 두면 같은 사실을 고치는 자리가 둘이 된다. 안 주면 칸이 없다. */
-  agencies?: string[];
+   *
+   *  값이 사는 자리는 여전히 거래선의 'Makers supplied'(Vendor.maker_ids) 하나뿐이다.
+   *  여기서 고치면 서버가 그 칸을 반대쪽에서 고쳐 준다 — 같은 사실을 두 군데 적어 두면
+   *  어긋나는 날이 오기 때문에, 적는 자리는 늘리지 않고 **묻는 방향만** 늘렸다.
+   *  안 주면 칸이 아예 없다(고객·거래선 창은 이 칸을 쓰지 않는다). */
+  agencies?: { initial: string[] };
   /** 창 제목 앞머리. 명부마다 다른 이름으로 부른다(제조사 창은 🏭 Maker). */
   title?: string;
   /** 결제조건 칸을 세울지 — 제조사 명부에는 그 칸이 없다(값을 치르는 상대가 아니다). */
@@ -1873,6 +1880,7 @@ function CompanyInfoModal<
   const [syncTwins, setSyncTwins] = useState(true);
   const [catIds, setCatIds] = useState<number[]>(() => [...(tags?.initial ?? [])]);
   const [makerIds, setMakerIds] = useState<number[]>(() => [...(makerTags?.initial ?? [])]);
+  const [agencyNames, setAgencyNames] = useState<string[]>(() => [...(agencies?.initial ?? [])]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   // 방금 저장이 저쪽 명부까지 닿았다는 한 줄. 이 창의 저장은 보고 있는 명부 밖으로도
@@ -2038,12 +2046,26 @@ function CompanyInfoModal<
       if (tags) body.category_ids = catIds;
       if (makerTags) body.maker_ids = makerIds;
       if (twinKinds.length && syncTwins) body.sync = twinKinds as PartnerImportKind[];
+      // 대리점 칸이 없는 창(고객·거래선)은 이 키를 아예 보내지 않는다 — 보내면 서버가
+      // 빈 목록으로 읽어 그 제조사의 대리점 표시를 전부 떼어 낸다.
+      if (agencies) body.agencies = agencyNames;
       if (name.trim() && name.trim() !== origName) body.rename = name.trim();
       const res = await save(body);
       const hit = Object.entries(res?.synced ?? {}).filter(([, n]) => Number(n) > 0);
-      setSyncNote(hit.length
-        ? `Also updated ${hit.map(([k, n]) => `${n} ${PARTNER_KIND_LABEL[k as PartnerImportKind]} ${Number(n) === 1 ? "contact" : "contacts"}`).join(" · ")}.`
-        : "");
+      const ag = res?.agencies;
+      const parts = [
+        hit.length
+          ? `Also updated ${hit.map(([k, n]) => `${n} ${PARTNER_KIND_LABEL[k as PartnerImportKind]} ${Number(n) === 1 ? "contact" : "contacts"}`).join(" · ")}.`
+          : "",
+        // 대리점은 거래선 쪽 태그를 고친 것이라, 몇 곳이 달라졌는지 말해 주어야 한다 —
+        // 이 창에서 누른 손짓이 저쪽 명부의 값을 바꿨다는 사실이 화면에 남는다.
+        ag && (ag.added || ag.removed)
+          ? `Agency tag ${[ag.added ? `added on ${ag.added}` : "",
+                           ag.removed ? `removed from ${ag.removed}` : ""]
+              .filter(Boolean).join(" · ")} vendor record(s).`
+          : "",
+      ].filter(Boolean);
+      setSyncNote(parts.join(" "));
       // 저장하면 읽기로 돌아온다 — 창을 닫아 버리면 방금 무엇을 저장했는지 확인할
       // 자리가 없고, 이어서 옆 회사로 넘어가려면 목록에서 그 회사를 다시 찾아야 한다.
       const finalName = name.trim() || origName;
@@ -2084,13 +2106,7 @@ function CompanyInfoModal<
       // 제조사 대부분은 담당자도 연락처도 없다 — 우리가 직접 사는 상대가 아니라서다)
       // 지금까지 그 답은 거래선 목록에만 흩어져 있었다.
       ...(agencies ? [["Agency",
-                       agencies.length
-                         ? <span className="mk-tags">
-                             {agencies.map((v) => (
-                               <span key={v} className="mk-tag" title={`${v} — supplies ${origName}`}>{v}</span>
-                             ))}
-                           </span>
-                         : null,
+                       agencyNames.length ? <AgencyBadges names={agencyNames} /> : null,
                       ] as [string, React.ReactNode]] : []),
       ...(stats ? [stats] : []),
       // 이 회사가 다른 명부에도 서 있다 — 고칠 때 저쪽까지 닿는다는 것을 읽는
@@ -2375,6 +2391,7 @@ function CompanyInfoModal<
           <CategoryTagPicker value={catIds} onChange={setCatIds} suggestions={tags.suggestions} />
         ) : null}
         {makerTags ? <MakerTagPicker value={makerIds} onChange={setMakerIds} /> : null}
+        {agencies ? <AgencyTagPicker value={agencyNames} onChange={setAgencyNames} /> : null}
         {twinKinds.length ? (
           <label className="form-field co-sync">
             <span>Also listed as</span>

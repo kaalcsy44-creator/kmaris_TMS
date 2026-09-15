@@ -284,6 +284,9 @@ class CompanyInfoSave(BaseModel):
     # 같은 이름으로 다른 명부에도 서 있는 그 회사에 이 변경을 함께 옮길지
     # ("customers" | "vendors" | "makers"). 빈 값 = 이 명부만 고친다.
     sync: list[str] | None = None
+    # 이 제조사를 대 주는 거래선(회사 이름) — 메이커 창에서만 보낸다. None = 건드리지 않음.
+    # 값이 저장되는 자리는 여전히 거래선의 'Makers supplied'(Vendor.maker_ids)다.
+    agencies: list[str] | None = None
 
 
 # 명부를 건너 함께 고치는 값 — 어느 명부에 서든 **같은 사실**인 것만 둔다.
@@ -932,6 +935,40 @@ def settings_makers():
         s.close()
 
 
+def _apply_maker_agencies(s, maker_name: str, names: list[str]) -> dict[str, int]:
+    """이 제조사를 대 주는 거래선을 메이커 쪽에서 정한다.
+
+    새 칸을 만들지 않는다. 값이 사는 자리는 여전히 거래선의 'Makers supplied'
+    (Vendor.maker_ids)이고, 여기서는 그 칸을 반대쪽에서 고칠 뿐이다 — 같은 사실을 두
+    군데 적어 두면 어긋나는 날이 오고, 그때 어느 쪽이 맞는지 아무도 모른다.
+
+    붙일 때는 이 회사의 대표 줄(가장 먼저 등록된 id)로 붙인다. 거래선이 가리키는 것은
+    담당자가 아니라 회사이고, 고르는 화면도 회사 단위로 접어 보여 준다
+    (MakerCell.useMakerCompanies). 뗄 때는 이 회사의 모든 줄을 뗀다 — 옛 태그가 담당자
+    줄의 id 로 붙어 있을 수 있어, 대표 줄만 떼면 화면에서 지웠는데도 그대로 남는다.
+
+    거래선도 레코드 1건 = 담당자 1명이라 한 회사가 여러 줄이다. 'Makers supplied' 는
+    회사 단위 값이므로 그 회사의 줄 전부에 같이 적는다(회사 정보 창의 규약 그대로)."""
+    maker_rows = _company_rows(s, Maker, maker_name)
+    mids = {m.id for m in maker_rows}
+    out = {"added": 0, "removed": 0}
+    if not mids:
+        return out
+    anchor = min(mids)
+    want = {_norm_company(n) for n in (names or []) if (n or "").strip()}
+    for v in s.query(Vendor).all():
+        ids = [int(x) for x in (getattr(v, "maker_ids", None) or []) if str(x).isdigit()]
+        has = bool(mids & set(ids))
+        keep = _norm_company(v.name or "") in want
+        if keep and not has:
+            v.maker_ids = ids + [anchor]      # JSON 칼럼은 새 리스트로 갈아 끼운다
+            out["added"] += 1
+        elif not keep and has:
+            v.maker_ids = [x for x in ids if x not in mids]
+            out["removed"] += 1
+    return out
+
+
 @app.put("/api/admin/settings/makers/company-info", dependencies=[Depends(require_token)])
 def update_maker_company(body: CompanyInfoSave):
     """회사 단위 값을 같은 이름의 메이커 레코드 전부에 반영(거래선과 같은 규약).
@@ -947,8 +984,12 @@ def update_maker_company(body: CompanyInfoSave):
         name = _apply_company_info(
             rows, body, ("specialization", "category_ids", "website", "note", "logo"))
         synced = _sync_company_twins(s, "makers", body)
+        # 대리점은 이름이 바뀐 뒤의 이름으로 찾는다 — 위에서 이미 갈아 끼웠다.
+        agencies = (_apply_maker_agencies(s, name, body.agencies)
+                    if body.agencies is not None else None)
         s.commit()
-        return {"ok": True, "updated": len(rows), "name": name, "synced": synced}
+        return {"ok": True, "updated": len(rows), "name": name, "synced": synced,
+                "agencies": agencies}
     finally:
         s.close()
 

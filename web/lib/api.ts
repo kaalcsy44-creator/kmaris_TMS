@@ -1373,6 +1373,8 @@ export type CompanyInfoSaved = {
   name: string;
   /** 명부별로 함께 고친 줄 수(sync 를 보냈을 때만). */
   synced?: Partial<Record<PartnerImportKind, number>>;
+  /** 대리점 표시를 붙이고 뗀 거래선 줄 수(agencies 를 보냈을 때만). */
+  agencies?: { added: number; removed: number } | null;
 };
 export type CompanyInfoSave = {
   name: string;
@@ -1393,6 +1395,10 @@ export type CompanyInfoSave = {
    *  ("customers" | "vendors" | "makers"). 주소·홈페이지·로고·소개와 회사명만 간다 —
    *  취급분류·Makes·결제조건은 명부마다 묻는 것이 달라 저쪽 값을 덮지 않는다. */
   sync?: PartnerImportKind[];
+  /** 이 제조사를 대 주는 거래선(회사 이름) — 메이커 창에서만 보낸다.
+   *  값이 저장되는 자리는 여전히 거래선의 'Makers supplied'(maker_ids)다: 서버가 그
+   *  칸을 이 목록에 맞춰 붙이고 뗀다. 보내지 않으면(undefined) 건드리지 않는다. */
+  agencies?: string[];
 };
 /** 이 회사가 실제로 다뤄 본 분류 — 태그의 첫 값을 제안하는 데 쓴다(거래 실적에서). */
 export type VendorCategorySuggestion = {
