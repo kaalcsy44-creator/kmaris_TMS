@@ -932,17 +932,33 @@ export type MarketingSave = {
   owner_id?: number | null;
 };
 
-/** 편집창에서 열어 보는 답장 원문(메일함에서 찾아 붙인 것). */
-export type MarketingReplyMail = {
-  found: boolean;
-  id?: number;
-  subject?: string;
-  from_addr?: string;
-  from_name?: string;
-  sent_at?: string;
-  body?: string;
-  truncated?: boolean;
-  attachments?: string[];
+/** 대화 한 통 — 우리가 보낸 것(out)과 상대가 보낸 것(in)이 같은 모양으로 선다. */
+export type MarketingThreadMail = {
+  id: number;
+  direction: "in" | "out";
+  subject: string;
+  from_addr: string;
+  from_name: string;
+  to: string[];
+  sent_at: string;
+  body: string;
+  truncated: boolean;
+  attachments: string[];
+  /** 자동 감지가 이 활동의 분류 근거로 삼은 그 한 통인가. */
+  detected: boolean;
+};
+
+/** 편집창에서 열어 보는 대화 — 그 수신 주소와 오간 메일 전부(발송일 그 뒤로).
+ *  활동이 들고 있는 reply_email_id 는 첫 답장 한 통뿐이라, 그 뒤의 왕복은 메일함에서
+ *  다시 세워 온다. 읽기만 하는 값이다 — 여기서 활동에 새로 붙이지 않는다. */
+export type MarketingThread = {
+  address: string;
+  since: string;
+  detected_id: number;
+  counts: { in: number; out: number };
+  /** 통수가 상한을 넘어 접힌 옛 메일 수(최근 것부터 남긴다). */
+  omitted: number;
+  messages: MarketingThreadMail[];
 };
 
 /** 답장 자동 감지 결과 — 메일함에서 새로 담은 통수 + 붙인 건수와 분류별 내역. */
@@ -987,8 +1003,8 @@ export function deleteMarketing(id: number): Promise<{ ok: boolean }> {
 export function detectMarketingReplies(): Promise<MarketingDetectResult> {
   return post("/api/admin/marketing/detect-replies", {});
 }
-export function fetchMarketingReplyMail(id: number): Promise<MarketingReplyMail> {
-  return get<MarketingReplyMail>(`/api/admin/marketing/${id}/reply`);
+export function fetchMarketingThread(id: number): Promise<MarketingThread> {
+  return get<MarketingThread>(`/api/admin/marketing/${id}/thread`);
 }
 
 // ── 홍보 이메일(회사소개·브로슈어) 발송 + 첨부 자료 라이브러리 ────────────────────

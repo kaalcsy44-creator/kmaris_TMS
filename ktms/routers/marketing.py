@@ -49,6 +49,8 @@ from _core import (
 )
 from fastapi import Body
 
+from sqlalchemy import Text, and_, cast, func, or_
+
 from db.models import EmailMessage
 from services import mail_sync, marketing_reply
 
@@ -196,32 +198,101 @@ def marketing_detect_replies(mark_no_reply: bool = True, scan: bool = True):
         s.close()
 
 
-@app.get("/api/admin/marketing/{row_id:int}/reply", dependencies=[Depends(require_token)])
-def marketing_reply_message(row_id: int):
-    """그 활동에 붙은 답장 원문 — 편집창에서 분류가 맞는지 눈으로 확인하는 자리."""
+# 한 통에서 실어 보내는 본문 길이. 대화 전체를 한 번에 내리므로 통당 상한을 둔다 —
+# 답장은 대개 첫 몇 줄이 전부이고, 그 아래는 우리가 보낸 원문의 인용이다.
+_THREAD_BODY = 2000
+# 한 대화에서 보여 주는 최대 통수(넘치면 최근 것부터 남기고 몇 통을 접었는지 알린다).
+_THREAD_MAX = 30
+
+
+@app.get("/api/admin/marketing/{row_id:int}/thread", dependencies=[Depends(require_token)])
+def marketing_thread(row_id: int):
+    """그 수신 주소와 오간 메일 전부 — 홍보 발송일 그 뒤로, 양방향.
+
+    활동 한 건이 들고 있는 reply_email_id 는 **첫 답장 한 통**이다. 자동 분류의 근거가
+    그 한 통이면 충분해서 그렇게 두었는데, 화면에서 보고 싶은 것은 대개 그 다음이다 —
+    우리가 뭐라고 답했고, 상대가 또 뭐라고 했는지. 그 왕복은 이미 메일함에 담겨 있다
+    (보낸 메일도 담는다: _store_message 가 홍보 주소를 상대로 둔 통을 모두 들인다).
+    여기서는 그것을 시간순으로 세워 줄 뿐, 활동에 새로 붙이지 않는다.
+
+    고르는 규칙은 둘이다. ① 그 주소에서 온 것, ② 그 주소에게 보낸 것. 여기에 자동
+    감지가 붙여 둔 그 한 통을 반드시 더한다 — 반송 통지는 보낸 사람이 메일 서버라
+    주소로는 걸리지 않는데, 그게 바로 그 활동이 'Invalid' 로 찍힌 근거다.
+    """
     s = get_session()
     try:
         m = s.query(MarketingActivity).filter_by(id=row_id).first()
         if not m:
             raise HTTPException(status_code=404, detail="마케팅 활동을 찾을 수 없습니다.")
-        if not getattr(m, "reply_email_id", None):
-            return {"found": False}
-        msg = s.query(EmailMessage).filter_by(id=m.reply_email_id).first()
-        if not msg:
-            return {"found": False}
-        return {
-            "found": True,
-            "id": msg.id,
-            "subject": msg.subject or "",
-            "from_addr": msg.from_addr or "",
-            "from_name": msg.from_name or "",
-            "sent_at": msg.sent_at or "",
-            # 본문은 앞부분만 — 분류가 맞는지 보는 데는 첫 화면이면 충분하고,
-            # 인용된 원문까지 실어 보내면 목록 화면이 무거워진다.
-            "body": (msg.body_text or "")[:4000],
-            "truncated": bool(msg.truncated) or len(msg.body_text or "") > 4000,
-            "attachments": [a.get("name", "") for a in (msg.attachments or [])][:10],
-        }
+        addr = (m.recipient_email or "").strip().lower()
+        detected = int(getattr(m, "reply_email_id", None) or 0)
+        out = {"address": addr, "since": (m.activity_date or "")[:10],
+               "detected_id": detected, "counts": {"in": 0, "out": 0},
+               "omitted": 0, "messages": []}
+        if not addr and not detected:
+            return out
+
+        cols = (EmailMessage.id, EmailMessage.direction, EmailMessage.from_addr,
+                EmailMessage.from_name, EmailMessage.to_addrs, EmailMessage.cc_addrs,
+                EmailMessage.subject,
+                # 본문은 앞부분만 — 통마다 전문을 실으면 대화 하나가 수십 KB가 된다.
+                func.substr(EmailMessage.body_text, 1, _THREAD_BODY), EmailMessage.sent_at,
+                EmailMessage.attachments, EmailMessage.truncated,
+                func.length(EmailMessage.body_text))
+        rows: list = []
+        if addr:
+            q = s.query(*cols)
+            # 발송보다 앞선 메일은 이 대화의 일부가 아니다 — 그 전에 오간 것이 있다면
+            # 그건 이 홍보 발송이 아니라 다른 일의 이력이다.
+            if out["since"]:
+                q = q.filter(EmailMessage.sent_at >= out["since"])
+            like = f"%{addr}%"
+            rows += q.filter(or_(
+                func.lower(EmailMessage.from_addr) == addr,
+                # 보낸 메일은 받는 사람 목록 안에 있다. JSON 칸이라 글자로 눕혀 거르고,
+                # 주소가 정말 그 목록에 있는지는 아래에서 한 번 더 본다(부분일치 배제).
+                and_(EmailMessage.direction == "out",
+                     or_(cast(EmailMessage.to_addrs, Text).ilike(like),
+                         cast(EmailMessage.cc_addrs, Text).ilike(like))),
+            )).all()
+        if detected and not any(r[0] == detected for r in rows):
+            rows += s.query(*cols).filter(EmailMessage.id == detected).all()
+
+        seen: set[int] = set()
+        msgs = []
+        for r in rows:
+            (mid, direction, frm, frm_name, to_addrs, cc_addrs, subject,
+             body, sent_at, attachments, truncated, body_len) = r
+            if mid in seen:
+                continue
+            seen.add(mid)
+            party = [str(a).lower() for a in ((to_addrs or []) + (cc_addrs or [])) if a]
+            # 글자로 건져 온 것 중 정말 그 주소와 오간 통만 남긴다 — LIKE 는 주소의
+            # 일부만 겹쳐도 걸린다(a@b.com 이 xa@b.com 에 든다). 자동 감지가 붙여 둔
+            # 통만은 이 규칙 밖이라도 남긴다: 반송 통지는 보낸 사람이 메일 서버다.
+            if mid != detected and addr and (frm or "").lower() != addr and addr not in party:
+                continue
+            msgs.append({
+                "id": mid,
+                "direction": direction or "in",
+                "subject": subject or "",
+                "from_addr": frm or "",
+                "from_name": frm_name or "",
+                "to": [str(a) for a in (to_addrs or [])][:10],
+                "sent_at": sent_at or "",
+                "body": body or "",
+                "truncated": bool(truncated) or int(body_len or 0) > _THREAD_BODY,
+                "attachments": [a.get("name", "") for a in (attachments or [])][:10],
+                "detected": mid == detected,
+            })
+        msgs.sort(key=lambda x: (x["sent_at"], x["id"]))
+        if len(msgs) > _THREAD_MAX:
+            out["omitted"] = len(msgs) - _THREAD_MAX
+            msgs = msgs[-_THREAD_MAX:]
+        out["messages"] = msgs
+        out["counts"] = {"in": sum(1 for x in msgs if x["direction"] != "out"),
+                         "out": sum(1 for x in msgs if x["direction"] == "out")}
+        return out
     finally:
         s.close()
 

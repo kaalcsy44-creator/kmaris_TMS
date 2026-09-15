@@ -21,7 +21,7 @@ import Modal from "@/components/common/Modal";
 import ComposeEmailModal from "@/components/screens/ComposeEmailModal";
 import BrochuresPanel from "@/components/screens/BrochuresPanel";
 import { BounceBadge } from "@/components/common/BouncedEmail";
-import { ReplyBadge, FollowUpCell, ReplyMailPanel } from "@/components/common/MarketingBadges";
+import { ReplyBadge, FollowUpCell, ReplyThreadPanel } from "@/components/common/MarketingBadges";
 import { REPLY_STATUSES, replyText, suggestFollowUp } from "@/lib/marketing";
 import { detectMarketingReplies, type MarketingDetectResult } from "@/lib/api";
 
@@ -601,16 +601,15 @@ export function MarketingForm({
               ) : null}
             </div>
             {replyPick ? <span className="hint-inline">{replyPick.hint}</span> : null}
-            {form.reply_email_id ? (
-              <>
-                {initial.reply_auto ? (
-                  <span className="hint-inline auto-note">
-                    Read from the reply below — check it and save to confirm.
-                  </span>
-                ) : null}
-                {rowId ? <ReplyMailPanel rowId={rowId} /> : null}
-              </>
+            {form.reply_email_id && initial.reply_auto ? (
+              <span className="hint-inline auto-note">
+                Read from the ★ message below — check it and save to confirm.
+              </span>
             ) : null}
+            {/* 대화는 답장이 붙지 않은 줄에도 세운다 — 답장이 없다는 것도 메일함을
+                봐야 아는 사실이고(보낸 것만 한 통 선다), 답장 없이 우리가 한 번 더
+                두드린 줄은 그 사실이 여기 말고는 어디에도 남지 않는다. */}
+            {rowId ? <ReplyThreadPanel rowId={rowId} /> : null}
           </div>
           {form.reply_status || form.reply_email_id ? (
             <>

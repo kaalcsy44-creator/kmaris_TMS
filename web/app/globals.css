@@ -17006,6 +17006,71 @@ input.mail-bad {
   color: #2b3a4d;
 }
 
+/* ── 홍보 메일의 대화(편집창) ─────────────────────────────────────────────────
+   활동 한 줄에 붙은 답장은 한 통이지만, 실제로 오간 것은 그 뒤로도 이어진다.
+   보낸 것과 받은 것을 같은 줄기에 시간순으로 세우되 방향을 색과 들여쓰기로 가른다 —
+   왕복이 몇 번이었는지가 한눈에 읽혀야 이 칸이 값을 한다. */
+.mail-thread {
+  margin-top: 8px;
+  border-left: 2px solid #dbe4ef;
+  padding-left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mail-thread-hd {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+}
+.mail-thread-hd .muted { font-size: 11.5px; }
+.mail-thread-more { font-size: 11.5px; color: #8593a4; }
+.mail-msg {
+  border: 1px solid #d7e2ee;
+  border-radius: 8px;
+  background: #fbfcfe;
+  padding: 8px 10px;
+}
+/* 받은 것은 왼쪽에 붙고, 보낸 것은 한 칸 들여 옅게 — 대화의 방향이 형태로 보인다. */
+.mail-msg.is-out {
+  margin-left: 18px;
+  background: #f6f8fb;
+  border-color: #e2e8f1;
+}
+/* 분류의 근거가 된 그 한 통. 위 Reply 칸이 왜 그 값인지는 이 표시가 답한다. */
+.mail-msg.is-detected { border-left: 3px solid #5b34d6; }
+.mail-msg-hd {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: #5c6b7d;
+}
+.mail-dir {
+  font-weight: 700;
+  font-size: 10.5px;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.mail-dir.in { background: #e8f0fe; color: #1a56c4; }
+.mail-dir.out { background: #eceef2; color: #6b7684; }
+.mail-when { font-variant-numeric: tabular-nums; }
+.mail-who { word-break: break-all; }
+.mail-detected { color: #5b34d6; font-weight: 600; }
+.mail-msg-subj {
+  margin-top: 3px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #22303f;
+  word-break: break-word;
+}
+.mail-msg .reply-mail-body { max-height: 180px; }
+
 /* ── 목록 표만 굴리기(pl-scroll) ───────────────────────────────────────────────
    마케팅 활동은 205줄이다. 페이지째 굴리면 두 가지가 불편해진다 — 아래로 갈수록 열
    이름이 사라지고, 무엇보다 **가로 막대가 문서 맨 아래**에 있어 오른쪽 칸(Reply·PIC)을
