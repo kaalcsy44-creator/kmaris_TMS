@@ -1317,6 +1317,25 @@ export function transferPartners(body: {
   return post<PartnerTransferResult>("/api/admin/settings/partners/transfer", body);
 }
 
+/** 고른 회사를 명부에서 지운 결과. 거래 기록이 걸린 회사는 지우지 않고 까닭을 돌려준다. */
+export type PartnerDeleteResult = {
+  ok: boolean;
+  /** 실제로 지워진 회사 이름. */
+  done: string[];
+  /** 지워진 줄 수(담당자 단위 — 회사 하나가 여러 줄일 수 있다). */
+  removed: number;
+  /** 건너뛴 회사와 그 까닭(거래 기록이 걸렸거나, 명부에 없거나). */
+  skipped: { name: string; reason: string }[];
+};
+
+/** 고른 회사를 명부에서 지운다(회사 단위 — 그 회사의 담당자가 모두 함께 지워진다). */
+export function deletePartners(body: {
+  kind: PartnerImportKind;
+  names: string[];
+}): Promise<PartnerDeleteResult> {
+  return post<PartnerDeleteResult>("/api/admin/settings/partners/delete", body);
+}
+
 export function fetchSettingsVessels(): Promise<SettingsVessel[]> {
   return get<SettingsVessel[]>("/api/admin/settings/vessels");
 }

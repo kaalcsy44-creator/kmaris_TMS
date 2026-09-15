@@ -27,6 +27,7 @@ import {
   deleteSettingsMaker,
   fetchSettingsVendors,
   transferPartners,
+  deletePartners,
   fetchVendorCategorySuggestions,
   fetchSettingsVessels,
   parseBusinessCard,
@@ -5503,6 +5504,55 @@ They will be removed from ${title}. ` +
     }
   }
 
+  /** 고른 회사를 명부에서 지운다 — 그 회사의 담당자가 모두 함께 간다.
+   *
+   *  옮기기와 같은 자리에 두는 까닭: 고르는 단위가 같다. 같은 회사가 두 번 들어왔거나
+   *  더는 거래하지 않는 곳을 빼는 일은 명부를 고르고 나서 가장 자주 하는 일인데,
+   *  지금까지는 회사 창을 열어 담당자를 한 명씩 지우는 길밖에 없었다. */
+  async function runDelete() {
+    if (!transfer || picked.size === 0) return;
+    const names = [...picked];
+    const what = `${names.length} ${names.length === 1 ? "company" : "companies"}`;
+    // 이 손짓은 되돌릴 수 없다 — 무엇을 지우는지 이름으로 보여 주고 묻는다.
+    const listed = names.slice(0, 10).join(", ")
+      + (names.length > 10 ? `, and ${names.length - 10} more` : "");
+    if (!confirm(
+      `Delete ${what} from ${title}?
+
+${listed}
+
+Every contact of ${names.length === 1 ? "this company" : "these companies"} is removed. A company with deal history cannot be deleted — it will be left as it is. This cannot be undone.`
+    )) {
+      return;
+    }
+    setTbusy(true);
+    setTmsg("");
+    setTerr(false);
+    try {
+      const r = await deletePartners({ kind: transfer.kind, names });
+      const said: string[] = [];
+      if (r.done.length) {
+        said.push(`${r.done.length} deleted` +
+                  (r.removed ? ` (${r.removed} record${r.removed === 1 ? "" : "s"})` : ""));
+      }
+      // 건너뛴 회사는 이름과 까닭을 그대로 밝힌다(옮기기와 같은 규약).
+      if (r.skipped.length) {
+        said.push(`skipped ${r.skipped.map((x) => `${x.name} — ${x.reason}`).join("; ")}`);
+      }
+      setTmsg(said.join(" · ") || "Nothing to do.");
+      setTerr(r.done.length === 0);
+      setPicked(new Set());
+      refresh();
+      onSaved?.();
+      transfer.onDone?.();
+    } catch (e) {
+      setTmsg(e instanceof Error ? e.message : "Delete failed");
+      setTerr(true);
+    } finally {
+      setTbusy(false);
+    }
+  }
+
   // 2열 배치 — 그룹을 위에서부터 채워 좌우 높이가 비슷해지게 자른다(신문 단 조판).
   // 펼친 그룹은 담당자 행만큼 높아지므로 그만큼 무게를 더 준다.
   const columnPair = (() => {
@@ -5829,6 +5879,18 @@ They will be removed from ${title}. ` +
                   ) : null}
                 </Fragment>
               ))}
+              {/* 지우기는 오른쪽 끝, Clear 바로 앞에 둔다 — 옮기기 단추들과 나란히
+                  두면 손이 미끄러진다. 색도 따로 준다(되돌릴 수 없는 손짓). */}
+              {canDelete ? (
+                <button
+                  className="btn sm ms-pick-del"
+                  disabled={tbusy}
+                  title={`Remove them from ${title} — every contact of the selected companies`}
+                  onClick={runDelete}
+                >
+                  🗑 Delete
+                </button>
+              ) : null}
               <button
                 className="btn sm"
                 disabled={tbusy}

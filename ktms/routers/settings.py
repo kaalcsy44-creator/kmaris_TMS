@@ -1297,6 +1297,80 @@ def partners_transfer(body: PartnerTransfer):
         s.close()
 
 
+class PartnerDelete(BaseModel):
+    """어느 명부의 어느 회사들을 지울 것인가(회사 단위, 여러 곳 한꺼번에)."""
+    kind: str
+    names: list[str] = []
+
+
+@app.post("/api/admin/settings/partners/delete", dependencies=[Depends(require_token)])
+def partners_delete(body: PartnerDelete):
+    """고른 회사를 명부에서 지운다.
+
+    지우는 단위는 회사다 — 옮기기와 같은 이유로. 명부의 한 줄은 담당자 한 명이고,
+    명부에서 빼려는 것은 언제나 회사다(같은 이름이 잘못 두 번 들어왔을 때, 더는 거래하지
+    않는 곳일 때). 목록이 회사 줄만 세우고 있으므로 고르는 것도 회사뿐이다.
+
+    거래 기록이 걸린 회사는 통째로 건너뛴다. 담당자 셋 중 한 명에게만 이력이 있다고
+    둘만 지우면, 남은 한 줄이 그 회사의 전부인 것처럼 보이게 된다 — 지우다 만 회사가
+    가장 나쁜 결과다. 까닭은 이름과 함께 돌려주어 어느 회사가 왜 남았는지 밝힌다.
+
+    제조사는 거래 기록이 걸리지 않는다(딜은 거래선을 타고 흐른다). 대신 그 제조사를
+    가리키던 거래선의 참조(maker_ids·maker_id)를 먼저 끊는다 — 회사째 지우면 물려줄
+    남은 줄이 없으므로 그냥 끊는다. 안 그러면 명부에 없는 id 를 가리키는 태그가 남는다.
+    """
+    if body.kind not in _PARTNER_KINDS:
+        raise HTTPException(status_code=400, detail="알 수 없는 명부입니다.")
+    names = [n for n in (body.names or []) if (n or "").strip()]
+    if not names:
+        raise HTTPException(status_code=400, detail="지울 회사를 고르세요.")
+
+    Model = _PARTNER_KINDS[body.kind]
+    s = get_session()
+    try:
+        by_name: dict[str, list] = {}
+        for r in s.query(Model).order_by(Model.id).all():
+            by_name.setdefault(_norm_company(r.name or ""), []).append(r)
+
+        done: list[str] = []
+        skipped: list[dict] = []
+        removed = 0
+        for raw in names:
+            rows = by_name.get(_norm_company(raw)) or []
+            if not rows:
+                skipped.append({"name": raw, "reason": "not found"})
+                continue
+            label = (rows[0].name or raw).strip()
+
+            blocked = ""
+            for r in rows:
+                reason = (_customer_block_reason(s, r) if body.kind == "customers"
+                          else _vendor_block_reason(s, r) if body.kind == "vendors"
+                          else "")
+                if reason:
+                    blocked = reason
+                    break
+            if blocked:
+                skipped.append({"name": label, "reason": blocked})
+                continue
+
+            for r in rows:
+                if body.kind == "customers":
+                    _delete_customer_row(s, r)
+                elif body.kind == "vendors":
+                    _delete_vendor_row(s, r)
+                else:
+                    _rehome_maker_refs(s, r.id, None)
+                    s.delete(r)
+                removed += 1
+            done.append(label)
+
+        s.commit()
+        return {"ok": True, "done": done, "removed": removed, "skipped": skipped}
+    finally:
+        s.close()
+
+
 def _norm_company(name: str) -> str:
     """회사 이름 비교용 — 대소문자·군더더기 공백을 지운다(MakerCell 의 norm 과 같은 뜻)."""
     return " ".join((name or "").split()).strip().lower()

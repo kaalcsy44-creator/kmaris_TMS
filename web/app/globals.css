@@ -1585,6 +1585,16 @@ table.mini.wide.ms-table thead th.pl-th.open .pl-th-btn {
   font-weight: 800;
   color: var(--navy);
 }
+/* 지우기 — 되돌릴 수 없는 손짓이라 옆의 옮기기 단추들과 색으로 갈라 둔다.
+   눌러야 확인 창이 한 번 더 뜨지만, 그 전에 무엇을 겨냥하는지가 먼저 읽혀야 한다. */
+.ms-pick-bar .ms-pick-del {
+  color: #b4232a;
+  border-color: #f0c9c9;
+}
+.ms-pick-bar .ms-pick-del:hover:not(:disabled) {
+  background: #fdeaea;
+  border-color: #e3a9a9;
+}
 /* 고른 회사 줄은 옅게 칠해 둔다 — 표를 굴려 내려가도 무엇을 골랐는지 보이게. */
 .ms-table tbody tr.ms-picked > td {
   background: #eef5ff;
