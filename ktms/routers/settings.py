@@ -132,6 +132,7 @@ def settings_customers():
     s = get_session()
     try:
         deals = _customer_deal_counts(s)
+        twins = _company_twin_kinds(s)
         return [{"id": c.id, "name": c.name, "contact": c.contact or "",
                  "duty": getattr(c, "duty", None) or "",
                  "contact_phone": getattr(c, "contact_phone", None) or "",
@@ -150,6 +151,9 @@ def settings_customers():
                  # 반송(Address not found)으로 되돌아온 주소들 — 목록·작성 화면이
                  # emails 와 겹치는 것만 붉게 표시한다(주소를 고치면 표시도 사라진다).
                  "bad_emails": [str(x).strip() for x in (getattr(c, "bad_emails", None) or []) if str(x).strip()],
+                 # 같은 이름으로 다른 명부에도 서 있는가 — 회사 정보를 고칠 때
+                 # 저쪽에도 함께 옮길지 묻는 자리가 이 값을 쓴다.
+                 "twins": _twins_of(twins, c.name or "", "customers"),
                  # 이 담당자가 준 문의와 그 결과. 회사 줄의 합계는 화면에서 더한다 —
                  # RFQ 는 고객 담당자 하나에만 매이므로 담당자별 수를 더해도 겹치지 않는다
                  # (벤더 쪽은 한 프로젝트가 담당자 둘에 걸릴 수 있어 서버에서 합집합을 센다).
@@ -277,6 +281,60 @@ class CompanyInfoSave(BaseModel):
     website: str | None = None           # 회사 홈페이지
     note: str | None = None              # 회사 소개 요약(고객사·거래선 공통)
     logo: str | None = None
+    # 같은 이름으로 다른 명부에도 서 있는 그 회사에 이 변경을 함께 옮길지
+    # ("customers" | "vendors" | "makers"). 빈 값 = 이 명부만 고친다.
+    sync: list[str] | None = None
+
+
+# 명부를 건너 함께 고치는 값 — 어느 명부에 서든 **같은 사실**인 것만 둔다.
+# 취급분류(category_ids)·Makes(specialization)·결제조건은 넣지 않는다: 칸 이름이
+# 같아도 묻는 것이 다르다(벤더는 '무엇을 다루나', 메이커는 '무엇을 만드나'). 덮어쓰면
+# 한쪽이 공들여 적어 둔 값이 조용히 사라진다.
+# 주소와 회사명은 _apply_company_info 가 이 목록과 무관하게 함께 옮긴다 — 이름이
+# 어긋나면 두 줄이 같은 회사라는 것을 알아볼 길이 없어진다(이 연결의 열쇠가 이름이다).
+_TWIN_FIELDS = ("website", "note", "logo")
+
+
+def _company_twin_kinds(s) -> dict[str, list[str]]:
+    """정규화한 회사명 → 그 이름이 서 있는 명부들.
+
+    같은 회사가 두 명부에 함께 서는 일은 흔하다(사 오던 곳에 팔기 시작하거나, 대리점을
+    겸한 제조사). 명부 사이 복사가 그 줄을 세워 주지만 둘을 잇는 표시는 남기지 않아,
+    그 뒤로는 한쪽만 고쳐져 같은 회사가 조금씩 다른 회사가 되었다.
+
+    잇는 열쇠는 이름이다. 따로 칸을 두지 않은 까닭은 이 앱이 이미 회사를 이름으로
+    가리기 때문이다 — 회사 정보 창의 저장이 같은 이름의 담당자 줄 전부에 닿는 것도
+    같은 규약이다. 그래서 이름을 바꿀 때는 저쪽 이름도 함께 바꾼다(_TWIN_FIELDS 주석).
+    """
+    out: dict[str, set[str]] = {}
+    for kind, Model in _PARTNER_KINDS.items():
+        for (nm,) in s.query(Model.name).all():
+            key = _norm_company(nm or "")
+            if key:
+                out.setdefault(key, set()).add(kind)
+    return {k: sorted(v) for k, v in out.items()}
+
+
+def _twins_of(twins: dict[str, list[str]], name: str, self_kind: str) -> list[str]:
+    """이 회사가 **다른** 명부 어디에 또 서 있는가(목록 한 줄에 실어 보내는 값)."""
+    return [k for k in twins.get(_norm_company(name), []) if k != self_kind]
+
+
+def _sync_company_twins(s, self_kind: str, body: CompanyInfoSave) -> dict[str, int]:
+    """같은 이름으로 다른 명부에 서 있는 회사에 같은 변경을 옮긴다.
+
+    저쪽 줄은 **바꾸기 전 이름**으로 찾는다 — 이름을 바꾸는 저장이면 저쪽은 아직 옛
+    이름으로 서 있다. 찾은 뒤에 _apply_company_info 가 새 이름까지 함께 얹는다."""
+    out: dict[str, int] = {}
+    for kind in (body.sync or []):
+        if kind == self_kind or kind not in _PARTNER_KINDS:
+            continue
+        rows = _company_rows(s, _PARTNER_KINDS[kind], body.name)
+        if not rows:
+            continue
+        _apply_company_info(rows, body, _TWIN_FIELDS)
+        out[kind] = len(rows)
+    return out
 
 
 def _company_rows(session, Model, name: str) -> list:
@@ -316,8 +374,9 @@ def update_customer_company(body: CompanyInfoSave):
             rows, body,
             ("tax_id", "tax_invoice_email", "specialization", "website", "note",
              "payment_terms", "logo"))
+        synced = _sync_company_twins(s, "customers", body)
         s.commit()
-        return {"ok": True, "updated": len(rows), "name": name}
+        return {"ok": True, "updated": len(rows), "name": name, "synced": synced}
     finally:
         s.close()
 
@@ -402,6 +461,7 @@ def settings_vendors():
     s = get_session()
     try:
         asked, answered = _vendor_deal_counts(s)
+        twins = _company_twin_kinds(s)
         vendors = s.query(Vendor).order_by(Vendor.name).all()
         # 회사 단위 합계 — 목록이 회사로 묶여 보이는데, 한 회사의 담당자 둘에게 같은
         # 프로젝트를 물었으면 담당자별 수를 더한 값은 그 프로젝트를 두 번 센다. 그래서
@@ -441,7 +501,9 @@ def settings_vendors():
                  "deals_answered": len(answered.get(v.id, ())),
                  # 같은 회사 전체의 값(위 합집합) — 목록의 회사 줄이 쓴다.
                  "co_deals": len(co_asked.get((v.name or "").strip(), ())),
-                 "co_deals_answered": len(co_answered.get((v.name or "").strip(), ()))}
+                 "co_deals_answered": len(co_answered.get((v.name or "").strip(), ())),
+                 # 같은 이름으로 다른 명부에도 서 있는가(고객 명부와 같은 취급).
+                 "twins": _twins_of(twins, v.name or "", "vendors")}
                 for v in vendors]
     finally:
         s.close()
@@ -707,8 +769,9 @@ def update_vendor_company(body: CompanyInfoSave):
             rows, body,
             ("specialization", "category_ids", "maker_ids", "website", "note",
              "payment_terms", "logo"))
+        synced = _sync_company_twins(s, "vendors", body)
         s.commit()
-        return {"ok": True, "updated": len(rows), "name": name}
+        return {"ok": True, "updated": len(rows), "name": name, "synced": synced}
     finally:
         s.close()
 
@@ -861,8 +924,10 @@ def settings_makers():
     try:
         counts = _maker_item_counts(s)
         agencies = _maker_agencies(s)
+        twins = _company_twin_kinds(s)
         rows = s.query(Maker).order_by(Maker.name, Maker.id).all()
-        return [_maker_row(m, counts, agencies) for m in rows]
+        return [{**_maker_row(m, counts, agencies),
+                 "twins": _twins_of(twins, m.name or "", "makers")} for m in rows]
     finally:
         s.close()
 
@@ -881,8 +946,9 @@ def update_maker_company(body: CompanyInfoSave):
             raise HTTPException(status_code=404, detail="해당 회사로 등록된 제조사가 없습니다.")
         name = _apply_company_info(
             rows, body, ("specialization", "category_ids", "website", "note", "logo"))
+        synced = _sync_company_twins(s, "makers", body)
         s.commit()
-        return {"ok": True, "updated": len(rows), "name": name}
+        return {"ok": True, "updated": len(rows), "name": name, "synced": synced}
     finally:
         s.close()
 

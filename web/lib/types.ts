@@ -69,6 +69,9 @@ export type SettingsCustomer = {
   won?: number;
   /** 그중 실주로 닫힌 수(나머지는 아직 진행 중). */
   lost?: number;
+  /** 같은 이름으로 다른 명부에도 서 있는 곳("customers"|"vendors"|"makers").
+   *  회사 정보를 고칠 때 저쪽에도 함께 옮길지 묻는 자리가 이 값을 쓴다. */
+  twins?: string[];
 };
 export type SettingsVendor = {
   id: number;
@@ -103,6 +106,9 @@ export type SettingsVendor = {
   /** 같은 회사 전체의 값 — 담당자별 수를 더하면 같은 프로젝트를 겹쳐 세므로 따로 받는다. */
   co_deals?: number;
   co_deals_answered?: number;
+  /** 같은 이름으로 다른 명부에도 서 있는 곳("customers"|"vendors"|"makers").
+   *  회사 정보를 고칠 때 저쪽에도 함께 옮길지 묻는 자리가 이 값을 쓴다. */
+  twins?: string[];
 };
 /**
  * 제조사(메이커) — 물건을 만든 회사. 거래선과 다른 축이다: 같은 MAN B&W 부품을 여러
@@ -131,6 +137,9 @@ export type SettingsMaker = {
   category_ids: number[];
   /** 품목 마스터에 이 회사 이름으로 등록된 품목 수(읽기전용). */
   items?: number;
+  /** 같은 이름으로 다른 명부에도 서 있는 곳("customers"|"vendors"|"makers").
+   *  회사 정보를 고칠 때 저쪽에도 함께 옮길지 묻는 자리가 이 값을 쓴다. */
+  twins?: string[];
   /** 이 제조사를 대 준다고 밝혀 둔 거래선 이름(읽기전용).
    *  거래선의 'Makers supplied'(maker_ids)를 서버가 거꾸로 읽어 준 값이라, 여기서
    *  고치지 않는다 — 고치는 자리는 언제나 그 거래선의 회사 창이다. */

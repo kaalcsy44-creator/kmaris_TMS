@@ -73,6 +73,7 @@ import type {
   RolePermRow,
   EmailTemplatesData,
   CompanyInfoSave,
+  CompanyInfoSaved,
   SignatureFields,
   VendorCategorySuggestion,
   PrintBook,
@@ -1057,6 +1058,8 @@ function MakersTab() {
           : null]}
         {...companyNav(company, setCompany)}
         // 담당자를 더하고 고치고 지우는 일이 모두 이 창 안에서 끝난다(거래선과 같다).
+        // 같은 이름으로 다른 명부에도 서 있는가 — 회사 값을 고칠 때 저쪽에도 옮길지 묻는다.
+        twins={shown[0]?.twins}
         onSaveContact={company.saveRow}
         onCreateContact={company.createRow}
         onDeleteContact={company.removeRow}
@@ -1266,6 +1269,8 @@ function CustomersTab() {
         // 두 창이 겹쳐 서면 어느 쪽을 닫는 손짓인지 흐려진다.
         // 담당자를 더하고 고치고 지우는 일이 모두 이 창 안에서 끝난다 — 명단이 곧
         // 결과를 보여 준다. 창을 하나 더 띄우면 그 명단을 잃는다.
+        // 같은 이름으로 다른 명부에도 서 있는가 — 회사 값을 고칠 때 저쪽에도 옮길지 묻는다.
+        twins={company.groups[company.index]?.[0]?.twins}
         onSaveContact={company.saveRow}
         onCreateContact={company.createRow}
         onDeleteContact={company.removeRow}
@@ -1775,6 +1780,7 @@ function CompanyInfoModal<
   tags,
   makerTags,
   agencies,
+  twins,
   title = "🏢 Company info",
   paymentTerms = true,
 }: {
@@ -1783,7 +1789,7 @@ function CompanyInfoModal<
   /** 문장으로 적는 칸(취급품목·회사 소개) — 한 줄 칸에 넣으면 앞머리만 보여 값을 확인하려면
       캐럿을 끝까지 밀어야 한다. 폼 아래에 전폭 여러 줄 칸으로 따로 세운다. */
   areas?: CompanyArea<T>[];
-  save: (body: CompanyInfoSave) => Promise<{ ok: boolean; updated: number }>;
+  save: (body: CompanyInfoSave) => Promise<CompanyInfoSaved>;
   onClose: () => void;
   onSaved: () => void;
   /** 이 회사와의 거래 요약(문의·수주 / 프로젝트·회신) — 표에 선 배지를 그대로 들여온다. */
@@ -1807,6 +1813,11 @@ function CompanyInfoModal<
   };
   /** 대 줄 수 있는 제조사(거래선 전용). tags 와 같은 규약 — 안 주면 칸이 아예 없다. */
   makerTags?: { initial: number[] };
+  /** 같은 이름으로 다른 명부에도 서 있는 곳("customers"|"vendors"|"makers").
+   *  같은 회사가 두 명부에 함께 서는 일은 흔하다 — 사 오던 곳에 팔기 시작하거나,
+   *  대리점을 겸한 제조사. 명부 사이 복사가 그 줄을 세워 주지만 둘을 잇는 표시는
+   *  남지 않아, 그 뒤로는 한쪽만 고쳐져 같은 회사가 조금씩 다른 회사가 되었다. */
+  twins?: string[];
   /** 이 제조사를 대 주는 거래선(제조사 전용) — makerTags 를 거꾸로 읽은 값이다.
    *  고치는 칸이 아니라 읽는 칸이다: 값의 주인은 거래선의 'Makers supplied' 태그라,
    *  여기서 고칠 수 있게 두면 같은 사실을 고치는 자리가 둘이 된다. 안 주면 칸이 없다. */
@@ -1831,10 +1842,19 @@ function CompanyInfoModal<
   });
   // 주소는 회사 단위 다중값(본사·지사) — 담당자별로 갈라져 있어도 여기서 한 목록으로 모은다.
   const [addresses, setAddresses] = useState<string[]>(() => companyAddresses(rows));
+  // 저쪽 명부에도 같은 변경을 옮길지. 기본은 옮긴다 — 두 줄이 같은 회사인 이상
+  // 주소가 갈라지는 것은 언제나 사고였지 뜻한 바가 아니었다. 그래도 칸을 보이게
+  // 두는 까닭은, 이 저장이 지금 보고 있는 명부 밖에까지 닿는다는 것을 알려야 해서다.
+  const twinKinds = (twins ?? []).filter((k) => k !== "");
+  const [syncTwins, setSyncTwins] = useState(true);
   const [catIds, setCatIds] = useState<number[]>(() => [...(tags?.initial ?? [])]);
   const [makerIds, setMakerIds] = useState<number[]>(() => [...(makerTags?.initial ?? [])]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  // 방금 저장이 저쪽 명부까지 닿았다는 한 줄. 이 창의 저장은 보고 있는 명부 밖으로도
+  // 나가므로, 나갔다는 사실이 화면에 남아야 한다 — 저장하면 읽기로 돌아오는데 그
+  // 화면에는 방금 무엇이 일어났는지 말해 주는 것이 아무것도 없다.
+  const [syncNote, setSyncNote] = useState("");
   // 방금 지운 담당자. 창이 든 rows 는 열 때 찍은 사진이라 목록이 새로 그려져도 바뀌지
   // 않는다 — 지운 사람이 그대로 남아 있으면 지워졌는지 아닌지를 알 수 없다.
   const [gone, setGone] = useState<Set<number>>(new Set());
@@ -1993,8 +2013,13 @@ function CompanyInfoModal<
       // 목록으로 읽어 지워 버린다(None = 건드리지 않음이 서버의 규약이다).
       if (tags) body.category_ids = catIds;
       if (makerTags) body.maker_ids = makerIds;
+      if (twinKinds.length && syncTwins) body.sync = twinKinds as PartnerImportKind[];
       if (name.trim() && name.trim() !== origName) body.rename = name.trim();
-      await save(body);
+      const res = await save(body);
+      const hit = Object.entries(res?.synced ?? {}).filter(([, n]) => Number(n) > 0);
+      setSyncNote(hit.length
+        ? `Also updated ${hit.map(([k, n]) => `${n} ${PARTNER_KIND_LABEL[k as PartnerImportKind]} ${Number(n) === 1 ? "contact" : "contacts"}`).join(" · ")}.`
+        : "");
       // 저장하면 읽기로 돌아온다 — 창을 닫아 버리면 방금 무엇을 저장했는지 확인할
       // 자리가 없고, 이어서 옆 회사로 넘어가려면 목록에서 그 회사를 다시 찾아야 한다.
       setBaseName(name.trim() || origName);
@@ -2043,6 +2068,18 @@ function CompanyInfoModal<
                          : null,
                       ] as [string, React.ReactNode]] : []),
       ...(stats ? [stats] : []),
+      // 이 회사가 다른 명부에도 서 있다 — 고칠 때 저쪽까지 닿는다는 것을 읽는
+      // 화면에서 먼저 알린다(고치기로 들어간 다음에 알면 늦다).
+      ...(twinKinds.length
+          ? [["Also listed as",
+              <span key="tw" className="co-twins">
+                {twinKinds.map((k) => (
+                  <span key={k} className="co-twin" title={`${origName} is also in the ${PARTNER_KIND_LABEL[k as PartnerImportKind]} book`}>
+                    {PARTNER_KIND_LABEL[k as PartnerImportKind]}
+                  </span>
+                ))}
+              </span>] as [string, React.ReactNode]]
+          : []),
       ...(areas ?? []).map((a) => [a.label, vals[String(a.key)]
         ? <span className="co-para">{vals[String(a.key)]}</span> : null] as [string, React.ReactNode]),
     ];
@@ -2262,6 +2299,7 @@ function CompanyInfoModal<
             </table>
             {err ? <span className="action-err">{err}</span> : null}
           </div>
+          {syncNote ? <p className="co-sync-note">✓ {syncNote}</p> : null}
           <p className="hint-inline" style={{ display: "block", marginTop: 10 }}>
             The values above are company-level — editing them applies to all {contacts.length}{" "}
             {contacts.length === 1 ? "contact" : "contacts"} at once. Name, role, email, phone and
@@ -2270,7 +2308,8 @@ function CompanyInfoModal<
         </div>
         <div className="form-actions">
           {canEditCompany ? (
-            <button className="btn primary" onClick={() => setEditing(true)}>✎ Edit</button>
+            <button className="btn primary"
+                    onClick={() => { setSyncNote(""); setEditing(true); }}>✎ Edit</button>
           ) : null}
           <button className="btn" onClick={onClose}>Close</button>
         </div>
@@ -2311,6 +2350,27 @@ function CompanyInfoModal<
           <CategoryTagPicker value={catIds} onChange={setCatIds} suggestions={tags.suggestions} />
         ) : null}
         {makerTags ? <MakerTagPicker value={makerIds} onChange={setMakerIds} /> : null}
+        {twinKinds.length ? (
+          <label className="form-field co-sync">
+            <span>Also listed as</span>
+            <label className="co-sync-check">
+              <input type="checkbox" checked={syncTwins}
+                     onChange={(e) => setSyncTwins(e.target.checked)} />
+              <span>
+                Apply to the{" "}
+                <b>{twinKinds.map((k) => PARTNER_KIND_LABEL[k as PartnerImportKind]).join(" · ")}</b>
+                {" "}record of the same name
+              </span>
+            </label>
+            {/* 무엇이 가고 무엇이 안 가는지 미리 적는다 — 이 창의 저장은 되돌리는
+                손짓이 없어서, 무엇이 닿는지 모른 채 누르게 두면 안 된다. */}
+            <span className="hint-inline">
+              Company name, address, website, logo and the description travel.
+              Categories, what they make/supply and payment terms stay separate —
+              they answer different questions in each book.
+            </span>
+          </label>
+        ) : null}
         {(areas ?? []).map((a) => (
           <label key={String(a.key)} className="form-field company-area-field">
             <span>{a.label}</span>
@@ -2719,6 +2779,8 @@ function VendorsTab() {
         {...companyNav(company, setCompany)}
         // 담당자를 더하고 고치고 지우는 일이 모두 이 창 안에서 끝난다 — 명단이 곧
         // 결과를 보여 준다. 창을 하나 더 띄우면 그 명단을 잃는다.
+        // 같은 이름으로 다른 명부에도 서 있는가 — 회사 값을 고칠 때 저쪽에도 옮길지 묻는다.
+        twins={company.groups[company.index]?.[0]?.twins}
         onSaveContact={company.saveRow}
         onCreateContact={company.createRow}
         onDeleteContact={company.removeRow}

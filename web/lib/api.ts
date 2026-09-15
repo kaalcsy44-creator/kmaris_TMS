@@ -1201,7 +1201,7 @@ export function createSettingsMaker(body: Omit<SettingsMaker, "id">): Promise<{ 
 /** 회사 단위 값을 같은 이름의 메이커 레코드 전부에 반영(거래선과 같은 규약). */
 export function updateMakerCompanyInfo(
   body: CompanyInfoSave
-): Promise<{ ok: boolean; updated: number; name: string }> {
+): Promise<CompanyInfoSaved> {
   return put("/api/admin/settings/makers/company-info", body);
 }
 /** 이 메이커를 거래선 명부에도 세우고(멱등) 그 거래선을 돌려준다 — 메이커에 직접
@@ -1366,6 +1366,14 @@ export function deleteSettingsCustomer(id: number): Promise<{ ok: boolean }> {
 // 회사 공통정보(주소·사업자번호·결제조건·로고)를 같은 회사명의 담당자 레코드 전체에 일괄 반영.
 // 값을 넘긴 필드만 바뀐다(빈 문자열 = 지우기). rename = 회사명 자체 변경.
 // addresses = 본사·지사 주소 목록(첫 값=대표) — 서버가 대표를 flat address 로 미러링한다.
+/** 회사 공통정보 저장의 결과 — 몇 줄에 닿았나, 그리고 저쪽 명부에는 몇 줄에 닿았나. */
+export type CompanyInfoSaved = {
+  ok: boolean;
+  updated: number;
+  name: string;
+  /** 명부별로 함께 고친 줄 수(sync 를 보냈을 때만). */
+  synced?: Partial<Record<PartnerImportKind, number>>;
+};
 export type CompanyInfoSave = {
   name: string;
   rename?: string;
@@ -1381,6 +1389,10 @@ export type CompanyInfoSave = {
   website?: string;
   note?: string;
   logo?: string;
+  /** 같은 이름으로 다른 명부에도 서 있는 그 회사에 이 변경을 함께 옮길 곳
+   *  ("customers" | "vendors" | "makers"). 주소·홈페이지·로고·소개와 회사명만 간다 —
+   *  취급분류·Makes·결제조건은 명부마다 묻는 것이 달라 저쪽 값을 덮지 않는다. */
+  sync?: PartnerImportKind[];
 };
 /** 이 회사가 실제로 다뤄 본 분류 — 태그의 첫 값을 제안하는 데 쓴다(거래 실적에서). */
 export type VendorCategorySuggestion = {
@@ -1394,12 +1406,12 @@ export function fetchVendorCategorySuggestions(): Promise<{ rows: VendorCategory
 }
 export function updateCustomerCompanyInfo(
   body: CompanyInfoSave
-): Promise<{ ok: boolean; updated: number; name: string }> {
+): Promise<CompanyInfoSaved> {
   return put("/api/admin/settings/customers/company-info", body);
 }
 export function updateVendorCompanyInfo(
   body: CompanyInfoSave
-): Promise<{ ok: boolean; updated: number; name: string }> {
+): Promise<CompanyInfoSaved> {
   return put("/api/admin/settings/vendors/company-info", body);
 }
 export function createSettingsVendor(body: {
