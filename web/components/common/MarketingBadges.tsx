@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchMarketingThread, type MarketingThread, type MarketingThreadMail } from "@/lib/api";
+import type { MarketingMailLog } from "@/lib/types";
 import { followUpState, replyBadge } from "@/lib/marketing";
 
 /** 목록의 Reply 칸 — 답장 종류를 한 낱말 배지로.
@@ -26,14 +27,62 @@ export function ReplyBadge({
   );
 }
 
-/** 목록의 Follow-up 칸 — 날짜와 함께 "언제인지"를 배지로 붙인다(지났는지·오늘인지). */
-export function FollowUpCell({ date }: { date: string }) {
+/** 세기를 뗀 짧은 날짜 — 표의 다른 날짜 칸과 같은 모양(26-09-08). */
+const shortDate = (d: string) => (d || "").replace(/^\d{2}(\d{2}-)/, "$1");
+
+/**
+ * 목록의 Follow-up 칸 — 언제 다시 두드리나(윗줄), 그리고 지금까지 어떻게 오갔나(아랫줄).
+ *
+ * 윗줄은 종전 그대로다: 후속예정일과 "언제인지" 배지(지났는지·오늘인지). 대시보드의
+ * Follow-up 카드가 쓰는 값이라 표에서 사라지면 그 줄이 왜 그 날짜에 잡혔는지 알 수
+ * 없게 된다.
+ *
+ * 아랫줄이 새로 붙은 것이다. 표에서 알고 싶은 것은 문면이 아니라 **박자**다 — 언제
+ * 두드렸고, 언제 답이 왔고, 그 뒤로 우리가 한 번 더 갔는가. 화살표와 날짜만으로 그게
+ * 읽힌다(↑ 우리가 보낸 것, ↓ 상대가 보낸 것). 문면은 행을 열면 대화 패널이 답한다.
+ *
+ * 줄 수는 최근 3개까지다. 오래된 것은 "+N earlier" 로 접어 맨 위에 둔다 — 아래로
+ * 갈수록 최근이라는 차례를 지키려면 접힌 것은 위에 있어야 한다.
+ */
+export function FollowUpCell({
+  date,
+  log,
+  total,
+}: {
+  date: string;
+  log?: MarketingMailLog[];
+  total?: number;
+}) {
   const st = followUpState(date || "");
-  if (!st) return <span className="muted">—</span>;
+  const items = log ?? [];
+  const hidden = Math.max(0, (total ?? items.length) - items.length);
+  if (!st && !items.length) return <span className="muted">—</span>;
   return (
     <span className="fu-cell">
-      <span>{date.replace(/^\d{2}(\d{2}-)/, "$1")}</span>
-      <span className={`fu-badge ${st.tone}`}>{st.label}</span>
+      <span className="fu-next">
+        {st ? (
+          <>
+            <span>{shortDate(date)}</span>
+            <span className={`fu-badge ${st.tone}`}>{st.label}</span>
+          </>
+        ) : (
+          <span className="muted">—</span>
+        )}
+      </span>
+      {items.length ? (
+        <span className="fu-log">
+          {hidden ? <span className="fu-log-more">+{hidden} earlier</span> : null}
+          {items.map((e, i) => (
+            <span key={`${e.d}-${e.dir}-${i}`} className={`fu-log-row ${e.dir === "out" ? "out" : "in"}`}>
+              <span className="fu-log-dir">{e.dir === "out" ? "↑" : "↓"}</span>
+              <span className="fu-log-date">{shortDate(e.d)}</span>
+              <span className="fu-log-kind">
+                {e.bounce ? "Bounced" : e.dir === "out" ? "Sent" : "Received"}
+              </span>
+            </span>
+          ))}
+        </span>
+      ) : null}
     </span>
   );
 }

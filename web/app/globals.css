@@ -16929,12 +16929,42 @@ input.mail-bad {
 .chip-clear:hover { border-color: #b03535; color: #b03535; }
 
 /* Follow-up 칸 — 날짜 옆에 남은 기간을 붙여, 지난 건이 눈에 먼저 들어오게 한다. */
+/* Follow-up 칸 — 윗줄은 언제 다시 두드리나, 아랫줄은 지금까지 어떻게 오갔나.
+   두 값의 결이 달라 세로로 쌓는다: 위는 앞으로의 약속, 아래는 지나간 사실이다. */
 .fu-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  white-space: nowrap;
+}
+.fu-next {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  white-space: nowrap;
 }
+/* 메일 이력 — 표의 주인공은 여전히 위의 날짜라, 한 호흡 작고 옅게 둔다. */
+.fu-log {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #6b7684;
+}
+.fu-log-row {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.fu-log-dir { font-weight: 700; }
+/* 방향을 색으로도 가른다 — 화살표 하나로는 줄이 여럿일 때 한눈에 안 갈린다.
+   들어온 것(답장)이 진하다: 이 표에서 눈이 찾는 것이 그것이다. */
+.fu-log-row.in .fu-log-dir { color: #1a56c4; }
+.fu-log-row.in .fu-log-kind { color: #1a56c4; }
+.fu-log-row.out .fu-log-dir { color: #9aa5b1; }
+.fu-log-date { font-variant-numeric: tabular-nums; }
+.fu-log-more { color: #9aa5b1; font-size: 10.5px; }
 .fu-badge {
   padding: 1px 6px;
   border-radius: 999px;

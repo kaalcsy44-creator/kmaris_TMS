@@ -2071,8 +2071,21 @@ export type MarketingRow = {
   reply_email_id: number;
   /** 이 분류를 기계가 했는가 — 사람이 한 번 저장하면 false 가 된다. */
   reply_auto: boolean;
+  /** 그 주소와 오간 메일의 박자 — 날짜와 방향만(최근 몇 줄). 목록의 Follow-up 칸이
+   *  후속예정일 아래에 세운다. 문면은 행을 열면 대화 패널이 보여 준다. */
+  mail_log?: MarketingMailLog[];
+  /** 오간 메일 전체 통수(mail_log 는 그중 최근 몇 줄뿐이다). */
+  mail_total?: number;
   owner_id: number;
   owner: string;
+};
+
+/** 오간 메일 한 통 — 목록에 세우는 데 필요한 것만. */
+export type MarketingMailLog = {
+  d: string;              // 보낸/받은 날 YYYY-MM-DD
+  dir: "in" | "out";      // in = 상대가 보낸 것, out = 우리가 보낸 것
+  /** 메일 서버가 되돌려 보낸 통(반송) — '받았다'가 아니라 '되돌아왔다'로 적는다. */
+  bounce?: boolean;
 };
 
 // ── 일정(Schedule) ────────────────────────────────────────────────────────────

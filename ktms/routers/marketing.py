@@ -56,6 +56,93 @@ from services import mail_sync, marketing_reply
 
 
 
+# 목록의 Follow-up 칸에 세우는 메일 이력 줄 수. 넘치면 옛 것부터 접고 "+N earlier".
+_LOG_MAX = 3
+
+
+def _mail_logs(s, acts: list) -> dict[int, dict]:
+    """활동 id → 그 주소와 오간 메일의 날짜·방향(최근 몇 줄)과 전체 통수.
+
+    편집창의 대화(marketing_thread)와 같은 것을 목록 크기로 줄인 값이다. 표에서
+    알고 싶은 것은 문면이 아니라 **박자**다 — 언제 두드렸고, 언제 답이 왔고, 그
+    뒤로 우리가 한 번 더 갔는가. 날짜와 화살표만으로 그게 보인다.
+
+    한 줄씩 메일함에 물으면 205번 묻게 되므로 한 번에 가져와 주소로 나눈다. 가져오는
+    칸은 날짜·방향·주소뿐이다(본문은 손대지 않는다) — 목록은 자주 열리는 화면이라
+    통마다 본문을 끌어오면 그것만으로 전송량이 는다.
+
+    반송 통지는 보낸 사람이 메일 서버라 주소로는 걸리지 않는다. 그래서 자동 감지가
+    붙여 둔 그 한 통(reply_email_id)을 id 로 따로 집어넣는다 — 'Invalid' 로 찍힌
+    줄에서 정작 보고 싶은 것이 그 되돌아온 날이다.
+    """
+    by_addr: dict[str, list[int]] = {}
+    dates: dict[int, str] = {}
+    detected: dict[int, int] = {}      # email_messages.id → 활동 id
+    for a in acts:
+        dates[a.id] = (a.activity_date or "")[:10]
+        addr = (a.recipient_email or "").strip().lower()
+        if addr:
+            by_addr.setdefault(addr, []).append(a.id)
+        mid = int(getattr(a, "reply_email_id", None) or 0)
+        if mid:
+            detected[mid] = a.id
+    if not by_addr and not detected:
+        return {}
+
+    since = min((d or "9999") for d in dates.values())
+    # 홍보 주소에서 온 것, 우리가 보낸 것, 그리고 감지가 붙여 둔 통. 이 셋 밖은
+    # 이 표와 무관한 메일이라 아예 가져오지 않는다.
+    want = [EmailMessage.direction == "out"]
+    if by_addr:
+        want.append(func.lower(EmailMessage.from_addr).in_(sorted(by_addr)))
+    if detected:
+        want.append(EmailMessage.id.in_(sorted(detected)))
+    rows = (s.query(EmailMessage.id, EmailMessage.direction, EmailMessage.from_addr,
+                    EmailMessage.to_addrs, EmailMessage.cc_addrs, EmailMessage.sent_at)
+            .filter(EmailMessage.sent_at >= since)
+            .filter(or_(*want))
+            .all())
+
+    hits: dict[int, list[dict]] = {}
+
+    def put(act_id: int, mid: int, at: str, direction: str, bounce: bool) -> None:
+        slot = hits.setdefault(act_id, [])
+        if any(h["id"] == mid for h in slot):
+            return
+        # 그 발송보다 앞선 메일은 이 활동의 이력이 아니다(편집창의 대화와 같은 규칙).
+        if at and dates.get(act_id) and at[:10] < dates[act_id]:
+            return
+        # 시각까지 들고 있다가 화면에 낼 때 날짜만 남긴다 — 하루에 몇 번씩 오가는
+        # 대화가 흔해서(문의는 그날 안에 두세 번 왕복한다), 날짜로만 세우면 순서가
+        # 뒤집힌다. 보낸 것 다음에 답이 온 것을 답 다음에 보낸 것으로 읽게 된다.
+        slot.append({"id": mid, "t": at, "dir": direction,
+                     **({"bounce": True} if bounce else {})})
+
+    for mid, direction, frm, to_addrs, cc_addrs, sent_at in rows:
+        at = sent_at or ""
+        low = (frm or "").lower()
+        bounce = marketing_reply.is_daemon(low)
+        for act_id in by_addr.get(low, []):
+            put(act_id, mid, at, direction or "in", bounce)
+        if direction == "out":
+            for a in {str(x).lower() for x in ((to_addrs or []) + (cc_addrs or [])) if x}:
+                for act_id in by_addr.get(a, []):
+                    put(act_id, mid, at, "out", False)
+        if mid in detected:
+            put(detected[mid], mid, at, direction or "in", bounce)
+
+    out: dict[int, dict] = {}
+    for act_id, log in hits.items():
+        log.sort(key=lambda h: (h["t"], h["id"]))
+        out[act_id] = {
+            "log": [{"d": h["t"][:10], "dir": h["dir"],
+                     **({"bounce": True} if h.get("bounce") else {})}
+                    for h in log[-_LOG_MAX:]],
+            "total": len(log),
+        }
+    return out
+
+
 @app.get("/api/admin/marketing", dependencies=[Depends(require_token)])
 def marketing_list(user: dict = Depends(get_current_user)):
     """잠정 고객사 마케팅 활동 목록."""
@@ -63,8 +150,16 @@ def marketing_list(user: dict = Depends(get_current_user)):
     try:
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         user_names = {u.id: u.username for u in s.query(User).all()}
-        rows = [_marketing_row(m, cust_names, user_names)
-                for m in _marketing_scoped(s, user).all()]
+        acts = _marketing_scoped(s, user).all()
+        logs = _mail_logs(s, acts)
+        rows = []
+        for m in acts:
+            row = _marketing_row(m, cust_names, user_names)
+            hit = logs.get(m.id) or {}
+            # 오간 메일의 박자 — 표의 Follow-up 칸이 후속예정일 아래에 세운다.
+            row["mail_log"] = hit.get("log", [])
+            row["mail_total"] = hit.get("total", 0)
+            rows.append(row)
         return {"rows": rows}
     finally:
         s.close()

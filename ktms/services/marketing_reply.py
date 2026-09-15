@@ -133,6 +133,12 @@ _DAEMON_SENDERS = ("mailer-daemon", "postmaster", "mail-delivery", "maildelivery
                    "delivery-status", "delivery-subsystem")
 
 
+def is_daemon(addr: str) -> bool:
+    """메일 서버가 보낸 통인가(반송·전달실패 통지). 목록·화면이 '받았다'와 '되돌아왔다'를
+    갈라 적으려면 이 판정이 이 모듈 밖에서도 필요하다."""
+    return bool(_DAEMON.search(addr or ""))
+
+
 def _alt_contact(text: str, exclude: set[str]) -> str:
     """자동응답이 가리킨 다른 담당자 주소 — 본문에서 첫 번째로 나오는 남의 주소."""
     for hit in _EMAIL_RE.findall(text or "")[:20]:

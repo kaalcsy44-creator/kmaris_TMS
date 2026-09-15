@@ -216,11 +216,19 @@ export default function MarketingScreen({ onFill }: { onFill?: (v: boolean) => v
       ),
     },
     {
+      // 거르고 정렬하는 값은 여전히 후속예정일 하나다 — 그 아래 메일 이력은 읽는
+      // 것이지 고르는 축이 아니다(오간 날짜로 표를 정렬하고 싶은 일은 없다).
       key: "next_action_date",
       label: "Follow-up",
       text: (r) => r.next_action_date || "",
       filter: "date",
-      render: (r) => <FollowUpCell date={r.next_action_date || ""} />,
+      render: (r) => (
+        <FollowUpCell
+          date={r.next_action_date || ""}
+          log={r.mail_log}
+          total={r.mail_total}
+        />
+      ),
     },
     { key: "owner", label: "PIC", text: (r) => r.owner || "", filter: "facet" },
   ];
