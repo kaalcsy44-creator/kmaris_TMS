@@ -593,7 +593,8 @@ def _vendor_marks(s) -> list[dict]:
       quoted    값을 준 곳. 사지 않았어도 — 실주한 딜이라도 — 그 회사가 그것을 다룬다는
                 사실은 남는다. 다음에 물어볼 곳을 찾는 것이 이 화면의 쓸모라서다.
       listed    거래 이력은 없고 다룬다고 밝혀 둔 곳. 분류 태그(category_ids)이거나,
-                취급품목 글귀가 그 분류 이름을 그대로 담고 있는 경우다.
+                취급품목 글귀가 그 분류 이름을 그대로 담고 있는 경우, 그리고 **그것을
+                만드는 제조사의 대리점**인 경우다(Makers supplied → 그 제조사의 분류).
 
     **발주와 견적은 소스 문서로 갈린다.** 매입(buy) 가격 이력에는 발주(po)와 벤더
     견적(vendor_quote)이 함께 들어 있어서(services/item_ledger), price_type 만 보고
@@ -605,6 +606,8 @@ def _vendor_marks(s) -> list[dict]:
     cat_of_item = {m.id: m.category_id for m in s.query(ItemMaster).all()}
     vendors = s.query(Vendor).all()
     name_of = {v.id: (v.name or "").strip() for v in vendors}
+    # 대리점을 타고 가려면 그 제조사가 무엇을 만드는지 알아야 한다(회사 단위로 접은 값).
+    maker_of = _maker_cat_index(s)
 
     # 센 것이 이긴다 — 한 회사가 같은 계통에서 사기도 하고 견적도 줬으면 '샀다'로 선다.
     _RANK = {"listed": 0, "quoted": 1, "supplied": 2}
@@ -634,6 +637,19 @@ def _vendor_marks(s) -> list[dict]:
             for c in cats.values():
                 if (c.level or 1) <= VENDOR_TAG_LEVEL and _spec_hits_category(spec, c.name):
                     put(c.id, co, "listed", f"Specialization mentions {c.name}")
+        # 대리점으로 선 것 — 이 회사가 대 주는 제조사가 그 계통을 만든다. 태그를 베껴
+        # 두지 않고 물을 때마다 따라간다: 제조사의 분류를 고치면 그 대리점 전부가 곧바로
+        # 따라오고, 같은 사실이 두 군데 적혀 어긋나는 일도 없다.
+        for raw in (getattr(v, "maker_ids", None) or []):
+            try:
+                hit = maker_of.get(int(raw))
+            except (TypeError, ValueError):
+                continue
+            if not hit:
+                continue
+            mk_name, mk_cats = hit
+            for cid in mk_cats:
+                put(cid, co, "listed", f"Agent for {mk_name}")
 
     # ── quoted / supplied: 실제 거래 ──────────────────────────────────────
     for h in (s.query(ItemPriceHistory)
@@ -933,6 +949,33 @@ def settings_makers():
                  "twins": _twins_of(twins, m.name or "", "makers")} for m in rows]
     finally:
         s.close()
+
+
+def _maker_cat_index(s) -> dict[int, tuple[str, set[int]]]:
+    """메이커 줄 id → (회사 이름, 그 **회사**가 만든다고 적어 둔 분류 전부).
+
+    makers.id 는 회사가 아니라 담당자 한 줄을 가리키고, 거래선의 'Makers supplied' 도
+    그중 아무 줄의 id 를 들고 있다. 회사 단위 값(분류)은 담당자 줄 어디에 적혀 있어도
+    되므로, 그 줄 하나만 보면 분류가 비어 있기 십상이다 — 이름으로 접어 모아 둔다.
+    (services/vendor_match._maker_index 와 같은 규약이다.)"""
+    by_name: dict[str, set[int]] = {}
+    rows = s.query(Maker.id, Maker.name, Maker.category_ids).all()
+    for _mid, name, cids in rows:
+        key = _norm_company(name or "")
+        if not key:
+            continue
+        slot = by_name.setdefault(key, set())
+        for x in (cids or []):
+            try:
+                slot.add(int(x))
+            except (TypeError, ValueError):
+                continue
+    out: dict[int, tuple[str, set[int]]] = {}
+    for mid, name, _cids in rows:
+        key = _norm_company(name or "")
+        if key:
+            out[mid] = ((name or "").strip(), by_name.get(key) or set())
+    return out
 
 
 def _apply_maker_agencies(s, maker_name: str, names: list[str]) -> dict[str, int]:

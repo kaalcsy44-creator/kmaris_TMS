@@ -1967,7 +1967,10 @@ export function createVendorRfq(
 // 2단계 거래선 추천 — 1단계 품목의 분류·품번을 벤더의 취급품목·거래이력에 맞춰 본 결과.
 // reasons 는 순위의 근거를 사람이 읽을 수 있게 풀어 놓은 것(고르는 건 사람이 한다).
 export type VendorSuggestReason = {
-  kind: "part" | "category" | "spec";
+  /** part=같은 품번을 다뤄 봤다 · category=같은 분류에서 거래했다 ·
+   *  declared=그 분류를 취급한다고 밝혀 뒀다 · agent=그것을 만드는 제조사의 대리점이다 ·
+   *  spec=취급품목·회사소개 글귀가 겹친다. 색이 곧 근거의 세기다(globals.css). */
+  kind: "part" | "category" | "declared" | "agent" | "spec";
   text: string;
 };
 export type VendorSuggestion = {

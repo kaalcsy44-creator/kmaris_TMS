@@ -9,6 +9,7 @@
   1) 같은 품번을 이미 산 곳 > 견적을 준 곳 > 물어본 곳
   2) 같은 분류(대>중>소)에서 거래한 이력이 있는 곳
   3) 그 분류를 취급한다고 **밝혀 둔** 곳(Settings > Vendor 의 Item categories)
+  3-a) 그것을 만드는 제조사의 **대리점**인 곳(Vendor 의 Makers supplied → Maker 의 분류)
   4) 취급품목·회사소개 글귀가 품목 낱말(제조사명 포함)과 겹치는 곳
 
 3) 이 없으면 아직 거래가 없는 곳은 오직 글귀로만 걸린다 — 새로 등록한 벤더는 우리가
@@ -27,7 +28,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 from db.models import (
-    ItemCategory, ItemMaster, ItemPriceHistory, Vendor, VendorQuote, VendorRFQ,
+    ItemCategory, ItemMaster, ItemPriceHistory, Maker, Vendor, VendorQuote, VendorRFQ,
 )
 from services.item_ledger import build_master_index, match_key, suggest_categories
 
@@ -56,9 +57,16 @@ _W_CAT = {"bought": 18.0, "quoted": 12.0, "asked": 7.0}
 # 우리가 한 번 물어본 것(7)보다는 세다 — 물어본 것은 우리 짐작이지만 태그는 그 회사가
 # 스스로 밝힌 것이라서다. 상위 분류만 맞으면 거래 이력과 같은 규칙으로 절반만 센다.
 _W_DECLARED = 10.0
+# 그것을 만드는 제조사의 대리점이라고 밝혀 둔 곳(Makers supplied → 그 제조사의 분류).
+# 태그(10)보다 약하다 — 한 다리 건넌 추론이라서다: 대리점이라고 그 브랜드의 모든
+# 품목을 다 대는 것은 아니다. 그래도 우리가 한 번 물어본 이력(7)과 비슷하게는 둔다.
+# 이 값 하나로도 추천에 설 수 있게 _MIN_SCORE(6.0) 와 같은 자리에 맞춘다 — 대리점이
+# 그 브랜드 건으로 안 불려 나오면 이 칸을 적어 둔 뜻이 없다.
+_W_AGENT = 6.0
 _PART_MAX = 2          # 품번 근거는 두 건까지만 점수에 센다(한 벤더가 독식하지 않도록)
 _CAT_MAX = 2
 _DECLARED_MAX = 2      # 태그 근거도 두 개까지 — 널리 태그한 벤더가 독식하지 않도록
+_AGENT_MAX = 2         # 대리점 근거도 두 개까지(같은 이유)
 _TEXT_CAP = 40.0       # 글귀 매칭 상한 — 글로만 1등이 되지는 않게
 _TEXT_UNIT = 14.0      # 한 벤더만 적어 둔 낱말(브랜드명 등)이 취급품목에서 맞았을 때의 값
 _SPEC_W = 1.0          # 취급품목 한 줄은 회사소개 문단보다 무겁게 본다
@@ -236,6 +244,33 @@ def _text_index(vendors: list) -> tuple[dict, dict]:
     return per, idf
 
 
+def _maker_index(session) -> dict[int, tuple[str, set[int]]]:
+    """메이커 줄 id → (회사 이름, 그 **회사**가 만든다고 적어 둔 분류 전부).
+
+    makers.id 는 회사가 아니라 담당자 한 줄을 가리킨다. 거래선이 'Makers supplied' 에
+    담아 둔 것도 그중 아무 줄의 id 라, 그 줄 하나만 보면 분류가 비어 있기 십상이다 —
+    회사 단위 값(분류·소개)은 담당자 줄 어디에 적혀 있어도 되기 때문이다. 그래서 이름으로
+    접어 그 회사의 모든 줄에서 분류를 모으고, 어느 줄의 id 로 물어도 같은 답을 준다."""
+    by_name: dict[str, set[int]] = {}
+    rows = session.query(Maker.id, Maker.name, Maker.category_ids).all()
+    for _mid, name, cids in rows:
+        key = " ".join((name or "").split()).lower()
+        if not key:
+            continue
+        slot = by_name.setdefault(key, set())
+        for x in (cids or []):
+            try:
+                slot.add(int(x))
+            except (TypeError, ValueError):
+                continue
+    out: dict[int, tuple[str, set[int]]] = {}
+    for mid, name, _cids in rows:
+        key = " ".join((name or "").split()).lower()
+        if key:
+            out[mid] = ((name or "").strip(), by_name.get(key) or set())
+    return out
+
+
 def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=()) -> dict:
     """딜 품목(1단계 Item list) -> 추천 벤더 목록과 그 근거."""
     lines = []
@@ -268,6 +303,7 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=()) -> dict:
     all_vendors = session.query(Vendor).order_by(Vendor.name).all()
     exp = _vendor_experience(session, cats, idx, masters)
     per_tokens, idf = _text_index(all_vendors)
+    makers = _maker_index(session)
 
     # 품목 쪽 낱말 — 품명·품번·비고 + 분류 이름. 원래 대소문자는 근거 문구에 쓴다.
     query_w: dict[str, float] = defaultdict(float)
@@ -354,11 +390,51 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=()) -> dict:
             elif any(c in want for c in _chain(cats, cid)):
                 dec_hits.append((_W_DECLARED * 0.5, cid, True))
         dec_hits.sort(key=lambda d: -d[0])
+        counted_dec = set(counted)
         for w, cid, indirect in dec_hits[:_DECLARED_MAX]:
             score += w
+            counted_dec.add(cid)
             near = "related to " if indirect else ""
             reasons.append({"kind": "declared",
                             "text": f"Lists {near}{cats[cid].name} as their category"})
+
+        # 3-a) 그것을 만드는 제조사의 대리점이다.
+        #
+        # 거래선의 'Makers supplied' 와 제조사의 분류를 잇는다 — "이 회사는 PANASIA 를
+        # 대 주고, PANASIA 는 BWTS 를 만든다". 두 값 다 이미 적혀 있었는데 아무도 잇지
+        # 않아, 대리점이라고 적어 둔 것이 추천에서는 아무 일도 하지 않았다.
+        #
+        # 베껴 두지 않고 물을 때마다 따라간다. 제조사의 분류를 고치면 그 대리점 전부가
+        # 곧바로 따라오고, 같은 사실이 두 군데 적혀 어긋나는 일도 없다.
+        ag_hits = []
+        for raw in (getattr(v, "maker_ids", None) or []):
+            try:
+                hit = makers.get(int(raw))
+            except (TypeError, ValueError):
+                continue
+            if not hit:
+                continue
+            mk_name, mk_cats = hit
+            for cid in mk_cats:
+                # 태그·이력이 이미 센 분류는 다시 세지 않는다(태그 쪽과 같은 규칙).
+                if cid in counted_dec or cid not in cats:
+                    continue
+                if cid in want:
+                    ag_hits.append((_W_AGENT, cid, mk_name, False))
+                elif any(c in want for c in _chain(cats, cid)):
+                    ag_hits.append((_W_AGENT * 0.5, cid, mk_name, True))
+        ag_hits.sort(key=lambda a: -a[0])
+        seen_ag: set[int] = set()
+        for w, cid, mk_name, indirect in ag_hits:
+            if cid in seen_ag:
+                continue      # 같은 분류를 만드는 제조사를 둘 대 주어도 한 번만 센다
+            seen_ag.add(cid)
+            if len(seen_ag) > _AGENT_MAX:
+                break
+            score += w
+            near = "related to " if indirect else ""
+            reasons.append({"kind": "agent",
+                            "text": f"Agent for {mk_name} — makes {near}{cats[cid].name}"})
 
         # 4) 취급품목·회사소개 글귀가 품목 낱말과 겹친다.
         tw = per_tokens.get(v.id) or {}

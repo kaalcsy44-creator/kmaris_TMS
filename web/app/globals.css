@@ -8554,6 +8554,15 @@ table.mini .num {
   border: 1px dashed #d3ddeb;
   padding: 1px 6px;
 }
+/* 대리점으로 걸린 것 — 스스로 밝힌 태그(declared)보다 한 다리 건넌 추론이라 점선은
+   같이 두되 색만 브랜드 쪽(보라)으로 돌린다. 근거 문구가 '어느 제조사를 타고 왔는지'를
+   말하므로, 그 줄만은 다른 근거와 눈에 띄게 갈려야 한다. */
+.vsug-reason.agent {
+  background: #f4f1fd;
+  color: #5b4b9a;
+  border: 1px dashed #ddd5f5;
+  padding: 1px 6px;
+}
 
 /* 명함 스캔 패널 — Customer/Vendor 등록 폼 맨 위. 붙여넣기·파일선택으로 자동 입력. */
 .bc-scan {
