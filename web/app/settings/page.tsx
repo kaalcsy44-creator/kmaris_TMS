@@ -1042,6 +1042,9 @@ function MakersTab() {
   const catNames = useCategoryNames();
   const [company, setCompany] = useState<CompanyNavCtx<SettingsMaker> | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // 마지막으로 저장한 회사명 — 새 목록에서 열려 있는 창의 회사를 되찾는 열쇠다.
+  // 이름째 바꿔 저장하면 창이 든 사진의 이름은 이미 옛것이라 그것으로는 못 찾는다.
+  const savedName = useRef("");
   const shown = company ? company.groups[company.index] ?? [] : [];
 
   return (
@@ -1078,7 +1081,8 @@ function MakersTab() {
         ]}
         save={updateMakerCompanyInfo}
         onClose={() => setCompany(null)}
-        onSaved={() => {
+        onSaved={(name) => {
+          savedName.current = name ?? "";
           setReloadKey((k) => k + 1);
           invalidateCache("settings-makers");
         }}
@@ -1120,7 +1124,14 @@ function MakersTab() {
           </span>,
         ],
         flat: true,
-        onRowClick: (_rs, nav) => setCompany(nav),
+        onRowClick: (_rs, nav) => { savedName.current = ""; setCompany(nav); },
+        // 저장 뒤 새로 불려 온 목록을 열려 있는 창에 그대로 건넨다 — 안 그러면 창은
+        // 열 때 찍은 사진을 계속 들고 있어, 옆 회사에 갔다 오는 순간 저장 전 값이
+        // 되돌아온다(그 상태로 다시 저장하면 방금 적은 것이 진짜로 지워진다).
+        onRowsSync: (find) =>
+          setCompany((cur) => (cur
+            ? find(savedName.current || cur.groups[cur.index]?.[0]?.name || "") ?? cur
+            : cur)),
         newRow: (rs) => withCompanyDefaults(EMPTY_MAKER, rs, rs[0].name),
         summary: (g, n) => `${g} makers · ${n} contacts`,
       }}
@@ -1249,6 +1260,9 @@ function CustomersTab() {
     CompanyNavCtx<SettingsCustomer> | null
   >(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // 마지막으로 저장한 회사명 — 새 목록에서 열려 있는 창의 회사를 되찾는 열쇠다.
+  // 이름째 바꿔 저장하면 창이 든 사진의 이름은 이미 옛것이라 그것으로는 못 찾는다.
+  const savedName = useRef("");
 
   return (
     <>
@@ -1287,7 +1301,8 @@ function CustomersTab() {
         ]}
         save={updateCustomerCompanyInfo}
         onClose={() => setCompany(null)}
-        onSaved={() => {
+        onSaved={(name) => {
+          savedName.current = name ?? "";
           setReloadKey((k) => k + 1);
           invalidateCustomerLogos();
         }}
@@ -1321,7 +1336,14 @@ function CustomersTab() {
           </span>,
         ],
         flat: true,
-        onRowClick: (_rs, nav) => setCompany(nav),
+        onRowClick: (_rs, nav) => { savedName.current = ""; setCompany(nav); },
+        // 저장 뒤 새로 불려 온 목록을 열려 있는 창에 그대로 건넨다 — 안 그러면 창은
+        // 열 때 찍은 사진을 계속 들고 있어, 옆 회사에 갔다 오는 순간 저장 전 값이
+        // 되돌아온다(그 상태로 다시 저장하면 방금 적은 것이 진짜로 지워진다).
+        onRowsSync: (find) =>
+          setCompany((cur) => (cur
+            ? find(savedName.current || cur.groups[cur.index]?.[0]?.name || "") ?? cur
+            : cur)),
         newRow: (rs) => withCompanyDefaults(EMPTY_CUSTOMER, rs, rs[0].name),
         summary: (g, n) => `${g} companies · ${n} contacts`,
       }}
@@ -1791,7 +1813,9 @@ function CompanyInfoModal<
   areas?: CompanyArea<T>[];
   save: (body: CompanyInfoSave) => Promise<CompanyInfoSaved>;
   onClose: () => void;
-  onSaved: () => void;
+  /** 저장이 끝났다 — 목록을 다시 불러오는 자리. 이름을 바꿔 저장했을 수 있어
+   *  최종 회사명을 함께 건넨다(새 목록에서 이 창의 회사를 되찾는 열쇠다). */
+  onSaved: (name?: string) => void;
   /** 이 회사와의 거래 요약(문의·수주 / 프로젝트·회신) — 표에 선 배지를 그대로 들여온다. */
   stats?: [string, ReactNode];
   /** 표의 앞뒤 회사로 건너뛰기. 이름을 함께 받아 어디로 가는지 미리 보인다. */
@@ -2022,10 +2046,11 @@ function CompanyInfoModal<
         : "");
       // 저장하면 읽기로 돌아온다 — 창을 닫아 버리면 방금 무엇을 저장했는지 확인할
       // 자리가 없고, 이어서 옆 회사로 넘어가려면 목록에서 그 회사를 다시 찾아야 한다.
-      setBaseName(name.trim() || origName);
+      const finalName = name.trim() || origName;
+      setBaseName(finalName);
       setEditing(false);
       setBusy(false);
-      onSaved();
+      onSaved(finalName);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
       setBusy(false);
@@ -2755,6 +2780,9 @@ function VendorsTab() {
     CompanyNavCtx<SettingsVendor> | null
   >(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // 마지막으로 저장한 회사명 — 새 목록에서 열려 있는 창의 회사를 되찾는 열쇠다.
+  // 이름째 바꿔 저장하면 창이 든 사진의 이름은 이미 옛것이라 그것으로는 못 찾는다.
+  const savedName = useRef("");
   // 실적에서 뽑은 분류 제안 — 회사명으로 찾는다(레코드 1 = 담당자 1 이라 vendor_id 로
   // 묶으면 같은 회사가 담당자별로 갈린다). 실패해도 화면은 그대로 나와야 하므로 삼킨다.
   const [suggest, setSuggest] = useState<VendorCategorySuggestion[]>([]);
@@ -2802,7 +2830,8 @@ function VendorsTab() {
         ]}
         save={updateVendorCompanyInfo}
         onClose={() => setCompany(null)}
-        onSaved={() => {
+        onSaved={(name) => {
+          savedName.current = name ?? "";
           setReloadKey((k) => k + 1);
           invalidateVendorLogos();
         }}
@@ -2837,7 +2866,14 @@ function VendorsTab() {
           </span>,
         ],
         flat: true,
-        onRowClick: (_rs, nav) => setCompany(nav),
+        onRowClick: (_rs, nav) => { savedName.current = ""; setCompany(nav); },
+        // 저장 뒤 새로 불려 온 목록을 열려 있는 창에 그대로 건넨다 — 안 그러면 창은
+        // 열 때 찍은 사진을 계속 들고 있어, 옆 회사에 갔다 오는 순간 저장 전 값이
+        // 되돌아온다(그 상태로 다시 저장하면 방금 적은 것이 진짜로 지워진다).
+        onRowsSync: (find) =>
+          setCompany((cur) => (cur
+            ? find(savedName.current || cur.groups[cur.index]?.[0]?.name || "") ?? cur
+            : cur)),
         newRow: (rs) => withCompanyDefaults(EMPTY_VENDOR, rs, rs[0].name),
         summary: (g, n) => `${g} vendors · ${n} contacts`,
       }}
@@ -5073,6 +5109,16 @@ function MasterSection<T extends { id: number }>({
     /** 회사 줄을 누르면 하는 일. 펼칠 것이 없는 표(flat)에서 줄 클릭이 갈 곳이다 —
      *  회사 정보 창을 연다. 주지 않으면 줄은 그냥 눌리지 않는다. */
     onRowClick?: (rows: T[], nav: CompanyNavCtx<T>) => void;
+    /** 목록이 새로 불려 오면 열려 있는 회사 창에 새 자리표를 건넨다.
+     *
+     *  회사 창이 든 rows 는 **줄을 누른 순간 찍은 사진**이다. 저장하면 목록은 새 값으로
+     *  다시 불려 오지만 그 사진은 그대로라, 창에서 ◀ ▶ 로 옆 회사에 갔다 돌아오면
+     *  창이 다시 세워지면서 저장 전 값이 되돌아온다 — 방금 적은 주소·홈페이지·로고가
+     *  빈 칸으로 보이고, 그 상태에서 한 번 더 저장하면 진짜로 지워진다.
+     *
+     *  건네는 것은 자리표를 만드는 함수다(회사 이름 → 지금 목록에서의 자리). 줄 수와
+     *  차례가 저장 사이에 달라질 수 있어, 자리 번호가 아니라 이름으로 다시 찾는다. */
+    onRowsSync?: (find: (name: string) => CompanyNavCtx<T> | null) => void;
     /** 회사 줄만 세우고 담당자 줄은 펼치지 않는다. 담당자는 회사정보 창의 명단에서
      *  보고 고친다 — 목록에서까지 펼치면 같은 값(지역·프로젝트·취급품목이 회사 단위다)이
      *  두 줄로 되풀이되고, 서른다섯 회사짜리 표가 일흔 줄이 된다. */
@@ -5153,6 +5199,32 @@ function MasterSection<T extends { id: number }>({
   }
 
   useEffect(refresh, [reloadKey]);
+
+  // 새로 불려 온 목록을 열려 있는 회사 창에 건넨다(group.onRowsSync 주석 참고).
+  // 자리표를 만드는 데 필요한 값은 이 아래 render 에서 채워진다 — 효과는 그 뒤에
+  // 돌기 때문에, 창이 받는 것은 언제나 방금 그린 목록이다.
+  const liveRef = useRef<{ groups: T[][]; keys: string[] }>({ groups: [], keys: [] });
+  useEffect(() => {
+    const hand = group?.onRowsSync;
+    if (!hand) return;
+    hand((name) => {
+      // 찾는 열쇠는 묶음 열쇠(group.by)다 — 이 표들은 그것이 곧 회사 이름이고,
+      // 무엇보다 T 가 name 을 가졌다고 이 자리에서는 말할 수 없다.
+      const key = (name || "").trim().toLowerCase();
+      const at = liveRef.current.keys.findIndex((k) => (k || "").trim().toLowerCase() === key);
+      if (at < 0) return null;   // 걸러져 안 보이거나 지워진 회사 — 든 사진을 그냥 둔다
+      return {
+        groups: liveRef.current.groups,
+        index: at,
+        addNew: () => openNewIn(liveRef.current.groups[at]),
+        saveRow,
+        createRow,
+        removeRow,
+      };
+    });
+    // 목록이 새로 불려 왔을 때만 — group 객체는 렌더마다 새로 만들어져 여기 걸면 맴돈다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
 
   function openNew() {
     setForm(empty);
@@ -5308,6 +5380,7 @@ function MasterSection<T extends { id: number }>({
   // 회사 목록을 순서 그대로 — 2열로 잘라 그려도 '다음 회사'는 자른 조각이 아니라
   // 전체 순서를 따라야 한다(회사 정보 창의 좌우 이동).
   const groupRows = groups.map((g) => g.rows);
+  liveRef.current = { groups: groupRows, keys: groups.map((g) => g.key) };
   const groupIndex = new Map(groups.map((g, i) => [g.key, i]));
   // 담당자 줄을 아예 안 세우는 표(거래선·고객) — 회사 줄 하나가 곧 그 회사다.
   const flatGroups = !!group?.flat;
