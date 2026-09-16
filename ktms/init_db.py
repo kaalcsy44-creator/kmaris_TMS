@@ -207,11 +207,16 @@ _MIGRATIONS = {
         "bank_fee":        "FLOAT DEFAULT 0",
         # 크레딧 노트로 깎아 준 금액(청구서 통화). 받을 돈 = 청구액 - 수금액 - 이 값.
         "credit_amount":   "FLOAT DEFAULT 0",
+        # 본 청구(main)인가 추가비용 청구(extra)인가. 기존 행은 전부 본 청구다.
+        "kind":            "VARCHAR(10) DEFAULT 'main'",
+        "extra_id":        "INTEGER",
     },
     "ap_records": {
         "charges":         "JSON",
         # 실제 지급일 — 지급 등록으로 잔액이 0이 된 날(예정일 due_date 와 다를 수 있다).
         "paid_date":       "VARCHAR(10)",
+        "kind":            "VARCHAR(10) DEFAULT 'main'",
+        "extra_id":        "INTEGER",
     },
     "finance_payables": {
         # 실제 납부일 {회차일: 납부일} — 예정일과 다른 날 납부한 경우를 남긴다.
@@ -287,7 +292,8 @@ def migrate_relax_not_null():
     신규 DB는 모델에서 이미 nullable 이라 ALTER 가 필요 없다."""
     engine = get_engine()
     insp = inspect(engine)
-    targets = [("quotations", "qtn_no")]
+    # ap_records.po_id — 추가비용(kind="extra")의 매입은 벤더 P/O 없이 서므로 NULL 이 된다.
+    targets = [("quotations", "qtn_no"), ("ap_records", "po_id")]
     with engine.begin() as conn:
         for table, col in targets:
             if not insp.has_table(table):

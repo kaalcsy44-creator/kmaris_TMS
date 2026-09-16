@@ -17407,3 +17407,69 @@ input.mail-bad {
   font-weight: 700;
   color: #9a6510;
 }
+
+/* ── 추가비용 탭(9단계 네 번째) ──────────────────────────────────────────────
+   본 계약과 별개로 붙은 비용 한 건을 벤더측·고객측 나란히 적는 자리. 품목표는 본
+   청구서의 것보다 훨씬 짧아(항공권 한 줄, 비자 한 줄) 가벼운 표를 따로 쓴다. */
+.xc-panel .stage-card { margin: 0 0 12px; }
+.xc-items { width: 100%; margin: 4px 0 0; }
+.xc-items th, .xc-items td { padding: 4px 6px; }
+.xc-items input { width: 100%; }
+.xc-items .xc-num { text-align: right; width: 120px; }
+.xc-items .xc-num input { text-align: right; }
+.xc-items .xc-del { width: 28px; text-align: center; }
+.xc-items .xc-foot-label { text-align: right; color: var(--muted); font-weight: 600; }
+.xc-items .xc-foot-val { font-weight: 700; }
+/* 줄 더하기 단추는 표 아래에 둔다 — caption 을 bottom 으로 내려 표의 일부로 읽히게. */
+.xc-items .xc-cap { caption-side: bottom; text-align: left; padding-top: 4px; }
+
+/* 세워진 청구 레코드 한 줄 — 금액·수금·잔액. 승인일을 채우기 전에는 안내만 선다. */
+.xc-bills { padding: 0 14px 12px; }
+.xc-bill {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.xc-bill-label { font-weight: 700; color: var(--navy); }
+.xc-bill-no { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.xc-bill-sep { color: #c4cedb; }
+.xc-bill--none { color: var(--muted); font-size: 12px; }
+
+/* 마진 한 줄 — 이 탭의 요점. 원가 그대로 넘겼는지 얹었는지가 여기서만 보인다. */
+.xc-margin {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+.xc-margin-val { font-weight: 700; font-size: 15px; color: #16705c; }
+.xc-margin-val.neg { color: #b4232a; }
+.xc-margin-warn { display: block; padding: 0 14px 12px; color: #b4232a; }
+
+/* 딜 카드·목록의 추가비용 배지 — 단계는 이미 완료여도 이 돈은 남아 있다. */
+.pl-extra-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 1px solid #ecd8c5;
+  border-radius: 999px;
+  background: #fbeee3;
+  color: #9a5a28;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pl-extra-badge.pay { border-color: #cfe0f8; background: #e9f1fd; color: #2456a6; }
+/* 금액 줄 + 추가비용 배지 — 한 줄에 두되 좁으면 배지가 아래로 내려간다. */
+.pl-card-amt-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pl-card-amt-row .pl-card-amt { margin: 0; }

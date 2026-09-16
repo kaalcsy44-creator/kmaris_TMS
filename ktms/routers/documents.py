@@ -199,9 +199,12 @@ def save_service_stage(order_id: int, body: ServiceStageSave):
             d = body.data or {}
             service_items = d.get("items") if isinstance(d.get("items"), list) else []
             total = _total_amount(service_items) + sum(_f(d.get(k)) for k in ("labor_cost", "travel_cost", "material_cost", "other_cost"))
-            ar = s.query(ARRecord).filter_by(order_id=order.id).first()
+            # 본 청구서만 찾는다 — 추가비용 청구가 먼저 서 있으면 그것을 본 청구로
+            # 잘못 집어 이 딜의 금액을 추가비용 금액으로 덮어쓴다.
+            ar = (s.query(ARRecord).filter_by(order_id=order.id)
+                  .filter(ARRecord.kind != "extra").first())
             if not ar:
-                ar = ARRecord(order_id=order.id, ci_no="",
+                ar = ARRecord(order_id=order.id, ci_no="", kind="main",
                               invoice_amount=total, paid_amount=0.0,
                               currency=d.get("currency", "USD"),
                               status=ARStatus.OUTSTANDING)
@@ -232,7 +235,9 @@ def delete_service_stage(order_id: int, stage: int):
         if stage in (7, 8):
             set_manual_stage(_rfq_for_order(s, order), order, stage, None)
         if stage == 9:
-            s.query(ARRecord).filter_by(order_id=order.id).delete(synchronize_session=False)
+            # 본 청구만 거둔다 — 추가비용 청구는 제 탭에서 지운다(수금이 잡혀 있을 수 있다).
+            (s.query(ARRecord).filter_by(order_id=order.id)
+             .filter(ARRecord.kind != "extra").delete(synchronize_session=False))
         s.commit()
         return {"ok": True}
     finally:
@@ -698,9 +703,11 @@ def reset_stage(order_id: int, stage: int):
                 tax = _latest_tax(s, ci.id)
                 if tax:
                     s.delete(tax)
-            s.query(ARRecord).filter_by(order_id=order_id).delete(synchronize_session=False)
+            (s.query(ARRecord).filter_by(order_id=order_id)
+             .filter(ARRecord.kind != "extra").delete(synchronize_session=False))
         elif stage == 11:
-            ars = s.query(ARRecord).filter_by(order_id=order_id).all()
+            ars = (s.query(ARRecord).filter_by(order_id=order_id)
+                   .filter(ARRecord.kind != "extra").all())
             if any(_enum_val(a.status) == "완납" for a in ars):
                 raise HTTPException(status_code=400,
                     detail="AR이 '완납'으로 표시돼 있습니다. AR 화면에서 결제를 먼저 해제하세요.")
@@ -945,11 +952,13 @@ def save_tax_invoice(order_id: int, body: TaxInvoiceSave):
         tax.date = body.date or tax.date or date.today().isoformat()
         tax.items = body.items or ci.items or []
 
-        ar = s.query(ARRecord).filter_by(order_id=order.id, ci_no=ci.ci_no).first()
+        ar = (s.query(ARRecord).filter_by(order_id=order.id, ci_no=ci.ci_no)
+              .filter(ARRecord.kind != "extra").first())
         invoice_amount = _total_amount(tax.items or [])
         if not ar:
             ar = ARRecord(
                 order_id=order.id,
+                kind="main",
                 ci_no=ci.ci_no,
                 invoice_amount=invoice_amount,
                 paid_amount=0.0,

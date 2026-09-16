@@ -216,7 +216,9 @@ def order_detail(order_id: int):
               if ci else None)
         tax = (s.query(TaxInvoiceData).filter_by(ci_id=ci.id).order_by(TaxInvoiceData.id.desc()).first()
                if ci else None)
-        ars = s.query(ARRecord).filter_by(order_id=o.id).order_by(ARRecord.id.desc()).all()
+        # 본 청구만 — 이 목록은 "이 오더의 청구서"를 뜻한다(추가비용은 제 탭에서 본다).
+        ars = (s.query(ARRecord).filter_by(order_id=o.id)
+               .filter(ARRecord.kind != "extra").order_by(ARRecord.id.desc()).all())
 
         return {
             "id": o.id,

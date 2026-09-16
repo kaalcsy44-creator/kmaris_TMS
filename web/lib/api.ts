@@ -30,6 +30,7 @@ import type {
   VendorQuoteOverviewRow,
   DocumentDetail,
   DocumentWorkItem,
+  ExtraChargeRow,
   TaxInvoiceItem,
   DocCharges,
   QtnRow,
@@ -1852,6 +1853,57 @@ export function updateClaim(claimId: number, body: ClaimSaveBody): Promise<{ ok:
 
 export function deleteClaim(claimId: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/claims/${claimId}`);
+}
+
+// ── 추가비용(Extra charge) — 9단계 네 번째 탭 ───────────────────────────────
+// 한 건에 벤더측(매입)과 고객측(매출)이 함께 들어간다. 승인일이 스위치다 —
+// 값을 채워 저장하면 그 쪽의 청구 레코드(AR/AP)가 서고, 비우면 거둬진다.
+export function fetchExtraCharges(params: { orderId?: number; rfqId?: number }): Promise<{ rows: ExtraChargeRow[] }> {
+  const q = new URLSearchParams();
+  if (params.orderId) q.set("order_id", String(params.orderId));
+  if (params.rfqId) q.set("rfq_id", String(params.rfqId));
+  return get<{ rows: ExtraChargeRow[] }>(`/api/admin/extra-charges?${q.toString()}`);
+}
+
+export type ExtraChargeSaveBody = {
+  rfq_id?: number;
+  order_id?: number;
+  title?: string;
+  reason?: string;
+  occurred_date?: string;
+  timing?: string;
+  description?: string;
+  vendor_id?: number | null;
+  vendor_quote_no?: string;
+  vendor_quote_date?: string;
+  vendor_currency?: string;
+  vendor_items?: DocumentWorkItem[];
+  vendor_amount?: number | null;
+  vendor_approved_date?: string;
+  quote_no?: string;
+  quote_date?: string;
+  valid_until?: string;
+  currency?: string;
+  fx_rate?: number | null;
+  items?: DocumentWorkItem[];
+  amount?: number | null;
+  vat_rate?: number | null;
+  sent_date?: string;
+  approved_date?: string;
+  approved_ref?: string;
+  notes?: string;
+};
+
+export function createExtraCharge(body: ExtraChargeSaveBody): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/extra-charges", body);
+}
+
+export function updateExtraCharge(id: number, body: ExtraChargeSaveBody): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/extra-charges/${id}`, body);
+}
+
+export function deleteExtraCharge(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/extra-charges/${id}`);
 }
 
 /** 상계할 수 있는 청구서 목록 — 그 고객의 청구서 전부(같은 오더 건이 맨 위). */

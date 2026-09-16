@@ -84,7 +84,7 @@ from db.models import (
     PackingList, TaxInvoiceData, ARRecord, APRecord, DeliveryProof,
     RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity, ScheduleEvent,
     MarketingAsset, FinancePayable, FinanceIncome, Consultant, Maker,
-    Claim, CreditNote,
+    Claim, CreditNote, ExtraCharge,
 )
 
 # ── App / CORS ────────────────────────────────────────────────────────────────
@@ -781,10 +781,16 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
               .order_by(ProformaInvoice.created_at.asc()).first())
         tax = (s.query(TaxInvoiceData).filter_by(ci_id=ci.id)
                .order_by(TaxInvoiceData.created_at.asc()).first()) if ci else None
-        ars = s.query(ARRecord).filter_by(order_id=order.id).all()
+        # 본 청구만 센다. 추가비용 청구(kind="extra")를 섞으면 두 군데가 무너진다 —
+        # ar_billed 가 추가 청구 하나로 True 가 되어 9단계가 앞서 초록이 되고,
+        # ar_paid 는 any() 라 추가 건만 완납돼도 11단계가 완료로 보인다.
+        # 추가비용은 파이프라인이 아니라 9단계 Extra charge 탭과 미수 대장에서 본다.
+        ars = (s.query(ARRecord).filter_by(order_id=order.id)
+               .filter(ARRecord.kind != "extra").all())
         # 매입측(AP) — 벤더 P/O 1건 = AP 1건. 9~11단계는 매출(AR)만이 아니라 이 매입까지
         # 끝나야 완료로 본다(벤더 청구서 수취·세금계산서 수취·지급).
-        aps = s.query(APRecord).filter_by(order_id=order.id).all()
+        aps = (s.query(APRecord).filter_by(order_id=order.id)
+               .filter(APRecord.kind != "extra").all())
         pod = (s.query(DeliveryProof).filter_by(order_id=order.id)
                .order_by(DeliveryProof.created_at.asc()).first())
     else:
@@ -2040,6 +2046,44 @@ CLAIM_COST_KINDS = ["labor", "parts", "freight", "inspection", "other"]
 CLAIM_BEARERS = ["us", "customer", "vendor", "shared"]
 CLAIM_SETTLEMENTS = ["credit_note", "cash", "vendor_ap", "none"]
 CLAIM_STATUSES = ["open", "settled", "closed"]
+
+
+class ExtraChargeSave(BaseModel):
+    """추가비용 한 건 — 사건 + 벤더측(매입) + 고객측(매출)을 한 본문에 담는다.
+
+    양쪽 승인일(vendor_approved_date / approved_date)이 곧 스위치다. 값이 들어오면
+    그 쪽의 청구 레코드(APRecord / ARRecord)를 만들고, 비워 보내면 되돌린다.
+    금액(vendor_amount / amount)을 비워 보내면 품목 합으로 채운다.
+    """
+    rfq_id: int | None = None
+    order_id: int | None = None
+    title: str | None = ""
+    reason: str | None = "schedule_delay"
+    occurred_date: str | None = ""
+    timing: str | None = "before"
+    description: str | None = ""
+    status: str | None = "draft"
+    # ── 벤더측 ──────────────────────────────────────────────────────────
+    vendor_id: int | None = None
+    vendor_quote_no: str | None = ""
+    vendor_quote_date: str | None = ""
+    vendor_currency: str | None = "KRW"
+    vendor_items: list[dict] | None = None
+    vendor_amount: float | None = None
+    vendor_approved_date: str | None = ""
+    # ── 고객측 ──────────────────────────────────────────────────────────
+    quote_no: str | None = ""
+    quote_date: str | None = ""
+    valid_until: str | None = ""
+    currency: str | None = "USD"
+    fx_rate: float | None = None
+    items: list[dict] | None = None
+    amount: float | None = None
+    vat_rate: float | None = None
+    sent_date: str | None = ""
+    approved_date: str | None = ""
+    approved_ref: str | None = ""
+    notes: str | None = ""
 
 
 class ClaimSave(BaseModel):

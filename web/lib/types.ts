@@ -1093,6 +1093,61 @@ export type ClaimRow = {
   credit_notes: CreditNoteRow[];
 };
 
+/** 추가비용에 딸린 청구 한 건(매출 AR 또는 매입 AP)의 현황 — 목록과 함께 실려 온다. */
+export type ExtraChargeBill = {
+  id: number;
+  invoice_no?: string;
+  bill_no?: string;
+  invoice_amount: number;
+  paid_amount: number;
+  outstanding: number;
+  currency: string;
+  due_date: string;
+  paid_date: string;
+  status: string;
+};
+
+/** 추가비용 한 건 — 본 계약과 별개로 뒤늦게 붙은 비용. 벤더측(매입)과 고객측(매출)을
+ *  한 레코드에 함께 담는다(마진을 한 자리에서 보려고). 자세한 규약은 백엔드 모델 주석. */
+export type ExtraChargeRow = {
+  id: number;
+  rfq_id: number;
+  order_id: number;
+  title: string;
+  reason: string;          // schedule_delay / scope_change / rework / other
+  occurred_date: string;
+  timing: string;          // before / after (작업 전·후)
+  description: string;
+  status: string;          // draft / quoted / approved / invoiced / settled
+  // 벤더측 — 공급사 견적 수취 → 우리 승인
+  vendor_id: number;
+  vendor: string;
+  vendor_quote_no: string;
+  vendor_quote_date: string;
+  vendor_currency: string;
+  vendor_items: DocumentWorkItem[];
+  vendor_amount: number;
+  vendor_approved_date: string;
+  // 고객측 — 우리 견적 발행 → 고객 승인
+  quote_no: string;
+  quote_date: string;
+  valid_until: string;
+  currency: string;
+  fx_rate: number;
+  items: DocumentWorkItem[];
+  amount: number;
+  vat_rate: number;
+  sent_date: string;
+  approved_date: string;
+  approved_ref: string;
+  notes: string;
+  /** 고객 청구액 − 벤더 원가(청구 통화 환산). 원가 그대로 넘겼는지 얹었는지 한 줄로. */
+  margin: number;
+  cost_in_sales_currency: number;
+  ar: ExtraChargeBill | null;
+  ap: ExtraChargeBill | null;
+};
+
 /** Finance 클레임 대장 한 줄 — 금액은 전부 KRW 환산(사건이 난 달의 말일 매매기준율). */
 export type FinanceClaimRow = {
   id: number;
@@ -1811,6 +1866,10 @@ export type PipelineRow = {
   vessels: string;            // 오더별 선박 목록(줄바꿈). 단일이면 1개
   customer_po_nos: string;    // 고객 P/O No. 목록(줄바꿈)
   order_amount: string;
+  /** 추가비용의 미수·미지급 잔액(USD 환산). 단계는 이미 완료여도 이 돈은 남아 있다 —
+   *  0 보다 크면 딜 카드·목록에 배지를 세운다. */
+  extra_ar_outstanding?: number;
+  extra_ap_outstanding?: number;
   customer_po_no: string;
   customer_po_at: string;
   vendor_po_no: string;

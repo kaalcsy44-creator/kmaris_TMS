@@ -702,6 +702,12 @@ class ARRecord(Base):
     bill_to_contact = Column(String(100))  # 청구 담당자
     bill_to_email   = Column(String(200))  # 청구 이메일
     bill_to_phone   = Column(String(60))   # 청구 연락처
+    # 본 청구(main)인가 추가비용 청구(extra)인가. 한 오더에 여러 AR 이 설 수 있는데,
+    # '이 딜의 청구서'를 찾는 자리는 거의 다 본 청구를 뜻한다 — 그 자리들이 추가 청구를
+    # 집어 들지 않도록 표시를 남긴다. 단계 판정(ar_paid)은 any 라 추가 건이 미수로 남아도
+    # 딜은 완료로 유지된다(ExtraCharge 주석 참고).
+    kind           = Column(String(10), default="main")   # main | extra
+    extra_id       = Column(Integer, ForeignKey("extra_charges.id"), nullable=True)
     created_at     = Column(DateTime, default=datetime.utcnow)
 
 
@@ -713,7 +719,10 @@ class APRecord(Base):
     기록한다. Finance 의 지급(payable) 소스로 자동 연결된다(_ap_record_rows)."""
     __tablename__ = "ap_records"
     id             = Column(Integer, primary_key=True)
-    po_id          = Column(Integer, ForeignKey("purchase_orders.id"))  # 대응 vendor P/O
+    # 대응 vendor P/O. 추가비용(kind="extra")은 P/O 없이 선다 — 여기에 보조 P/O 를 끊으면
+    # _deal_progress 의 ap_all_paid 가 벤더 P/O 목록을 all() 로 훑으므로, 그 건이 미지급인
+    # 동안 이미 끝난 9·10·11단계가 통째로 되돌아간다.
+    po_id          = Column(Integer, ForeignKey("purchase_orders.id"), nullable=True)
     order_id       = Column(Integer, ForeignKey("orders.id"))           # 프로젝트/고객 롤업
     vendor_id      = Column(Integer, ForeignKey("vendors.id"))
     bill_no        = Column(String(60))    # 벤더 대금청구서/거래명세서 번호
@@ -734,7 +743,70 @@ class APRecord(Base):
     tax_received_date = Column(String(10))              # 수취일 YYYY-MM-DD
     tax_invoice_no    = Column(String(60))              # 전자세금계산서 승인번호
     notes          = Column(Text)
+    kind           = Column(String(10), default="main")   # main | extra
+    extra_id       = Column(Integer, ForeignKey("extra_charges.id"), nullable=True)
     created_at     = Column(DateTime, default=datetime.utcnow)
+
+
+class ExtraCharge(Base):
+    """추가비용 — 본 계약 금액과 별개로 뒤늦게 생긴 비용 한 건.
+
+    일정이 밀려 항공권을 바꾸거나 비자를 새로 받는 식으로 생긴다. 본 대금을 이미 받은
+    뒤에 생기기도 하고, 작업 전에 생기기도 한다.
+
+    파이프라인 단계로 두지 않는 이유는 Claim 과 같다 — 모든 딜이 거치는 경로가 아니라
+    예외 사건이고, 11단계가 끝난 뒤에도 생긴다. 단계로 만들면 추가비용이 없는 딜이
+    영영 미완료로 남는다. 그래서 딜에 딸린 별도 기록으로 두고 9단계의 탭으로 본다.
+
+    한 건 안에 양쪽이 다 들어간다.
+      벤더측  공급사가 견적을 보내오고 우리가 승인한다  → APRecord(kind="extra")
+      고객측  우리가 견적을 발행하고 고객이 승인한다    → ARRecord(kind="extra")
+    둘을 한 레코드에 두는 까닭은 마진 때문이다 — 추가비용을 원가 그대로 넘겼는지 얹었는지
+    볼 수 있는 자리가 그전에는 없었다. 두 쪽의 순서는 정해져 있지 않다(고객이 먼저
+    승인하고 공급사 견적이 나중에 오기도 한다). 그래서 각각 따로 채울 수 있게 둔다.
+
+    items 는 청구서 품목(ARRecord.items)과 같은 모양이다 — description/qty/unit_price/amount.
+    """
+    __tablename__ = "extra_charges"
+    id            = Column(Integer, primary_key=True)
+    rfq_id        = Column(Integer, ForeignKey("rfqs.id"), nullable=True)     # 프로젝트
+    order_id      = Column(Integer, ForeignKey("orders.id"), nullable=True)   # 고객 P/O
+    title         = Column(String(200))   # 한 줄 제목 — "일정 지연에 따른 항공권 변경·비자"
+    # schedule_delay(일정 지연) / scope_change(범위 변경) / rework(재작업) / other
+    reason        = Column(String(30), default="schedule_delay")
+    occurred_date = Column(String(10))    # 발생일 YYYY-MM-DD
+    # 작업 전에 생긴 비용인가 후에 생긴 비용인가 — 청구 시점과 승인 경로가 달라진다.
+    timing        = Column(String(10), default="before")   # before | after
+    description   = Column(Text)          # 경위
+    status        = Column(String(20), default="draft")    # draft/quoted/approved/invoiced/settled/void
+
+    # ── 벤더측(매입) — 공급사 견적 수취 → 우리 승인 ──────────────────────────
+    vendor_id          = Column(Integer, ForeignKey("vendors.id"), nullable=True)
+    vendor_quote_no    = Column(String(60))
+    vendor_quote_date  = Column(String(10))
+    vendor_currency    = Column(String(10), default="KRW")
+    vendor_items       = Column(JSON, default=list)
+    vendor_amount      = Column(Float, default=0.0)
+    vendor_approved_date = Column(String(10))   # 우리가 승인한 날(비면 미승인)
+    vendor_approved_by   = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # ── 고객측(매출) — 우리 견적 발행 → 고객 승인 ────────────────────────────
+    quote_no      = Column(String(60))
+    quote_date    = Column(String(10))
+    valid_until   = Column(String(10))
+    currency      = Column(String(10), default="USD")
+    # 벤더 통화와 다를 때 마진을 재려면 환율이 있어야 한다(1 vendor_currency = ? currency).
+    fx_rate       = Column(Float, default=1.0)
+    items         = Column(JSON, default=list)
+    amount        = Column(Float, default=0.0)
+    vat_rate      = Column(Float, default=0.0)
+    sent_date     = Column(String(10))          # 고객에게 견적을 보낸 날
+    approved_date = Column(String(10))          # 고객이 승인한 날(비면 미승인)
+    approved_ref  = Column(String(200))         # 승인 근거 — 메일 제목·고객 P/O 번호 등
+
+    notes         = Column(Text)
+    created_by    = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at    = Column(DateTime, default=datetime.utcnow)
 
 
 class Claim(Base):
