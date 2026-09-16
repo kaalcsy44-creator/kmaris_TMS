@@ -115,6 +115,7 @@ import { invalidateMasterCategories } from "@/components/common/CategoryCell";
 import { CategoryBadges, CategoryTagPicker, useVendorCategoryOptions } from "@/components/common/CategoryTags";
 import { MakerBadges, MakerTagPicker, useMakerOptions } from "@/components/common/MakerCell";
 import { AgencyBadges, AgencyTagPicker } from "@/components/common/AgencyPicker";
+import { WebsiteScanPanel } from "@/components/common/WebsiteScanPanel";
 import RegionCombo from "@/components/common/RegionPicker";
 // 목록의 상대처는 다른 화면과 같은 모양(로고 + 이름)으로 — 같은 회사를 두 표기로 읽지 않도록.
 import CustomerName from "@/components/common/CustomerName";
@@ -1061,6 +1062,7 @@ function MakersTab() {
         key={shown[0]?.name ?? company.index}
         rows={shown}
         title="🏭 Maker"
+        scan={{ kind: "maker" }}
         // 결제조건은 거래선의 칸이다 — 물건값은 거래선에게 치른다.
         paymentTerms={false}
         stats={["Items", shown[0]?.items
@@ -1844,6 +1846,7 @@ function CompanyInfoModal<
   makerTags,
   agencies,
   twins,
+  scan,
   title = "🏢 Company info",
   paymentTerms = true,
 }: {
@@ -1894,6 +1897,9 @@ function CompanyInfoModal<
   title?: string;
   /** 결제조건 칸을 세울지 — 제조사 명부에는 그 칸이 없다(값을 치르는 상대가 아니다). */
   paymentTerms?: boolean;
+  /** 홈페이지를 읽어 태그 후보를 내미는 칸. 안 주면 그 칸이 아예 없다(고객사 창은
+   *  분류도 제조사도 쓰지 않아 읽어 봐야 넣을 자리가 없다). */
+  scan?: { kind: "vendor" | "maker" };
 }) {
   // 저장 뒤에도 창이 남으므로 회사명을 상태로 든다. 이름을 바꿔 저장하면 제목·읽기
   // 화면이 새 이름이 되어야 하고, 그 다음 저장의 조회 키도 새 이름이어야 한다.
@@ -2424,6 +2430,19 @@ function CompanyInfoModal<
           />
         ) : null}
         <LogoPasteField value={vals.logo ?? ""} onChange={(v) => setVals({ ...vals, logo: v })} />
+        {scan ? (
+          <WebsiteScanPanel
+            kind={scan.kind}
+            rowId={rows[0].id}
+            website={vals.website ?? ""}
+            catIds={catIds}
+            onCats={setCatIds}
+            makerIds={makerTags ? makerIds : undefined}
+            onMakers={makerTags ? setMakerIds : undefined}
+            note={vals.note ?? ""}
+            onNote={(v) => setVals({ ...vals, note: v })}
+          />
+        ) : null}
         {tags ? (
           <CategoryTagPicker value={catIds} onChange={setCatIds} suggestions={tags.suggestions} />
         ) : null}
@@ -2899,6 +2918,7 @@ function VendorsTab() {
           { key: "note", label: "About this company", rows: 5,
             placeholder: "What they make or represent, which brands they carry, where they are based…" },
         ]}
+        scan={{ kind: "vendor" }}
         save={updateVendorCompanyInfo}
         onClose={() => setCompany(null)}
         onSaved={(name) => {

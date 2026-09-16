@@ -1,6 +1,10 @@
 """K-Maris TMS — settings routes (split from admin_api.py; behavior unchanged)."""
 from __future__ import annotations
 
+from fastapi import Body
+
+from services.vendor_scan import scan_partner
+
 from _core import (
     email_template_names,
     CompanyProfile,
@@ -752,6 +756,41 @@ def vendor_category_suggestions():
         } for co, nodes in sorted(found.items())]}
     finally:
         s.close()
+
+
+def _scan_partner_row(Model, row_id: int, website: str, kind: str):
+    """홈페이지를 읽어 태그 후보를 낸다 — 거래선·제조사가 같은 일을 한다.
+
+    **읽기만 한다.** 돌려준 후보는 화면에서 사람이 고른 뒤 평소의 저장 경로
+    (company-info)로 들어간다 — 여기서 바로 쓰면 틀린 태그가 조용히 박힌다.
+    """
+    s = get_session()
+    try:
+        row = s.query(Model).filter_by(id=row_id).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Not found")
+        site = (website or "").strip() or (row.website or "")
+        if not site.strip():
+            raise HTTPException(status_code=400,
+                                detail="홈페이지 주소가 없습니다. 먼저 주소를 등록하세요.")
+        return {"name": row.name, "website": site,
+                **scan_partner(s, row.name or "", site, kind)}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/vendors/{row_id}/scan-website",
+          dependencies=[Depends(require_token)])
+def scan_vendor_website(row_id: int, website: str = Body("", embed=True)):
+    """거래선 홈페이지 → 취급 분류·대 줄 수 있는 제조사 후보."""
+    return _scan_partner_row(Vendor, row_id, website, "vendor")
+
+
+@app.post("/api/admin/settings/makers/{row_id}/scan-website",
+          dependencies=[Depends(require_token)])
+def scan_maker_website(row_id: int, website: str = Body("", embed=True)):
+    """제조사 홈페이지 → 만드는 품목의 분류 후보(제조사에는 제조사 칸이 없다)."""
+    return _scan_partner_row(Maker, row_id, website, "maker")
 
 
 @app.post("/api/admin/settings/vendors", dependencies=[Depends(require_token)])

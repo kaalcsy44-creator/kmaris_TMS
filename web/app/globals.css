@@ -17550,3 +17550,31 @@ select.compose-tpl-version {
   font-size: 11.5px;
   color: var(--ink);
 }
+
+/* ── 홈페이지 읽기(WebsiteScanPanel) ─────────────────────────────────────────
+   거래선·제조사 창에서 홈페이지를 읽어 태그 후보를 내미는 칸. 태그 칸(.cat-picker)
+   바로 위에 서므로 그 칸의 간격을 그대로 따라간다 — 읽은 결과가 아래 칸으로 들어가는
+   흐름이라 둘이 다른 물건처럼 보이면 안 된다. */
+.scan-panel { gap: 6px; }
+.scan-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.scan-out {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg-soft, #f8fafc);
+}
+/* 근거 — 무엇을 보고 골랐는지. 고를 게 없을 때는 왜 없는지가 여기 적힌다. */
+.scan-why { margin: 0; font-size: 11px; line-height: 1.5; color: var(--muted); }
+.scan-group { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.scan-group > b { font-size: 11px; width: 100%; }
+.scan-pick { display: inline-flex; gap: 4px; align-items: center; font-size: 11px; }
+.scan-pick input { margin: 0; }
+.scan-pick i { color: var(--muted); font-style: normal; }
+.scan-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+/* 명부에 없어 태그로 달 수 없는 브랜드 — 지우지 않고 남긴다(명부에 올릴 거리다). */
+.scan-unlisted > span { font-size: 11px; line-height: 1.6; word-break: break-word; }
+.scan-unlisted > i { font-size: 11px; color: var(--muted); width: 100%; }
+/* 못 읽은 사이트 — 오류가 아니라 사정이라 붉게 쓰지 않는다(할 일이 다르다). */
+.scan-warn {
+  font-size: 11px; line-height: 1.5; color: #92400e;
+  background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 6px 8px;
+}

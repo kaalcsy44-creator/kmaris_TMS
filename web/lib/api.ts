@@ -1440,6 +1440,36 @@ export function fetchVendorCategorySuggestions(): Promise<{ rows: VendorCategory
     "/api/admin/settings/vendors/category-suggestions"
   );
 }
+/** 홈페이지를 읽어 낸 태그 후보 — 쓰지는 않았고, 고르는 것은 사람이 한다. */
+export type PartnerScan = {
+  name: string;
+  website: string;
+  /** 실제로 읽은 쪽들 — 첫 화면만 읽혔는지 안쪽까지 들어갔는지 보인다. */
+  pages: { url: string; chars: number }[];
+  makers: { id: number; name: string; country: string }[];
+  categories: { id: number; code: string; path: string }[];
+  /** 홈페이지에는 있는데 우리 제조사 명부에는 없는 브랜드 — 명부에 올릴 거리다. */
+  unlisted_brands: string[];
+  /** 무엇을 근거로 골랐는지(한국어). 고를 게 없을 때는 왜 없는지가 적힌다. */
+  evidence: string;
+  /** 회사 소개 한 문장 — About 칸에 넣을 수 있다. */
+  summary: string;
+  /** 못 읽었을 때의 사유. 비어 있으면 성공. */
+  error: string;
+};
+/** 거래선·제조사의 홈페이지를 읽어 태그 후보를 받는다(서버는 DB 를 건드리지 않는다).
+ *  website 를 주면 명부의 주소 대신 그 주소를 읽는다 — 첫 화면이 비어 있는 사이트에서
+ *  취급품목 쪽 주소를 직접 넣어 볼 수 있다. */
+export function scanPartnerWebsite(
+  kind: "vendor" | "maker",
+  rowId: number,
+  website = ""
+): Promise<PartnerScan> {
+  return post<PartnerScan>(
+    `/api/admin/settings/${kind === "maker" ? "makers" : "vendors"}/${rowId}/scan-website`,
+    { website }
+  );
+}
 export function updateCustomerCompanyInfo(
   body: CompanyInfoSave
 ): Promise<CompanyInfoSaved> {
