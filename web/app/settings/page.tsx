@@ -1147,7 +1147,7 @@ function MakersTab() {
             <span className="cust-name-text">{r.name || "—"}</span>
           </span>
         )],
-        ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
+        ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />, "ms-region"],
         ["contact", "Contact"],
         ["website", "Website", (r) => <SiteCell value={r.website} />, "ms-site"],
         ["items", "Items", (r) => (
@@ -1377,7 +1377,7 @@ function CustomersTab() {
             <span className="cust-name-text">{r.name || "—"}</span>
           </span>
         )],
-        ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
+        ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />, "ms-region"],
         // 담당자 이름 옆의 반송 꼬리표 — 이 사람 주소로 보낸 메일이 되돌아왔다는 표시다.
         // 명부를 훑다가 바로 보여야 한다: 주소는 접혀 있어도 이름은 늘 이 자리에 있다.
         ["contact", "Contact", (r) => (
@@ -2663,8 +2663,9 @@ function MultiCell({ values, flat }: { values?: string[]; flat: string }) {
   const list = (values ?? []).filter(Boolean);
   const first = list[0] || flat || "—";
   const extra = list.length > 1 ? list.length - 1 : 0;
+  // 칸이 좁아 값이 …으로 잘릴 수 있다(지역 칸) — 전체는 title 로 남긴다.
   return (
-    <span>
+    <span title={list.length ? list.join(", ") : flat || undefined}>
       {first}
       {extra > 0 ? <span className="mv-more"> +{extra}</span> : null}
     </span>
@@ -2927,7 +2928,7 @@ function VendorsTab() {
             <span className="cust-name-text">{r.name || "—"}</span>
           </span>
         )],
-        ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />],
+        ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />, "ms-region"],
         ["contact", "Contact"],
         ["website", "Website", (r) => <SiteCell value={r.website} />, "ms-site"],
         // 담당자 줄은 그 담당자 몫만 — 회사 합계는 위 그룹 줄이 든다.

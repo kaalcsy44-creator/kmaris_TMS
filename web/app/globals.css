@@ -1338,11 +1338,33 @@ table.mini.wide.ms-table td.ms-spec:not(.ms-actcol) {
    담기는 폭을 최소로 잡고 나머지는 내용에 맡긴다(앞 nth-child 규칙과 클래스 수를 맞춰야
    이긴다 — :not 포함 5개). */
 table.mini.wide.ms-table th.ms-maker:not(.ms-actcol),
-table.mini.wide.ms-table td.ms-maker:not(.ms-actcol),
+table.mini.wide.ms-table td.ms-maker:not(.ms-actcol) {
+  width: auto;
+  min-width: 180px;
+}
+/* 분류 — 배지가 여러 개 서는 칸이라 180px 로는 두 개째부터 줄이 바뀐다. 지역·홈페이지에서
+   되찾은 폭을 여기로 돌려, 배지 서너 개가 한 줄에 담기게 한다. */
 table.mini.wide.ms-table th.ms-cat:not(.ms-actcol),
 table.mini.wide.ms-table td.ms-cat:not(.ms-actcol) {
   width: auto;
-  min-width: 180px;
+  min-width: 390px;
+}
+/* 지역 — 값은 대개 "Korea" 한 낱말인데 칸은 nowrap 이라 표 전체에서 가장 긴 값 하나가
+   폭을 정한다("Korea, China, Singapore" 한 줄 때문에 나머지 150줄이 빈칸을 물었다).
+   홈페이지 칸(.ms-site-link)과 같은 방식으로 내용 폭을 잘라 …으로 줄인다(전체는 title). */
+table.mini.wide.ms-table th.ms-region:not(.ms-actcol),
+table.mini.wide.ms-table td.ms-region:not(.ms-actcol) {
+  width: 1%;
+  min-width: 0;
+  white-space: nowrap;
+}
+table.mini.wide.ms-table td.ms-region > span {
+  display: inline-block;
+  max-width: 128px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 /* 홈페이지 — 도메인 한 줄이라 제 폭만 쓴다. 앞의 자리(nth-child) 규칙이 주는 최소폭
    120~150px 은 "acevalve.co.kr" 한 낱말에는 너무 넓고, 반대로 긴 주소는 두 줄로 접혀
@@ -1356,7 +1378,9 @@ table.mini.wide.ms-table td.ms-site:not(.ms-actcol) {
 }
 .ms-site-link {
   display: inline-block;
-  max-width: 220px;
+  /* 도메인 한 줄이면 충분하다 — 220px 은 "wartsila.com/marine/services" 같은 긴 주소
+     하나가 열 전체를 그 폭으로 벌려 놓는 값이었다. */
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1646,12 +1670,22 @@ table.mini.wide.ms-table.ms-table--sel td.ms-spec:not(.ms-actcol) {
   white-space: normal;
 }
 table.mini.wide.ms-table.ms-table--sel th.ms-maker:not(.ms-actcol),
-table.mini.wide.ms-table.ms-table--sel td.ms-maker:not(.ms-actcol),
-table.mini.wide.ms-table.ms-table--sel th.ms-cat:not(.ms-actcol),
-table.mini.wide.ms-table.ms-table--sel td.ms-cat:not(.ms-actcol) {
+table.mini.wide.ms-table.ms-table--sel td.ms-maker:not(.ms-actcol) {
   width: auto;
   min-width: 180px;
   white-space: normal;
+}
+table.mini.wide.ms-table.ms-table--sel th.ms-cat:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--sel td.ms-cat:not(.ms-actcol) {
+  width: auto;
+  min-width: 390px;
+  white-space: normal;
+}
+table.mini.wide.ms-table.ms-table--sel th.ms-region:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--sel td.ms-region:not(.ms-actcol) {
+  width: 1%;
+  min-width: 0;
+  white-space: nowrap;
 }
 table.mini.wide.ms-table.ms-table--sel th.ms-deals:not(.ms-actcol),
 table.mini.wide.ms-table.ms-table--sel td.ms-deals:not(.ms-actcol) {
