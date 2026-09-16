@@ -21,6 +21,7 @@ import Modal from "@/components/common/Modal";
 import ComposeEmailModal from "@/components/screens/ComposeEmailModal";
 import BrochuresPanel from "@/components/screens/BrochuresPanel";
 import { BounceBadge } from "@/components/common/BouncedEmail";
+import { GradeBadge, useCustomerGrade } from "@/components/common/CustomerGrade";
 import { ReplyBadge, FollowUpCell, ReplyThreadPanel } from "@/components/common/MarketingBadges";
 import { REPLY_STATUSES, replyText, suggestFollowUp } from "@/lib/marketing";
 import { detectMarketingReplies, type MarketingDetectResult } from "@/lib/api";
@@ -168,6 +169,9 @@ export default function MarketingScreen({ onFill }: { onFill?: (v: boolean) => v
     if (idParam) router.replace("/marketing");
   }
 
+  // 담당자 등급 — 고객 목록 캐시에서 읽는다(이 화면이 이미 쓰는 그 캐시다).
+  const gradeOf = useCustomerGrade();
+
   const columns: ColumnDef<MarketingRow>[] = [
     { key: "activity_date", label: "Date", text: (r) => r.activity_date || "", filter: "date" },
     {
@@ -186,7 +190,20 @@ export default function MarketingScreen({ onFill }: { onFill?: (v: boolean) => v
         </span>
       ),
     },
-    { key: "contact_person", label: "Contact", text: (r) => r.contact_person || "" },
+    {
+      key: "contact_person",
+      label: "Contact",
+      text: (r) => r.contact_person || "",
+      // 등급은 사람에 붙는다 — 여기서 "이 사람이 어떤 사람인지"가 보여야, 회신을
+      // 분류하거나 후속을 잡을 때 목록을 떠나지 않고 판단할 수 있다.
+      // 미등록 잠정사(is_prospect)는 명부에 없으니 등급도 없다.
+      render: (r) => (
+        <span className="mk-contact">
+          <span>{r.contact_person || "—"}</span>
+          <GradeBadge grade={gradeOf(r.customer_id)} />
+        </span>
+      ),
+    },
     {
       key: "recipient_email",
       label: "Email",
