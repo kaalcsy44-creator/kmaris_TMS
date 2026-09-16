@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from _core import (
+    email_template_names,
     CompanyProfile,
     Customer,
     CustomerContact,
@@ -2547,19 +2548,23 @@ def _email_tpl_defaults(doc_type: str, lang: str) -> dict:
             "body_tpl": vendor_rfq_default_body_tpl(lang)}
 
 
-def _email_tpl_row(s, user_id, doc_type: str, lang: str):
+def _email_tpl_row(s, user_id, doc_type: str, lang: str, name: str = ""):
     t = (s.query(EmailTemplate)
-         .filter_by(user_id=user_id, doc_type=doc_type, lang=lang).first())
+         .filter_by(user_id=user_id, doc_type=doc_type, lang=lang, name=name or "").first())
     if not t:
         return None
-    return {"subject_tpl": t.subject_tpl or "", "body_tpl": t.body_tpl or "",
-            "options": t.options or {}}
+    return {"name": t.name or "", "subject_tpl": t.subject_tpl or "",
+            "body_tpl": t.body_tpl or "", "options": t.options or {}}
 
 
 @app.get("/api/admin/settings/email-templates", dependencies=[Depends(require_token)])
-def get_email_templates(doc_type: str = "vendor_rfq",
+def get_email_templates(doc_type: str = "vendor_rfq", name: str = "",
                         user: dict = Depends(get_current_user)):
-    """현재 사용자 개인 템플릿 + 회사 기본값 + 코드 내장 기본값/토큰·컬럼 카탈로그."""
+    """현재 사용자 개인 템플릿 + 회사 기본값 + 코드 내장 기본값/토큰·컬럼 카탈로그.
+
+    name 은 개인 템플릿의 여러 판 중 지금 편집하는 판(빈 이름 = 기본 판). 판 목록은
+    versions 로 함께 내려보내 화면이 한 번의 호출로 탭을 그릴 수 있게 한다.
+    """
     spec = _email_doc_spec(doc_type)
     has_cols = bool(spec["item_cols"])
     s = get_session()
@@ -2576,7 +2581,10 @@ def get_email_templates(doc_type: str = "vendor_rfq",
                            for k, v in VENDOR_RFQ_ITEM_COLS.items()] if has_cols else []),
             "default_item_cols": DEFAULT_VENDOR_RFQ_ITEM_COLS if has_cols else [],
             "defaults": {lang: _email_tpl_defaults(doc_type, lang) for lang in langs},
-            "user": {lang: _email_tpl_row(s, uid, doc_type, lang) for lang in langs},
+            # 지금 고른 판. 회사 기본값은 판을 나누지 않는다(회사가 쓰는 표준 한 벌).
+            "name": (name or "").strip(),
+            "versions": {lang: email_template_names(s, uid, doc_type, lang) for lang in langs},
+            "user": {lang: _email_tpl_row(s, uid, doc_type, lang, name) for lang in langs},
             "company": {lang: _email_tpl_row(s, None, doc_type, lang) for lang in langs},
         }
     finally:
@@ -2592,6 +2600,8 @@ def save_email_template(body: EmailTemplateSave, user: dict = Depends(get_curren
         raise HTTPException(status_code=403, detail="회사 기본 템플릿은 admin만 편집할 수 있습니다.")
     lang = "ko" if body.lang == "ko" else "en"
     user_id = None if scope == "company" else user.get("id")
+    # 회사 기본값은 한 벌뿐이다 — 판을 나누는 것은 개인 템플릿에서만.
+    name = "" if scope == "company" else (body.name or "").strip()[:60]
     if spec["item_cols"]:
         cols = [c for c in ((body.options or {}).get("item_cols") or [])
                 if c in VENDOR_RFQ_ITEM_COLS]
@@ -2600,38 +2610,51 @@ def save_email_template(body: EmailTemplateSave, user: dict = Depends(get_curren
         opts = {}
     s = get_session()
     try:
-        t = (s.query(EmailTemplate)
-             .filter_by(user_id=user_id, doc_type=body.doc_type, lang=lang).first())
+        # 이름을 바꿔 저장하는 경우 — 옛 판을 찾아 이름만 갈아 끼운다(새로 만들지 않는다).
+        old_name = (body.rename_from or "").strip()
+        t = None
+        if old_name and old_name != name:
+            t = (s.query(EmailTemplate)
+                 .filter_by(user_id=user_id, doc_type=body.doc_type, lang=lang,
+                            name=old_name).first())
+        if t is None:
+            t = (s.query(EmailTemplate)
+                 .filter_by(user_id=user_id, doc_type=body.doc_type, lang=lang,
+                            name=name).first())
         if not t:
             t = EmailTemplate(user_id=user_id, doc_type=body.doc_type, lang=lang)
             s.add(t)
+        t.name = name
         t.subject_tpl = body.subject_tpl or ""
         t.body_tpl = body.body_tpl or ""
         t.options = opts
         t.updated_at = datetime.utcnow()
         s.commit()
-        return {"ok": True, "scope": scope, "lang": lang}
+        return {"ok": True, "scope": scope, "lang": lang, "name": name}
     finally:
         s.close()
 
 
 @app.delete("/api/admin/settings/email-templates", dependencies=[Depends(require_token)])
 def delete_email_template(scope: str = "user", doc_type: str = "vendor_rfq",
-                          lang: str = "en", user: dict = Depends(get_current_user)):
+                          lang: str = "en", name: str = "",
+                          user: dict = Depends(get_current_user)):
     """템플릿 삭제(= 상위 기본값으로 초기화). 회사(company)는 admin 만."""
     scope = "company" if scope == "company" else "user"
     if scope == "company" and user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="회사 기본 템플릿은 admin만 편집할 수 있습니다.")
     lang = "ko" if lang == "ko" else "en"
     user_id = None if scope == "company" else user.get("id")
+    # 회사 기본값은 판이 없다 — 이름은 개인 템플릿에서만 의미가 있다.
+    name = "" if scope == "company" else (name or "").strip()
     s = get_session()
     try:
         t = (s.query(EmailTemplate)
-             .filter_by(user_id=user_id, doc_type=doc_type, lang=lang).first())
+             .filter_by(user_id=user_id, doc_type=doc_type, lang=lang, name=name).first())
         if t:
             s.delete(t)
             s.commit()
-        return {"ok": True}
+        return {"ok": True, "name": name}
     finally:
         s.close()
 

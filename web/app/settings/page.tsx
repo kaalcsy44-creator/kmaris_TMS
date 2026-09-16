@@ -6290,6 +6290,9 @@ function EmailTemplatesTab() {
   const [data, setData] = useState<EmailTemplatesData | null>(null);
   const [scope, setScope] = useState<"user" | "company">("user");
   const [lang, setLang] = useState<"en" | "ko">("en");
+  // 지금 편집 중인 판(빈 문자열 = 기본 판). 같은 종류·언어라도 상대에 따라 할 말이
+  // 달라서 여러 판을 두고 골라 쓴다 — 하나만 저장해 두면 보낼 때마다 고쳐 쓰게 된다.
+  const [version, setVersion] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [cols, setCols] = useState<string[]>([]);
@@ -6305,9 +6308,9 @@ function EmailTemplatesTab() {
   const lastFocus = useRef<"subject" | "body">("body");
   const previewSeq = useRef(0);
 
-  function load(type = docType) {
+  function load(type = docType, name = version) {
     if (type === SIG_TAB) return;   // 서명 탭은 자체 편집기가 스스로 불러온다
-    fetchEmailTemplates(type)
+    fetchEmailTemplates(type, name)
       .then(setData)
       .catch((e) => setErr(e instanceof Error ? e.message : "Load failed"));
   }
@@ -6315,9 +6318,17 @@ function EmailTemplatesTab() {
   useEffect(() => {
     if (docType === SIG_TAB) return;
     setData(null);
-    load(docType);
+    setVersion("");
+    load(docType, "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docType]);
+
+  // 판을 바꾸면 그 판을 다시 불러온다(제목·본문이 판마다 다르다).
+  useEffect(() => {
+    if (docType === SIG_TAB) return;
+    load(docType, version);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version]);
 
   // scope/lang/data 변화 시 해당 템플릿(없으면 기본값)을 폼에 채운다.
   useEffect(() => {
@@ -6399,8 +6410,11 @@ function EmailTemplatesTab() {
         subject_tpl: subject,
         body_tpl: body,
         options: { item_cols: cols },
+        name: scope === "company" ? "" : version,
       });
-      setMsg(scope === "company" ? "Saved company default" : "Saved your template");
+      setMsg(scope === "company"
+        ? "Saved company default"
+        : version ? `Saved “${version}”` : "Saved your template");
       load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
@@ -6415,7 +6429,7 @@ function EmailTemplatesTab() {
     setErr(null);
     setMsg(null);
     try {
-      await deleteEmailTemplate(scope, docType, lang);
+      await deleteEmailTemplate(scope, docType, lang, scope === "company" ? "" : version);
       setMsg("Reset to default");
       load();
     } catch (e) {
@@ -6423,6 +6437,68 @@ function EmailTemplatesTab() {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** 지금 화면에 있는 제목·본문을 새 이름으로 한 벌 더 저장한다.
+   *  빈 판을 만들어 두고 다시 적게 하지 않는다 — 대개 쓰던 것을 조금 고쳐 다른 판을
+   *  만들기 때문이다(선주용에서 조선소용으로 문단 하나만 바꾸는 식). */
+  async function addVersion() {
+    const name = window.prompt("New version name (e.g. Shipyard, Owner)", "")?.trim();
+    if (!name) return;
+    if ((data?.versions?.[lang] ?? []).includes(name)) {
+      setErr(`“${name}” already exists`);
+      return;
+    }
+    setBusy(true); setErr(null); setMsg(null);
+    try {
+      await saveEmailTemplate({
+        scope: "user", doc_type: docType, lang,
+        subject_tpl: subject, body_tpl: body,
+        options: { item_cols: cols }, name,
+      });
+      setMsg(`Created “${name}”`);
+      setVersion(name);          // 만든 판으로 바로 넘어간다
+      load(docType, name);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Create failed");
+    } finally { setBusy(false); }
+  }
+
+  async function renameVersion() {
+    if (!version) return;
+    const name = window.prompt("Rename this version", version)?.trim();
+    if (!name || name === version) return;
+    if ((data?.versions?.[lang] ?? []).includes(name)) {
+      setErr(`“${name}” already exists`);
+      return;
+    }
+    setBusy(true); setErr(null); setMsg(null);
+    try {
+      await saveEmailTemplate({
+        scope: "user", doc_type: docType, lang,
+        subject_tpl: subject, body_tpl: body,
+        options: { item_cols: cols }, name, rename_from: version,
+      });
+      setMsg(`Renamed to “${name}”`);
+      setVersion(name);
+      load(docType, name);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Rename failed");
+    } finally { setBusy(false); }
+  }
+
+  async function deleteVersion() {
+    if (!version) return;
+    if (!window.confirm(`Delete version “${version}”? The default version stays.`)) return;
+    setBusy(true); setErr(null); setMsg(null);
+    try {
+      await deleteEmailTemplate("user", docType, lang, version);
+      setMsg(`Deleted “${version}”`);
+      setVersion("");
+      load(docType, "");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Delete failed");
+    } finally { setBusy(false); }
   }
 
   // 종류 탭은 로딩 중에도 그대로 둔다(탭을 누른 뒤 화면이 통째로 사라지지 않게).
@@ -6497,6 +6573,39 @@ function EmailTemplatesTab() {
           {customized ? "Customized" : "Using default"}
         </span>
       </div>
+
+      {/* 판 고르기 — 회사 기본값은 한 벌뿐이라 개인 템플릿에서만 보인다. */}
+      {scope === "user" ? (
+        <div className="email-tpl-versions">
+          <span className="email-tpl-tokens-label">Version</span>
+          <span className="seg-toggle" role="group" aria-label="Template version">
+            <button className={version === "" ? "on" : ""} onClick={() => setVersion("")}>
+              Default
+            </button>
+            {(data.versions?.[lang] ?? []).map((v) => (
+              <button key={v} className={version === v ? "on" : ""} onClick={() => setVersion(v)}>
+                {v}
+              </button>
+            ))}
+          </span>
+          <button type="button" className="btn xs" disabled={busy} onClick={addVersion}>
+            ＋ New version
+          </button>
+          {version ? (
+            <>
+              <button type="button" className="btn xs" disabled={busy} onClick={renameVersion}>
+                Rename
+              </button>
+              <button type="button" className="btn xs danger" disabled={busy} onClick={deleteVersion}>
+                Delete
+              </button>
+            </>
+          ) : null}
+          <span className="hint-inline">
+            Each version keeps its own subject &amp; body. Pick one when composing.
+          </span>
+        </div>
+      ) : null}
 
       <div className="email-tpl-tokens">
         <span className="email-tpl-tokens-label">Insert token:</span>

@@ -118,6 +118,10 @@ export default function ComposeEmailModal({
   const [smtpConfigured, setSmtpConfigured] = useState(true);
   // 현재 종류·언어에 사용자가 저장한 템플릿이 있는지 + 저장/초기화 안내 문구.
   const [savedTpl, setSavedTpl] = useState(false);
+  // 고른 템플릿 판(빈 문자열 = 기본 판)과 고를 수 있는 판 목록. 회사소개 메일은 상대가
+  // 선주냐 관리사냐 조선소냐에 따라 할 말이 달라, Settings 에서 판을 여러 벌 둔다.
+  const [tplName, setTplName] = useState("");
+  const [tplVersions, setTplVersions] = useState<string[]>([]);
   const [tplMsg, setTplMsg] = useState("");
 
   const [assetIds, setAssetIds] = useState<number[]>([]);
@@ -184,7 +188,7 @@ export default function ComposeEmailModal({
   // 있어야 한다(예전엔 첫 로드 뒤 본문이 아예 바뀌지 않는 버그가 있었다).
   const drafts = useRef<Record<string, { subject: string; body: string; saved: boolean }>>({});
   function stash(subj: string, bd: string, saved = savedTpl) {
-    drafts.current[`${kind}:${lang}`] = { subject: subj, body: bd, saved };
+    drafts.current[`${kind}:${lang}:${tplName}`] = { subject: subj, body: bd, saved };
   }
 
   // 편집 결과는 다시 토큰으로 되돌려 보관 → 수신자를 바꾸면 이름만 갈아 끼워진다.
@@ -204,7 +208,7 @@ export default function ComposeEmailModal({
   // 종류·언어를 바꾸면 그쪽 템플릿(또는 편집 중이던 초안)을 불러온다.
   useEffect(() => {
     setTplMsg("");
-    const cached = drafts.current[`${kind}:${lang}`];
+    const cached = drafts.current[`${kind}:${lang}:${tplName}`];
     if (cached) {
       setSubjectTpl(cached.subject);
       setBodyTpl(cached.body);
@@ -212,25 +216,26 @@ export default function ComposeEmailModal({
       return;
     }
     let cancelled = false;
-    marketingComposeDefaults({ kind, lang })
+    marketingComposeDefaults({ kind, lang, name: tplName })
       .then((d) => {
         if (cancelled) return;
         setFrom((prev) => prev || d.from);
         setSmtpConfigured(d.smtp_configured);
         setSavedTpl(d.saved);
+        setTplVersions(d.versions ?? []);
         setSubjectTpl(d.subject);
         setBodyTpl(d.body);
         // 서명은 손대기 전까진 항상 서버 값으로 맞춘다 — 그래야 Settings 에서 바꾼
         // 서명이나 EN↔KR 전환이 그대로 따라온다. 직접 고친 뒤에는 건드리지 않는다.
         setSignature((prev) => (sigDirty.current ? prev : d.signature));
-        drafts.current[`${kind}:${lang}`] = { subject: d.subject, body: d.body, saved: d.saved };
+        drafts.current[`${kind}:${lang}:${tplName}`] = { subject: d.subject, body: d.body, saved: d.saved };
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, lang]);
+  }, [kind, lang, tplName]);
 
   // 현재 편집한 제목·본문을 이 종류·언어의 사용자 템플릿으로 저장 → 다음 작성 시 기본값.
   // 저장되는 건 화면 텍스트가 아니라 토큰이 든 원본이라, 수신자 이름은 박히지 않는다.
@@ -239,10 +244,10 @@ export default function ComposeEmailModal({
     setErr("");
     setTplMsg("");
     try {
-      await saveMarketingTemplate({ kind, lang, subject: subjectTpl, body: bodyTpl });
+      await saveMarketingTemplate({ kind, lang, subject: subjectTpl, body: bodyTpl, name: tplName });
       setSavedTpl(true);
       stash(subjectTpl, bodyTpl, true);
-      setTplMsg("Saved as template.");
+      setTplMsg(tplName ? `Saved to “${tplName}”.` : "Saved as template.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to save template.");
     } finally {
@@ -257,8 +262,8 @@ export default function ComposeEmailModal({
     setErr("");
     setTplMsg("");
     try {
-      await resetMarketingTemplate(kind, lang);
-      const d = await marketingComposeDefaults({ kind, lang });
+      await resetMarketingTemplate(kind, lang, tplName);
+      const d = await marketingComposeDefaults({ kind, lang, name: tplName });
       setSubjectTpl(d.subject);
       setBodyTpl(d.body);
       setSavedTpl(false);
@@ -594,6 +599,20 @@ export default function ComposeEmailModal({
                 KR
               </button>
               {savedTpl ? <span className="compose-tpl-flag">saved</span> : null}
+              {/* 판 고르기 — Settings 에 저장해 둔 판이 있을 때만 선다(한 벌뿐이면 줄만 는다). */}
+              {tplVersions.length ? (
+                <select
+                  className="compose-tpl-version"
+                  value={tplName}
+                  onChange={(e) => setTplName(e.target.value)}
+                  title="Which saved version of this email to start from"
+                >
+                  <option value="">Default</option>
+                  {tplVersions.map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              ) : null}
               <span className="compose-tpl-sep" />
               {/* 편집 ↔ 미리보기. 미리보기는 서버가 발송용 HTML 로 렌더한 결과라
                   수신자가 실제로 보게 될 글꼴·크기·목록 그대로다. */}

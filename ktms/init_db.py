@@ -100,6 +100,10 @@ _MIGRATIONS = {
         "vessel_type": "VARCHAR(60)",
         "ais_flag": "VARCHAR(60)",
     },
+    "email_templates": {
+        # 같은 종류·언어의 여러 판을 가르는 이름. 기존 행은 빈 이름 = 기본 판이다.
+        "name": "VARCHAR(60) DEFAULT ''",
+    },
     "email_sync_state": {
         # 읽은 구간의 아래쪽 경계(옛 메일 방향). 첫 배포 뒤 추가된 컬럼.
         "backfill_uid": "INTEGER DEFAULT 0",

@@ -1072,6 +1072,8 @@ export async function downloadMarketingAsset(id: number, filename: string): Prom
 export function marketingComposeDefaults(opts: {
   kind?: "intro" | "brochure";
   lang?: "en" | "ko";
+  /** 고른 템플릿 판(빈 값 = 기본 판). */
+  name?: string;
 }): Promise<{
   from: string;
   subject: string;
@@ -1079,8 +1081,11 @@ export function marketingComposeDefaults(opts: {
   signature: string;
   saved: boolean;
   smtp_configured: boolean;
+  name?: string;
+  versions?: string[];
 }> {
   const p = new URLSearchParams({ kind: opts.kind ?? "intro", lang: opts.lang ?? "en" });
+  if (opts.name) p.set("name", opts.name);
   return get(`/api/admin/marketing/compose-defaults?${p.toString()}`);
 }
 
@@ -1090,13 +1095,19 @@ export function saveMarketingTemplate(input: {
   lang: "en" | "ko";
   subject: string;
   body: string;
-}): Promise<{ ok: boolean }> {
+  /** 저장할 판 이름(빈 값 = 기본 판). */
+  name?: string;
+}): Promise<{ ok: boolean; name?: string }> {
   return put("/api/admin/marketing/compose-template", input);
 }
 
 // 저장한 홍보 메일 템플릿 삭제 → 내장 기본값으로 복귀.
-export function resetMarketingTemplate(kind: "intro" | "brochure", lang: "en" | "ko"): Promise<{ ok: boolean }> {
-  return del(`/api/admin/marketing/compose-template?kind=${kind}&lang=${lang}`);
+export function resetMarketingTemplate(
+  kind: "intro" | "brochure", lang: "en" | "ko", name = ""
+): Promise<{ ok: boolean }> {
+  const q = new URLSearchParams({ kind, lang });
+  if (name) q.set("name", name);
+  return del(`/api/admin/marketing/compose-template?${q.toString()}`);
 }
 
 // 자주 쓰는 CC 주소록(팀 공용) — 작성 화면에서 클릭으로 골라 넣는다.
@@ -1535,9 +1546,15 @@ export type EmailTemplatesData = {
   defaults: Record<"en" | "ko", { subject_tpl: string; body_tpl: string }>;
   user: Record<"en" | "ko", EmailTplRow>;
   company: Record<"en" | "ko", EmailTplRow>;
+  /** 지금 열어 둔 판 이름(빈 문자열 = 기본 판). */
+  name?: string;
+  /** 이 사람이 저장해 둔 판 이름들(기본 판은 이름이 없어 목록에 없다). */
+  versions?: Record<"en" | "ko", string[]>;
 };
-export function fetchEmailTemplates(docType = "vendor_rfq"): Promise<EmailTemplatesData> {
-  return get<EmailTemplatesData>(`/api/admin/settings/email-templates?doc_type=${docType}`);
+export function fetchEmailTemplates(docType = "vendor_rfq", name = ""): Promise<EmailTemplatesData> {
+  const q = new URLSearchParams({ doc_type: docType });
+  if (name) q.set("name", name);
+  return get<EmailTemplatesData>(`/api/admin/settings/email-templates?${q.toString()}`);
 }
 export function saveEmailTemplate(body: {
   scope: "user" | "company";
@@ -1546,15 +1563,22 @@ export function saveEmailTemplate(body: {
   subject_tpl: string;
   body_tpl: string;
   options: { item_cols: string[] };
-}): Promise<{ ok: boolean; scope: string; lang: string }> {
+  /** 저장할 판 이름(빈 값 = 기본 판). 회사 기본값은 판을 나누지 않는다. */
+  name?: string;
+  /** 이름만 바꿔 저장할 때의 옛 이름 — 주면 새로 만들지 않고 그 판을 고친다. */
+  rename_from?: string;
+}): Promise<{ ok: boolean; scope: string; lang: string; name?: string }> {
   return put("/api/admin/settings/email-templates", body);
 }
 export function deleteEmailTemplate(
   scope: "user" | "company",
   docType: string,
-  lang: "en" | "ko"
+  lang: "en" | "ko",
+  name = ""
 ): Promise<{ ok: boolean }> {
-  return del(`/api/admin/settings/email-templates?scope=${scope}&doc_type=${docType}&lang=${lang}`);
+  const q = new URLSearchParams({ scope, doc_type: docType, lang });
+  if (name) q.set("name", name);
+  return del(`/api/admin/settings/email-templates?${q.toString()}`);
 }
 export function previewEmailTemplate(body: {
   doc_type: string;

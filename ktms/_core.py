@@ -1674,14 +1674,32 @@ def _render_tokens(tpl: str, ctx: dict) -> str:
     return out
 
 
-def _resolve_email_template(s, user_id, doc_type: str, lang: str):
-    """개인(user_id) → 회사 기본(NULL) 순으로 EmailTemplate 조회. 없으면 None."""
-    for uid in (([user_id] if user_id else []) + [None]):
-        t = (s.query(EmailTemplate)
-             .filter_by(user_id=uid, doc_type=doc_type, lang=lang).first())
-        if t:
-            return t
+def _resolve_email_template(s, user_id, doc_type: str, lang: str, name: str = ""):
+    """개인(user_id) → 회사 기본(NULL) 순으로 EmailTemplate 조회. 없으면 None.
+
+    name 은 같은 종류·언어의 여러 판 중 하나를 고른다(빈 이름 = 기본 판). 이름을 줬는데
+    그 판이 없으면 기본 판으로 내려간다 — 판을 지운 뒤에도 화면이 빈 채로 열리지 않게.
+    """
+    name = (name or "").strip()
+    for nm in ([name, ""] if name else [""]):
+        for uid in (([user_id] if user_id else []) + [None]):
+            t = (s.query(EmailTemplate)
+                 .filter_by(user_id=uid, doc_type=doc_type, lang=lang, name=nm).first())
+            if t:
+                return t
     return None
+
+
+def email_template_names(s, user_id, doc_type: str, lang: str) -> list[str]:
+    """이 사람이 이 종류·언어로 저장해 둔 판 이름들(기본 판은 빈 이름이라 빠진다)."""
+    rows = (s.query(EmailTemplate.name)
+            .filter(EmailTemplate.user_id == user_id,
+                    EmailTemplate.doc_type == doc_type,
+                    EmailTemplate.lang == lang,
+                    EmailTemplate.name.isnot(None),
+                    EmailTemplate.name != "")
+            .order_by(EmailTemplate.name).all())
+    return [n for (n,) in rows]
 
 
 # 서명은 문서 종류와 무관하게 담당자당 하나다. 저장할 곳을 새로 만드는 대신 EmailTemplate 의
@@ -3940,6 +3958,10 @@ class EmailTemplateSave(BaseModel):
     subject_tpl: str = ""
     body_tpl: str = ""
     options: dict | None = None   # {"item_cols": [...]}
+    # 같은 종류·언어의 여러 판 중 어느 것 — 빈 이름이 기본 판이다.
+    name: str = ""
+    # 이름을 바꿔 저장할 때의 옛 이름(비면 이름 변경 아님).
+    rename_from: str | None = None
 
 
 class EmailTemplatePreviewReq(BaseModel):

@@ -414,13 +414,17 @@ class EmailTemplate(Base):
     발송 화면의 초안(제목·본문)을 생성할 때 사용한다. 토큰({{rfq_no}} 등) 치환
     방식이며, options 로 ITEM LIST 컬럼 구성을 담는다.
     해석 순서: 개인(user_id=uid) → 회사 기본(user_id=NULL) → 코드 내장 기본값.
-    (user_id, doc_type, lang) 조합은 upsert 로직에서 유일하게 유지한다.
+    (user_id, doc_type, lang, name) 조합은 upsert 로직에서 유일하게 유지한다.
     """
     __tablename__ = "email_templates"
     id          = Column(Integer, primary_key=True)
     user_id     = Column(Integer, ForeignKey("users.id"), nullable=True)  # NULL=회사 공용 기본
     doc_type    = Column(String(40), default="vendor_rfq")   # MVP: vendor_rfq
     lang        = Column(String(8), default="en")            # en | ko
+    # 같은 종류·같은 언어로 여러 판을 둔다 — 회사소개 메일만 해도 상대가 선주냐 관리사냐
+    # 조선소냐에 따라 할 말이 달라서, 하나만 저장해 두면 보낼 때마다 고쳐 쓰게 된다.
+    # 빈 이름("")이 기본 판이다 — 이름을 두기 전에 저장해 둔 행들이 그대로 기본이 된다.
+    name        = Column(String(60), default="")
     subject_tpl = Column(Text)
     body_tpl    = Column(Text)
     options     = Column(JSON, default=dict)   # {"item_cols": ["part_no","qty","maker","description"]}
