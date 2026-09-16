@@ -8275,7 +8275,7 @@ table.mini .num {
    목록 안에서만 한 급 내린다(.cust-name-text 는 표·배지에서도 쓰는 공용 클래스라
    전역으로 내리면 상관없는 화면의 글자까지 따라 작아진다). */
 .cust-select-opt .cust-name-text {
-  font-size: 12px;
+  font-size: 11px;
 }
 .cust-opt-contact {
   flex: 0 1 auto;
