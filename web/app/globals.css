@@ -8266,6 +8266,12 @@ table.mini .num {
 .cust-select-foot .btn { padding: 3px 12px; font-size: 12px; }
 /* 담당자 이름(showContact) — 회사명은 같고 사람만 다른 항목을 구분하는 보조 표기.
    회사명이 길면 회사명 쪽이 먼저 줄고 담당자 이름은 끝까지 남게 flex-shrink 를 0 으로. */
+/* 고르기 목록의 회사명 — 한 줄에 회사명과 담당자가 함께 서는 자리라 13px 은 크다.
+   목록 안에서만 한 급 내린다(.cust-name-text 는 표·배지에서도 쓰는 공용 클래스라
+   전역으로 내리면 상관없는 화면의 글자까지 따라 작아진다). */
+.cust-select-opt .cust-name-text {
+  font-size: 12px;
+}
 .cust-opt-contact {
   flex: 0 1 auto;
   min-width: 0;
