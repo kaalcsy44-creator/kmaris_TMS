@@ -734,6 +734,8 @@ export type VendorQuoteForImport = {
   /** 이 견적이 답한 Vendor RFQ. 개요의 번호 링크가 그 벤더 탭을 열 때 쓴다. */
   vendor_rfq_id?: number | null;
   vendor_quote_no: string;
+  /** 공급사 아이디 — 매입 청구서를 이 견적에서 불러올 때 공급사 칸을 채운다. */
+  vendor_id?: number;
   vendor: string;
   received_date: string;
   received_at?: string;

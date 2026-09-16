@@ -832,6 +832,9 @@ def rfq_vendor_quotes(rfq_id: int):
                 # 3단계 탭이 열린 채로 뜨게 하는 데 쓴다(벤더가 여럿이면 어느 탭인지가 중요).
                 "vendor_rfq_id": q.vendor_rfq_id,
                 "vendor_quote_no": getattr(q, "vendor_quote_no", None) or "—",
+                # 이름만으로는 공급사 칸(아이디로 고른다)을 채울 수 없다 — 매입 청구서를
+                # 이 견적에서 불러올 때 공급사까지 함께 앉히려면 아이디가 있어야 한다.
+                "vendor_id": (vrfq.vendor_id or 0) if vrfq else 0,
                 "vendor": vendor_names.get(vrfq.vendor_id, "—") if vrfq else "—",
                 "received_date": q.received_date or "",
                 "received_at": getattr(q, "received_at", None) or "",

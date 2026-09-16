@@ -774,11 +774,23 @@ function ApAddForm({
     () => (rfqId ? fetchRfqVendorQuotes(rfqId) : Promise.resolve({ vendor_quotes: [] })),
   );
   const dealVendorQuotes = vqData?.vendor_quotes ?? [];
+  // 견적 하나를 고르면 그 견적이 아는 것은 전부 앉힌다 — 품목만 옮기고 공급사와 번호를
+  // 손으로 다시 적게 하면, 정작 그 견적에 적혀 있는 것을 두 번 치는 일이 된다.
   const loadVendorQuote = (qid: number) => {
     const q = dealVendorQuotes.find((x) => x.id === qid);
     if (!q) return;
     setItems(vendorQuoteItemsToTax(q.items));
-    if (q.currency) setForm((f) => ({ ...f, currency: q.currency }));
+    // 공급사는 견적에 딸린 사실이라 고를 때마다 따라간다.
+    if (q.vendor_id) setVendorId(q.vendor_id);
+    setForm((f) => ({
+      ...f,
+      currency: q.currency || f.currency,
+      // 청구서 번호는 견적번호와 다를 수 있다(공급사가 따로 끊는다) — 비어 있을 때만
+      // 견적번호를 넣어 둔다. 이미 적어 둔 번호를 덮어쓰지 않는다.
+      bill_no: f.bill_no || (q.vendor_quote_no && q.vendor_quote_no !== "—" ? q.vendor_quote_no : ""),
+      // 청구일은 건드리지 않는다 — 기본값(오늘)로 두고, 공급사 청구서에 적힌 날이
+      // 다르면 사람이 고친다. 견적 수신일이 곧 청구일은 아니라 넘겨짚지 않는다.
+    }));
     sel.clear();
   };
   const [form, setForm] = useState<ApForm>(() =>
