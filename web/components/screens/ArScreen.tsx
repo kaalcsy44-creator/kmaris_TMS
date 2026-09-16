@@ -248,13 +248,13 @@ export function ArOverview({
           상자 하나에 key 하나면 탭을 바꿀 때 통째로 갈린다. */}
       {docTab === "ar" ? (
         <div className="ar-tabpane" key="ar">
-          {/* 청구서가 둘 이상이거나 새로 끊는 중일 때만 스트립을 세운다 — 한 건뿐인
-              대부분의 딜에서 줄만 늘리지 않도록.
+          {/* 한 건뿐이어도 세운다 — AP 탭의 선택기와 같은 자리·같은 모양이어야 두 탭을
+              오갈 때 눈이 다시 적응하지 않는다. ＋ 단추의 자리도 늘 같아진다.
               .pane-row 를 쓰지 않는다. 그 클래스는 "탭 행 위에 붙는 번호 행"의 자리라
               (z 6, sticky top) 굴리면 탭을 넘어 위로 올라가 앉는다 — 청구서 스트립이
               AR/AP/Claim 탭보다 위에 서면 탭이 청구서에 딸린 것처럼 읽힌다. 실제로는
               반대다: 이 스트립은 AR 탭 하나에만 딸린 것이라 탭 아래에 있어야 한다. */}
-          {orderArs.length > 1 || addingAr ? (
+          {orderArs.length || addingAr ? (
             <div className="embedded-record-bar ar-inv-bar">
               <span className="wp-po-picker-label">Invoice</span>
               <RecordStrip ariaLabel="Invoices" activeKey={addingAr ? -1 : match?.id ?? 0}>
@@ -391,46 +391,45 @@ function ApSection({
 
   return (
     <div>
-      <div className="project-select">
-        <label>Vendor bill *</label>
-        <select
-          value={addingExtra ? 0 : keyOf(current!)}
-          onChange={(e) => {
-            const v = Number(e.target.value);
-            if (v === 0) return;
-            setAddingExtra(false);
-            setSelPo(v);
-          }}
-        >
-          {poRows.map((r) => (
-            <option key={keyOf(r)} value={keyOf(r)}>
-              {r.po_id
-                ? `${r.po_no || `PO#${r.po_id}`} · ${r.vendor}${r.ap ? "  ✓ billed" : ""}`
-                : `Extra · ${r.vendor}${r.ap?.bill_no ? ` · ${r.ap.bill_no}` : ""}`}
-            </option>
-          ))}
-          {addingExtra ? <option value={0}>Extra · new</option> : null}
-        </select>
-        {/* 추가 매입 — 일정 지연처럼 본 발주와 별개로 받은 청구. 보조 P/O 를 끊지 않는다
-            (그러면 이미 끝난 9·10·11단계가 미지급 때문에 되돌아간다). */}
-        {!addingExtra ? (
-          <button type="button" className="btn sm" style={{ marginLeft: 8 }}
-                  onClick={() => setAddingExtra(true)}>
+      {/* 선택기는 AR 탭의 청구서 스트립과 같은 모양·같은 자리다. 한쪽은 알약, 한쪽은
+          드롭다운이면 같은 일(어느 청구서를 보고 있나)을 하는데도 매번 눈이 다시
+          적응해야 한다. 여러 건이거나 새로 끊는 중일 때만 세우는 규칙도 같다. */}
+      {poRows.length || addingExtra ? (
+        <div className="embedded-record-bar ar-inv-bar">
+          <span className="wp-po-picker-label">Vendor bill</span>
+          <RecordStrip ariaLabel="Vendor bills" activeKey={addingExtra ? 0 : keyOf(current!)}>
+            {poRows.map((r) => (
+              <button
+                key={keyOf(r)}
+                type="button"
+                className={!addingExtra && keyOf(r) === keyOf(current!) ? "on" : ""}
+                onClick={() => { setAddingExtra(false); setSelPo(keyOf(r)); }}
+              >
+                {r.po_id
+                  ? `${r.po_no || `PO#${r.po_id}`} · ${r.vendor}${r.ap ? " ✓" : ""}`
+                  : `${r.ap?.bill_no || `BILL ${r.ap_id ?? ""}`} · ${r.vendor} · Extra`}
+              </button>
+            ))}
+            {addingExtra ? <button type="button" className="on">New · Extra</button> : null}
+          </RecordStrip>
+          {addingExtra ? (
+            <button type="button" className="btn sm" style={{ marginLeft: "auto" }}
+                    onClick={() => setAddingExtra(false)}>Cancel</button>
+          ) : null}
+        </div>
+      ) : null}
+      {/* 추가 매입 — 일정 지연처럼 본 발주와 별개로 받은 청구. 보조 P/O 를 끊지 않는다
+          (그러면 이미 끝난 9·10·11단계가 미지급 때문에 되돌아간다). */}
+      {!addingExtra ? (
+        <div className="ar-add-extra">
+          <button type="button" className="btn sm" onClick={() => setAddingExtra(true)}>
             ＋ Additional bill
           </button>
-        ) : (
-          <button type="button" className="btn sm" style={{ marginLeft: 8 }}
-                  onClick={() => setAddingExtra(false)}>
-            Cancel
-          </button>
-        )}
-      </div>
-      {addingExtra ? (
-        <p className="hint-inline" style={{ display: "block", margin: "0 0 10px" }}>
-          A bill outside the vendor P/O — the extra quote the vendor sent for a delay, for instance.
-          Pick the vendor and load its lines from that quote. It is paid here like any other bill,
-          and it does not move this deal&apos;s stage.
-        </p>
+          <span className="hint-inline">
+            A bill outside the vendor P/O — e.g. the extra quote the vendor sent for a delay.
+            Pick the vendor and load its lines from that quote.
+          </span>
+        </div>
       ) : null}
       <ApAddForm
         key={addingExtra ? "extra-new" : keyOf(current!)}
@@ -774,6 +773,11 @@ function ApAddForm({
     () => (rfqId ? fetchRfqVendorQuotes(rfqId) : Promise.resolve({ vendor_quotes: [] })),
   );
   const dealVendorQuotes = vqData?.vendor_quotes ?? [];
+  // 견적 총액 — 매입 견적에는 금액 칸이 없어 수량×단가로 낸다(vendorQuoteItemsToTax 와
+  // 같은 규칙). AR 의 "Load quote…" 가 "번호 · USD 880" 으로 적는 것과 같은 자리다 —
+  // 어느 견적인지 번호만으로는 안 잡히고, 금액이 있어야 고르기 전에 짚인다.
+  const vendorQuoteTotal = (q: { items?: VendorQuoteItem[] }) =>
+    vendorQuoteItemsToTax(q.items).reduce((n, it) => n + num(it.amount), 0);
   // 견적 하나를 고르면 그 견적이 아는 것은 전부 앉힌다 — 품목만 옮기고 공급사와 번호를
   // 손으로 다시 적게 하면, 정작 그 견적에 적혀 있는 것을 두 번 치는 일이 된다.
   const loadVendorQuote = (qid: number) => {
@@ -983,7 +987,8 @@ function ApAddForm({
               </option>
               {dealVendorQuotes.map((q) => (
                 <option key={q.id} value={q.id}>
-                  {q.vendor_quote_no || `Quote ${q.id}`} · {q.vendor}
+                  {q.vendor_quote_no || `Quote ${q.id}`} · {q.vendor} ·{" "}
+                  {q.currency || "KRW"} {Math.round(vendorQuoteTotal(q)).toLocaleString()}
                 </option>
               ))}
             </select>
@@ -1709,22 +1714,27 @@ function ArAddForm({
           <div className="items-head-actions">
             <button type="button" className="btn sm" onClick={loadSource} disabled={loadDisabled}>{loadLabel}</button>
             {/* 추가 청구서의 품목은 대개 4단계에 이미 적어 둔 추가 견적에 그대로 있다 —
-                같은 값을 두 번 적지 않도록 그 견적에서 끌어온다. */}
-            {dealQuotes.length ? (
-              <select
-                className="ar-load-quote"
-                value=""
-                onChange={(e) => { if (e.target.value) loadQuote(Number(e.target.value)); }}
-                title="Copy the item lines from one of this deal's quotations"
-              >
-                <option value="">Load quote…</option>
-                {dealQuotes.map((q) => (
-                  <option key={q.id} value={q.id}>
-                    {q.qtn_no || `Quote ${q.id}`} · {q.currency} {Math.round(q.amount).toLocaleString()}
-                  </option>
-                ))}
-              </select>
-            ) : null}
+                같은 값을 두 번 적지 않도록 그 견적에서 끌어온다.
+                견적이 없어도 칸은 남긴다(AP 탭의 공급사 견적 칸과 같은 규칙) — 칸째로
+                사라지면 "왜 안 보이지"가 되고 그 답을 화면에서 찾을 수 없다. */}
+            <select
+              className="ar-load-quote"
+              value=""
+              disabled={!dealQuotes.length}
+              onChange={(e) => { if (e.target.value) loadQuote(Number(e.target.value)); }}
+              title={dealQuotes.length
+                ? "Copy the item lines from one of this deal's quotations"
+                : "No quotation has been issued on this deal yet (stage 4)"}
+            >
+              <option value="">
+                {dealQuotes.length ? "Load quote…" : "No quotation yet"}
+              </option>
+              {dealQuotes.map((q) => (
+                <option key={q.id} value={q.id}>
+                  {q.qtn_no || `Quote ${q.id}`} · {q.currency} {Math.round(q.amount).toLocaleString()}
+                </option>
+              ))}
+            </select>
             <ItemColsButton grid={grid} />
             <ExcludeSelectedButton items={form.items} sel={sel} onChange={setItems} />
             <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(form.items, sel, setItems)} />
