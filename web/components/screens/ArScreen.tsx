@@ -183,6 +183,20 @@ export function ArOverview({
     if (initialDocTab) setDocTab(initialDocTab);
   }, [initialDocTab]);
 
+  // 한 오더에 청구서가 여럿일 수 있다 — 본 계약 건(main) 하나에, 일정 지연처럼 뒤늦게
+  // 생긴 사유로 끊는 추가 청구(extra)가 붙는다. 번호 순(= 끊은 순)으로 세운다.
+  const orderArs = useMemo(
+    () => rows.filter((r) => r.order_id === orderId).sort((a, b) => a.id - b.id),
+    [rows, orderId]
+  );
+  const [selArId, setSelArId] = useState<number | null>(null);
+  const [addingAr, setAddingAr] = useState(false);
+  // 목록이 바뀌어도 보던 청구서를 계속 본다(저장 뒤 새 목록에서도 같은 건).
+  useEffect(() => {
+    if (addingAr) return;
+    setSelArId((cur) => (cur != null && orderArs.some((r) => r.id === cur) ? cur : orderArs[0]?.id ?? null));
+  }, [orderArs, addingAr]);
+
   function load() {
     invalidateCache("dashboard");
     invalidateCache("pipeline");
@@ -202,19 +216,6 @@ export function ArOverview({
       </div>
     );
   }
-  // 한 오더에 청구서가 여럿일 수 있다 — 본 계약 건(main) 하나에, 일정 지연처럼 뒤늦게
-  // 생긴 사유로 끊는 추가 청구(extra)가 붙는다. 번호 순(= 끊은 순)으로 세운다.
-  const orderArs = useMemo(
-    () => rows.filter((r) => r.order_id === orderId).sort((a, b) => a.id - b.id),
-    [rows, orderId]
-  );
-  const [selArId, setSelArId] = useState<number | null>(null);
-  const [addingAr, setAddingAr] = useState(false);
-  // 목록이 바뀌어도 보던 청구서를 계속 본다(저장 뒤 새 목록에서도 같은 건).
-  useEffect(() => {
-    if (addingAr) return;
-    setSelArId((cur) => (cur != null && orderArs.some((r) => r.id === cur) ? cur : orderArs[0]?.id ?? null));
-  }, [orderArs, addingAr]);
   const match = addingAr ? undefined : orderArs.find((r) => r.id === selArId) ?? orderArs[0];
   // 화면의 다른 곳(클레임·담당자 판정)은 본 청구서를 기준으로 삼는다.
   const mainAr = orderArs.find((r) => (r.kind ?? "main") !== "extra") ?? orderArs[0];
