@@ -8122,6 +8122,11 @@ table.mini .num {
   border-radius: 3px;
   background: #fff;
 }
+/* 로고 없는 회사도 이름 시작 위치가 같도록 빈 자리를 남긴다(.vsel-logo-blank 와 같은 뜻). */
+.cust-logo-blank {
+  display: inline-block;
+  background: none;
+}
 .cust-name-text {
   min-width: 0;
   overflow: hidden;

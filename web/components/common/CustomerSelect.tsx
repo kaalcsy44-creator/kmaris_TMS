@@ -6,6 +6,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CustomerOption } from "@/lib/types";
+import { useCustomerLogo } from "@/lib/customerLogos";
 
 type MenuPos = { left: number; width: number; top?: number; bottom?: number };
 
@@ -36,6 +37,13 @@ export default function CustomerSelect({
   multiple?: boolean;
   selectedIds?: number[];
 }) {
+  // 로고는 회사에 딸린 것이지 담당자에 딸린 것이 아니다.
+  //
+  // 이 명부는 레코드 1건 = 담당자 1명이라 같은 회사가 담당자 수만큼 줄로 나온다. 로고를
+  // 올린 것은 그중 한 줄뿐이라, 옵션에 실려 온 c.logo 만 보면 같은 회사인데 어떤 줄에는
+  // 로고가 뜨고 어떤 줄에는 안 뜬다(AMCL 은 나오고 ANGLO-EASTERN 은 안 나오던 증상).
+  // 그래서 줄에 없으면 회사명으로 한 번 더 찾는다 — VendorSelect 가 쓰는 규칙과 같다.
+  const logoFor = useCustomerLogo();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [pos, setPos] = useState<MenuPos | null>(null);
@@ -133,7 +141,13 @@ export default function CustomerSelect({
             {checked ? "✓" : ""}
           </span>
         ) : null}
-        {c.logo ? <img className="cust-logo" src={c.logo} alt="" /> : null}
+        {(() => {
+          const logo = c.logo || logoFor(c.name);
+          // 로고가 없는 회사도 이름 시작 위치는 같아야 한다 — 없으면 빈 자리를 남긴다.
+          return logo
+            ? <img className="cust-logo" src={logo} alt="" />
+            : <span className="cust-logo cust-logo-blank" aria-hidden />;
+        })()}
         <span className="cust-name-text">{c.name}</span>
         {showContact ? (
           <span className="cust-opt-contact">{c.contact?.trim() || "(no contact)"}</span>
