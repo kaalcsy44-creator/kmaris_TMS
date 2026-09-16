@@ -5173,9 +5173,45 @@ a.btn.primary:hover {
 .form-grid--thirds {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+/* 열 수 고정 격자 — auto-fit 은 "가장 많이 든 줄"이 열 수를 정한다. 그래서 칸 4개인 줄과
+   5개인 줄이 한 격자에 있으면 4개짜리 줄 끝에 빈 칸이 남고, 창 폭이 바뀔 때마다 그
+   구멍의 위치가 옮겨 다닌다. 섹션마다 열 수를 못박아 줄이 늘 꽉 차게 한다. */
+.form-grid--cols2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.form-grid--cols3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.form-grid--cols4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+/* 좁은 창에서는 고정 열을 풀어 준다 — 4열을 끝까지 버티면 날짜 입력이 잘린다. */
+@media (max-width: 1180px) {
+  .form-grid--cols4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .form-grid--cols2,
+  .form-grid--cols3,
+  .form-grid--cols4 {
+    grid-template-columns: 1fr;
+  }
+}
 /* 주소·프로젝트명처럼 긴 한 줄 값 — 반 칸에 가두면 앞머리만 보이므로 한 행을 통째로 쓴다. */
 .form-grid > .form-field--full {
   grid-column: 1 / -1;
+}
+/* 한 줄까지는 아니고 두 칸이 필요한 값(숙소·담당자명) — 날짜와 같은 폭을 주면
+   앞머리만 보인다. 줄 끝에 남던 빈 칸을 메우는 역할도 겸한다. */
+.form-grid > .form-field--span2 {
+  grid-column: span 2;
+}
+/* 한 열까지 좁아진 화면에선 두 칸짜리도 그냥 한 칸 — span 2 가 남으면 격자가 넘친다. */
+@media (max-width: 720px) {
+  .form-grid > .form-field--span2 {
+    grid-column: auto;
+  }
 }
 /* 견적 편집기 — 문서정보 4필드를 한 줄로 고정(3+1 로 깨져 생기던 끝칸 공백 방지).
    폭은 균등이 아니라 값 길이에 비례 배분한다 — 1번칸("2026-07-09 · Jinwoo Engineering ·
@@ -6320,6 +6356,11 @@ input[type="month"] { font-family: inherit; }
 }
 .po-textarea.small {
   min-height: 78px;
+}
+/* 목록성 여러 줄 값(스페어·작업내역·소견) — 78px 은 세 줄 만에 잘려 안쪽 스크롤이
+   생기고, 기본 240px 은 단계 하나가 화면을 다 먹는다. 그 사이. */
+.po-textarea.mid {
+  min-height: 150px;
 }
 .po-work-note {
   display: flex;

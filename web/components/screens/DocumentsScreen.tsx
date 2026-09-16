@@ -221,35 +221,131 @@ const SVC_CFG: Record<SvcStage, { label: string; btn: string; done: (r: DocRow) 
   9: { label: "Billing · Statement", btn: "Billing · Statement", done: (r) => r.svc_billed },
 };
 
-// 서비스 단계별 입력 필드 스키마(7·8). 9는 청구 폼으로 별도 처리.
-type SvcField = { key: string; label: string; type?: "text" | "date" | "number" | "textarea" | "select"; options?: string[] };
-const SVC_FIELDS: Record<7 | 8, SvcField[]> = {
+// 서비스 단계별 입력 스키마(7·8). 9는 청구 폼으로 별도 처리.
+//  - 칸을 평면으로 늘어놓지 않고 섹션(카드)으로 묶는다. 한 카드 = 한 가지 사실
+//    (범위 / 파견 / 준비물)이라, 열 수를 카드마다 고정해도 빈 칸이 생기지 않는다.
+//  - cols 는 그 카드의 고정 열 수. auto-fit 격자는 "가장 많이 든 줄"이 열 수를 정해
+//    한 칸짜리 줄이 화면 폭의 80%를 비웠다.
+type SvcField = {
+  key: string;
+  label: string;
+  type?: "text" | "date" | "number" | "textarea" | "select";
+  options?: string[];
+  placeholder?: string;
+  /** 여러 줄 입력의 높이 — 목록성 값(스페어·작업내역)은 넉넉히. */
+  tall?: boolean;
+  /** 두 칸을 쓰는 항목 — 날짜와 같은 폭을 주면 앞머리만 보이는 값(숙소·담당자명)에.
+   *  줄의 끝칸이 비는 것도 이걸로 메운다. */
+  span?: 2;
+};
+type SvcSection = { title: string; cols: 2 | 3 | 4; fields: SvcField[] };
+
+const SERVICE_TYPES = ["Inspection", "Repair", "Commissioning", "Overhaul", "Survey", "Other"];
+
+const SVC_SECTIONS: Record<7 | 8, SvcSection[]> = {
   7: [
-    { key: "service_type", label: "Service type", type: "select", options: ["Inspection", "Repair", "Commissioning", "Overhaul", "Survey", "Other"] },
-    { key: "scope", label: "Scope", type: "textarea" },
-    { key: "scheduled_from", label: "Scheduled from", type: "date" },
-    { key: "scheduled_to", label: "Scheduled to", type: "date" },
-    { key: "location", label: "Location (port / yard / onboard)" },
-    { key: "engineers", label: "Assigned engineer(s)" },
-    { key: "materials", label: "Required spares / tools", type: "textarea" },
-    // 구 8 'Service Arrangement' 흡수 — 파견/비자/숙소/현장연락/확정일정
-    { key: "dispatch_from", label: "Dispatch from", type: "date" },
-    { key: "dispatch_to", label: "Return on", type: "date" },
-    { key: "visa_status", label: "Visa / permit status" },
-    { key: "accommodation", label: "Accommodation / logistics" },
-    { key: "site_contact", label: "On-site contact" },
-    { key: "confirmed_schedule", label: "Confirmed schedule" },
-    { key: "notes", label: "Notes", type: "textarea" },
+    {
+      title: "Service scope",
+      cols: 4,
+      fields: [
+        { key: "service_type", label: "Service type", type: "select", options: SERVICE_TYPES },
+        { key: "scheduled_from", label: "Scheduled from", type: "date" },
+        { key: "scheduled_to", label: "Scheduled to", type: "date" },
+        { key: "location", label: "Location (port / yard / onboard)", placeholder: "Zhoushan, China" },
+        { key: "scope", label: "Scope", type: "textarea", tall: true,
+          placeholder: "What is contracted — e.g. crane wire renewal, load test, class witness" },
+      ],
+    },
+    {
+      // 구 8 'Service Arrangement' 흡수 — 파견/비자/숙소/현장연락.
+      title: "Dispatch",
+      cols: 4,
+      fields: [
+        // 라벨이 "Dispatch from" 이면 바로 위 Location 탓에 출발'지'로 읽힌다 — 날짜임을 못박는다.
+        { key: "dispatch_from", label: "Depart on", type: "date" },
+        { key: "dispatch_to", label: "Return on", type: "date" },
+        // 송장의 man_power 로 넘어가는 값이라 이름이 아니라 인원수다(serviceInfoDefaults 참조).
+        { key: "engineers", label: "Engineers (persons)", type: "number", placeholder: "2" },
+        { key: "visa_status", label: "Visa / permit status", placeholder: "Visa issued · 90 days" },
+        { key: "accommodation", label: "Accommodation / logistics", span: 2, placeholder: "Hotel + yard shuttle" },
+        { key: "site_contact", label: "On-site contact", placeholder: "Name · +86 ..." },
+        // 날짜 두 칸과 겹치던 'Confirmed schedule' — 일정의 정본은 위 날짜이고
+        // 이 칸은 그 날짜로 못 적는 단서(기상 조건·현지 확정 회신 등)만 받는다.
+        { key: "confirmed_schedule", label: "Schedule note", placeholder: "Confirmed by yard on 08-21" },
+      ],
+    },
+    {
+      title: "Preparation",
+      cols: 2,
+      fields: [
+        { key: "materials", label: "Required spares / tools", type: "textarea", tall: true },
+        { key: "notes", label: "Notes", type: "textarea" },
+      ],
+    },
   ],
   8: [
-    { key: "performed_date", label: "Service performed date", type: "date" },
-    { key: "work_summary", label: "Work performed summary", type: "textarea" },
-    { key: "findings", label: "Findings / recommendations", type: "textarea" },
-    { key: "man_hours", label: "Man-hours", type: "number" },
-    { key: "customer_accepted", label: "Customer acceptance (name / date)" },
-    { key: "notes", label: "Notes", type: "textarea" },
+    {
+      title: "Service result",
+      cols: 4,
+      fields: [
+        // 7단계는 기간(from~to)인데 8단계가 날짜 하나뿐이면 예정 대비 실적을 비교할 수
+        // 없고 Man-hours 를 검증할 근거도 없다 — 실제 수행 기간을 그대로 받는다.
+        { key: "performed_from", label: "Performed from", type: "date" },
+        { key: "performed_to", label: "Performed to", type: "date" },
+        { key: "engineers", label: "Engineers (persons)", type: "number", placeholder: "2" },
+        { key: "man_hours", label: "Man-hours", type: "number", placeholder: "96" },
+      ],
+    },
+    {
+      title: "Report",
+      cols: 2,
+      fields: [
+        { key: "work_summary", label: "Work performed summary", type: "textarea", tall: true },
+        { key: "findings", label: "Findings / recommendations", type: "textarea", tall: true },
+      ],
+    },
+    {
+      title: "Acceptance",
+      cols: 3,
+      fields: [
+        // 구 customer_accepted 는 "이름 / 날짜"를 한 칸에 받아 정렬도 검색도 안 됐다.
+        { key: "accepted_by", label: "Accepted by (name)", span: 2, placeholder: "Chief Engineer" },
+        { key: "accepted_date", label: "Accepted on", type: "date" },
+        { key: "notes", label: "Notes", type: "textarea" },
+      ],
+    },
   ],
 };
+
+/** 이 단계에서 쓰는 모든 칸(저장·초기화용 평면 목록). */
+function svcFields(svc: 7 | 8): SvcField[] {
+  return SVC_SECTIONS[svc].flatMap((s) => s.fields);
+}
+
+/** 예전에 저장해 둔 값을 지금 칸 이름으로 옮겨 읽는다(저장본은 건드리지 않는다).
+ *  칸 이름을 바꿀 때 DB를 손대면 배포 순서에 따라 값이 잠깐 사라지므로,
+ *  읽는 쪽에서만 옛 이름을 받아 준다. 저장하면 새 이름으로 다시 쓰인다. */
+function svcLegacyValue(svc: 7 | 8, key: string, saved: Record<string, unknown>): string {
+  const str = (k: string) => String(saved[k] ?? "").trim();
+  if (svc === 8) {
+    // performed_date(단일 날짜) → performed_from
+    if (key === "performed_from" && !str("performed_from")) return str("performed_date");
+    // customer_accepted("이름 / 날짜" 한 칸) → 이름·날짜로 가른다.
+    if (key === "accepted_by" && !str("accepted_by")) return splitAcceptance(str("customer_accepted")).name;
+    if (key === "accepted_date" && !str("accepted_date")) return splitAcceptance(str("customer_accepted")).date;
+  }
+  return "";
+}
+
+/** "Chief Engineer / 2026-09-04" 처럼 한 칸에 적혀 있던 인수 확인을 이름과 날짜로 가른다.
+ *  날짜로 읽히는 조각이 있으면 그것만 날짜로 빼고 나머지를 이름으로 둔다. */
+function splitAcceptance(v: string): { name: string; date: string } {
+  if (!v) return { name: "", date: "" };
+  const m = v.match(/(\d{4}-\d{2}-\d{2})/);
+  if (!m) return { name: v, date: "" };
+  const name = v.replace(m[1], "").replace(/[\/,·\-\s]+$/, "").replace(/^[\/,·\s]+/, "").trim();
+  return { name, date: m[1] };
+}
 
 // 서비스 단계 편집기(모달 없는 본문) — 상세 로드 후 단계별 폼 렌더. 신규/수정 공용.
 function ServiceStageEditor({
@@ -330,7 +426,8 @@ function ServiceEditorModal({
   );
 }
 
-// 9단계 리포트 파일 업로드 — Auto-fill 과 동일한 tool-btn 스타일(컴팩트), Pending 아래 배치.
+// 8단계 리포트 파일 업로드 — Auto-fill 과 동일한 tool-btn 스타일(컴팩트), Pending 아래 배치.
+// 이 파일이 곧 8단계의 완료 근거다(그래서 8단계엔 완료 체크박스를 두지 않는다).
 function ServiceReportUpload({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
   const pod = data.pod;
   const [busy, setBusy] = useState(false);
@@ -409,7 +506,8 @@ function ServiceReportUpload({ data, onChanged }: { data: DocumentDetail; onChan
   );
 }
 
-// 서비스 7·8·9단계 — 구조화 입력 필드 + (9단계) 리포트 파일. 저장 시 단계 완료.
+// 서비스 7·8단계 — 섹션으로 묶은 구조화 입력 + (8단계) 리포트 파일.
+// 9단계(청구)는 ServiceBillingForm 이 따로 맡는다 — 그래서 여기 svc 는 7|8 뿐이다.
 function ServiceStageForm({
   data,
   svc,
@@ -417,20 +515,33 @@ function ServiceStageForm({
   onClose,
 }: {
   data: DocumentDetail;
-  svc: 7 | 8 | 9;
+  svc: 7 | 8;
   onChanged: () => void;
   onClose: () => void;
 }) {
-  const fields = SVC_FIELDS[svc as 7 | 8];
+  const stage = svc;
+  const sections = SVC_SECTIONS[stage];
+  const fields = svcFields(stage);
   const saved = data.order.service_info?.[String(svc)] ?? {};
   const hasSaved = !!data.order.service_info?.[String(svc)];
+  // 8단계는 7단계에 이미 적어 둔 사실(기간·투입 인원)을 물려받는다 — 같은 딜에서
+  // 예정과 실적을 각각 손으로 옮겨 적게 하면 둘이 어긋나고, 어긋난 쪽이 정본이 된다.
+  const s7 = (data.order.service_info?.["7"] || {}) as Record<string, unknown>;
   const [form, setForm] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
-    for (const f of fields) init[f.key] = String(saved[f.key] ?? "");
+    for (const f of fields) {
+      init[f.key] = String(saved[f.key] ?? "") || svcLegacyValue(stage, f.key, saved as Record<string, unknown>);
+    }
+    if (stage === 8 && !hasSaved) {
+      const from7 = (k: string) => String(s7[k] ?? "").trim();
+      if (!init.performed_from) init.performed_from = from7("scheduled_from");
+      if (!init.performed_to) init.performed_to = from7("scheduled_to");
+      if (!init.engineers) init.engineers = from7("engineers");
+    }
     return init;
   });
   const done = Boolean(data.stage_done[String(svc) as "7" | "8"]) || (svc === 8 && !!data.pod);
-  const [complete, setComplete] = useState(done); // 7·8단계: 저장 시 단계 완료 여부
+  const [complete, setComplete] = useState(done); // 7단계: 저장 시 단계 완료 여부
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
@@ -444,8 +555,12 @@ function ServiceStageForm({
     setBusy(true);
     setErr(null);
     try {
-      // 8단계(Complete·Report)는 리포트 파일(POD) 업로드가 완료 근거이므로 stage_dates 완료는 생략(파일 기준).
-      await saveServiceStage(data.order.id, svc, form, svc === 8 ? false : complete);
+      // 8단계(Complete·Report)의 완료 근거는 리포트 파일(POD)이다. 그래서 완료 체크박스를
+      // 두지 않는데, 예전에는 여기서 complete=false 를 보내는 바람에 저장할 때마다
+      // 백엔드가 set_manual_stage(..., 8, None) 로 남아 있던 완료 표시까지 지웠다.
+      // 지금 값을 그대로 돌려보내 "입력 저장"이 단계 상태를 바꾸지 않게 한다.
+      const keepDone = Boolean(data.stage_done[String(svc) as "7" | "8"]);
+      await saveServiceStage(data.order.id, svc, form, svc === 8 ? keepDone : complete);
       onChanged();
       onClose();
     } catch (e) {
@@ -478,14 +593,21 @@ function ServiceStageForm({
 
       <fieldset {...fieldsetProps}>
       {svc === 8 ? <ServiceReportUpload data={data} onChanged={onChanged} /> : null}
+      {svc === 8 ? <ServiceContextLine s7={s7} /> : null}
 
-      <div className="form-grid">
-        {fields.map((f) => (
-          <SvcFieldInput key={f.key} field={f} value={form[f.key] ?? ""} onChange={(v) => set(f.key, v)} />
-        ))}
-      </div>
+      {sections.map((sec) => (
+        <div className="stage-card" key={sec.title}>
+          <div className="form-section-title">{sec.title}</div>
+          <div className={`form-grid form-grid--cols${sec.cols}`}>
+            {sec.fields.map((f) => (
+              <SvcFieldInput key={f.key} field={f} value={form[f.key] ?? ""} onChange={(v) => set(f.key, v)} />
+            ))}
+          </div>
+        </div>
+      ))}
 
-      {svc !== 9 ? (
+      {/* 완료 체크박스는 7단계 전용 — 8단계의 완료 근거는 리포트 파일이다. */}
+      {svc === 7 ? (
         <label className="stage-complete-check">
           <input type="checkbox" checked={complete} onChange={(e) => setComplete(e.target.checked)} />
           <span>Mark this stage as complete</span>
@@ -515,9 +637,11 @@ function ServiceStageForm({
   );
 }
 
-// 서비스 10단계 — 청구 요금 내역 입력 → 저장 시 AR 레코드 자동 생성.
+// 서비스 9단계(Billing · Statement) — 청구 요금 내역 입력 → 저장 시 AR 레코드 자동 생성.
+// 단계 번호는 9다. 예전엔 10을 읽고 썼는데, 백엔드는 7·8·9만 받으므로 저장이 400으로
+// 떨어졌고 목록의 svc_billed(=service_info["9"])도 영영 켜지지 않았다.
 function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail; onChanged: () => void; onClose: () => void }) {
-  const saved = data.order.service_info?.["10"] ?? {};
+  const saved = data.order.service_info?.["9"] ?? {};
   const savedText = (key: string, fallback = "") => String(saved[key] ?? fallback);
   const savedItems = Array.isArray(saved.items) ? (saved.items as DocumentWorkItem[]) : [];
   const [labor, setLabor] = useState(savedText("labor_cost"));
@@ -540,13 +664,13 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
     [labor, travel, material, other]
   );
   const total = itemTotal + extraTotal;
-  const billed = !!data.order.service_info?.["10"];
+  const billed = !!data.order.service_info?.["9"];
 
   async function save() {
     setBusy(true);
     setErr(null);
     try {
-      await saveServiceStage(data.order.id, 10, {
+      await saveServiceStage(data.order.id, 9, {
         labor_cost: labor,
         travel_cost: travel,
         material_cost: material,
@@ -568,7 +692,7 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
     setBusy(true);
     setErr(null);
     try {
-      await deleteServiceStage(data.order.id, 10);
+      await deleteServiceStage(data.order.id, 9);
       onChanged();
       onClose();
     } catch (e) {
@@ -645,16 +769,24 @@ function SvcFieldInput({
   onChange: (v: string) => void;
 }) {
   if (field.type === "textarea") {
+    // 여러 줄 칸은 한 줄을 통째로 쓴다. 높이는 값의 성격에 따라 — 스페어 목록·작업내역은
+    // 78px 이면 세 줄 만에 잘려 안쪽 스크롤이 생겼다.
     return (
-      <label className="form-field" style={{ gridColumn: "1 / -1" }}>
+      <label className="form-field form-field--full">
         <span>{field.label}</span>
-        <textarea className="po-textarea small" value={value} onChange={(e) => onChange(e.target.value)} />
+        <textarea
+          className={`po-textarea ${field.tall ? "mid" : "small"}`}
+          value={value}
+          placeholder={field.placeholder}
+          onChange={(e) => onChange(e.target.value)}
+        />
       </label>
     );
   }
+  const spanCls = field.span === 2 ? " form-field--span2" : "";
   if (field.type === "select") {
     return (
-      <label className="form-field">
+      <label className={`form-field${spanCls}`}>
         <span>{field.label}</span>
         <select value={value} onChange={(e) => onChange(e.target.value)}>
           <option value="">Select…</option>
@@ -665,7 +797,32 @@ function SvcFieldInput({
       </label>
     );
   }
-  return <Field label={field.label} value={value} onChange={onChange} type={field.type ?? "text"} />;
+  return (
+    <Field
+      label={field.label}
+      value={value}
+      onChange={onChange}
+      type={field.type ?? "text"}
+      placeholder={field.placeholder}
+      span2={field.span === 2}
+    />
+  );
+}
+
+/** 8단계 머리의 한 줄 요약 — 7단계에 적어 둔 종류·장소·예정 기간.
+ *  리포트를 쓰는 사람이 "무슨 일로 어디에 갔는지"를 보려고 단계를 오가지 않게 한다. */
+function ServiceContextLine({ s7 }: { s7: Record<string, unknown> }) {
+  const str = (k: string) => String(s7[k] ?? "").trim();
+  const from = str("scheduled_from");
+  const to = str("scheduled_to");
+  const period = from && to && from !== to ? `${from} ~ ${to}` : from || to;
+  const parts = [str("service_type"), str("location"), period].filter(Boolean);
+  if (!parts.length) return null;
+  return (
+    <p className="hint-inline svc-context" style={{ display: "block", marginBottom: 12 }}>
+      From stage 7 — {parts.join(" · ")}
+    </p>
+  );
 }
 
 // 오더 작업 모달 — 클릭한 문서 한 종류의 편집기만 띄운다(다른 단계 탭은 보이지 않음).
@@ -1390,7 +1547,9 @@ function serviceInfoDefaults(order: DocumentDetail["order"]): Record<string, str
     service_description: str("scope") || order.project_title || "",
     service_location: str("location"),
     man_power: str("engineers"),
-    service_date: str("confirmed_schedule") || period,
+    // 일정의 정본은 7단계의 날짜 두 칸이다. confirmed_schedule 은 '일정 메모'로
+    // 성격이 바뀌었으므로, 날짜가 없을 때만 예전 값을 받아 쓴다.
+    service_date: period || str("confirmed_schedule"),
     duration: "",
     vessel_schedule: "",
     local_agent: "",
@@ -2173,6 +2332,7 @@ function Field({
   type = "text",
   placeholder,
   wide,
+  span2,
   options,
 }: {
   label: string;
@@ -2183,13 +2343,15 @@ function Field({
   placeholder?: string;
   // 주소처럼 긴 값 — 그리드 한 줄을 통째로 쓴다.
   wide?: boolean;
+  // 한 줄을 다 쓰진 않지만 날짜칸 폭으로는 모자란 값 — 두 칸을 쓴다.
+  span2?: boolean;
   // 고를 수 있는 값(예: 고객사에 등록된 본사·지사 주소). 직접 입력도 그대로 된다.
   options?: string[];
 }) {
   const listId = useId();
   const list = (options ?? []).filter(Boolean);
   return (
-    <label className={`form-field${wide ? " form-field--wide" : ""}`}>
+    <label className={`form-field${wide ? " form-field--wide" : ""}${span2 ? " form-field--span2" : ""}`}>
       <span>{label}</span>
       <input
         type={type}
