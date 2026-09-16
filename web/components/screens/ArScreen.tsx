@@ -26,7 +26,7 @@ import {
 } from "@/lib/api";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import type { ApByOrderRow, ArRow, DocCharges, DocumentDetail, DocumentWorkItem, FinancePayable, PoWorkOptions, TaxInvoiceItem } from "@/lib/types";
+import type { ApByOrderRow, ArRow, DocCharges, DocumentDetail, DocumentWorkItem, FinancePayable, PoWorkOptions, TaxInvoiceItem, VendorQuoteItem } from "@/lib/types";
 import { createPortal } from "react-dom";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import VendorSelect from "@/components/common/VendorSelect";
@@ -777,7 +777,7 @@ function ApAddForm({
   const loadVendorQuote = (qid: number) => {
     const q = dealVendorQuotes.find((x) => x.id === qid);
     if (!q) return;
-    setItems(workItemsToTax((q.items ?? []) as unknown as DocumentWorkItem[]));
+    setItems(vendorQuoteItemsToTax(q.items));
     if (q.currency) setForm((f) => ({ ...f, currency: q.currency }));
     sel.clear();
   };
@@ -1306,6 +1306,31 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
 }
 
 /** 작업 품목(CI·PI·P/O 공용) → 세금계산서 청구 품목(설명·Part No.·수량·단가·금액). */
+/** 공급사 견적 품목 → 청구 품목.
+ *
+ *  매입 쪽 견적은 칸 이름이 다르다. 단가는 unit_price 가 아니라 cost_price 이고, 금액
+ *  칸은 아예 없다(수량×단가로 낸다). 이걸 모르고 매출 쪽 변환기를 그대로 쓰면 품목명과
+ *  수량만 들어오고 단가·금액이 0 으로 앉는다 — 실제로 그랬다.
+ *
+ *  옵션 제목 행(row_kind="option")은 품목이 아니라 아래 품목들을 묶는 머리글이라 뺀다.
+ *  금액이 없어 청구서에 넣으면 빈 줄이 된다.
+ */
+function vendorQuoteItemsToTax(items: VendorQuoteItem[] | undefined | null): TaxInvoiceItem[] {
+  return (items ?? [])
+    .filter((it) => (it.row_kind || "") !== "option")
+    .map((it) => {
+      const qty = num(it.qty);
+      const unit_price = num(it.cost_price);
+      return {
+        description: it.description || "",
+        part_no: it.part_no || "",
+        qty,
+        unit_price,
+        amount: Math.round(qty * unit_price * 100) / 100,
+      };
+    });
+}
+
 function workItemsToTax(items: DocumentWorkItem[] | undefined | null): TaxInvoiceItem[] {
   return (items ?? []).map((it) => {
     const qty = num(it.qty);
