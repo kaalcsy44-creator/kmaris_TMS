@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from _core import (
+    _rfq_for_order,
     APPayment,
     APRecord,
     APSave,
@@ -63,9 +64,14 @@ def ap_by_order(order_id: int):
     """이 오더의 vendor P/O 목록 + 각 P/O 의 AP 레코드(없으면 null).
 
     프로젝트 9~11단계 AP 탭이 벤더 P/O 선택기와 편집 폼을 그리는 데 사용한다.
+    rfq_id 를 함께 준다 — 청구 품목을 3단계에 받아 둔 공급사 견적에서 끌어올 때 필요하다.
+    화면이 다른 목록(po-work-options)을 뒤져 오더→프로젝트를 되짚게 두면, 그 목록에
+    이 오더가 없을 때 아무 말 없이 빈 손이 된다.
     """
     s = get_session()
     try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        rfq = _rfq_for_order(s, order) if order else None
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         pos = (
             s.query(PurchaseOrder)
@@ -107,7 +113,7 @@ def ap_by_order(order_id: int):
                 "items": a.items or [],
                 "ap": _ap_out(a, "", vendor),
             })
-        return {"rows": rows}
+        return {"rows": rows, "rfq_id": rfq.id if rfq else 0}
     finally:
         s.close()
 

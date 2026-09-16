@@ -1948,8 +1948,9 @@ export function deleteArRecord(arId: number): Promise<{ ok: boolean }> {
 }
 
 // ── 매입 청구(AP) — 벤더 대금청구서/거래명세서·전자세금계산서 수취 ────────────────
-export function fetchApByOrder(orderId: number): Promise<{ rows: ApByOrderRow[] }> {
-  return get<{ rows: ApByOrderRow[] }>(`/api/admin/ap/by-order/${orderId}`);
+/** rfq_id 를 함께 준다 — 청구 품목을 3단계의 공급사 견적에서 끌어올 때 쓴다. */
+export function fetchApByOrder(orderId: number): Promise<{ rows: ApByOrderRow[]; rfq_id: number }> {
+  return get<{ rows: ApByOrderRow[]; rfq_id: number }>(`/api/admin/ap/by-order/${orderId}`);
 }
 
 export function createApRecord(body: ApSave): Promise<{ ok: boolean; id: number }> {

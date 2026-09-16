@@ -426,6 +426,7 @@ function ApSection({
         key={addingExtra ? "extra-new" : keyOf(current!)}
         row={addingExtra ? draftExtra : current!}
         orderId={orderId}
+        rfqId={data.rfq_id ?? 0}
         stage={stage}
         extra={addingExtra}
         onCreated={() => setAddingExtra(false)}
@@ -724,6 +725,7 @@ type ApForm = {
 function ApAddForm({
   row,
   orderId,
+  rfqId,
   stage,
   extra = false,
   onCreated,
@@ -731,6 +733,8 @@ function ApAddForm({
 }: {
   row: ApByOrderRow;
   orderId: number;
+  /** 이 딜의 프로젝트 — 공급사 견적을 그 프로젝트 것으로 불러온다. */
+  rfqId: number;
   stage: StageTab;
   /** 추가 매입(벤더 P/O 없이 받은 청구) — 공급사를 직접 고르고 kind="extra" 로 저장한다. */
   extra?: boolean;
@@ -749,12 +753,15 @@ function ApAddForm({
   const { data: workOpts } = useCachedData("ar:workoptions", fetchPoWorkOptions);
   // 이 딜에 들어온 공급사 견적 — 추가비용 견적도 3단계에 함께 서 있다. 그 품목을 그대로
   // 끌어오면 같은 값을 두 번 적지 않는다(AR 쪽 "Load quote…" 와 같은 뜻).
-  // 추가 매입을 적을 때만 부른다 — 견적 품목은 목록 API 에 실려 오지 않는 무거운 값이라,
-  // 본 매입 화면까지 매번 끌어올 이유가 없다.
-  const dealRfqId = (workOpts?.orders ?? []).find((o) => o.id === orderId)?.rfq_id ?? 0;
+  //
+  // 추가 매입뿐 아니라 본 매입에서도 쓴다. 발주서와 공급사 청구서의 품목이 늘 같지는
+  // 않아서(수량이 갈리거나 항목이 붙는다) "Load P/O" 만으로는 모자랄 때가 있다.
+  //
+  // rfqId 는 위에서 내려받는다 — 예전에는 po-work-options 의 오더 목록을 뒤져 되짚었는데,
+  // 그 목록에 이 오더가 없으면 아무 말 없이 견적이 하나도 없는 것처럼 보였다.
   const { data: vqData } = useCachedData(
-    isExtraRow && dealRfqId ? `rfq:vendor-quotes:${dealRfqId}` : "",
-    () => fetchRfqVendorQuotes(dealRfqId)
+    rfqId ? `rfq:vendor-quotes:${rfqId}` : "rfq:vendor-quotes:none",
+    () => (rfqId ? fetchRfqVendorQuotes(rfqId) : Promise.resolve({ vendor_quotes: [] })),
   );
   const dealVendorQuotes = vqData?.vendor_quotes ?? [];
   const loadVendorQuote = (qid: number) => {
@@ -936,8 +943,9 @@ function ApAddForm({
           <ExcludedCountNote items={form.items} />
           <div className="items-head-actions">
             <button type="button" className="btn sm" onClick={loadPo} disabled={poItems.length === 0}>Load P/O</button>
-            {/* 추가 매입의 품목은 3단계에 이미 받아 둔 공급사 견적에 그대로 있다. */}
-            {isExtraRow && dealVendorQuotes.length ? (
+            {/* 청구 품목은 3단계에 받아 둔 공급사 견적에 그대로 있을 때가 많다 —
+                추가 매입은 P/O 자체가 없고, 본 매입도 발주서와 청구서가 어긋날 수 있다. */}
+            {dealVendorQuotes.length ? (
               <select
                 className="ar-load-quote"
                 value=""
