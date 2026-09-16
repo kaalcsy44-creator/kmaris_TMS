@@ -115,6 +115,7 @@ import { invalidateMasterCategories } from "@/components/common/CategoryCell";
 import { CategoryBadges, CategoryTagPicker, useVendorCategoryOptions } from "@/components/common/CategoryTags";
 import { MakerBadges, MakerTagPicker, useMakerOptions } from "@/components/common/MakerCell";
 import { AgencyBadges, AgencyTagPicker } from "@/components/common/AgencyPicker";
+import RegionCombo from "@/components/common/RegionPicker";
 // 목록의 상대처는 다른 화면과 같은 모양(로고 + 이름)으로 — 같은 회사를 두 표기로 읽지 않도록.
 import CustomerName from "@/components/common/CustomerName";
 import { BounceBadge, MailAddress, hasBounced, isBounced } from "@/components/common/BouncedEmail";
@@ -984,6 +985,10 @@ const PARTNER_KIND_LABEL: Record<PartnerImportKind, string> = {
 function invalidatePartnerCaches() {
   invalidateCustomerLogos();
   invalidateVendorLogos();
+  // 세 명부의 목록 캐시 — 로고 캐시와는 다른 것이다. 대리점 고르기와 지역 고르기가
+  // 이 목록을 읽으므로, 방금 적은 지역이 5분 뒤에야 보이지 않게 여기서 함께 씻는다.
+  invalidateCache("settings-customers");
+  invalidateCache("settings-vendors");
   invalidateCache("settings-makers");
 }
 
@@ -1268,7 +1273,7 @@ function MakersTab() {
                            onChange={(emails) => setForm({ ...form, emails })} />
           <MultiValueField label="Phone" placeholder="+49 30 1234 5678" values={form.phones}
                            onChange={(phones) => setForm({ ...form, phones })} />
-          <MultiValueField label="Region" placeholder="Germany" values={form.regions}
+          <MultiValueField label="Region" placeholder="Germany" combo="region" values={form.regions}
                            onChange={(regions) => setForm({ ...form, regions })} />
         </>
       )}
@@ -1524,7 +1529,7 @@ function CustomersTab() {
         <>
           <MultiValueField label="Email" placeholder="name@company.com" values={form.emails} onChange={(emails) => setForm({ ...form, emails })} />
           <MultiValueField label="Phone" placeholder="+65 1234 5678" values={form.phones} onChange={(phones) => setForm({ ...form, phones })} />
-          <MultiValueField label="Region" placeholder="Singapore" values={form.regions} onChange={(regions) => setForm({ ...form, regions })} />
+          <MultiValueField label="Region" placeholder="Singapore" combo="region" values={form.regions} onChange={(regions) => setForm({ ...form, regions })} />
         </>
       )}
       allowCopy
@@ -1747,18 +1752,28 @@ function ContactMultiCell({
   placeholder: string;
   label: string;
 }) {
+  // 지역은 회사 칸과 같은 목록에서 고른다 — 두 자리가 다른 말을 쓰면 필터가 갈린다.
+  const isRegion = label === "region";
   const rows = values.length ? values : [""];
   const set = (i: number, v: string) => onChange(rows.map((x, k) => (k === i ? v : x)));
   return (
     <div className="co-mv">
       {rows.map((v, i) => (
         <div key={i} className="co-mv-row">
-          <input
-            value={v}
-            placeholder={i === 0 ? placeholder : ""}
-            title={i === 0 ? `Primary ${label} — used on documents and emails` : label}
-            onChange={(e) => set(i, e.target.value)}
-          />
+          {isRegion ? (
+            <RegionCombo
+              value={v}
+              placeholder={i === 0 ? placeholder : ""}
+              onChange={(x) => set(i, x)}
+            />
+          ) : (
+            <input
+              value={v}
+              placeholder={i === 0 ? placeholder : ""}
+              title={i === 0 ? `Primary ${label} — used on documents and emails` : label}
+              onChange={(e) => set(i, e.target.value)}
+            />
+          )}
           {rows.length > 1 ? (
             <button type="button" className="co-mv-del" title={`Remove this ${label}`}
                     onClick={() => onChange(rows.filter((_, k) => k !== i))}>✕</button>
@@ -2688,11 +2703,14 @@ function MultiValueField({
   placeholder,
   values,
   onChange,
+  combo,
 }: {
   label: string;
   placeholder?: string;
   values: string[];
   onChange: (next: string[]) => void;
+  /** 지역 칸 — 빈 칸에 아무렇게나 적는 대신 토글로 고른다(직접 입력도 그대로). */
+  combo?: "region";
 }) {
   const list = values.length ? values : [""];
   function set(i: number, v: string) {
@@ -2711,7 +2729,13 @@ function MultiValueField({
       <div className="mv-list">
         {list.map((v, i) => (
           <div key={i} className="mv-row">
-            <input className="mv-in" placeholder={placeholder} value={v} onChange={(e) => set(i, e.target.value)} />
+            {combo === "region" ? (
+              <div className="mv-combo">
+                <RegionCombo value={v} placeholder={placeholder} onChange={(x) => set(i, x)} />
+              </div>
+            ) : (
+              <input className="mv-in" placeholder={placeholder} value={v} onChange={(e) => set(i, e.target.value)} />
+            )}
             {i === 0 ? <span className="mv-primary" title="Used on documents & emails">Primary</span> : null}
             {list.length > 1 ? (
               <button type="button" className="btn sm danger mv-del" onClick={() => remove(i)} title="Remove">✕</button>
@@ -3063,7 +3087,7 @@ function VendorsTab() {
         <>
           <MultiValueField label="Email" placeholder="name@company.com" values={form.emails} onChange={(emails) => setForm({ ...form, emails })} />
           <MultiValueField label="Phone" placeholder="+65 1234 5678" values={form.phones} onChange={(phones) => setForm({ ...form, phones })} />
-          <MultiValueField label="Region" placeholder="Singapore" values={form.regions} onChange={(regions) => setForm({ ...form, regions })} />
+          <MultiValueField label="Region" placeholder="Singapore" combo="region" values={form.regions} onChange={(regions) => setForm({ ...form, regions })} />
         </>
       )}
       allowCopy

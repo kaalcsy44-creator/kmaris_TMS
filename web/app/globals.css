@@ -6319,10 +6319,11 @@ input[type="month"] { font-family: inherit; }
 }
 .combobox-toggle {
   position: absolute;
+  /* 높이는 입력칸을 따라간다 — 32px 로 못 박아 두면 담당자 표처럼 낮은 칸에서 넘친다. */
   top: 0;
+  bottom: 0;
   right: 0;
   width: 30px;
-  height: 32px;
   border: 0;
   background: transparent;
   color: #6b7a90;
@@ -6351,6 +6352,34 @@ input[type="month"] { font-family: inherit; }
   border: 1px solid #d7e2ee;
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(11, 29, 58, 0.16);
+}
+/* 묶음(Already used / Other countries) — 제목은 고를 수 없는 이름표다.
+   묶음 껍데기는 li 지만 값이 아니므로 안쪽 목록만 값처럼 보이게 한다. */
+.combobox-group {
+  padding: 0 !important;
+  border-radius: 0 !important;
+  cursor: default !important;
+}
+.combobox-group:hover {
+  background: none !important;
+}
+.combobox-group > ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.combobox-group-label {
+  padding: 6px 10px 3px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.combobox-group + .combobox-group .combobox-group-label {
+  margin-top: 2px;
+  border-top: 1px solid var(--line);
+  padding-top: 7px;
 }
 .combobox-menu li {
   padding: 7px 10px;
@@ -8292,6 +8321,16 @@ table.mini .num {
   border: 1px solid var(--border, #d8dee6);
   border-radius: 5px;
   font-size: 13px;
+}
+/* 지역 칸은 입력칸 대신 콤보가 선다 — .mv-in(테두리·여백)을 겹쳐 씌우면 테두리가
+   두 겹이 되므로, 자리(폭)만 물려주고 모양은 콤보 안의 입력칸이 그린다. */
+.mv-combo {
+  flex: 1;
+  min-width: 0;
+}
+.co-mv-row > .combobox {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .mv-primary {
   flex: 0 0 auto;
