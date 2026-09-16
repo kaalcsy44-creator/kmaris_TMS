@@ -1124,6 +1124,11 @@ function MakersTab() {
           <span key="ct" className="ms-group-sub">
             <CategoryBadges ids={companyIds(rs, "category_ids")} max={4} empty={<span className="dash">—</span>} />
           </span>,
+          <span key="ag" className="ms-group-sub">
+            {companyAgencies(rs).length
+              ? <AgencyBadges names={companyAgencies(rs)} />
+              : <span className="dash">—</span>}
+          </span>,
           <span key="s" className="ms-group-sub">
             {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
           </span>,
@@ -1156,6 +1161,11 @@ function MakersTab() {
         // 분류(트리의 자리)와 Makes(자유 문장)를 가른다 — 한 칸에 뭉쳐 있으면 머리 칸
         // 필터가 둘 중 어느 것으로도 고르지 못한다(공급사 표와 같은 이유).
         ["category_ids", "Category", undefined, "ms-cat"],
+        // Agency = 이 제조사를 대 주는 거래선. 값이 사는 자리는 그 거래선의
+        // 'Makers supplied' 이고 서버가 거꾸로 읽어 준다 — 여기서는 읽기만 한다.
+        ["agencies", "Agency", (r) => (
+          r.agencies?.length ? <AgencyBadges names={r.agencies} /> : <span className="dash">—</span>
+        ), "ms-agency"],
         // Makes = 이 회사가 무엇을 만드는가. 트리에 자리가 없는 것(기종·브랜드 이름)이
         // 여기 적힌다 — "HiMSEN Engine", "2 Stroke Engine".
         ["specialization", "Makes", undefined, "ms-spec"],
@@ -3359,6 +3369,8 @@ const makerHeadCols = (
     filter: "facet", emptyLabel: "No item yet" },
   { key: "category_ids", text: (r) => joinNames(catNames(r.category_ids)), filter: "facet",
     facetValues: (r) => catNames(r.category_ids), emptyLabel: "Untagged" },
+  { key: "agencies", text: (r) => joinNames(r.agencies ?? []), filter: "facet",
+    facetValues: (r) => r.agencies ?? [], emptyLabel: "No agency" },
   { key: "specialization", text: (r) => r.specialization || "", filter: "facet",
     emptyLabel: "Unspecified" },
 ];
@@ -3371,6 +3383,12 @@ function companyIds<K extends string>(
   key: K,
 ): number[] {
   return rows.find((r) => (r[key] ?? []).length)?.[key] ?? [];
+}
+
+/** 회사 단위 문자열 값(대리점)을 담당자 줄들에서 읽는다 — companyIds 와 같은 규칙.
+ *  대리점은 서버가 회사 이름으로 거꾸로 읽어 주므로 어느 줄에서 읽어도 같다. */
+function companyAgencies(rows: SettingsMaker[]): string[] {
+  return rows.find((r) => (r.agencies ?? []).length)?.agencies ?? [];
 }
 
 /* ── 인쇄용 칸 — 종이는 화면보다 넓다 ─────────────────────────────────────────
@@ -3460,6 +3478,7 @@ const makerPrintCols = (cat: (ids?: number[] | null) => string): PrintCol<Settin
   { label: "Address", value: (r) => contactValues(r.addresses, r.address).join(" / "), width: 3 },
   { label: "Website", value: (r) => r.website, width: 1.8 },
   { label: "Category", value: (r) => cat(r.category_ids), width: 1.8 },
+  { label: "Agency", value: (r) => (r.agencies ?? []).join(", "), width: 1.8 },
   { label: "Makes", value: (r) => r.specialization, width: 2.0 },
   { label: "Items", align: "right", width: 0.8, value: (r) => (r.items ? String(r.items) : "") },
 ];
