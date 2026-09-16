@@ -240,8 +240,14 @@ export function ArOverview({
         </button>
       </div>
 
+      {/* 탭 본문은 저마다 제 상자에 담고 key 를 준다.
+          그전에는 AR 은 Fragment(자식 여럿, 그나마 조건부라 개수가 들쭉날쭉), AP·Claim 은
+          단일 요소였다. 같은 자리에서 "자식 여럿"과 "자식 하나"가 오가면 React 가 옛
+          자식들을 지우지 못하고 남겨 두는 일이 생긴다 — 실제로 10·11단계에서 AR 입력폼이
+          서너 개씩 남아 AP 내용 위에 쌓였고, Claim 탭으로 옮겨도 그대로 있었다.
+          상자 하나에 key 하나면 탭을 바꿀 때 통째로 갈린다. */}
       {docTab === "ar" ? (
-        <>
+        <div className="ar-tabpane" key="ar">
           {/* 청구서가 둘 이상이거나 새로 끊는 중일 때만 스트립을 세운다 — 한 건뿐인
               대부분의 딜에서 줄만 늘리지 않도록.
               .pane-row 를 쓰지 않는다. 그 클래스는 "탭 행 위에 붙는 번호 행"의 자리라
@@ -303,11 +309,15 @@ export function ArOverview({
           {match && stageTab === 9 ? (
             <div className="ar-milestone ar-milestone--note"><ApGate row={match} stage={9} /></div>
           ) : null}
-        </>
+        </div>
       ) : docTab === "ap" ? (
-        <ApSection orderId={orderId} stage={stageTab} focusPoId={initialApPoId ?? null} onChanged={load} />
+        <div className="ar-tabpane" key="ap">
+          <ApSection orderId={orderId} stage={stageTab} focusPoId={initialApPoId ?? null} onChanged={load} />
+        </div>
       ) : (
-        <ClaimPanel orderId={orderId} assigneeId={mainAr?.assignee_id ?? 0} onChanged={load} />
+        <div className="ar-tabpane" key="claim">
+          <ClaimPanel orderId={orderId} assigneeId={mainAr?.assignee_id ?? 0} onChanged={load} />
+        </div>
       )}
     </div>
   );
@@ -944,22 +954,27 @@ function ApAddForm({
           <div className="items-head-actions">
             <button type="button" className="btn sm" onClick={loadPo} disabled={poItems.length === 0}>Load P/O</button>
             {/* 청구 품목은 3단계에 받아 둔 공급사 견적에 그대로 있을 때가 많다 —
-                추가 매입은 P/O 자체가 없고, 본 매입도 발주서와 청구서가 어긋날 수 있다. */}
-            {dealVendorQuotes.length ? (
-              <select
-                className="ar-load-quote"
-                value=""
-                onChange={(e) => { if (e.target.value) loadVendorQuote(Number(e.target.value)); }}
-                title="Copy the item lines from a vendor quote received on this deal"
-              >
-                <option value="">Load vendor quote…</option>
-                {dealVendorQuotes.map((q) => (
-                  <option key={q.id} value={q.id}>
-                    {q.vendor_quote_no || `Quote ${q.id}`} · {q.vendor}
-                  </option>
-                ))}
-              </select>
-            ) : null}
+                추가 매입은 P/O 자체가 없고, 본 매입도 발주서와 청구서가 어긋날 수 있다.
+                견적이 하나도 없어도 칸은 남기고 그렇게 적는다 — 칸째로 사라지면
+                "왜 안 보이지"가 되고, 그 답을 화면 어디에서도 찾을 수 없다. */}
+            <select
+              className="ar-load-quote"
+              value=""
+              disabled={!dealVendorQuotes.length}
+              onChange={(e) => { if (e.target.value) loadVendorQuote(Number(e.target.value)); }}
+              title={dealVendorQuotes.length
+                ? "Copy the item lines from a vendor quote received on this deal"
+                : "No vendor quote has been received on this deal yet (stage 3)"}
+            >
+              <option value="">
+                {dealVendorQuotes.length ? "Load vendor quote…" : "No vendor quote yet"}
+              </option>
+              {dealVendorQuotes.map((q) => (
+                <option key={q.id} value={q.id}>
+                  {q.vendor_quote_no || `Quote ${q.id}`} · {q.vendor}
+                </option>
+              ))}
+            </select>
             <ItemColsButton grid={grid} />
             <ExcludeSelectedButton items={form.items} sel={sel} onChange={setItems} />
             <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(form.items, sel, setItems)} />
