@@ -8317,6 +8317,14 @@ table.mini .num {
 .cust-grade.g-A { background: #e9f1fd; border-color: #cfe0f8; color: #2456a6; }
 .cust-grade.g-B { background: #fbeee3; border-color: #ecd8c5; color: #9a5a28; }
 .cust-grade.g-C { background: #f1f3f6; border-color: var(--line); color: #8a95a5; }
+/* X 는 등급이 아니라 경고다 — 닿지 않는 주소이므로 고치거나 지울 건이다. 색·테두리를
+   따뜻함 계열 밖으로 빼서 C(회색)와 섞이지 않게 한다. */
+.cust-grade.g-X {
+  background: #fdecec;
+  border-color: #f2c2c2;
+  color: #b4232a;
+  border-style: dashed;
+}
 /* 반송된 적이 있는 주소 — 고르지 말라는 뜻이 아니라(상대가 고쳤을 수 있다) 알고
    고르라는 표시다. 그래서 막지 않고 꼬리표만 붙인다. */
 .cust-bounced {

@@ -1159,15 +1159,20 @@ def customer_usage_counts(s) -> dict[int, int]:
 
 
 # 담당자 등급 — 이 사람과 우리 사이에 무엇이 오갔는가. 위에서부터 먼저 잡힌다.
+#   X  닿지 않는 사람        — 등록된 주소가 전부 반송됐다. 등급을 매길 일이 아니라
+#                              주소를 고치거나 줄을 지워야 할 건이다.
 #   S  거래까지 간 사람      — 고객 P/O 를 준 적이 있다
 #   A  문의를 준 사람        — RFQ 가 들어왔다(견적은 대개 그에 딸려 나간다)
-#   B  답장은 준 사람        — 문의는 아니지만 홍보 메일에 회신이 있었다
-#   C  아직 답이 없는 사람   — 보내기만 했고 돌아온 것이 없다
-CUSTOMER_GRADES = ("S", "A", "B", "C")
+#   B  답장은 준 사람        — 문의는 아니지만 사람이 쓴 회신이 왔다
+#   C  아직 답이 없는 사람   — 보내기만 했고 사람의 답은 돌아온 것이 없다
+CUSTOMER_GRADES = ("X", "S", "A", "B", "C")
 
-# 회신으로 치는 답장 종류. no_reply 는 말 그대로 답이 없는 것이고, invalid 는 죽은
-# 주소가 되돌아온 것이라 둘 다 회신이 아니다(그 둘은 C 로 떨어진다).
-_REPLIED_STATUSES = ("inquiry", "later", "auto_reply")
+# 회신으로 치는 답장 종류 — 사람이 읽고 쓴 답만 센다.
+#   no_reply   답이 없는 것
+#   invalid    죽은 주소가 되돌아온 것
+#   auto_reply 부재중 자동응답 — 서버가 보낸 것이라 사실상 답이 아니다
+# 셋 다 회신이 아니라서 C 로 떨어진다.
+_REPLIED_STATUSES = ("inquiry", "later")
 
 
 def customer_grades(s) -> dict[int, str]:
@@ -1190,12 +1195,33 @@ def customer_grades(s) -> dict[int, str]:
                   MarketingActivity.reply_status.in_(_REPLIED_STATUSES))
 
     out: dict[int, str] = {}
-    for (cid,) in s.query(Customer.id).all():
-        out[cid] = ("S" if cid in ordered
-                    else "A" if cid in inquired
-                    else "B" if cid in replied
-                    else "C")
+    for c in s.query(Customer).all():
+        out[c.id] = ("X" if customer_unreachable(c)
+                     else "S" if c.id in ordered
+                     else "A" if c.id in inquired
+                     else "B" if c.id in replied
+                     else "C")
     return out
+
+
+def customer_unreachable(c) -> bool:
+    """이 담당자에게 더는 메일이 닿지 않는가 — 등록된 주소가 **전부** 반송됐는가.
+
+    하나라도 성한 주소가 남아 있으면 닿는다. 주소를 둘 이상 적어 둔 사람이 그중 하나만
+    반송됐다고 '지울 대상'이 되면, 실제로는 연락이 되는 사람을 명부에서 밀어내게 된다.
+
+    반송 표시(bad_emails)는 주소를 지우지 않고 따로 쌓아 둔 것이라, 주소를 고쳐
+    emails 에서 빼면 교집합이 비어 이 판정도 저절로 풀린다.
+    """
+    def norm(v) -> str:
+        return str(v or "").strip().lower()
+
+    mails = {norm(m) for m in (getattr(c, "emails", None) or []) if norm(m)}
+    if not mails:
+        # 주소가 아예 없으면 '반송된 것'이 아니라 '적어 둔 것이 없는' 상태다.
+        return False
+    bad = {norm(b) for b in (getattr(c, "bad_emails", None) or []) if norm(b)}
+    return mails.issubset(bad)
 
 
 def customer_options(s) -> list[dict]:
@@ -1210,12 +1236,14 @@ def customer_options(s) -> list[dict]:
     out = []
     for c in s.query(Customer).order_by(Customer.name).all():
         bad = [str(x).strip() for x in (getattr(c, "bad_emails", None) or []) if str(x).strip()]
+        grade = grades.get(c.id, "C")
         out.append({"id": c.id, "name": c.name, "contact": c.contact or "",
                     "logo": getattr(c, "logo", None) or "",
                     "uses": uses.get(c.id, 0),
-                    "grade": grades.get(c.id, "C"),
-                    # 이 사람의 주소 중 하나라도 되돌아온 적이 있는가.
-                    "bounced": bool(bad)})
+                    "grade": grade,
+                    # 일부 주소만 반송된 경우의 꼬리표. 전부 죽은 건(X)은 등급이 이미
+                    # 그 말을 하므로 같은 말을 두 번 붙이지 않는다.
+                    "bounced": bool(bad) and grade != "X"})
     return out
 
 

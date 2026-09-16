@@ -35,8 +35,8 @@ export type RfqOverview = {
 // uses = 거래 빈도(받은 RFQ + 고객 P/O 건수). 드롭다운에서 자주 거래하는 고객사를
 // 위쪽 그룹으로 올리는 데 쓴다(CustomerSelect).
 /** 담당자 등급 — 이 사람과 무엇이 오갔는가. 서버가 매긴다(_core.customer_grades).
- *    S 거래까지 / A 문의를 줌 / B 답장은 줌 / C 아직 답이 없음 */
-export type CustomerGrade = "S" | "A" | "B" | "C";
+ *    X 닿지 않음(주소가 전부 반송) / S 거래까지 / A 문의를 줌 / B 답장은 줌 / C 답 없음 */
+export type CustomerGrade = "X" | "S" | "A" | "B" | "C";
 
 export type CustomerOption = {
   id: number;
