@@ -102,6 +102,9 @@ def ar_overview():
             pi = pi_by_order.get(r.order_id)
             rows.append({
                 "id": r.id,
+                # 본 청구(main) / 추가 청구(extra) — 한 오더에 청구서가 여럿일 때
+                # 어느 것이 본 계약 건인지 화면에서 가려 보여야 한다.
+                "kind": getattr(r, "kind", None) or "main",
                 "order_id": r.order_id,
                 "assignee_id": (rfq.created_by or 0) if rfq else 0,
                 "assignee": (user_names.get(rfq.created_by, "") or "") if rfq else "",
@@ -268,6 +271,8 @@ def create_ar(body: ARSave):
             bill_to_contact=body.bill_to_contact or "",
             bill_to_email=body.bill_to_email or "",
             bill_to_phone=body.bill_to_phone or "",
+            # 추가 청구서 — 본 계약과 별개로 끊는 두 번째 이후 청구서.
+            kind=(body.kind if body.kind in ("main", "extra") else "main"),
         )
         s.add(ar)
         s.commit()
@@ -286,6 +291,8 @@ def update_ar(ar_id: int, body: ARSave):
         if not s.query(Order).filter_by(id=body.order_id).first():
             raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
         ar.order_id = body.order_id
+        if body.kind in ("main", "extra"):
+            ar.kind = body.kind
         ar.ci_no = body.ci_no or ""
         ar.invoice_amount = body.invoice_amount or 0.0
         ar.paid_amount = body.paid_amount or 0.0

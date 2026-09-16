@@ -45,8 +45,8 @@ import {
 } from "@/components/common/itemTable";
 import { useItemGrid, ItemGridStyle, ItemTh, ItemColsButton, type ItemCol } from "@/components/common/itemGrid";
 import { useEditGate } from "@/lib/viewMode";
+import RecordStrip from "@/components/common/RecordStrip";
 import ClaimPanel from "@/components/screens/ClaimPanel";
-import ExtraChargePanel from "@/components/screens/ExtraChargePanel";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -149,7 +149,7 @@ export function ArOverview({
   /** 지급대장(Payables)에서 벤더 청구서 번호를 눌러 온 경우 — AP 탭을 그 P/O 로 연다. */
   initialApPoId?: number | null;
   /** 처음 열 문서 탭 — 클레임 대장에서 눌러 오면 "claim". 그 뒤엔 사용자의 선택이 우선. */
-  initialDocTab?: "ar" | "ap" | "claim" | "extra";
+  initialDocTab?: "ar" | "ap" | "claim";
   /** 상위(프로젝트 팝업)의 파이프라인 새로고침 — 단계 완료가 즉시 단계 칩에 반영되게 한다. */
   onChanged?: () => void;
 } = {}) {
@@ -160,7 +160,7 @@ export function ArOverview({
   );
   // 수취(AR, 고객 청구) / 지급(AP, 벤더 매입) / 클레임(납품 후 하자·상계) 문서 탭.
   // 지급대장에서 온 딥링크는 AP 로 연다.
-  const [docTab, setDocTab] = useState<"ar" | "ap" | "claim" | "extra">(
+  const [docTab, setDocTab] = useState<"ar" | "ap" | "claim">(
     initialDocTab ?? (initialApPoId ? "ap" : "ar")
   );
   const rows = useMemo(() => data?.rows ?? [], [data]);
@@ -202,7 +202,22 @@ export function ArOverview({
       </div>
     );
   }
-  const match = rows.find((r) => r.order_id === orderId);
+  // 한 오더에 청구서가 여럿일 수 있다 — 본 계약 건(main) 하나에, 일정 지연처럼 뒤늦게
+  // 생긴 사유로 끊는 추가 청구(extra)가 붙는다. 번호 순(= 끊은 순)으로 세운다.
+  const orderArs = useMemo(
+    () => rows.filter((r) => r.order_id === orderId).sort((a, b) => a.id - b.id),
+    [rows, orderId]
+  );
+  const [selArId, setSelArId] = useState<number | null>(null);
+  const [addingAr, setAddingAr] = useState(false);
+  // 목록이 바뀌어도 보던 청구서를 계속 본다(저장 뒤 새 목록에서도 같은 건).
+  useEffect(() => {
+    if (addingAr) return;
+    setSelArId((cur) => (cur != null && orderArs.some((r) => r.id === cur) ? cur : orderArs[0]?.id ?? null));
+  }, [orderArs, addingAr]);
+  const match = addingAr ? undefined : orderArs.find((r) => r.id === selArId) ?? orderArs[0];
+  // 화면의 다른 곳(클레임·담당자 판정)은 본 청구서를 기준으로 삼는다.
+  const mainAr = orderArs.find((r) => (r.kind ?? "main") !== "extra") ?? orderArs[0];
   // 9~11단계 모두 같은 대금청구서 편집기(ArAddForm)를 본문으로 쓴다 — P/O 간·단계 간 화면 일관성.
   // 레코드가 없으면 생성 폼, 있으면 편집 폼. 10·11단계는 그 아래 발행/수금 완료 바(MilestoneBar)를 덧붙인다.
   // AR(수취) 옆에 AP(지급, 벤더 매입) 탭 — 각 벤더 P/O 의 대금청구서·전자세금계산서를 입력.
@@ -220,17 +235,57 @@ export function ArOverview({
         <button className={docTab === "claim" ? "on" : ""} onClick={() => setDocTab("claim")}>
           Claim · Credit Note
         </button>
-        {/* 추가비용 — 본 계약과 별개로 뒤늦게 붙은 비용. 클레임의 거울상이라 그 옆에 둔다
-            (클레임은 우리가 깎아 주는 쪽, 이쪽은 우리가 더 받는 쪽). 이 탭 하나에
-            공급사 견적·우리 승인과 우리 견적·고객 승인이 함께 서므로 마진이 보인다. */}
-        <button className={docTab === "extra" ? "on" : ""} onClick={() => setDocTab("extra")}>
-          Extra charge
-        </button>
       </div>
 
       {docTab === "ar" ? (
         <>
-          <ArAddForm key={match?.id ?? `new-${orderId}`} options={options ?? null} fallbackOrderId={orderId} existing={match} onChanged={load} />
+          {/* 청구서가 둘 이상이거나 새로 끊는 중일 때만 스트립을 세운다 — 한 건뿐인
+              대부분의 딜에서 줄만 늘리지 않도록. 3·4단계의 견적 스트립과 같은 모양이다. */}
+          {orderArs.length > 1 || addingAr ? (
+            <div className="embedded-record-bar ar-inv-bar pane-row">
+              <span className="wp-po-picker-label">Invoice</span>
+              <RecordStrip ariaLabel="Invoices" activeKey={addingAr ? -1 : match?.id ?? 0}>
+                {orderArs.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    className={!addingAr && r.id === match?.id ? "on" : ""}
+                    onClick={() => { setAddingAr(false); setSelArId(r.id); }}
+                  >
+                    {r.invoice_no || r.ci_no || `INV ${r.id}`}
+                    {(r.kind ?? "main") === "extra" ? " · Extra" : ""}
+                  </button>
+                ))}
+                {addingAr ? <button type="button" className="on">New · Extra</button> : null}
+              </RecordStrip>
+              {addingAr ? (
+                <button type="button" className="btn sm" style={{ marginLeft: "auto" }}
+                        onClick={() => setAddingAr(false)}>Cancel</button>
+              ) : null}
+            </div>
+          ) : null}
+          {/* 추가 청구서 — 일정 지연 등으로 본 계약과 별개로 끊는 두 번째 이후 청구서.
+              단계 판정에서는 빠지므로(_deal_progress) 이미 완료된 딜에도 끊을 수 있다. */}
+          {!addingAr && orderArs.length ? (
+            <div className="ar-add-extra">
+              <button type="button" className="btn sm" onClick={() => setAddingAr(true)}>
+                ＋ Additional invoice
+              </button>
+              <span className="hint-inline">
+                For costs billed separately from the contract — e.g. flight change or visa fees from a delay.
+              </span>
+            </div>
+          ) : null}
+          <ArAddForm
+            key={addingAr ? `new-extra-${orderId}` : match?.id ?? `new-${orderId}`}
+            options={options ?? null}
+            fallbackOrderId={orderId}
+            existing={addingAr ? undefined : match}
+            // 이미 본 청구서가 있는데 또 끊는다면 그것은 추가 청구다.
+            newKind={addingAr ? "extra" : "main"}
+            onCreated={(id) => { setAddingAr(false); setSelArId(id); }}
+            onChanged={load}
+          />
           {/* key = AR 레코드 id — P/O 를 바꾸면 완료 바의 입력값(수금액·일자)도 그 청구서 것으로
               다시 채워진다. key 가 없으면 앞서 보던 P/O 의 금액이 그대로 남아 엉뚱한 청구서에
               저장된다(P/O A 금액이 B 에 기록되던 원인). */}
@@ -244,10 +299,8 @@ export function ArOverview({
         </>
       ) : docTab === "ap" ? (
         <ApSection orderId={orderId} stage={stageTab} focusPoId={initialApPoId ?? null} onChanged={load} />
-      ) : docTab === "extra" ? (
-        <ExtraChargePanel orderId={orderId} assigneeId={match?.assignee_id ?? 0} onChanged={load} />
       ) : (
-        <ClaimPanel orderId={orderId} assigneeId={match?.assignee_id ?? 0} onChanged={load} />
+        <ClaimPanel orderId={orderId} assigneeId={mainAr?.assignee_id ?? 0} onChanged={load} />
       )}
     </div>
   );
@@ -1183,12 +1236,18 @@ function ArAddForm({
   options,
   fallbackOrderId,
   existing,
+  newKind = "main",
+  onCreated,
   onChanged,
 }: {
   options: PoWorkOptions | null;
   fallbackOrderId: number | null;
   // 주면 그 AR 레코드를 편집(수정). 없으면 신규 생성.
   existing?: ArRow;
+  /** 새로 끊는 청구서의 종류 — 본 계약 건이면 main, 추가비용 건이면 extra. */
+  newKind?: "main" | "extra";
+  /** 새 청구서를 만든 직후 그 id — 목록이 다시 오기 전에 그 건을 고르게 한다. */
+  onCreated?: (id: number) => void;
   onChanged: () => void;
 }) {
   const editing = !!existing;
@@ -1293,7 +1352,10 @@ function ArAddForm({
         bill_to_phone: form.bill_to_phone,
       };
       if (editing) await updateArRecord(form.id, { ...body, paid_amount: form.paid_amount, status: form.status, notes: form.notes });
-      else await createArRecord(body);
+      else {
+        const r = await createArRecord({ ...body, kind: newKind });
+        onCreated?.(r.id);
+      }
       onChanged();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
@@ -1323,6 +1385,27 @@ function ArAddForm({
   const loadLabel = ciItems.length ? "Load CI" : piItems.length ? "Load PI" : "Load P/O";
   const loadSource = () => { setItems(loadItems.map((it) => ({ ...it }))); sel.clear(); };
   const loadDisabled = loadItems.length === 0;
+  // 이 딜(프로젝트)의 고객 견적들 — 추가비용 견적도 4단계에 함께 서 있다. 추가 청구서를
+  // 끊을 때 그 견적의 품목을 그대로 끌어오면 같은 값을 두 번 적지 않는다.
+  const dealQuotes = (() => {
+    const order = (options?.orders ?? []).find((o) => o.id === form.order_id);
+    if (!order) return [];
+    return (options?.quotations ?? []).filter((q) => q.rfq_id === order.rfq_id);
+  })();
+  const loadQuote = (qtnId: number) => {
+    const q = dealQuotes.find((x) => x.id === qtnId);
+    if (!q) return;
+    setItems((q.items ?? []).map((it) => ({
+      description: String(it.description ?? ""),
+      part_no: String(it.part_no ?? ""),
+      qty: num(it.qty),
+      unit_price: num(it.unit_price),
+      amount: num(it.amount),
+    } as TaxInvoiceItem)));
+    // 견적 통화가 청구 통화와 다를 이유가 없다 — 끌어온 견적의 통화를 따라간다.
+    if (q.currency) setForm((f) => ({ ...f, currency: q.currency }));
+    sel.clear();
+  };
   // Cancel — 편집 중이면 저장된 값으로, 신규면 빈 폼으로 되돌린다(오더 선택은 유지).
   const cancel = () => {
     if (existing) { setForm(arRowToForm(existing)); setInvMode("manual"); }
@@ -1452,6 +1535,23 @@ function ArAddForm({
           <ExcludedCountNote items={form.items} />
           <div className="items-head-actions">
             <button type="button" className="btn sm" onClick={loadSource} disabled={loadDisabled}>{loadLabel}</button>
+            {/* 추가 청구서의 품목은 대개 4단계에 이미 적어 둔 추가 견적에 그대로 있다 —
+                같은 값을 두 번 적지 않도록 그 견적에서 끌어온다. */}
+            {dealQuotes.length ? (
+              <select
+                className="ar-load-quote"
+                value=""
+                onChange={(e) => { if (e.target.value) loadQuote(Number(e.target.value)); }}
+                title="Copy the item lines from one of this deal's quotations"
+              >
+                <option value="">Load quote…</option>
+                {dealQuotes.map((q) => (
+                  <option key={q.id} value={q.id}>
+                    {q.qtn_no || `Quote ${q.id}`} · {q.currency} {Math.round(q.amount).toLocaleString()}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             <ItemColsButton grid={grid} />
             <ExcludeSelectedButton items={form.items} sel={sel} onChange={setItems} />
             <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(form.items, sel, setItems)} />

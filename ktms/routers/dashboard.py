@@ -5,7 +5,6 @@ from sqlalchemy.orm import defer
 
 from _core import (
     ARRecord,
-    APRecord,
     ARStatus,
     CommercialInvoice,
     TaxInvoiceData,
@@ -158,18 +157,11 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
         # 추가비용 청구는 단계 판정에서 빠져 있어(_deal_progress) 딜이 '수금 완료'로 남는데,
         # 그 채로 목록에 아무 표시가 없으면 끝난 딜 안에 받을 돈이 조용히 숨는다.
         extra_ar: dict[int, float] = {}
-        extra_ap: dict[int, float] = {}
         for a in s.query(ARRecord).filter(ARRecord.kind == "extra").all():
             v = _ar_outstanding(a)
             if v > 0:
                 cur = (a.currency or "USD").upper()
                 extra_ar[a.order_id] = extra_ar.get(a.order_id, 0.0) + (
-                    v / USD_KRW_RATE if cur == "KRW" else v)
-        for a in s.query(APRecord).filter(APRecord.kind == "extra").all():
-            v = round((a.invoice_amount or 0) - (a.paid_amount or 0), 2)
-            if v > 0:
-                cur = (a.currency or "KRW").upper()
-                extra_ap[a.order_id] = extra_ap.get(a.order_id, 0.0) + (
                     v / USD_KRW_RATE if cur == "KRW" else v)
 
         q = s.query(RFQ).order_by(RFQ.id.desc())
@@ -332,7 +324,6 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 order_amount = ""
             # 추가비용 잔액(USD 환산) — 0 이면 프런트가 배지를 그리지 않는다.
             _eo_ar = round(sum(extra_ar.get(oo.id, 0.0) for oo in orders_all), 2)
-            _eo_ap = round(sum(extra_ap.get(oo.id, 0.0) for oo in orders_all), 2)
 
             # ── 프로젝트 정보(사이드바) 집계 ─────────────────────────────────────
             # 한 프로젝트에 고객 P/O(오더)가 여러 건이면 선박·고객 PO No.는 목록으로,
@@ -464,9 +455,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "customer_po_nos": customer_po_nos_disp, # 고객 P/O No. 목록(줄바꿈)
                 # 딜 총액(고객 P/O 여러 건 합산) — PO 이후 단계 카드 금액에 사용.
                 "order_amount": order_amount,
-                # 추가비용 잔액(USD 환산). 단계는 이미 완료여도 이 돈은 남아 있다.
+                # 추가 청구의 미수(USD 환산). 단계는 이미 완료여도 이 돈은 남아 있다.
                 "extra_ar_outstanding": _eo_ar,
-                "extra_ap_outstanding": _eo_ap,
                 # 5~6 PO 체인
                 "customer_po_no": (o.po_no if o else "") or "",
                 "customer_po_at": _kst(o.created_at) if o else "",

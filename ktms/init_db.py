@@ -207,16 +207,13 @@ _MIGRATIONS = {
         "bank_fee":        "FLOAT DEFAULT 0",
         # 크레딧 노트로 깎아 준 금액(청구서 통화). 받을 돈 = 청구액 - 수금액 - 이 값.
         "credit_amount":   "FLOAT DEFAULT 0",
-        # 본 청구(main)인가 추가비용 청구(extra)인가. 기존 행은 전부 본 청구다.
+        # 본 계약 청구(main)인가 추가비용 청구(extra)인가. 기존 행은 전부 본 계약 건이다.
         "kind":            "VARCHAR(10) DEFAULT 'main'",
-        "extra_id":        "INTEGER",
     },
     "ap_records": {
         "charges":         "JSON",
         # 실제 지급일 — 지급 등록으로 잔액이 0이 된 날(예정일 due_date 와 다를 수 있다).
         "paid_date":       "VARCHAR(10)",
-        "kind":            "VARCHAR(10) DEFAULT 'main'",
-        "extra_id":        "INTEGER",
     },
     "finance_payables": {
         # 실제 납부일 {회차일: 납부일} — 예정일과 다른 날 납부한 경우를 남긴다.
@@ -292,7 +289,6 @@ def migrate_relax_not_null():
     신규 DB는 모델에서 이미 nullable 이라 ALTER 가 필요 없다."""
     engine = get_engine()
     insp = inspect(engine)
-    # ap_records.po_id — 추가비용(kind="extra")의 매입은 벤더 P/O 없이 서므로 NULL 이 된다.
     targets = [("quotations", "qtn_no"), ("ap_records", "po_id")]
     with engine.begin() as conn:
         for table, col in targets:
@@ -315,7 +311,12 @@ def migrate_drop_columns():
     Postgres 는 DROP COLUMN 이 제약까지 함께 제거한다. SQLite 는 best-effort."""
     engine = get_engine()
     insp = inspect(engine)
-    targets = [("orders", "ord_no"), ("vendor_rfqs", "vrfq_no")]
+    # ar_records.extra_id / ap_records.kind·extra_id — 추가비용을 별도 테이블로 두려던
+    # 흔적. 추가 청구는 AR 레코드 한 건(kind="extra")으로 충분하고, 벤더측 추가 지급은
+    # FinancePayable(DirectPaymentPanel)이 이미 맡고 있어 이 칸들은 쓰이지 않는다.
+    targets = [("orders", "ord_no"), ("vendor_rfqs", "vrfq_no"),
+               ("ar_records", "extra_id"), ("ap_records", "extra_id"),
+               ("ap_records", "kind")]
     with engine.begin() as conn:
         for table, col in targets:
             if not insp.has_table(table):
@@ -327,6 +328,29 @@ def migrate_drop_columns():
                 print(f"[OK] {table}.{col} dropped.")
             except Exception as e:  # noqa: BLE001
                 print(f"[WARN] {table}.{col} drop skipped: {e}")
+
+
+def migrate_drop_extra_charges():
+    """추가비용을 별도 테이블로 두려던 흔적을 거둔다. 멱등(이미 없으면 건너뜀).
+
+    추가비용의 견적은 3·4단계에 이미 한 건 더 세우면 되고(그 화면이 원래 여러 건을
+    받는다), 그 청구서는 9단계의 AR 레코드 한 건(kind="extra")이면 된다. 벤더측 추가
+    지급은 FinancePayable(AP 탭의 DirectPaymentPanel)이 이미 맡고 있다. 남길 이유가
+    없는 빈 테이블이라 지운다 — 한 줄도 쓰인 적이 없다.
+    """
+    engine = get_engine()
+    insp = inspect(engine)
+    if not insp.has_table("extra_charges"):
+        print("[SKIP] extra_charges (already gone).")
+        return
+    with engine.begin() as conn:
+        n = conn.execute(text("SELECT count(*) FROM extra_charges")).scalar() or 0
+        if n:
+            # 값이 들어 있으면 지우지 않는다 — 사람이 적은 것을 코드가 조용히 버리면 안 된다.
+            print(f"[WARN] extra_charges has {n} rows — left in place.")
+            return
+        conn.execute(text("DROP TABLE extra_charges"))
+        print("[OK] extra_charges dropped (was empty).")
 
 
 def migrate_rfq_numbers():
@@ -1513,6 +1537,8 @@ if __name__ == "__main__":
     migrate_columns()
     migrate_relax_not_null()
     migrate_drop_columns()
+    # 컬럼을 먼저 떼고 테이블을 지운다(FK 가 걸려 있던 순서 그대로).
+    migrate_drop_extra_charges()
     migrate_rfq_numbers()
     migrate_quotation_numbers()
     migrate_remove_stage_8()

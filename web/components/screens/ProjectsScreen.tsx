@@ -1828,19 +1828,13 @@ function BoardCard({
         // 추가비용 잔액 — 단계 판정에서 빠져 있어 딜은 '수금 완료'로 남는다. 그래서
         // 여기 표시가 없으면 끝난 딜 안에 받을 돈·줄 돈이 조용히 숨는다.
         const ar = r.extra_ar_outstanding ?? 0;
-        const ap = r.extra_ap_outstanding ?? 0;
-        if (!amount && ar <= 0 && ap <= 0) return null;
+        if (!amount && ar <= 0) return null;
         return (
           <div className="pl-card-amt-row">
             {amount ? <div className="pl-card-amt" title={amount}>{amount}</div> : null}
             {ar > 0 ? (
               <span className="pl-extra-badge" title="Extra charge still unpaid by the customer">
                 +USD {Math.round(ar).toLocaleString()}
-              </span>
-            ) : null}
-            {ap > 0 ? (
-              <span className="pl-extra-badge pay" title="Extra cost we still owe the vendor">
-                −USD {Math.round(ap).toLocaleString()}
               </span>
             ) : null}
           </div>

@@ -84,7 +84,7 @@ from db.models import (
     PackingList, TaxInvoiceData, ARRecord, APRecord, DeliveryProof,
     RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity, ScheduleEvent,
     MarketingAsset, FinancePayable, FinanceIncome, Consultant, Maker,
-    Claim, CreditNote, ExtraCharge,
+    Claim, CreditNote,
 )
 
 # ── App / CORS ────────────────────────────────────────────────────────────────
@@ -1978,6 +1978,9 @@ class ARSave(BaseModel):
     bill_to_contact: str | None = None
     bill_to_email: str | None = None
     bill_to_phone: str | None = None
+    # 본 청구(main) / 추가 청구(extra). 추가 청구는 일정 지연 같은 사유로 본 계약과
+    # 별개로 끊는 두 번째 청구서다 — 파이프라인 단계 판정에서는 빠진다(_deal_progress).
+    kind: str | None = None
 
 
 class APSave(BaseModel):
@@ -2046,44 +2049,6 @@ CLAIM_COST_KINDS = ["labor", "parts", "freight", "inspection", "other"]
 CLAIM_BEARERS = ["us", "customer", "vendor", "shared"]
 CLAIM_SETTLEMENTS = ["credit_note", "cash", "vendor_ap", "none"]
 CLAIM_STATUSES = ["open", "settled", "closed"]
-
-
-class ExtraChargeSave(BaseModel):
-    """추가비용 한 건 — 사건 + 벤더측(매입) + 고객측(매출)을 한 본문에 담는다.
-
-    양쪽 승인일(vendor_approved_date / approved_date)이 곧 스위치다. 값이 들어오면
-    그 쪽의 청구 레코드(APRecord / ARRecord)를 만들고, 비워 보내면 되돌린다.
-    금액(vendor_amount / amount)을 비워 보내면 품목 합으로 채운다.
-    """
-    rfq_id: int | None = None
-    order_id: int | None = None
-    title: str | None = ""
-    reason: str | None = "schedule_delay"
-    occurred_date: str | None = ""
-    timing: str | None = "before"
-    description: str | None = ""
-    status: str | None = "draft"
-    # ── 벤더측 ──────────────────────────────────────────────────────────
-    vendor_id: int | None = None
-    vendor_quote_no: str | None = ""
-    vendor_quote_date: str | None = ""
-    vendor_currency: str | None = "KRW"
-    vendor_items: list[dict] | None = None
-    vendor_amount: float | None = None
-    vendor_approved_date: str | None = ""
-    # ── 고객측 ──────────────────────────────────────────────────────────
-    quote_no: str | None = ""
-    quote_date: str | None = ""
-    valid_until: str | None = ""
-    currency: str | None = "USD"
-    fx_rate: float | None = None
-    items: list[dict] | None = None
-    amount: float | None = None
-    vat_rate: float | None = None
-    sent_date: str | None = ""
-    approved_date: str | None = ""
-    approved_ref: str | None = ""
-    notes: str | None = ""
 
 
 class ClaimSave(BaseModel):
