@@ -784,13 +784,14 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
         # 본 청구만 센다. 추가비용 청구(kind="extra")를 섞으면 두 군데가 무너진다 —
         # ar_billed 가 추가 청구 하나로 True 가 되어 9단계가 앞서 초록이 되고,
         # ar_paid 는 any() 라 추가 건만 완납돼도 11단계가 완료로 보인다.
-        # 추가비용은 파이프라인이 아니라 9단계 Extra charge 탭과 미수 대장에서 본다.
+        # 추가 청구는 파이프라인이 아니라 9단계 AR 탭의 청구서 스트립과 미수 대장에서 본다.
         ars = (s.query(ARRecord).filter_by(order_id=order.id)
                .filter(ARRecord.kind != "extra").all())
         # 매입측(AP) — 벤더 P/O 1건 = AP 1건. 9~11단계는 매출(AR)만이 아니라 이 매입까지
         # 끝나야 완료로 본다(벤더 청구서 수취·세금계산서 수취·지급).
-        aps = (s.query(APRecord).filter_by(order_id=order.id)
-               .filter(APRecord.kind != "extra").all())
+        # AR 과 달리 가릴 것이 없다 — P/O 없이 나간 추가 지급은 여기가 아니라
+        # FinancePayable(DirectPaymentPanel)에 서므로 이 목록에 섞이지 않는다.
+        aps = s.query(APRecord).filter_by(order_id=order.id).all()
         pod = (s.query(DeliveryProof).filter_by(order_id=order.id)
                .order_by(DeliveryProof.created_at.asc()).first())
     else:
