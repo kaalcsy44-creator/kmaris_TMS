@@ -241,9 +241,13 @@ export function ArOverview({
       {docTab === "ar" ? (
         <>
           {/* 청구서가 둘 이상이거나 새로 끊는 중일 때만 스트립을 세운다 — 한 건뿐인
-              대부분의 딜에서 줄만 늘리지 않도록. 3·4단계의 견적 스트립과 같은 모양이다. */}
+              대부분의 딜에서 줄만 늘리지 않도록.
+              .pane-row 를 쓰지 않는다. 그 클래스는 "탭 행 위에 붙는 번호 행"의 자리라
+              (z 6, sticky top) 굴리면 탭을 넘어 위로 올라가 앉는다 — 청구서 스트립이
+              AR/AP/Claim 탭보다 위에 서면 탭이 청구서에 딸린 것처럼 읽힌다. 실제로는
+              반대다: 이 스트립은 AR 탭 하나에만 딸린 것이라 탭 아래에 있어야 한다. */}
           {orderArs.length > 1 || addingAr ? (
-            <div className="embedded-record-bar ar-inv-bar pane-row">
+            <div className="embedded-record-bar ar-inv-bar">
               <span className="wp-po-picker-label">Invoice</span>
               <RecordStrip ariaLabel="Invoices" activeKey={addingAr ? -1 : match?.id ?? 0}>
                 {orderArs.map((r) => (
