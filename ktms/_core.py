@@ -1158,14 +1158,65 @@ def customer_usage_counts(s) -> dict[int, int]:
     return counts
 
 
+# 담당자 등급 — 이 사람과 우리 사이에 무엇이 오갔는가. 위에서부터 먼저 잡힌다.
+#   S  거래까지 간 사람      — 고객 P/O 를 준 적이 있다
+#   A  문의를 준 사람        — RFQ 가 들어왔다(견적은 대개 그에 딸려 나간다)
+#   B  답장은 준 사람        — 문의는 아니지만 홍보 메일에 회신이 있었다
+#   C  아직 답이 없는 사람   — 보내기만 했고 돌아온 것이 없다
+CUSTOMER_GRADES = ("S", "A", "B", "C")
+
+# 회신으로 치는 답장 종류. no_reply 는 말 그대로 답이 없는 것이고, invalid 는 죽은
+# 주소가 되돌아온 것이라 둘 다 회신이 아니다(그 둘은 C 로 떨어진다).
+_REPLIED_STATUSES = ("inquiry", "later", "auto_reply")
+
+
+def customer_grades(s) -> dict[int, str]:
+    """담당자(고객 레코드)별 등급 {customer_id: "S"|"A"|"B"|"C"}.
+
+    등급은 사람에게 매긴다 — 이 명부는 레코드 1건 = 담당자 1명이고, 같은 회사라도
+    문의를 주는 사람과 한 번도 답이 없는 사람이 따로 있기 때문이다.
+
+    A 를 "문의"로 잡고 견적 발행 여부는 따지지 않는다. 문의가 들어왔는데 우리가 아직
+    견적을 못 낸 건은 그 사람 탓이 아니고, 그렇다고 B(답장만 준 사람)로 내리면 실제
+    문의를 준 사람이 홍보 메일에 한 줄 답한 사람보다 아래에 서게 된다.
+    """
+    def ids(model, *filters):
+        q = s.query(model.customer_id).filter(model.customer_id.isnot(None), *filters)
+        return {cid for (cid,) in q.distinct().all()}
+
+    ordered = ids(Order)
+    inquired = ids(RFQ)
+    replied = ids(MarketingActivity,
+                  MarketingActivity.reply_status.in_(_REPLIED_STATUSES))
+
+    out: dict[int, str] = {}
+    for (cid,) in s.query(Customer.id).all():
+        out[cid] = ("S" if cid in ordered
+                    else "A" if cid in inquired
+                    else "B" if cid in replied
+                    else "C")
+    return out
+
+
 def customer_options(s) -> list[dict]:
-    """드롭다운용 고객 마스터 — 이름순 + 거래 빈도(uses). 정렬(자주 거래 우선)은
-    uses 를 보고 화면(CustomerSelect)에서 그룹으로 나눠 처리한다."""
+    """드롭다운용 고객 마스터 — 이름순 + 거래 빈도(uses) + 등급 + 반송 표시.
+
+    정렬(자주 거래 우선)은 uses 를 보고 화면(CustomerSelect)에서 그룹으로 나눠 처리한다.
+    등급·반송은 고르기 전에 보여야 쓸모가 있다 — 반송된 주소인 줄 모르고 골라 담았다가
+    수신자 목록에서야 알게 되면, 그때는 이미 지우고 다시 고르는 일이 된다.
+    """
     uses = customer_usage_counts(s)
-    return [{"id": c.id, "name": c.name, "contact": c.contact or "",
-             "logo": getattr(c, "logo", None) or "",
-             "uses": uses.get(c.id, 0)}
-            for c in s.query(Customer).order_by(Customer.name).all()]
+    grades = customer_grades(s)
+    out = []
+    for c in s.query(Customer).order_by(Customer.name).all():
+        bad = [str(x).strip() for x in (getattr(c, "bad_emails", None) or []) if str(x).strip()]
+        out.append({"id": c.id, "name": c.name, "contact": c.contact or "",
+                    "logo": getattr(c, "logo", None) or "",
+                    "uses": uses.get(c.id, 0),
+                    "grade": grades.get(c.id, "C"),
+                    # 이 사람의 주소 중 하나라도 되돌아온 적이 있는가.
+                    "bounced": bool(bad)})
+    return out
 
 
 def _vrfq_sent_iso(v) -> str:

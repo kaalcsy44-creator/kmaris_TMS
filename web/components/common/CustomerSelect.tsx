@@ -5,10 +5,18 @@
 // overflow 클리핑을 피하려고 메뉴는 body 로 portal + position:fixed 로 띄운다.
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { CustomerOption } from "@/lib/types";
+import type { CustomerOption, CustomerGrade } from "@/lib/types";
 import { useCustomerLogo } from "@/lib/customerLogos";
 
 type MenuPos = { left: number; width: number; top?: number; bottom?: number };
+
+/** 등급이 무엇을 뜻하는지 — 배지는 글자 한 자뿐이라 뜻은 툴팁이 진다. */
+const GRADE_HINT: Record<CustomerGrade, string> = {
+  S: "Ordered before — this contact has given us a P/O",
+  A: "Sent an inquiry (RFQ)",
+  B: "Replied to our mail, but no inquiry yet",
+  C: "No reply yet",
+};
 
 // 상단 "Frequent" 그룹에 올릴 최대 고객 수(VendorSelect 와 같은 규칙).
 // 너무 길면 "위쪽 = 자주 쓰는 것" 이라는 이점이 사라진다.
@@ -151,6 +159,18 @@ export default function CustomerSelect({
         <span className="cust-name-text">{c.name}</span>
         {showContact ? (
           <span className="cust-opt-contact">{c.contact?.trim() || "(no contact)"}</span>
+        ) : null}
+        {/* 등급과 반송은 줄 끝에 모아 둔다 — 이름을 읽는 눈을 막지 않으면서, 고르기
+            전에 "이 사람이 어떤 사람인지"가 같은 자리에서 보이게. */}
+        {c.grade ? (
+          <span className={`cust-grade g-${c.grade}`} title={GRADE_HINT[c.grade]}>
+            {c.grade}
+          </span>
+        ) : null}
+        {c.bounced ? (
+          <span className="cust-bounced" title="A mail to this contact came back — address may be dead">
+            ✉︎!
+          </span>
         ) : null}
       </span>
     );

@@ -34,7 +34,20 @@ export type RfqOverview = {
 
 // uses = 거래 빈도(받은 RFQ + 고객 P/O 건수). 드롭다운에서 자주 거래하는 고객사를
 // 위쪽 그룹으로 올리는 데 쓴다(CustomerSelect).
-export type CustomerOption = { id: number; name: string; contact?: string; logo?: string; uses?: number };
+/** 담당자 등급 — 이 사람과 무엇이 오갔는가. 서버가 매긴다(_core.customer_grades).
+ *    S 거래까지 / A 문의를 줌 / B 답장은 줌 / C 아직 답이 없음 */
+export type CustomerGrade = "S" | "A" | "B" | "C";
+
+export type CustomerOption = {
+  id: number;
+  name: string;
+  contact?: string;
+  logo?: string;
+  uses?: number;
+  grade?: CustomerGrade;
+  /** 이 사람의 주소 중 하나라도 반송된 적이 있는가(고르기 전에 보여야 한다). */
+  bounced?: boolean;
+};
 
 // 레코드 1건 = 담당자 1명(person-centric). 이메일·연락처·지역은 여러 개 등록 가능하며
 // 각 리스트의 첫 값(대표)이 flat contact 필드로 미러링돼 문서·메일에 쓰인다.
