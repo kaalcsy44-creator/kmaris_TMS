@@ -76,7 +76,10 @@ def ar_overview():
                 lst.append(nm)
         # 매입(AP) 진행 — 9~11단계는 매출(AR)·매입(AP) 양쪽이 끝나야 완료라, 화면에서
         # "AR 은 끝났는데 왜 단계가 안 넘어가지?" 를 알 수 있게 벤더측 진척을 함께 내려보낸다.
-        ap_by_po = {a.po_id: a for a in s.query(APRecord).all()}
+        # 본 매입만 — 추가 매입(kind="extra")은 P/O 가 없어 이 표의 키가 되지 못하고,
+        # 단계 완료 판정(_ap_progress)에도 들어가서는 안 된다.
+        ap_by_po = {a.po_id: a for a in s.query(APRecord).all()
+                    if a.po_id and (getattr(a, "kind", None) or "main") != "extra"}
         today_str = date.today().isoformat()
 
         rows = []

@@ -1175,6 +1175,8 @@ export type ArData = {
 
 /** 매입 청구(AP) 레코드 — ARRecord 의 매입측 대응. 벤더 P/O 1건에 1:1. */
 export type ApRow = {
+  /** 본 매입(main) / 추가 매입(extra). */
+  kind?: "main" | "extra";
   id: number;
   po_id: number;
   order_id: number;
@@ -1202,7 +1204,10 @@ export type ApRow = {
 
 /** AP 탭의 벤더 P/O 1행 — 선택기 + (있으면) 그 P/O 의 AP 레코드. */
 export type ApByOrderRow = {
+  /** 벤더 P/O id. 추가 매입(발주 없이 받은 청구)은 0. */
   po_id: number;
+  /** 추가 매입 줄일 때 그 AP 레코드 id — 발주가 없어 po_id 로는 줄을 가릴 수 없다. */
+  ap_id?: number;
   po_no: string;
   vendor_id: number | null;
   vendor: string;
@@ -1214,7 +1219,10 @@ export type ApByOrderRow = {
 
 /** AP 저장 바디(부분 저장 허용). */
 export type ApSave = {
+  /** 벤더 P/O id. 추가 매입은 0(서버가 NULL 로 받는다). */
   po_id: number;
+  /** 본 매입(main) / 추가 매입(extra). 생략하면 po_id 유무로 서버가 정한다. */
+  kind?: "main" | "extra";
   order_id: number;
   vendor_id?: number | null;
   bill_no?: string;

@@ -791,7 +791,10 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
         # 끝나야 완료로 본다(벤더 청구서 수취·세금계산서 수취·지급).
         # AR 과 달리 가릴 것이 없다 — P/O 없이 나간 추가 지급은 여기가 아니라
         # FinancePayable(DirectPaymentPanel)에 서므로 이 목록에 섞이지 않는다.
-        aps = s.query(APRecord).filter_by(order_id=order.id).all()
+        # 본 매입만 센다 — 추가 매입(kind="extra")은 P/O 가 없어 아래 _ap_by_po 조회에
+        # 걸리지 않지만, 뜻을 코드로 못박아 둔다(AR 쪽과 같은 규칙).
+        aps = (s.query(APRecord).filter_by(order_id=order.id)
+               .filter((APRecord.kind == None) | (APRecord.kind != "extra")).all())  # noqa: E711
         pod = (s.query(DeliveryProof).filter_by(order_id=order.id)
                .order_by(DeliveryProof.created_at.asc()).first())
     else:
@@ -1985,8 +1988,13 @@ class ARSave(BaseModel):
 
 
 class APSave(BaseModel):
-    """매입 청구(AP) 저장 — ARSave 의 매입측 대응. 각 행은 하나의 vendor P/O(po_id)."""
-    po_id: int
+    """매입 청구(AP) 저장 — ARSave 의 매입측 대응. 한 행 = 벤더 P/O 하나에 대한 지급 의무.
+
+    추가 매입(kind="extra")만 po_id 없이 선다 — 일정 지연처럼 본 발주와 별개인 비용은
+    보조 P/O 를 끊으면 이미 끝난 단계가 되돌아가므로(APRecord.po_id 주석) P/O 를 비운다.
+    그때는 vendor_id 로 공급사를 직접 고른다."""
+    po_id: int | None = None
+    kind: str | None = None
     order_id: int
     vendor_id: int | None = None
     bill_no: str | None = ""

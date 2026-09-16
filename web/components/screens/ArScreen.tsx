@@ -14,6 +14,7 @@ import {
   updateArRecord,
   fetchApByOrder,
   createApRecord,
+  fetchRfqVendorQuotes,
   updateApRecord,
   deleteApRecord,
   fetchDealPayables,
@@ -28,6 +29,7 @@ import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type { ApByOrderRow, ArRow, DocCharges, DocumentDetail, DocumentWorkItem, FinancePayable, PoWorkOptions, TaxInvoiceItem } from "@/lib/types";
 import { createPortal } from "react-dom";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
+import VendorSelect from "@/components/common/VendorSelect";
 import {
   useRowSelection,
   deleteSelectedRows,
@@ -327,7 +329,10 @@ function ApSection({
 }) {
   const cacheKey = `ap:by-order:${orderId}`;
   const { data, error, refresh } = useCachedData(cacheKey, () => fetchApByOrder(orderId));
+  // 고른 줄의 열쇠 — 벤더 P/O 는 po_id, 추가 매입은 P/O 가 없으므로 -ap_id 로 구분한다.
+  const keyOf = (r: ApByOrderRow) => (r.po_id ? r.po_id : -(r.ap_id ?? 0));
   const [selPo, setSelPo] = useState<number | null>(focusPoId);
+  const [addingExtra, setAddingExtra] = useState(false);
   const poRows = useMemo(() => data?.rows ?? [], [data]);
 
   // 딥링크로 지정된 P/O 가 이 오더에 있으면 그 건을 연다(그 뒤엔 사용자의 선택이 우선).
@@ -336,10 +341,11 @@ function ApSection({
   }, [focusPoId, poRows]);
 
   useEffect(() => {
-    if (poRows.length && (selPo == null || !poRows.some((r) => r.po_id === selPo))) {
-      setSelPo(poRows[0].po_id);
+    if (addingExtra) return;
+    if (poRows.length && (selPo == null || !poRows.some((r) => keyOf(r) === selPo))) {
+      setSelPo(keyOf(poRows[0]));
     }
-  }, [poRows, selPo]);
+  }, [poRows, selPo, addingExtra]);
 
   function reload() {
     invalidateCache("finance:summary");
@@ -365,21 +371,66 @@ function ApSection({
     );
   }
 
-  const current = poRows.find((r) => r.po_id === selPo) ?? poRows[0];
+  const current = addingExtra
+    ? null
+    : poRows.find((r) => keyOf(r) === selPo) ?? poRows[0];
+  // 새 추가 매입 줄 — 아직 저장 전이라 서버 목록에 없다. 빈 줄을 만들어 폼에 넘긴다.
+  const draftExtra: ApByOrderRow = {
+    po_id: 0, po_no: "", vendor_id: null, vendor: "", currency: "KRW", date: "", items: [], ap: null,
+  };
 
   return (
     <div>
       <div className="project-select">
-        <label>Vendor P/O *</label>
-        <select value={current.po_id} onChange={(e) => setSelPo(Number(e.target.value))}>
+        <label>Vendor bill *</label>
+        <select
+          value={addingExtra ? 0 : keyOf(current!)}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            if (v === 0) return;
+            setAddingExtra(false);
+            setSelPo(v);
+          }}
+        >
           {poRows.map((r) => (
-            <option key={r.po_id} value={r.po_id}>
-              {(r.po_no || `PO#${r.po_id}`)} · {r.vendor}{r.ap ? "  ✓ billed" : ""}
+            <option key={keyOf(r)} value={keyOf(r)}>
+              {r.po_id
+                ? `${r.po_no || `PO#${r.po_id}`} · ${r.vendor}${r.ap ? "  ✓ billed" : ""}`
+                : `Extra · ${r.vendor}${r.ap?.bill_no ? ` · ${r.ap.bill_no}` : ""}`}
             </option>
           ))}
+          {addingExtra ? <option value={0}>Extra · new</option> : null}
         </select>
+        {/* 추가 매입 — 일정 지연처럼 본 발주와 별개로 받은 청구. 보조 P/O 를 끊지 않는다
+            (그러면 이미 끝난 9·10·11단계가 미지급 때문에 되돌아간다). */}
+        {!addingExtra ? (
+          <button type="button" className="btn sm" style={{ marginLeft: 8 }}
+                  onClick={() => setAddingExtra(true)}>
+            ＋ Additional bill
+          </button>
+        ) : (
+          <button type="button" className="btn sm" style={{ marginLeft: 8 }}
+                  onClick={() => setAddingExtra(false)}>
+            Cancel
+          </button>
+        )}
       </div>
-      <ApAddForm key={current.po_id} row={current} orderId={orderId} stage={stage} onChanged={reload} />
+      {addingExtra ? (
+        <p className="hint-inline" style={{ display: "block", margin: "0 0 10px" }}>
+          A bill outside the vendor P/O — the extra quote the vendor sent for a delay, for instance.
+          Pick the vendor and load its lines from that quote. It is paid here like any other bill,
+          and it does not move this deal&apos;s stage.
+        </p>
+      ) : null}
+      <ApAddForm
+        key={addingExtra ? "extra-new" : keyOf(current!)}
+        row={addingExtra ? draftExtra : current!}
+        orderId={orderId}
+        stage={stage}
+        extra={addingExtra}
+        onCreated={() => setAddingExtra(false)}
+        onChanged={reload}
+      />
       <DirectPaymentPanel orderId={orderId} onChanged={reload} />
     </div>
   );
@@ -674,11 +725,16 @@ function ApAddForm({
   row,
   orderId,
   stage,
+  extra = false,
+  onCreated,
   onChanged,
 }: {
   row: ApByOrderRow;
   orderId: number;
   stage: StageTab;
+  /** 추가 매입(벤더 P/O 없이 받은 청구) — 공급사를 직접 고르고 kind="extra" 로 저장한다. */
+  extra?: boolean;
+  onCreated?: () => void;
   onChanged: () => void;
 }) {
   const ap = row.ap;
@@ -687,6 +743,27 @@ function ApAddForm({
   // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다.
   const { editing: canWriteNow, readMode, fieldsetProps } = useEditGate(canEdit);
   const poItems = useMemo(() => workItemsToTax(row.items), [row.items]);
+  // 추가 매입은 벤더 P/O 가 없어 공급사를 잡아 줄 것이 없다 — 직접 고른다.
+  const isExtraRow = extra || (row.ap?.kind ?? (row.po_id ? "main" : "extra")) === "extra";
+  const [vendorId, setVendorId] = useState<number | "">(row.vendor_id ?? "");
+  const { data: workOpts } = useCachedData("ar:workoptions", fetchPoWorkOptions);
+  // 이 딜에 들어온 공급사 견적 — 추가비용 견적도 3단계에 함께 서 있다. 그 품목을 그대로
+  // 끌어오면 같은 값을 두 번 적지 않는다(AR 쪽 "Load quote…" 와 같은 뜻).
+  // 추가 매입을 적을 때만 부른다 — 견적 품목은 목록 API 에 실려 오지 않는 무거운 값이라,
+  // 본 매입 화면까지 매번 끌어올 이유가 없다.
+  const dealRfqId = (workOpts?.orders ?? []).find((o) => o.id === orderId)?.rfq_id ?? 0;
+  const { data: vqData } = useCachedData(
+    isExtraRow && dealRfqId ? `rfq:vendor-quotes:${dealRfqId}` : "",
+    () => fetchRfqVendorQuotes(dealRfqId)
+  );
+  const dealVendorQuotes = vqData?.vendor_quotes ?? [];
+  const loadVendorQuote = (qid: number) => {
+    const q = dealVendorQuotes.find((x) => x.id === qid);
+    if (!q) return;
+    setItems(workItemsToTax((q.items ?? []) as unknown as DocumentWorkItem[]));
+    if (q.currency) setForm((f) => ({ ...f, currency: q.currency }));
+    sel.clear();
+  };
   const [form, setForm] = useState<ApForm>(() =>
     ap
       ? {
@@ -767,10 +844,12 @@ function ApAddForm({
     }
     setBusy(true); setErr("");
     try {
+      const isExtra = extra || (ap?.kind ?? (row.po_id ? "main" : "extra")) === "extra";
       const body = {
         po_id: row.po_id,
+        kind: (isExtra ? "extra" : "main") as "main" | "extra",
         order_id: orderId,
-        vendor_id: row.vendor_id,
+        vendor_id: isExtra ? (vendorId === "" ? null : vendorId) : row.vendor_id,
         bill_no: form.bill_no,
         bill_date: form.bill_date,
         invoice_amount: total,
@@ -789,7 +868,10 @@ function ApAddForm({
         tax_invoice_no: form.tax_invoice_no,
       };
       if (ap) await updateApRecord(ap.id, body);
-      else await createApRecord(body);
+      else {
+        await createApRecord(body);
+        onCreated?.();
+      }
       onChanged();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
@@ -826,6 +908,16 @@ function ApAddForm({
   return (
     <fieldset {...fieldsetProps} style={{ border: 0, padding: 0, margin: 0 }}>
       <div className="form-grid">
+        {isExtraRow ? (
+          <label className="form-field">
+            <span>Vendor *</span>
+            <VendorSelect
+              value={vendorId}
+              options={(workOpts?.vendors ?? []).map((v) => ({ id: v.id, name: v.name }))}
+              onChange={setVendorId}
+            />
+          </label>
+        ) : null}
         <Field label="Bill No. (vendor)" value={form.bill_no} onChange={(v) => setForm({ ...form, bill_no: v })} />
         <Field label="Bill date" value={form.bill_date} onChange={(v) => setForm({ ...form, bill_date: v })} type="date" />
         <label className="form-field">
@@ -844,6 +936,22 @@ function ApAddForm({
           <ExcludedCountNote items={form.items} />
           <div className="items-head-actions">
             <button type="button" className="btn sm" onClick={loadPo} disabled={poItems.length === 0}>Load P/O</button>
+            {/* 추가 매입의 품목은 3단계에 이미 받아 둔 공급사 견적에 그대로 있다. */}
+            {isExtraRow && dealVendorQuotes.length ? (
+              <select
+                className="ar-load-quote"
+                value=""
+                onChange={(e) => { if (e.target.value) loadVendorQuote(Number(e.target.value)); }}
+                title="Copy the item lines from a vendor quote received on this deal"
+              >
+                <option value="">Load vendor quote…</option>
+                {dealVendorQuotes.map((q) => (
+                  <option key={q.id} value={q.id}>
+                    {q.vendor_quote_no || `Quote ${q.id}`} · {q.vendor}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             <ItemColsButton grid={grid} />
             <ExcludeSelectedButton items={form.items} sel={sel} onChange={setItems} />
             <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(form.items, sel, setItems)} />

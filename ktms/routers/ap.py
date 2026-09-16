@@ -34,6 +34,7 @@ def _ap_out(r: APRecord, po_no: str = "", vendor: str = "") -> dict:
     return {
         "id": r.id,
         "po_id": r.po_id,
+        "kind": getattr(r, "kind", None) or "main",
         "order_id": r.order_id,
         "vendor_id": r.vendor_id,
         "po_no": po_no,
@@ -72,7 +73,8 @@ def ap_by_order(order_id: int):
             .order_by(PurchaseOrder.id)
             .all()
         )
-        ap_by_po = {a.po_id: a for a in s.query(APRecord).filter_by(order_id=order_id).all()}
+        all_aps = s.query(APRecord).filter_by(order_id=order_id).order_by(APRecord.id).all()
+        ap_by_po = {a.po_id: a for a in all_aps if a.po_id}
         rows = []
         for po in pos:
             vendor = vendor_names.get(po.vendor_id, "—")
@@ -87,6 +89,24 @@ def ap_by_order(order_id: int):
                 "items": po.items or [],
                 "ap": _ap_out(existing, po.po_no or "", vendor) if existing else None,
             })
+        # 추가 매입 — 본 발주와 별개로 받은 청구(일정 지연에 따른 항공권 변경 같은 것).
+        # P/O 가 없으므로 자기 자신이 곧 한 줄이다. 화면은 이것도 P/O 줄과 같은 모양으로
+        # 받아 같은 편집 폼에 넘긴다(po_id 0 = 발주 없는 줄).
+        for a in all_aps:
+            if a.po_id or (getattr(a, "kind", None) or "main") != "extra":
+                continue
+            vendor = vendor_names.get(a.vendor_id, "—")
+            rows.append({
+                "po_id": 0,
+                "ap_id": a.id,
+                "po_no": "",
+                "vendor_id": a.vendor_id or 0,
+                "vendor": vendor,
+                "currency": a.currency or "KRW",
+                "date": a.bill_date or "",
+                "items": a.items or [],
+                "ap": _ap_out(a, "", vendor),
+            })
         return {"rows": rows}
     finally:
         s.close()
@@ -96,18 +116,25 @@ def ap_by_order(order_id: int):
 def create_ap(body: APSave):
     s = get_session()
     try:
-        po = s.query(PurchaseOrder).filter_by(id=body.po_id).first()
-        if not po:
-            raise HTTPException(status_code=404, detail="Purchase order not found.")
+        kind = "extra" if (body.kind == "extra" or not body.po_id) else "main"
+        po = None
+        if kind == "main":
+            po = s.query(PurchaseOrder).filter_by(id=body.po_id).first()
+            if not po:
+                raise HTTPException(status_code=404, detail="Purchase order not found.")
+            existing = s.query(APRecord).filter_by(po_id=body.po_id).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="This P/O already has an AP record.")
+        elif not body.vendor_id:
+            # P/O 가 없으면 공급사를 잡아 줄 것이 없다 — 지급 대장이 "누구에게"를 잃는다.
+            raise HTTPException(status_code=400, detail="추가 매입은 공급사를 골라야 합니다.")
         if not s.query(Order).filter_by(id=body.order_id).first():
             raise HTTPException(status_code=404, detail="Order not found.")
-        existing = s.query(APRecord).filter_by(po_id=body.po_id).first()
-        if existing:
-            raise HTTPException(status_code=400, detail="This P/O already has an AP record.")
         ap = APRecord(
-            po_id=body.po_id,
+            po_id=body.po_id or None,
+            kind=kind,
             order_id=body.order_id,
-            vendor_id=body.vendor_id if body.vendor_id is not None else po.vendor_id,
+            vendor_id=body.vendor_id if body.vendor_id is not None else (po.vendor_id if po else None),
             bill_no=body.bill_no or "",
             bill_date=body.bill_date or "",
             invoice_amount=body.invoice_amount or 0.0,
@@ -138,7 +165,10 @@ def update_ap(ap_id: int, body: APSave):
         ap = s.query(APRecord).filter_by(id=ap_id).first()
         if not ap:
             raise HTTPException(status_code=404, detail="AP record not found.")
-        ap.po_id = body.po_id
+        # 추가 매입은 P/O 가 없다 — 빈 값이 0 으로 들어가 없는 발주를 가리키지 않게 한다.
+        ap.po_id = body.po_id or None
+        if body.kind in ("main", "extra"):
+            ap.kind = body.kind
         ap.order_id = body.order_id
         if body.vendor_id is not None:
             ap.vendor_id = body.vendor_id

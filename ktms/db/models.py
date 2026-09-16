@@ -725,11 +725,14 @@ class APRecord(Base):
     기록한다. Finance 의 지급(payable) 소스로 자동 연결된다(_ap_record_rows)."""
     __tablename__ = "ap_records"
     id             = Column(Integer, primary_key=True)
-    # 대응 vendor P/O. P/O 없이 나간 매입(서비스 딜에서 흔하다)은 여기가 아니라
-    # FinancePayable 로 등록한다 — AP 탭 아래의 DirectPaymentPanel 이 그 자리이고,
-    # 서버가 그것을 이 딜의 매입 원가로 센다(_is_deal_purchase).
-    # 보조 P/O 를 끊어 우회하지 말 것: _deal_progress 의 ap_all_paid 가 벤더 P/O 목록을
+    # 대응 vendor P/O. 추가 매입(kind="extra")만 비어 있다 — 일정 지연처럼 본 발주와
+    # 별개인 비용은 공급사가 견적을 새로 보내오고 우리가 승인해 청구를 받지만, 그것을
+    # 위해 보조 P/O 를 끊으면 안 된다: _deal_progress 의 ap_all_paid 가 벤더 P/O 목록을
     # all() 로 훑으므로, 그 건이 미지급인 동안 이미 끝난 9·10·11단계가 되돌아간다.
+    # 그래서 P/O 없이 서고, 단계 판정에서는 kind 로 빠진다.
+    #
+    # 금액만 적고 끝낼 일이면 FinancePayable(AP 탭 아래 DirectPaymentPanel)이 더 가볍다.
+    # 여기는 품목·부가세·전자세금계산서 수취까지 본 매입과 똑같이 남겨야 할 때 쓴다.
     po_id          = Column(Integer, ForeignKey("purchase_orders.id"), nullable=True)
     order_id       = Column(Integer, ForeignKey("orders.id"))           # 프로젝트/고객 롤업
     vendor_id      = Column(Integer, ForeignKey("vendors.id"))
@@ -751,6 +754,8 @@ class APRecord(Base):
     tax_received_date = Column(String(10))              # 수취일 YYYY-MM-DD
     tax_invoice_no    = Column(String(60))              # 전자세금계산서 승인번호
     notes          = Column(Text)
+    # 본 매입(main) / 추가 매입(extra). ARRecord.kind 와 같은 뜻·같은 규약이다.
+    kind           = Column(String(10), default="main")   # main | extra
     created_at     = Column(DateTime, default=datetime.utcnow)
 
 
