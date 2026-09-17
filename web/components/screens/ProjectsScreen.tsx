@@ -121,7 +121,7 @@ type Tab = "customer" | "internal";
 type WorkspaceArea = "rfq" | "po" | "documents" | "ar";
 type StageTabKey = number;
 
-export default function ProjectsScreen() {
+export default function ProjectsScreen({ onFill }: { onFill?: (fill: boolean) => void }) {
   const [tab, setTab] = useState<Tab>("internal");
   // 신규 RFQ 등록 팝업 — 화면 우측 하단 버튼으로 연다.
   const [newRfqOpen, setNewRfqOpen] = useState(false);
@@ -226,6 +226,9 @@ export default function ProjectsScreen() {
               customers={customers ?? []}
               vessels={vessels ?? []}
               onChanged={reloadPipeline}
+              // 실주 사유는 내부 기록이다 — 고객에게 보이는 확인용 화면에는 적지 않는다.
+              showCloseReason={false}
+              onFill={onFill}
             />
           )}
         </>
@@ -256,6 +259,7 @@ export default function ProjectsScreen() {
               openClaim={deepLink?.claim ?? false}
               openView={deepLink?.view ?? "work"}
               openBack={deepLink?.back ?? null}
+              onFill={onFill}
             />
           )}
         </>
@@ -550,6 +554,8 @@ function PipelineTable({
   openClaim = false,
   openView = "work",
   openBack = null,
+  showCloseReason = true,
+  onFill,
 }: {
   rows: PipelineRow[];
   steps: string[];
@@ -578,6 +584,13 @@ function PipelineTable({
   openView?: "work" | "overview";
   /** 딥링크로 왔을 때 팝업을 닫으면 돌아갈 주소(없으면 이 목록에 남는다). */
   openBack?: string | null;
+  /** 종결 사유를 표에 적을지. 고객확인용 탭은 false — 실주 사유는 내부 기록이다. */
+  showCloseReason?: boolean;
+  /**
+   * 표 보기일 때만 페이지를 화면 높이에 못 박아 달라고 위(page)에 알린다.
+   * 보드는 칸마다 길이가 달라 페이지째 굴러야 하므로 못 박으면 아래가 잘린다.
+   */
+  onFill?: (fill: boolean) => void;
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [initialModalView, setInitialModalView] = useState<"work" | "overview">("work");
@@ -637,6 +650,12 @@ function PipelineTable({
   }, [openRfqId, openOrderId, openStage, openVrfqId, openApPoId, openClaim, openView, openBack, rows]);
   // 목록 표시 방식: 표(table) / 칸반 보드(board). 같은 데이터·같은 상세 모달 재사용.
   const [view, setView] = useState<"table" | "board">("board");
+  // 표 보기에서만 화면 높이를 못 박는다(가로 막대를 표 발밑·화면 안에 두려고).
+  // 표를 떠날 때(보드 전환·언마운트)는 반드시 되돌린다 — 안 그러면 다음 화면이 잘린다.
+  useEffect(() => {
+    onFill?.(view === "table");
+    return () => onFill?.(false);
+  }, [view, onFill]);
   // 현황판 전체 미리보기(A4 가로 이미지) 팝업 열림 여부.
   const [previewOpen, setPreviewOpen] = useState(false);
   // 보드 카드 밀도: 상세(false) / 간략(true). 간략이면 모든 카드를 한 줄 요약으로 접어 전체를 한눈에.
@@ -1118,7 +1137,10 @@ function PipelineTable({
           showDone={showDone}
         />
       ) : (
-      <div className="pl-table-wrap">
+      /* pl-scroll — 표 상자 안에서 위아래·좌우를 굴린다. 페이지째 굴리면 열 이름이
+         사라지고, 무엇보다 가로 막대가 문서 맨 아래에 생겨 마지막 줄까지 내려가야
+         오른쪽 칸(PIC·금액)을 옆으로 밀 수 있다. */
+      <div className="pl-table-wrap pl-scroll">
         <table className="pipeline customizable">
           <colgroup>
             {orderedColumns.map((c) => {
@@ -1206,6 +1228,7 @@ function PipelineTable({
                         steps={steps}
                         stage={stageOf(r)}
                         onOverview={() => openOverview(r.rfq_id)}
+                        showCloseReason={showCloseReason}
                       />
                     ))}
                   </tr>
@@ -1737,6 +1760,14 @@ function BoardCard({
       <ProjectNo value={r.project_no} />
     </button>
   );
+  // CLOSED 리본에 얹는 사유 — 카드에는 한 줄을 더 놓을 자리가 없어 툴팁으로 돌린다.
+  const closedTitle = (() => {
+    if (!cancelled) return undefined;
+    const label = closeReasonLabel(r.close_reason);
+    const note = (r.close_reason_note || "").trim();
+    if (!label && !note) return "Closed";
+    return r.close_reason === "other" ? note || label : note ? `${label} — ${note}` : label;
+  })();
   const cardProps = {
     role: "button" as const,
     tabIndex: 0,
@@ -1753,7 +1784,7 @@ function BoardCard({
   if (compact) {
     return (
       <div {...cardProps}>
-        {cancelled ? <span className="pl-card-ribbon">CLOSED</span> : null}
+        {cancelled ? <span className="pl-card-ribbon" title={closedTitle}>CLOSED</span> : null}
         <div className="pl-card-nrow">
           {projectNo}
           {chevron}
@@ -1781,7 +1812,7 @@ function BoardCard({
 
   return (
     <div {...cardProps}>
-      {cancelled ? <span className="pl-card-ribbon">CLOSED</span> : null}
+      {cancelled ? <span className="pl-card-ribbon" title={closedTitle}>CLOSED</span> : null}
       <div className="pl-card-top">
         {projectNo}
         <span className="pl-card-top-r">
@@ -1904,6 +1935,26 @@ function MoneyLines({
 }
 
 /**
+ * 종결 사유 한 줄(표) — 'Other' 는 직접 입력한 노트가 사유 자체이고, 그 밖의 사유는
+ * 라벨을 적고 노트(있으면)는 툴팁으로 돌린다. 사유 없이 종결된 옛 건은 "Closed" 로만.
+ * 표시 규칙은 팝업 머리의 .pl-close-reason 과 같게 맞춘다.
+ */
+function ClosedReasonTag({ r }: { r: PipelineRow }) {
+  const label = closeReasonLabel(r.close_reason);
+  const note = (r.close_reason_note || "").trim();
+  const text = r.close_reason === "other" ? note || label : label || "Closed";
+  const full = note && r.close_reason !== "other" ? `${label} — ${note}` : text;
+  // 종결일은 날짜만(yy-mm-dd) — 몇 시에 닫았는지는 목록에서 읽을 일이 없다.
+  const when = fmtYMD(r.closed_at || "");
+  return (
+    <div className="pl-td-closed" title={when ? `${full} · closed ${when}` : full}>
+      <span className="pl-td-closed-tx">⊘ {text}</span>
+      {when ? <span className="pl-td-closed-at">{when}</span> : null}
+    </div>
+  );
+}
+
+/**
  * 그룹 열 한 칸 — 묶인 필드를 여러 줄로 쌓는다.
  * 관리번호·타입·선박이 윗줄, 프로젝트명이 아랫줄인 식으로 "무엇인가"를 한 덩어리로 읽게 한다.
  */
@@ -1913,12 +1964,15 @@ function PipelineCell({
   steps,
   stage,
   onOverview,
+  showCloseReason = true,
 }: {
   colKey: ColKey;
   r: PipelineRow;
   steps: string[];
   stage: number;
   onOverview: () => void;
+  /** 종결 사유를 단계 칸에 적을지 — 고객확인용 탭에서는 끈다(실주 사유는 내부 기록이다). */
+  showCloseReason?: boolean;
 }) {
   switch (colKey) {
     case "project": {
@@ -1978,6 +2032,9 @@ function PipelineCell({
             savedAt={stageDateOf(r, r.stage)}
             lastAt={lastActivityISO(r)}
           />
+          {/* 종결건은 바가 멈춘 자리보다 "왜 멈췄나"가 먼저다 — 지금까지는 제목의
+              취소선뿐이라 사유를 보려면 39건을 하나씩 열어야 했다. */}
+          {r.cancelled && showCloseReason ? <ClosedReasonTag r={r} /> : null}
         </td>
       );
     case "amounts": {
