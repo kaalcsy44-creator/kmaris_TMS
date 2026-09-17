@@ -33,7 +33,7 @@ from _core import (
     USD_KRW_RATE,
     _apply_owner_filter,
     _assign_rfq_no,
-    _CLOSE_REASON_SHORT,
+    _close_reason_short,
     _next_kmaris_rfq_no,
     _coerce_work_type,
     _dual_money,
@@ -566,8 +566,8 @@ def update_rfq_cancel(rfq_id: int, body: RfqCancelUpdate,
         # 로그가 아니라 소음이 된다.
         if bool(body.cancelled) != was_cancelled:
             if body.cancelled:
-                reason = (rfq.close_reason_note or "").strip() or _CLOSE_REASON_SHORT.get(
-                    (rfq.close_reason or "").strip(), "")
+                reason = (rfq.close_reason_note or "").strip() or _close_reason_short(
+                    rfq.close_reason)
                 log_stage_note(s, rfq_id, "딜 종결" + (f" — {reason}" if reason else ""),
                                user.get("username", ""), system="close")
             else:

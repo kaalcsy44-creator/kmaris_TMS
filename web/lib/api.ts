@@ -378,15 +378,36 @@ export const CLOSE_REASONS: {
   { code: "superseded", label: "Re-issued — moved to another project", badge: "Re-issued", tone: "reiss" },
   { code: "other", label: "Other (specify)", badge: "Other", tone: "other" },
 ];
-export function closeReasonLabel(code?: string | null): string {
-  if (!code) return "";
-  return CLOSE_REASONS.find((r) => r.code === code)?.label || code;
+// 사유는 여러 갈래가 겹친다 — "메이커가 직접 견적을 냈고, 그쪽이 1/3 가격이었다"는
+// 한 갈래로 줄이면 둘 중 하나가 통째로 사라진다. 저장은 코드를 쉼표로 이은 한 칸
+// ("price,direct_deal") — 마케팅 활동 유형이 쓰는 방식과 같다. 한 갈래만 담긴 옛 값도
+// 그대로 통과한다(쉼표가 없으면 배열 길이 1).
+/** 저장값 → 코드 배열. */
+export function closeReasonCodes(value?: string | null): string[] {
+  return value ? value.split(",").map((x) => x.trim()).filter(Boolean) : [];
+}
+/** 코드 배열 → 저장값. 배지 차례(CLOSE_REASONS 순)로 줄 세워 붙인다 — 고른 순서대로
+ *  두면 같은 조합이 행마다 다른 차례로 보인다. */
+export function joinCloseReasons(codes: string[]): string {
+  const known = CLOSE_REASONS.filter((o) => codes.includes(o.code)).map((o) => o.code);
+  const rest = codes.filter((c) => c && !CLOSE_REASONS.some((o) => o.code === c));
+  return [...known, ...rest].join(",");
+}
+/** 사람이 읽는 긴 이름. 여러 갈래면 " · " 로 잇는다. */
+export function closeReasonLabel(value?: string | null): string {
+  return closeReasonCodes(value)
+    .map((c) => CLOSE_REASONS.find((r) => r.code === c)?.label || c)
+    .join(" · ");
 }
 /** 목록 배지용 짧은 이름 + 색 갈래. 모르는 코드(옛 데이터·수기)는 코드 그대로 중립색으로. */
 export function closeReasonBadge(code?: string | null): { text: string; tone: string } {
   const hit = CLOSE_REASONS.find((r) => r.code === code);
   if (hit) return { text: hit.badge, tone: hit.tone };
   return { text: code ? code : "Closed", tone: "other" };
+}
+/** 저장값 → 배지 목록(갈래마다 하나). 사유가 없으면 빈 배열. */
+export function closeReasonBadges(value?: string | null): { code: string; text: string; tone: string }[] {
+  return closeReasonCodes(value).map((c) => ({ code: c, ...closeReasonBadge(c) }));
 }
 
 export function updateRfqStageDate(

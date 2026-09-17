@@ -3630,10 +3630,12 @@ table.pipeline td.nowrap {
 .pl-td-closed:disabled { cursor: default; }
 .pl-td-closed:not(:disabled):hover .close-badge { filter: brightness(0.96); }
 .pl-td-closed:not(:disabled):hover .pl-td-closed-note { color: #4a5568; }
+/* 갈래가 둘 이상이면 배지가 여럿 선다 — 칸을 넘기지 말고 줄을 바꾼다. */
 .pl-td-closed-top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px 6px;
   max-width: 100%;
 }
 /* 적어 둔 사정 — 접지 않고 줄을 바꾼다(최대 3줄). 좁은 칸에서 한 줄로 자르면 정작

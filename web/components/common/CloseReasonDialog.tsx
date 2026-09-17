@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CLOSE_REASONS, setRfqCancelled } from "@/lib/api";
+import { CLOSE_REASONS, closeReasonCodes, joinCloseReasons, setRfqCancelled } from "@/lib/api";
 
 /**
  * 딜 종결 사유 고르기 — 닫을 때(mode="close")와 이미 닫힌 건의 사유를 고칠 때
@@ -27,18 +27,24 @@ export default function CloseReasonDialog({
   onSaved: () => void | Promise<unknown>;
   onClose: () => void;
 }) {
-  const [code, setCode] = useState(initialCode || "");
+  // 사유는 여러 갈래를 함께 고른다 — 한 갈래로 줄이라고 강요하면 "메이커가 직접 견적을
+  // 냈고 그쪽이 1/3 가격이었다" 같은 건에서 둘 중 하나가 통째로 사라진다.
+  const [codes, setCodes] = useState<string[]>(() => closeReasonCodes(initialCode));
   const [note, setNote] = useState(initialNote || "");
   const [busy, setBusy] = useState(false);
   const editing = mode === "edit";
   // 'Other' 는 노트가 곧 사유라 비워 둘 수 없다. 그 밖의 갈래는 노트가 덧붙임(선택).
-  const ready = !!code && (code !== "other" || !!note.trim());
+  const ready = codes.length > 0 && (!codes.includes("other") || !!note.trim());
+
+  function toggle(code: string) {
+    setCodes((cur) => (cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code]));
+  }
 
   async function save() {
     if (busy || !ready) return;
     setBusy(true);
     try {
-      await setRfqCancelled(rfqId, true, code, note.trim() || undefined);
+      await setRfqCancelled(rfqId, true, joinCloseReasons(codes), note.trim() || undefined);
       await onSaved();
       onClose();
     } finally {
@@ -68,16 +74,20 @@ export default function CloseReasonDialog({
           {editing
             ? "The deal stays closed — only the reason changes. Nothing is added to the activity log."
             : "Select a reason. It will move to the Closed zone on the board — you can reactivate it anytime."}
+          {" Pick as many as apply."}
         </div>
         <div className="close-reason-list">
           {CLOSE_REASONS.map((opt) => (
-            <label key={opt.code} className={`close-reason-opt${code === opt.code ? " sel" : ""}`}>
+            <label
+              key={opt.code}
+              className={`close-reason-opt${codes.includes(opt.code) ? " sel" : ""}`}
+            >
               <input
-                type="radio"
+                type="checkbox"
                 name="close-reason"
                 value={opt.code}
-                checked={code === opt.code}
-                onChange={() => setCode(opt.code)}
+                checked={codes.includes(opt.code)}
+                onChange={() => toggle(opt.code)}
               />
               <span className={`close-badge tone-${opt.tone}`}>{opt.badge}</span>
               <span className="close-reason-txt">{opt.label}</span>
@@ -86,14 +96,13 @@ export default function CloseReasonDialog({
         </div>
         {/* 갈래로는 다 담기지 않는 사정(어느 메이커가·얼마나 비쌌는지)은 여기 남는다.
             갈래는 세기 위한 것이고, 이 글은 다음에 같은 고객을 만났을 때 읽을 것이다. */}
-        {code ? (
+        {codes.length ? (
           <textarea
             className="close-reason-note"
-            placeholder={code === "other" ? "Enter the reason" : "Add a note (optional)"}
+            placeholder={codes.includes("other") ? "Enter the reason" : "Add a note (optional)"}
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={3}
-            autoFocus
           />
         ) : null}
         <div className="close-reason-actions">

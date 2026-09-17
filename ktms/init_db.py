@@ -36,7 +36,7 @@ _MIGRATIONS = {
         "contact_person": "VARCHAR(100)",
         "request_channel": "VARCHAR(40)",
         "created_by": "INTEGER",
-        "close_reason": "VARCHAR(40)",
+        "close_reason": "VARCHAR(200)",
         "close_reason_note": "TEXT",
         "closed_at": "VARCHAR(16)",
         # 소개자(컨설턴트)와 이 딜만의 수수료율(%) — 비우면 컨설턴트 기본율.
@@ -1059,6 +1059,34 @@ def migrate_widen_activity_type():
     print("[OK] marketing_activities.activity_type widened to VARCHAR(200).")
 
 
+def migrate_widen_close_reason():
+    """rfqs.close_reason 을 VARCHAR(200)으로 확장(복수 선택 join 대비).
+
+    한 딜이 여러 갈래로 닫힌다 — "메이커가 직접 견적을 냈고 그쪽이 1/3 가격이었다"는
+    갈래 하나로 줄이면 둘 중 하나가 사라진다. 코드를 쉼표로 이어 한 칸에 담으므로
+    40자로는 세 갈래를 못 넘긴다(marketing_activities.activity_type 와 같은 처지였다).
+
+    Postgres 만 VARCHAR 길이를 강제하므로 대상. SQLite 는 길이 무시라 no-op.
+    applied_migrations 마커로 1회만 실행."""
+    eng = get_engine()
+    insp = inspect(eng)
+    if not insp.has_table("rfqs"):
+        return
+    if eng.dialect.name != "postgresql":
+        return
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='widen_close_reason'")).first():
+            return
+        conn.execute(text(
+            "ALTER TABLE rfqs ALTER COLUMN close_reason TYPE VARCHAR(200)"))
+        conn.execute(text(
+            "INSERT INTO applied_migrations (name) VALUES ('widen_close_reason')"))
+    print("[OK] rfqs.close_reason widened to VARCHAR(200).")
+
+
 def migrate_widen_specialization():
     """고객·거래선·제조사의 취급품목(specialization)을 TEXT 로 — 200자 제한을 푼다.
 
@@ -1557,6 +1585,7 @@ if __name__ == "__main__":
     # 기자재 축 → 선박 계통 축(참고 도면). 위 재편이 끝난 트리를 받아 돈다.
     migrate_vessel_system_categories()
     migrate_widen_activity_type()
+    migrate_widen_close_reason()
     migrate_widen_specialization()
     migrate_normalize_incoterms()
     migrate_split_stage_dates_to_orders()

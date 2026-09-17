@@ -22,6 +22,8 @@ import {
   CLOSE_REASONS,
   closeReasonLabel,
   closeReasonBadge,
+  closeReasonBadges,
+  closeReasonCodes,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import {
@@ -546,7 +548,10 @@ function cellText(r: PipelineRow, key: FieldKey, steps: string[]): string {
       return doneStageLabel(r.stage, steps);
     case "close_reason":
       // 정렬은 배지 이름 기준 — 화면에서 묶여 보이는 덩어리와 줄 세우는 축이 같아야 한다.
-      return r.cancelled ? closeReasonBadge(r.close_reason).text : "";
+      // 갈래가 여럿이면 붙여서 비교한다(첫 배지가 사실상의 기준이 된다).
+      return r.cancelled
+        ? closeReasonCodes(r.close_reason).map((c) => closeReasonBadge(c).text).join(" ")
+        : "";
     case "assignee":
       return r.assignee || "";
     case "margin_pct":
@@ -805,19 +810,31 @@ function PipelineTable({
     .sort((a, b) => a.localeCompare(b, "ko"));
   const vesselOpts = distinct((r) => r.vessel || "");
   const assigneeOpts = distinct((r) => r.assignee || "");
+  // 한 딜이 여러 갈래로 닫힐 수 있으므로 필터도 "하나라도 걸리면 남는다"로 센다
+  // (벤더 필터와 같은 규약). 진행 중인 딜은 ""(Still open) 한 칸으로 묶는다.
+  const rowCloseReasons = (r: PipelineRow): string[] => {
+    if (!r.cancelled) return [""];
+    const codes = closeReasonCodes(r.close_reason);
+    return codes.length ? codes : ["(none)"];
+  };
   // 단계 옵션: 데이터에 존재하는 stage 번호를 오름차순으로
   const stageOpts = Array.from(new Set(rows.map((r) => stageOf(r)))).sort((a, b) => a - b);
   // 종결 사유 옵션: 실제로 쓰인 코드만, 배지 차례(CLOSE_REASONS 순)대로. 진행 중인 딜은
   // 사유가 없으므로 "" 한 칸으로 묶어 고를 수 있게 둔다 — 사유 열에서 "아직 안 닫힌 것"을
   // 고르는 길이 없으면 이 열의 필터는 반쪽이다.
   const closeReasonOpts = (() => {
-    const used = new Set(rows.map((r) => (r.cancelled ? r.close_reason || "" : "")));
+    const used = new Set(rows.flatMap(rowCloseReasons));
     const known = CLOSE_REASONS.map((o) => o.code).filter((c) => used.has(c));
     // 목록에 없는 옛 코드(수기·폐기된 갈래)도 있으면 뒤에 붙인다 — 골라서 고치러 가야 한다.
     const unknown = Array.from(used).filter(
       (c) => c && !CLOSE_REASONS.some((o) => o.code === c)
     );
-    return [...known, ...unknown, ...(used.has("") ? [""] : [])];
+    return [
+      ...known,
+      ...unknown.filter((c) => c !== "(none)"),
+      ...(used.has("(none)") ? ["(none)"] : []),
+      ...(used.has("") ? [""] : []),
+    ];
   })();
 
   // 메뉴 값 목록(데이터 고유값). 날짜·필터없는 필드는 빈 배열.
@@ -837,11 +854,11 @@ function PipelineTable({
       case "stage":
         return stageOpts.map((s) => ({ v: String(s), label: doneStageLabel(s, steps) }));
       case "close_reason":
-        return closeReasonOpts.map((c) =>
-          c
-            ? { v: c, label: closeReasonBadge(c).text, tone: closeReasonBadge(c).tone }
-            : { v: "", label: "Still open" }
-        );
+        return closeReasonOpts.map((c) => {
+          if (!c) return { v: "", label: "Still open" };
+          if (c === "(none)") return { v: c, label: "Closed · no reason", tone: "other" };
+          return { v: c, label: closeReasonBadge(c).text, tone: closeReasonBadge(c).tone };
+        });
       default:
         return [];
     }
@@ -891,7 +908,7 @@ function PipelineTable({
       (fAssignee.length === 0 || fAssignee.includes(r.assignee || "")) &&
       (fStage.length === 0 || fStage.includes(String(stageOf(r)))) &&
       (fCloseReason.length === 0 ||
-        fCloseReason.includes(r.cancelled ? r.close_reason || "" : "")) &&
+        rowCloseReasons(r).some((c) => fCloseReason.includes(c))) &&
       // 영업 계정은 항상 자기 딜만. 그 외엔 Assignee 멀티 필터(빈 배열=전체).
       (salesScoped
         ? (r.assignee || "") === myName
@@ -2011,7 +2028,7 @@ function MoneyLines({
  * 하지 않고 나란히 둔다. 누르면 사유를 고친다(행 클릭=딜 팝업과 겹치지 않게 stopPropagation).
  */
 function ClosedReasonTag({ r, onEdit }: { r: PipelineRow; onEdit?: () => void }) {
-  const badge = closeReasonBadge(r.close_reason);
+  const badges = closeReasonBadges(r.close_reason);
   const note = (r.close_reason_note || "").trim();
   const label = closeReasonLabel(r.close_reason) || "No reason recorded";
   // 종결일은 날짜만(yy-mm-dd) — 몇 시에 닫았는지는 목록에서 읽을 일이 없다.
@@ -2030,9 +2047,16 @@ function ClosedReasonTag({ r, onEdit }: { r: PipelineRow; onEdit?: () => void })
       disabled={!onEdit}
     >
       <span className="pl-td-closed-top">
-        <span className={`close-badge tone-${badge.tone}`}>
-          ⊘ {r.close_reason ? badge.text : "Closed"}
-        </span>
+        {/* 갈래가 여럿이면 여럿을 다 세운다 — 대표 하나만 남기면 나머지는 없던 일이 된다. */}
+        {badges.length ? (
+          badges.map((b) => (
+            <span key={b.code} className={`close-badge tone-${b.tone}`}>
+              ⊘ {b.text}
+            </span>
+          ))
+        ) : (
+          <span className="close-badge tone-other">⊘ Closed</span>
+        )}
         {when ? <span className="pl-td-closed-at">{when}</span> : null}
       </span>
       {/* 적어 둔 사정은 접지 않고 줄을 바꾼다(최대 3줄) — 좁은 칸에서 한 줄로 자르면

@@ -1048,6 +1048,14 @@ _CLOSE_REASON_SHORT = {
 }
 
 
+def _close_reason_short(value: str | None) -> str:
+    """종결 사유 저장값("price,direct_deal") → 읽는 이름("Lost on price · Maker/other
+    vendor took it"). 한 딜이 여러 갈래로 닫힐 수 있어 저장은 쉼표로 이은 한 칸이다
+    (마케팅 활동 유형과 같은 방식). 갈래 하나만 담긴 옛 값도 그대로 통과한다."""
+    codes = [c.strip() for c in (value or "").split(",") if c.strip()]
+    return " · ".join(_CLOSE_REASON_SHORT.get(c, c) for c in codes)
+
+
 def _deal_state_map(s) -> dict[int, dict]:
     """딜(RFQ)별 성사 여부 한 줄 요약 — {rfq_id: {"state": ..., "note": ...}}.
 
@@ -1098,8 +1106,7 @@ def _deal_state_map(s) -> dict[int, dict]:
     for r in s.query(RFQ.id, RFQ.status, RFQ.close_reason, RFQ.close_reason_note).all():
         # 종결(실주/취소)은 어디까지 갔든 그것이 결말이다 — 사유를 그대로 세운다.
         if _enum_val(r.status) == RFQStatus.LOST.value:
-            note = (r.close_reason_note or "").strip() or _CLOSE_REASON_SHORT.get(
-                (r.close_reason or "").strip(), "")
+            note = (r.close_reason_note or "").strip() or _close_reason_short(r.close_reason)
             out[r.id] = {"state": "closed", "note": " ".join(note.split())[:60]}
             continue
         orders = orders_by_rfq.get(r.id) or []
@@ -3954,6 +3961,7 @@ class RfqCancelUpdate(BaseModel):
     cancelled: bool
     # 사유 코드 — 갈래는 _CLOSE_REASON_SHORT(= web/lib/api.ts 의 CLOSE_REASONS)와 같다.
     # price · slow_response · no_quote · lead_time · direct_deal · schedule · superseded · other
+    # 여러 갈래면 쉼표로 이어 보낸다("price,direct_deal").
     reason: Optional[str] = None
     reason_note: Optional[str] = None
 
