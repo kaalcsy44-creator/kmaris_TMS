@@ -3216,8 +3216,9 @@ function ConsultantsTab() {
       update={updateSettingsConsultant}
       remove={deleteSettingsConsultant}
       columns={[
-        ["name", "Consultant"],
-        ["company", "Company"],
+        // 이름 칸과 회사 칸의 폭 배분만 이 표의 사정에 맞춘다(globals.css 의 ms-cons-*).
+        ["name", "Consultant", undefined, "ms-cons-name"],
+        ["company", "Company", undefined, "ms-cons-co"],
         ["default_rate", "Fee rate", (r) => `${r.default_rate}%`],
         ["bank_name", "Bank", (r) => (r.bank_account
           ? <span>{r.bank_name} <span className="muted">{r.bank_account}</span></span>

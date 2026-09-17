@@ -1450,6 +1450,22 @@ table.mini.wide.ms-table.ms-table--even td:nth-child(n + 2):not(.ms-actcol) {
   width: auto;
   min-width: 0;
 }
+/* Consultant 표 — 이름 칸과 회사 칸의 폭 배분.
+   위 --even 규칙은 남는 폭을 내용 길이에 비례해 나누는데, 이 표에서는 회사명("K-Maris
+   Singapore PTE LTD")이 제일 길어 사실상 회사 칸이 남는 폭을 다 가져갔다. 정작 이 표를
+   여는 까닭은 누구에게 얼마를 보내는가이고, 그 '누구'가 맨 앞 칸이다. 그래서 이름 칸에
+   폭을 주고, 그만큼을 회사 칸에서 뺀다 — 둘 다 %로 적어야 화면 폭이 달라져도 주고받은
+   몫이 그대로 유지된다(px 로 적으면 좁은 화면에서 이름 칸이 회사 칸을 잡아먹는다).
+   앞의 --even nth-child 규칙과 클래스 수를 맞춰야(:not 포함 6개) 이긴다. */
+table.mini.wide.ms-table.ms-table--even th.ms-cons-name:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--even td.ms-cons-name:not(.ms-actcol) {
+  width: 15%;
+  white-space: nowrap;
+}
+table.mini.wide.ms-table.ms-table--even th.ms-cons-co:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--even td.ms-cons-co:not(.ms-actcol) {
+  width: 32%;
+}
 /* ── 품목 마스터 표(Customer·Description·… ·Vendor·가격 3열) ────────────────
    회사 목록용 폭 규칙(첫 칸이 남는 폭을 독차지하고 나머지는 width:1%)을 그대로 쓰면
    맨 앞 Customer 만 텅 빈 채 넓어지고 Description 은 한 낱말 폭까지 눌린다.
