@@ -28,6 +28,16 @@ export type ColumnDef<T> = {
   numeric?: boolean;
   /** 패싯 빈값("") 표시 라벨(기본 "미지정"). */
   emptyLabel?: string;
+  /** 거르는 값이 셀 텍스트와 다를 때(예: 이름 칸을 등급으로 거른다).
+   *  생략하면 text() 가 곧 패싯 값이다 — 종전 동작 그대로. */
+  facetText?: (row: T) => string;
+  /** 패싯 값 표시(배지 등). 생략 시 값 문자열(빈값은 emptyLabel). */
+  facetLabel?: (value: string) => React.ReactNode;
+  /** 값을 세우는 차례(여기 적힌 순서 먼저, 나머지는 로케일순 뒤에). */
+  facetOrder?: string[];
+  /** 메뉴에서 이 필터를 부르는 이름(생략 시 컬럼 라벨) — 이름 칸을 등급으로 거를
+   *  때처럼, 고르는 축이 칸 이름과 다르면 그 축의 이름을 적는다. */
+  filterLabel?: string;
 };
 
 type SortDir = "asc" | "desc";
@@ -125,9 +135,23 @@ export default function FilterTable<T>({
     setOpenCol(null);
   }
 
+  /** 이 줄이 이 칸에서 갖는 패싯 값 — 따로 정해 두지 않았으면 보이는 텍스트 그대로. */
+  function facetOf(col: ColumnDef<T>, row: T): string {
+    return (col.facetText ?? col.text)(row);
+  }
+
   // 데이터에 실제 존재하는 패싯 값(한글 정렬). 빈값은 "" 으로 포함.
+  // facetOrder 를 준 칸은 그 차례가 먼저다 — 등급처럼 값에 서열이 있으면 가나다순이
+  // 그 서열을 흩뜨린다(S·A·B·C·X 를 A·B·C·S·X 로 세우게 된다).
   function distinct(col: ColumnDef<T>): string[] {
-    return Array.from(new Set(rows.map(col.text))).sort((a, b) => a.localeCompare(b, "ko"));
+    const values = Array.from(new Set(rows.map((r) => facetOf(col, r))));
+    const order = col.facetOrder;
+    if (!order) return values.sort((a, b) => a.localeCompare(b, "ko"));
+    const rank = (v: string) => {
+      const i = order.indexOf(v);
+      return i < 0 ? order.length : i;
+    };
+    return values.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, "ko"));
   }
   function facetValue(key: string): string[] {
     return facets[key] ?? [];
@@ -170,7 +194,7 @@ export default function FilterTable<T>({
     columns.every((col) => {
       if (col.filter === "facet") {
         const sel = facetValue(col.key);
-        return sel.length === 0 || sel.includes(col.text(r));
+        return sel.length === 0 || sel.includes(facetOf(col, r));
       }
       if (col.filter === "date") {
         const { from, to } = dateRange(col.key);
@@ -225,14 +249,18 @@ export default function FilterTable<T>({
     // "All"(선택 해제) 줄은 값이 아니라 명령이라 목록 밖에서 따로 그린다.
     const opts =
       col.filter === "facet"
-        ? distinct(col).map((v) => ({ v, label: v || col.emptyLabel || "Unspecified" }))
+        ? distinct(col).map((v) => {
+            const text = v || col.emptyLabel || "Unspecified";
+            // 배지로 세우는 값이라도 검색은 글자로 한다 — 그래서 text 는 늘 남긴다.
+            return { v, text, node: col.facetLabel ? col.facetLabel(v) : text };
+          })
         : [];
     const sel = facetValue(col.key);
     const d = dateRange(col.key);
     // 검색칸은 목록이 길 때만 — 값이 몇 개뿐인 열에서는 읽을 것만 한 줄 늘린다.
     const searchable = opts.length > 8;
     const q = query.trim().toLowerCase();
-    const shownOpts = q ? opts.filter((o) => o.label.toLowerCase().includes(q)) : opts;
+    const shownOpts = q ? opts.filter((o) => o.text.toLowerCase().includes(q)) : opts;
     return (
       <>
         <div className="pl-menu-backdrop" onClick={() => setOpenCol(null)} />
@@ -283,7 +311,7 @@ export default function FilterTable<T>({
               {/* 고른 개수 — 목록이 스크롤로 밀려도 몇 개가 걸렸는지 머리에 남는다. */}
               {sel.length ? (
                 <span className="pl-menu-cap">
-                  {col.label}
+                  {col.filterLabel ?? col.label}
                   <span className="pl-menu-cnt">{sel.length} selected</span>
                 </span>
               ) : null}
@@ -316,7 +344,7 @@ export default function FilterTable<T>({
                     aria-checked={sel.includes(o.v)}
                   >
                     <span className="chk">{sel.includes(o.v) ? "✓" : ""}</span>
-                    <span className="lbl">{o.label}</span>
+                    <span className="lbl">{o.node}</span>
                   </button>
                 ))}
               </div>

@@ -28,6 +28,19 @@ export const GRADE_HINT: Record<CustomerGrade, string> = {
   C: "No reply yet — auto-reply only, or nothing came back",
 };
 
+/** 배지 옆에 한 마디로 세우는 이름 — 고르는 자리(필터 메뉴)에서는 글자 한 자만으로는
+ *  무엇을 고르는지 알 수 없다. 툴팁은 마우스를 올려야 나오고, 고르는 중에는 늦다. */
+export const GRADE_LABEL: Record<CustomerGrade, string> = {
+  X: "Unreachable",
+  S: "Ordered before",
+  A: "Sent an inquiry",
+  B: "Replied",
+  C: "No reply yet",
+};
+
+/** 세우는 차례 — 가까운 사람부터, 등급 밖(X)은 맨 뒤. 가나다순이면 이 서열이 흩어진다. */
+export const GRADE_ORDER: CustomerGrade[] = ["S", "A", "B", "C", "X"];
+
 export function GradeBadge({ grade }: { grade?: CustomerGrade | null }) {
   if (!grade) return null;
   return (

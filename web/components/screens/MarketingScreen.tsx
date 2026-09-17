@@ -12,7 +12,7 @@ import {
   type MarketingSave,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import type { MarketingRow, CustomerOption } from "@/lib/types";
+import type { MarketingRow, CustomerOption, CustomerGrade } from "@/lib/types";
 import { can, canEditDeal, editBlockReason, getUser } from "@/lib/auth";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import CustomerName from "@/components/common/CustomerName";
@@ -21,7 +21,7 @@ import Modal from "@/components/common/Modal";
 import ComposeEmailModal from "@/components/screens/ComposeEmailModal";
 import BrochuresPanel from "@/components/screens/BrochuresPanel";
 import { BounceBadge } from "@/components/common/BouncedEmail";
-import { GradeBadge, useCustomerGrade } from "@/components/common/CustomerGrade";
+import { GradeBadge, GRADE_LABEL, GRADE_ORDER, useCustomerGrade } from "@/components/common/CustomerGrade";
 import { ReplyBadge, FollowUpCell, ReplyThreadPanel } from "@/components/common/MarketingBadges";
 import { REPLY_STATUSES, replyText, suggestFollowUp } from "@/lib/marketing";
 import { detectMarketingReplies, type MarketingDetectResult } from "@/lib/api";
@@ -197,6 +197,29 @@ export default function MarketingScreen({ onFill }: { onFill?: (v: boolean) => v
       // 등급은 사람에 붙는다 — 여기서 "이 사람이 어떤 사람인지"가 보여야, 회신을
       // 분류하거나 후속을 잡을 때 목록을 떠나지 않고 판단할 수 있다.
       // 미등록 잠정사(is_prospect)는 명부에 없으니 등급도 없다.
+      //
+      // 거르는 축은 이름이 아니라 등급이다. 400줄이 넘는 표에서 이름으로 거른다는 것은
+      // 값이 400개인 목록에서 하나를 집는 일이라 애초에 쓸 자리가 없고, 정작 이 칸을
+      // 보며 하고 싶은 일은 "답장 준 사람만", "아직 답 없는 사람만" 추려 다음 발송을
+      // 정하는 쪽이다. 이름은 여전히 정렬과 검색의 값으로 남는다.
+      filter: "facet",
+      filterLabel: "Grade",
+      facetText: (r) => gradeOf(r.customer_id) ?? "",
+      facetOrder: [...GRADE_ORDER, ""],
+      emptyLabel: "No grade (prospect)",
+      facetLabel: (v) =>
+        v ? (
+          <span className="pl-menu-grade">
+            <GradeBadge grade={v as CustomerGrade} />
+            <span>{GRADE_LABEL[v as CustomerGrade] ?? v}</span>
+          </span>
+        ) : (
+          // 등급이 없는 줄 — 명부에 없는 잠정사이거나, 아직 고객 레코드에 붙지 않은 줄.
+          <span className="pl-menu-grade">
+            <span className="cust-grade g-none">–</span>
+            <span>No grade (prospect)</span>
+          </span>
+        ),
       render: (r) => (
         <span className="mk-contact">
           <span>{r.contact_person || "—"}</span>
