@@ -1,6 +1,7 @@
 "use client";
 
 import { COL_MENU_W } from "@/components/common/tableHeadMenu";
+import CloseReasonDialog from "@/components/common/CloseReasonDialog";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -18,8 +19,8 @@ import {
   setRfqCancelled,
   updateRfq,
   fetchAssignableUsers,
-  CLOSE_REASONS,
   closeReasonLabel,
+  closeReasonBadge,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import {
@@ -650,6 +651,9 @@ function PipelineTable({
   }, [openRfqId, openOrderId, openStage, openVrfqId, openApPoId, openClaim, openView, openBack, rows]);
   // 목록 표시 방식: 표(table) / 칸반 보드(board). 같은 데이터·같은 상세 모달 재사용.
   const [view, setView] = useState<"table" | "board">("board");
+  // 목록에서 사유 배지를 눌러 고치는 딜(없으면 닫힘). 딜 팝업을 거치지 않는 지름길 —
+  // 39건을 훑다가 잘못 분류된 것이 보이면 그 자리에서 고치는 편이 자연스럽다.
+  const [reasonEdit, setReasonEdit] = useState<PipelineRow | null>(null);
   // 표 보기에서만 화면 높이를 못 박는다(가로 막대를 표 발밑·화면 안에 두려고).
   // 표를 떠날 때(보드 전환·언마운트)는 반드시 되돌린다 — 안 그러면 다음 화면이 잘린다.
   useEffect(() => {
@@ -1229,6 +1233,7 @@ function PipelineTable({
                         stage={stageOf(r)}
                         onOverview={() => openOverview(r.rfq_id)}
                         showCloseReason={showCloseReason}
+                        onEditCloseReason={() => setReasonEdit(r)}
                       />
                     ))}
                   </tr>
@@ -1241,6 +1246,18 @@ function PipelineTable({
       )}
 
       {openCol ? renderColMenu(openCol) : null}
+
+      {/* 목록에서 바로 고치는 종결 사유 — 딜 팝업의 것과 같은 다이얼로그다. */}
+      {reasonEdit ? (
+        <CloseReasonDialog
+          rfqId={reasonEdit.rfq_id}
+          mode="edit"
+          initialCode={reasonEdit.close_reason}
+          initialNote={reasonEdit.close_reason_note}
+          onSaved={onChanged}
+          onClose={() => setReasonEdit(null)}
+        />
+      ) : null}
 
       {selected ? (
         <PipelineModal
@@ -1935,20 +1952,35 @@ function MoneyLines({
 }
 
 /**
- * 종결 사유 한 줄(표) — 'Other' 는 직접 입력한 노트가 사유 자체이고, 그 밖의 사유는
- * 라벨을 적고 노트(있으면)는 툴팁으로 돌린다. 사유 없이 종결된 옛 건은 "Closed" 로만.
- * 표시 규칙은 팝업 머리의 .pl-close-reason 과 같게 맞춘다.
+ * 종결 사유 한 줄(표) — 갈래는 배지로, 그 안의 사정은 적어 둔 그대로 옆에 붙인다.
+ * 갈래(배지)는 세기 위한 것이고 서술형 노트는 읽기 위한 것이라, 둘 중 하나를 고르게
+ * 하지 않고 나란히 둔다. 누르면 사유를 고친다(행 클릭=딜 팝업과 겹치지 않게 stopPropagation).
  */
-function ClosedReasonTag({ r }: { r: PipelineRow }) {
-  const label = closeReasonLabel(r.close_reason);
+function ClosedReasonTag({ r, onEdit }: { r: PipelineRow; onEdit?: () => void }) {
+  const badge = closeReasonBadge(r.close_reason);
   const note = (r.close_reason_note || "").trim();
-  const text = r.close_reason === "other" ? note || label : label || "Closed";
-  const full = note && r.close_reason !== "other" ? `${label} — ${note}` : text;
+  const label = closeReasonLabel(r.close_reason) || "No reason recorded";
   // 종결일은 날짜만(yy-mm-dd) — 몇 시에 닫았는지는 목록에서 읽을 일이 없다.
   const when = fmtYMD(r.closed_at || "");
+  const full = [label, note].filter(Boolean).join(" — ");
   return (
-    <div className="pl-td-closed" title={when ? `${full} · closed ${when}` : full}>
-      <span className="pl-td-closed-tx">⊘ {text}</span>
+    <div className="pl-td-closed">
+      <button
+        type="button"
+        className="pl-td-closed-btn"
+        title={`${full}${when ? ` · closed ${when}` : ""}${onEdit ? " · click to edit" : ""}`}
+        onClick={(e) => {
+          if (!onEdit) return;
+          e.stopPropagation();
+          onEdit();
+        }}
+        disabled={!onEdit}
+      >
+        <span className={`close-badge tone-${badge.tone}`}>
+          ⊘ {r.close_reason ? badge.text : "Closed"}
+        </span>
+        {note ? <span className="pl-td-closed-note">{note}</span> : null}
+      </button>
       {when ? <span className="pl-td-closed-at">{when}</span> : null}
     </div>
   );
@@ -1965,6 +1997,7 @@ function PipelineCell({
   stage,
   onOverview,
   showCloseReason = true,
+  onEditCloseReason,
 }: {
   colKey: ColKey;
   r: PipelineRow;
@@ -1973,6 +2006,8 @@ function PipelineCell({
   onOverview: () => void;
   /** 종결 사유를 단계 칸에 적을지 — 고객확인용 탭에서는 끈다(실주 사유는 내부 기록이다). */
   showCloseReason?: boolean;
+  /** 사유 배지를 눌렀을 때. 없으면 배지는 읽기 전용. */
+  onEditCloseReason?: () => void;
 }) {
   switch (colKey) {
     case "project": {
@@ -2034,7 +2069,9 @@ function PipelineCell({
           />
           {/* 종결건은 바가 멈춘 자리보다 "왜 멈췄나"가 먼저다 — 지금까지는 제목의
               취소선뿐이라 사유를 보려면 39건을 하나씩 열어야 했다. */}
-          {r.cancelled && showCloseReason ? <ClosedReasonTag r={r} /> : null}
+          {r.cancelled && showCloseReason ? (
+            <ClosedReasonTag r={r} onEdit={onEditCloseReason} />
+          ) : null}
         </td>
       );
     case "amounts": {
@@ -2163,16 +2200,12 @@ export function PipelineModal({
   const [newWorkType, setNewWorkType] = useState("부품공급");
   // 딜 종결(취소/실주) 토글 — 종결 시 보드 Cancelled 존으로, 재활성 시 진행 컬럼으로 복귀.
   const [cancelBusy, setCancelBusy] = useState(false);
-  // 종결 시 사유 선택 모달 상태. 재활성은 사유가 필요 없으므로 바로 처리한다.
+  // 종결 사유 고르기·고치기 모달(CloseReasonDialog). 재활성은 사유가 필요 없어 바로 처리.
   const [reasonOpen, setReasonOpen] = useState(false);
-  const [reasonCode, setReasonCode] = useState<string>("");
-  const [reasonNote, setReasonNote] = useState("");
   async function toggleCancelled() {
     if (isNewProject || cancelBusy) return;
     if (!r.cancelled) {
-      // 종결 → 사유 선택 모달을 연다(직접 확정은 confirmClose 에서).
-      setReasonCode("");
-      setReasonNote("");
+      // 종결 → 사유 선택 모달을 연다(저장은 다이얼로그가 한다).
       setReasonOpen(true);
       return;
     }
@@ -2180,22 +2213,6 @@ export function PipelineModal({
     setCancelBusy(true);
     try {
       await setRfqCancelled(r.rfq_id, false);
-      await onChanged();
-    } finally {
-      setCancelBusy(false);
-    }
-  }
-  async function confirmClose() {
-    if (cancelBusy || !reasonCode) return;
-    setCancelBusy(true);
-    try {
-      await setRfqCancelled(
-        r.rfq_id,
-        true,
-        reasonCode,
-        reasonNote.trim() || undefined
-      );
-      setReasonOpen(false);
       await onChanged();
     } finally {
       setCancelBusy(false);
@@ -2714,17 +2731,25 @@ export function PipelineModal({
                 r.assignee || "—"
               )}
             </span>
-            {!isNewProject && r.cancelled && r.close_reason ? (() => {
+            {!isNewProject && r.cancelled ? (() => {
               // 'Other' 는 노트가 사유 자체. 그 외 사유는 라벨 뒤에 노트(있으면)를 붙인다.
               const label = closeReasonLabel(r.close_reason);
               const note = (r.close_reason_note || "").trim();
-              const text = r.close_reason === "other"
-                ? (note || label)
-                : (note ? `${label} — ${note}` : label);
+              const text = r.close_reason
+                ? (r.close_reason === "other" ? note || label : note ? `${label} — ${note}` : label)
+                : "No reason recorded";
+              // 누르면 사유를 고친다 — 잘못 고른 갈래를 되돌리려고 딜을 되살렸다 다시
+              // 닫으면 종결일시가 오늘로 바뀌어 "언제 놓친 건"인지가 사라진다.
               return (
-                <span className="pl-close-reason" title={text}>
-                  ⊘ {text}
-                </span>
+                <button
+                  type="button"
+                  className="pl-close-reason"
+                  title={`${text} · click to edit`}
+                  onClick={() => setReasonOpen(true)}
+                  disabled={cancelBusy}
+                >
+                  ⊘ {text} <span className="pl-close-reason-pen">✎</span>
+                </button>
               );
             })() : null}
             {!isNewProject ? (
@@ -2749,58 +2774,16 @@ export function PipelineModal({
           </span>
         </div>
 
-        {/* Close deal 사유 선택 — 종결 확정 전 사유를 고른다(기타는 직접 입력). */}
-        {reasonOpen ? (
-          <div
-            className="close-reason-backdrop"
-            onMouseDown={(e) => { if (e.target === e.currentTarget && !cancelBusy) setReasonOpen(false); }}
-            role="presentation"
-          >
-            <div className="close-reason-modal" role="dialog" aria-modal="true" aria-label="Close deal reason">
-              <div className="close-reason-title">Close this deal</div>
-              <div className="close-reason-sub">
-                Select a reason. It will move to the Closed zone on the board — you can reactivate it anytime.
-              </div>
-              <div className="close-reason-list">
-                {CLOSE_REASONS.map((opt) => (
-                  <label key={opt.code} className={`close-reason-opt${reasonCode === opt.code ? " sel" : ""}`}>
-                    <input
-                      type="radio"
-                      name="close-reason"
-                      value={opt.code}
-                      checked={reasonCode === opt.code}
-                      onChange={() => setReasonCode(opt.code)}
-                    />
-                    <span>{opt.label}</span>
-                  </label>
-                ))}
-              </div>
-              {/* 사유 선택 후 부가 설명(선택). 'Other' 는 필수, 그 외에는 선택 입력. */}
-              {reasonCode ? (
-                <textarea
-                  className="close-reason-note"
-                  placeholder={reasonCode === "other" ? "Enter the reason" : "Add a note (optional)"}
-                  value={reasonNote}
-                  onChange={(e) => setReasonNote(e.target.value)}
-                  rows={3}
-                  autoFocus
-                />
-              ) : null}
-              <div className="close-reason-actions">
-                <button type="button" className="btn" onClick={() => setReasonOpen(false)} disabled={cancelBusy}>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn primary"
-                  onClick={confirmClose}
-                  disabled={cancelBusy || !reasonCode || (reasonCode === "other" && !reasonNote.trim())}
-                >
-                  {cancelBusy ? "Closing…" : "Close deal"}
-                </button>
-              </div>
-            </div>
-          </div>
+        {/* 종결 사유 — 닫을 때 고르고, 닫힌 뒤에도 머리의 배지를 눌러 고친다. */}
+        {reasonOpen && !isNewProject ? (
+          <CloseReasonDialog
+            rfqId={r.rfq_id}
+            mode={r.cancelled ? "edit" : "close"}
+            initialCode={r.cancelled ? r.close_reason : ""}
+            initialNote={r.cancelled ? r.close_reason_note : ""}
+            onSaved={onChanged}
+            onClose={() => setReasonOpen(false)}
+          />
         ) : null}
 
         {/* 개요 뷰 — 팝업 안에서 프로젝트 전체를 읽는다. 단계 스트립과 좌우 2단 작업

@@ -449,7 +449,7 @@ class RFQ(Base):
     # 딜 종결(취소/실주) 사유. 종결 시 저장, 재활성 시 비운다.
     #   code: schedule(일정 지연/취소) | slow_response(대응 지연) | no_quote(견적 불가) | other(기타)
     close_reason      = Column(String(40))   # 사유 코드
-    close_reason_note = Column(Text)          # 기타 사유 직접 입력(선택)
+    close_reason_note = Column(Text)          # 사유에 덧붙인 서술(선택, other 는 필수)
     closed_at         = Column(String(16))    # 종결 일시 "YYYY-MM-DDTHH:MM" (KST). 재활성 시 비운다.
     follow_up_level  = Column(SAEnum(FollowUpLevel), default=FollowUpLevel.B)
     request_channel  = Column(String(40))   # 고객 요청 수단: Email/Phone/SMS/WhatsApp/WeChat 등

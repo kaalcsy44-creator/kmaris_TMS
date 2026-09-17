@@ -354,16 +354,39 @@ export function setRfqCancelled(
   });
 }
 
-// 딜 종결 사유 코드 → 라벨. Close deal 사유 선택/표시 공용.
-export const CLOSE_REASONS: { code: string; label: string }[] = [
-  { code: "schedule", label: "Project delayed or cancelled" },
-  { code: "slow_response", label: "Slower response than competitors" },
-  { code: "no_quote", label: "Unable to quote" },
-  { code: "other", label: "Other (specify)" },
+// 딜 종결 사유 — Close deal 사유 선택·배지 표시 공용.
+//
+// 갈래는 실제로 닫힌 건들을 묶어서 정했다(2026-09 기준 39건). 한동안 사유의 절반 이상이
+// "기타 + 직접 입력"이었는데, 그 자유 서술을 읽어 보면 가격·납기·메이커 직거래처럼 같은
+// 말이 반복된다 — 세어 볼 수 있는 갈래는 코드로 세우고, 그 안의 사정은 노트로 남긴다.
+//   badge: 목록의 좁은 칸에 들어갈 짧은 이름(라벨은 사유 선택 화면에서 쓰는 긴 문장)
+//   tone : 배지 색 갈래(.close-badge.tone-<tone>)
+// 코드 이름은 옛 데이터와 맞춘다 — schedule·slow_response·no_quote·other 는 이미 저장돼
+// 있어 바꾸면 그 건들의 사유가 통째로 미아가 된다(라벨만 오늘의 말로 고쳐 쓴다).
+export const CLOSE_REASONS: {
+  code: string;
+  label: string;
+  badge: string;
+  tone: string;
+}[] = [
+  { code: "price", label: "Price — lost on price", badge: "Price", tone: "price" },
+  { code: "slow_response", label: "Response — slower than competitors", badge: "Response", tone: "resp" },
+  { code: "no_quote", label: "No quote — unable to quote or source", badge: "No quote", tone: "noq" },
+  { code: "lead_time", label: "Lead time — delivery too late", badge: "Lead time", tone: "lead" },
+  { code: "direct_deal", label: "Direct deal — maker or another vendor took it", badge: "Direct deal", tone: "direct" },
+  { code: "schedule", label: "On hold — cancelled, postponed or gone quiet", badge: "On hold", tone: "hold" },
+  { code: "superseded", label: "Re-issued — moved to another project", badge: "Re-issued", tone: "reiss" },
+  { code: "other", label: "Other (specify)", badge: "Other", tone: "other" },
 ];
 export function closeReasonLabel(code?: string | null): string {
   if (!code) return "";
   return CLOSE_REASONS.find((r) => r.code === code)?.label || code;
+}
+/** 목록 배지용 짧은 이름 + 색 갈래. 모르는 코드(옛 데이터·수기)는 코드 그대로 중립색으로. */
+export function closeReasonBadge(code?: string | null): { text: string; tone: string } {
+  const hit = CLOSE_REASONS.find((r) => r.code === code);
+  if (hit) return { text: hit.badge, tone: hit.tone };
+  return { text: code ? code : "Closed", tone: "other" };
 }
 
 export function updateRfqStageDate(

@@ -3615,17 +3615,30 @@ table.pipeline td.nowrap {
   font-size: 11.5px;
   line-height: 16px;
 }
-.pl-td-closed-tx {
+/* 배지 + 노트는 한 덩어리로 눌러 고친다 — 11px 배지만 과녁으로 삼으면 너무 작다. */
+.pl-td-closed-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 1px 2px 1px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pl-td-closed-btn:disabled { cursor: default; }
+.pl-td-closed-btn:not(:disabled):hover .close-badge { filter: brightness(0.96); }
+.pl-td-closed-btn:not(:disabled):hover .pl-td-closed-note { color: #4a5568; }
+/* 적어 둔 사정 — 배지 옆에 그대로. 길면 접고(…) 전문은 툴팁. */
+.pl-td-closed-note {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 600;
-  color: #b23b3b;
-  background: #fbeaea;
-  border: 1px solid #e3b7b7;
-  border-radius: 7px;
-  padding: 1px 8px;
+  color: #6b7a8d;
 }
 .pl-td-closed-at {
   flex: none;
@@ -9232,7 +9245,35 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   border: 1px solid #e3b7b7;
   border-radius: 7px;
   padding: 3px 9px;
+  font-family: inherit;
+  cursor: pointer;
 }
+.pl-close-reason:hover:not(:disabled) { background: #f7dede; border-color: #d59f9f; }
+/* 연필은 평소 흐리게 둔다 — 늘 진하면 사유보다 먼저 읽힌다. */
+.pl-close-reason-pen { opacity: 0.55; }
+.pl-close-reason:hover .pl-close-reason-pen { opacity: 1; }
+/* ── 종결 사유 배지 ───────────────────────────────────────────────────────
+   갈래마다 색을 달리 둔다 — 39줄을 훑을 때 읽는 것은 글자가 아니라 색의 덩어리다.
+   다만 다 같은 채도로 칠하면 목록이 소리를 지르므로, 바탕은 옅게·글자만 진하게.
+   갈래는 lib/api.ts 의 CLOSE_REASONS(tone)과 1:1. */
+.close-badge {
+  flex: none;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 7px;
+  padding: 1px 8px;
+  border: 1px solid;
+}
+.close-badge.tone-price  { color: #8a5a00; background: #fdf1d9; border-color: #e9cc92; }
+.close-badge.tone-resp   { color: #5b34d6; background: #f0ecfd; border-color: #cdbdf3; }
+.close-badge.tone-noq    { color: #4a5568; background: #eef1f5; border-color: #cfd7e2; }
+.close-badge.tone-lead   { color: #9a4a12; background: #fdece2; border-color: #f0c3a3; }
+.close-badge.tone-direct { color: #1a6b5c; background: #e2f4f1; border-color: #a8d8cf; }
+.close-badge.tone-hold   { color: #1d5fa8; background: #e8f1fd; border-color: #b9d3f2; }
+.close-badge.tone-reiss  { color: #2a6f34; background: #e9f5ea; border-color: #b4ddb8; }
+.close-badge.tone-other  { color: #b23b3b; background: #fbeaea; border-color: #e3b7b7; }
+
 /* Close deal 사유 선택 모달 — 프로젝트 모달(z-index 100) 위로 띄운다. */
 .close-reason-backdrop {
   position: fixed;
@@ -9283,6 +9324,9 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .close-reason-opt:hover { border-color: var(--blue); background: #f6f9ff; }
 .close-reason-opt.sel { border-color: var(--blue); background: var(--sel); font-weight: 600; }
 .close-reason-opt input { accent-color: var(--blue); }
+/* 고르는 자리에도 같은 배지를 둔다 — 목록에서 보게 될 색을 여기서 먼저 익힌다. */
+.close-reason-opt .close-badge { min-width: 78px; text-align: center; }
+.close-reason-txt { min-width: 0; }
 .close-reason-note {
   width: 100%;
   resize: vertical;

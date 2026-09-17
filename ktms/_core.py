@@ -1033,10 +1033,17 @@ def _project_no_map(s) -> dict[int, str]:
 
 # 종결 사유 코드 → 목록에 붙일 짧은 말. 사유 고르는 화면의 문장(CLOSE_REASONS)은
 # 한 칸에 넣기엔 길다("Project delayed or cancelled").
+# 종결 사유 코드 → 짧은 이름(활동기록 한 줄·딜 상태 요약용).
+# 갈래는 web/lib/api.ts 의 CLOSE_REASONS 와 같아야 한다 — 한쪽만 늘리면 새 갈래로 닫은
+# 건이 로그에서 이름 없이 남는다.
 _CLOSE_REASON_SHORT = {
-    "schedule": "Project delayed",
+    "price": "Lost on price",
     "slow_response": "Slow response",
     "no_quote": "Unable to quote",
+    "lead_time": "Lead time too long",
+    "direct_deal": "Maker/other vendor took it",
+    "schedule": "On hold",
+    "superseded": "Re-issued as another project",
     "other": "Other",
 }
 
@@ -3945,7 +3952,8 @@ class RfqCancelUpdate(BaseModel):
     단계(stage)는 레코드 기반으로 자동 산출되므로 여기서는 status 만 바꾼다.
     종결 시 사유(reason 코드 + 기타 직접입력 note)를 함께 저장한다."""
     cancelled: bool
-    # schedule(일정 지연/취소) | slow_response(대응 지연) | no_quote(견적 불가) | other(기타)
+    # 사유 코드 — 갈래는 _CLOSE_REASON_SHORT(= web/lib/api.ts 의 CLOSE_REASONS)와 같다.
+    # price · slow_response · no_quote · lead_time · direct_deal · schedule · superseded · other
     reason: Optional[str] = None
     reason_note: Optional[str] = None
 
