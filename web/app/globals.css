@@ -3307,7 +3307,12 @@ table.pipeline col.plc-vendor {
   width: 150px;
 }
 table.pipeline col.plc-stage {
-  width: 500px;
+  width: 360px;
+}
+/* 종결 사유 — 배지 + 서술 두세 줄이 들어갈 만큼. 진행 중인 딜에서는 비어 있는 칸이라
+   더 넓힐 이유가 없다(필요하면 머리 가장자리를 끌어 늘리거나 Columns 에서 숨긴다). */
+table.pipeline col.plc-closed {
+  width: 260px;
 }
 table.pipeline col.plc-assignee {
   width: 84px;
@@ -3604,41 +3609,42 @@ table.pipeline td.nowrap {
   white-space: nowrap;
   color: #4a5568;
 }
-/* 종결 사유 — 단계 바 바로 아래 한 줄. 취소선 제목만으로는 "왜 닫혔나"를 알 수 없어
-   종결건마다 팝업을 열어야 했다. 회색 글자(tr.closed) 속에서도 읽히게 붉은 칩으로.
-   폭이 좁으면 접고(…) 전문은 툴팁 — 줄을 늘려 행 높이를 흔들지 않는다. */
+/* 종결 사유 칸 — 갈래(배지)와 종결일이 윗줄, 적어 둔 사정이 아랫줄.
+   칸 전체가 누르는 과녁이다(11px 배지만 과녁으로 삼으면 너무 작다). */
+.pl-td-closed-cell { vertical-align: top; }
 .pl-td-closed {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 5px;
-  font-size: 11.5px;
-  line-height: 16px;
-}
-/* 배지 + 노트는 한 덩어리로 눌러 고친다 — 11px 배지만 과녁으로 삼으면 너무 작다. */
-.pl-td-closed-btn {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  max-width: 100%;
-  padding: 1px 2px 1px 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  padding: 0;
   border: 0;
   background: none;
   font: inherit;
+  font-size: 11.5px;
+  line-height: 16px;
   text-align: left;
   cursor: pointer;
 }
-.pl-td-closed-btn:disabled { cursor: default; }
-.pl-td-closed-btn:not(:disabled):hover .close-badge { filter: brightness(0.96); }
-.pl-td-closed-btn:not(:disabled):hover .pl-td-closed-note { color: #4a5568; }
-/* 적어 둔 사정 — 배지 옆에 그대로. 길면 접고(…) 전문은 툴팁. */
+.pl-td-closed:disabled { cursor: default; }
+.pl-td-closed:not(:disabled):hover .close-badge { filter: brightness(0.96); }
+.pl-td-closed:not(:disabled):hover .pl-td-closed-note { color: #4a5568; }
+.pl-td-closed-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+/* 적어 둔 사정 — 접지 않고 줄을 바꾼다(최대 3줄). 좁은 칸에서 한 줄로 자르면 정작
+   이유가 잘려 나간다. 넘치는 만큼은 툴팁에 전문이 있다. */
 .pl-td-closed-note {
-  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   color: #6b7a8d;
+  overflow-wrap: break-word;
 }
 .pl-td-closed-at {
   flex: none;

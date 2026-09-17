@@ -19,6 +19,7 @@ import {
   setRfqCancelled,
   updateRfq,
   fetchAssignableUsers,
+  CLOSE_REASONS,
   closeReasonLabel,
   closeReasonBadge,
 } from "@/lib/api";
@@ -435,6 +436,7 @@ type FieldKey =
   | "vessel"
   | "project_title"
   | "stage"
+  | "close_reason"
   | "assignee"
   | "margin_pct";
 
@@ -443,19 +445,32 @@ type FieldKey =
  * 열을 잘게 쪼개 두면 프로젝트명·벤더명·이중통화 금액이 좁은 칸에서 단어 중간에
  * 잘려서, 필드를 읽는 순서(무엇→누구→얼마)대로 묶었다.
  */
-type ColKey = "project" | "customer" | "vendor" | "stage" | "amounts" | "assignee";
+type ColKey =
+  | "project"
+  | "customer"
+  | "vendor"
+  | "stage"
+  | "closed"
+  | "amounts"
+  | "assignee";
 
 const PIPELINE_COLUMNS: { key: ColKey; label: string }[] = [
   { key: "project", label: "Project" },
   { key: "customer", label: "Customer" },
   { key: "vendor", label: "Vendor" },
   { key: "stage", label: "Stage" },
+  // 종결 사유 — 단계와 한 칸에 겹쳐 두면 "어디까지 갔나"와 "왜 멈췄나"가 서로를 밀어내고,
+  // 무엇보다 사유로 걸러 볼 수가 없다(필터는 열 단위로 걸린다).
+  { key: "closed", label: "Reason" },
   { key: "amounts", label: "Amounts" },
   { key: "assignee", label: "PIC" },
 ];
 
-/** 금액 열을 뺀 구성 — 고객확인용 탭. 매입가·마진은 고객에게 보일 수 없다. */
-const PIPELINE_COLUMNS_NO_MONEY = PIPELINE_COLUMNS.filter((c) => c.key !== "amounts");
+/** 금액·종결사유를 뺀 구성 — 고객확인용 탭. 매입가·마진은 고객에게 보일 수 없고,
+ *  실주 사유는 내부 기록이다(화면공유·이미지 내보내기 포함). */
+const PIPELINE_COLUMNS_NO_MONEY = PIPELINE_COLUMNS.filter(
+  (c) => c.key !== "amounts" && c.key !== "closed"
+);
 
 /**
  * 그룹 열이 품는 정렬 기준. 여러 필드를 한 열에 접었으므로 메뉴가 필드별 정렬을 제공해야
@@ -472,6 +487,7 @@ const COL_SORTS: Record<ColKey, { key: FieldKey; label: string }[]> = {
   customer: [{ key: "customer", label: "Customer" }],
   vendor: [{ key: "vendor", label: "Vendor" }],
   stage: [{ key: "stage", label: "Stage" }],
+  closed: [{ key: "close_reason", label: "Reason" }],
   amounts: [{ key: "margin_pct", label: "Margin %" }],
   assignee: [{ key: "assignee", label: "PIC" }],
 };
@@ -482,6 +498,7 @@ const COL_FILTERS: Record<ColKey, FieldKey[]> = {
   customer: ["customer"],
   vendor: ["vendor"],
   stage: ["stage"],
+  closed: ["close_reason"],
   amounts: [],
   assignee: ["assignee"],
 };
@@ -493,6 +510,7 @@ const FIELD_LABEL: Partial<Record<FieldKey, string>> = {
   customer: "Customer",
   vendor: "Vendor",
   stage: "Stage",
+  close_reason: "Reason",
   assignee: "PIC",
 };
 
@@ -503,6 +521,7 @@ const PLC_CLASS: Record<ColKey, string> = {
   customer: "plc-customer",
   vendor: "plc-vendor",
   stage: "plc-stage",
+  closed: "plc-closed",
   amounts: "plc-amounts",
   assignee: "plc-assignee",
 };
@@ -525,6 +544,9 @@ function cellText(r: PipelineRow, key: FieldKey, steps: string[]): string {
       return r.project_title || "";
     case "stage":
       return doneStageLabel(r.stage, steps);
+    case "close_reason":
+      // 정렬은 배지 이름 기준 — 화면에서 묶여 보이는 덩어리와 줄 세우는 축이 같아야 한다.
+      return r.cancelled ? closeReasonBadge(r.close_reason).text : "";
     case "assignee":
       return r.assignee || "";
     case "margin_pct":
@@ -698,6 +720,7 @@ function PipelineTable({
   const [fVessel, setFVessel] = useState<string[]>([]);
   const [fAssignee, setFAssignee] = useState<string[]>([]);
   const [fStage, setFStage] = useState<string[]>([]); // 단계 번호 문자열
+  const [fCloseReason, setFCloseReason] = useState<string[]>([]); // 종결 사유 코드("" = 진행 중)
   const [fFrom, setFFrom] = useState(""); // 수신일 From "YYYY-MM-DD"
   const [fTo, setFTo] = useState(""); // 수신일 To
   // 헤더 클릭 시 뜨는 컬럼 메뉴(정렬+필터). fixed 위치라 가로 스크롤에 잘리지 않는다.
@@ -733,6 +756,7 @@ function PipelineTable({
       case "vessel": return fVessel;
       case "assignee": return fAssignee;
       case "stage": return fStage;
+      case "close_reason": return fCloseReason;
       default: return [];
     }
   }
@@ -744,6 +768,7 @@ function PipelineTable({
       case "vessel": setFVessel(next); break;
       case "assignee": setFAssignee(next); break;
       case "stage": setFStage(next); break;
+      case "close_reason": setFCloseReason(next); break;
     }
     // 메뉴는 열어 둔다 — 복수 선택은 한 번에 하나씩 찍어 쌓는 동작이라, 고를 때마다
     // 닫히면 같은 메뉴를 값 수만큼 다시 열어야 한다. 닫기는 바깥 클릭/머리글 재클릭.
@@ -782,10 +807,22 @@ function PipelineTable({
   const assigneeOpts = distinct((r) => r.assignee || "");
   // 단계 옵션: 데이터에 존재하는 stage 번호를 오름차순으로
   const stageOpts = Array.from(new Set(rows.map((r) => stageOf(r)))).sort((a, b) => a - b);
+  // 종결 사유 옵션: 실제로 쓰인 코드만, 배지 차례(CLOSE_REASONS 순)대로. 진행 중인 딜은
+  // 사유가 없으므로 "" 한 칸으로 묶어 고를 수 있게 둔다 — 사유 열에서 "아직 안 닫힌 것"을
+  // 고르는 길이 없으면 이 열의 필터는 반쪽이다.
+  const closeReasonOpts = (() => {
+    const used = new Set(rows.map((r) => (r.cancelled ? r.close_reason || "" : "")));
+    const known = CLOSE_REASONS.map((o) => o.code).filter((c) => used.has(c));
+    // 목록에 없는 옛 코드(수기·폐기된 갈래)도 있으면 뒤에 붙인다 — 골라서 고치러 가야 한다.
+    const unknown = Array.from(used).filter(
+      (c) => c && !CLOSE_REASONS.some((o) => o.code === c)
+    );
+    return [...known, ...unknown, ...(used.has("") ? [""] : [])];
+  })();
 
   // 메뉴 값 목록(데이터 고유값). 날짜·필터없는 필드는 빈 배열.
   // "All"(선택 해제) 줄은 메뉴가 목록 위에 따로 그린다 — 값이 아니라 명령이라서.
-  function colOptions(key: FieldKey): { v: string; label: string }[] {
+  function colOptions(key: FieldKey): { v: string; label: string; tone?: string }[] {
     switch (key) {
       case "customer":
         return customerOpts.map((v) => ({ v, label: v || "Unspecified" }));
@@ -799,6 +836,12 @@ function PipelineTable({
         return assigneeOpts.map((v) => ({ v, label: v || "Unspecified" }));
       case "stage":
         return stageOpts.map((s) => ({ v: String(s), label: doneStageLabel(s, steps) }));
+      case "close_reason":
+        return closeReasonOpts.map((c) =>
+          c
+            ? { v: c, label: closeReasonBadge(c).text, tone: closeReasonBadge(c).tone }
+            : { v: "", label: "Still open" }
+        );
       default:
         return [];
     }
@@ -811,6 +854,7 @@ function PipelineTable({
     fVessel.length > 0 ||
     fAssignee.length > 0 ||
     fStage.length > 0 ||
+    fCloseReason.length > 0 ||
     fFrom !== "" ||
     fTo !== "";
 
@@ -821,6 +865,7 @@ function PipelineTable({
     setFVessel([]);
     setFAssignee([]);
     setFStage([]);
+    setFCloseReason([]);
     setFFrom("");
     setFTo("");
   }
@@ -845,6 +890,8 @@ function PipelineTable({
       (fVessel.length === 0 || fVessel.includes(r.vessel || "")) &&
       (fAssignee.length === 0 || fAssignee.includes(r.assignee || "")) &&
       (fStage.length === 0 || fStage.includes(String(stageOf(r)))) &&
+      (fCloseReason.length === 0 ||
+        fCloseReason.includes(r.cancelled ? r.close_reason || "" : "")) &&
       // 영업 계정은 항상 자기 딜만. 그 외엔 Assignee 멀티 필터(빈 배열=전체).
       (salesScoped
         ? (r.assignee || "") === myName
@@ -1005,7 +1052,14 @@ function PipelineTable({
                       aria-checked={sel.includes(o.v)}
                     >
                       <span className="chk">{sel.includes(o.v) ? "✓" : ""}</span>
-                      <span className="lbl">{o.label}</span>
+                      {/* 사유는 목록에서 색 덩어리로 읽히므로 고르는 자리도 같은 배지로. */}
+                      <span className="lbl">
+                        {o.tone ? (
+                          <span className={`close-badge tone-${o.tone}`}>{o.label}</span>
+                        ) : (
+                          o.label
+                        )}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -1964,25 +2018,27 @@ function ClosedReasonTag({ r, onEdit }: { r: PipelineRow; onEdit?: () => void })
   const when = fmtYMD(r.closed_at || "");
   const full = [label, note].filter(Boolean).join(" — ");
   return (
-    <div className="pl-td-closed">
-      <button
-        type="button"
-        className="pl-td-closed-btn"
-        title={`${full}${when ? ` · closed ${when}` : ""}${onEdit ? " · click to edit" : ""}`}
-        onClick={(e) => {
-          if (!onEdit) return;
-          e.stopPropagation();
-          onEdit();
-        }}
-        disabled={!onEdit}
-      >
+    <button
+      type="button"
+      className="pl-td-closed"
+      title={`${full}${when ? ` · closed ${when}` : ""}${onEdit ? " · click to edit" : ""}`}
+      onClick={(e) => {
+        if (!onEdit) return;
+        e.stopPropagation();
+        onEdit();
+      }}
+      disabled={!onEdit}
+    >
+      <span className="pl-td-closed-top">
         <span className={`close-badge tone-${badge.tone}`}>
           ⊘ {r.close_reason ? badge.text : "Closed"}
         </span>
-        {note ? <span className="pl-td-closed-note">{note}</span> : null}
-      </button>
-      {when ? <span className="pl-td-closed-at">{when}</span> : null}
-    </div>
+        {when ? <span className="pl-td-closed-at">{when}</span> : null}
+      </span>
+      {/* 적어 둔 사정은 접지 않고 줄을 바꾼다(최대 3줄) — 좁은 칸에서 한 줄로 자르면
+          "Maker(Viking Engineering) - Vessel…" 처럼 정작 이유가 잘려 나간다. */}
+      {note ? <span className="pl-td-closed-note">{note}</span> : null}
+    </button>
   );
 }
 
@@ -2067,8 +2123,12 @@ function PipelineCell({
             savedAt={stageDateOf(r, r.stage)}
             lastAt={lastActivityISO(r)}
           />
-          {/* 종결건은 바가 멈춘 자리보다 "왜 멈췄나"가 먼저다 — 지금까지는 제목의
-              취소선뿐이라 사유를 보려면 39건을 하나씩 열어야 했다. */}
+        </td>
+      );
+    case "closed":
+      // 종결건만 채워지는 칸. 진행 중인 딜에 "—" 를 찍으면 목록의 절반이 대시로 덮인다.
+      return (
+        <td className="pl-td-closed-cell">
           {r.cancelled && showCloseReason ? (
             <ClosedReasonTag r={r} onEdit={onEditCloseReason} />
           ) : null}
