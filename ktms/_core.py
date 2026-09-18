@@ -93,7 +93,11 @@ app = FastAPI(title="KTMS Admin API", docs_url=None, redoc_url=None)
 _ALLOWED_ORIGINS = {"http://localhost:3000", "http://127.0.0.1:3000"}
 _ALLOWED_ORIGIN_RE = re.compile(r"https://.*\.vercel\.app$")
 USD_KRW_RATE = 1543.41
-API_BUILD = "mail-longid-fix"
+# 지금 도는 것이 어느 판인지 바깥에서 볼 수 있는 유일한 자리다. 화면에만 기능이
+# 올라가고 API 는 예전 판으로 남아 있던 적이 있는데(2026-09-18, Scan website 가
+# "Not Found" 만 내놓았다), 이 값이 9월 2일에 멈춰 있어서 무엇이 도는지 확인할 길이
+# 없었다. 배포로 확인할 일이 있는 변경에서는 이 값을 함께 고친다 — /health 가 답한다.
+API_BUILD = "vendor-scan-images"
 
 
 def _allow_origin(origin: str | None) -> str | None:
