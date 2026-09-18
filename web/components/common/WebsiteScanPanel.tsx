@@ -97,7 +97,13 @@ export function WebsiteScanPanel({
         {res && !res.error ? (
           <span className="hint-inline">
             Read {res.pages.length} page{res.pages.length === 1 ? "" : "s"}
-            {res.pages.length === 1 ? " — only the front page had text." : "."}
+            {/* 그림을 읽었다는 사실은 숨기지 않는다 — 글이 없는 사이트에서 태그가
+                나온 이유가 그것이고, 사람이 결과를 얼마나 믿을지도 거기서 갈린다. */}
+            {res.images
+              ? ` and ${res.images} picture${res.images === 1 ? "" : "s"} — this site prints its text into images.`
+              : res.pages.length === 1
+                ? " — only the front page had text."
+                : "."}
           </span>
         ) : null}
       </div>
@@ -170,9 +176,9 @@ export function WebsiteScanPanel({
       ) : null}
 
       <span className="hint-inline">
-        Reads the front page and a few product pages, then proposes tags — it never saves
-        on its own. A logo on a website is not proof they supply that brand, so check
-        before adding.
+        Reads the front page and a few product pages — and, where a site prints its text
+        into images, those pictures too — then proposes tags. It never saves on its own.
+        A logo on a website is not proof they supply that brand, so check before adding.
       </span>
     </div>
   );

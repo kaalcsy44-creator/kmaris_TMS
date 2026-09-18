@@ -1497,6 +1497,8 @@ export type PartnerScan = {
   website: string;
   /** 실제로 읽은 쪽들 — 첫 화면만 읽혔는지 안쪽까지 들어갔는지 보인다. */
   pages: { url: string; chars: number }[];
+  /** 함께 읽은 그림 수. 글이 통째로 그림인 사이트에서만 0 이 아니다. */
+  images: number;
   makers: { id: number; name: string; country: string }[];
   categories: { id: number; code: string; path: string }[];
   /** 홈페이지에는 있는데 우리 제조사 명부에는 없는 브랜드 — 명부에 올릴 거리다. */

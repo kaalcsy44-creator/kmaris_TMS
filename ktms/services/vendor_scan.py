@@ -15,10 +15,17 @@
 제품·사업·취급품목으로 보이는 링크를 몇 개 따라 들어간다. 자바스크립트로만 그리는
 사이트는 본문이 통째로 비는데, 그때는 조용히 빈 답을 주지 말고 그 사실을 말한다 —
 "아무것도 못 찾았다"와 "읽을 수가 없었다"는 사람이 할 일이 전혀 다르다.
+
+글이 없다고 내용이 없는 것은 아니다. 이 바닥의 오래된 사이트는 본문을 통째로 그림에
+인쇄해 둔다(ACE Valve 의 제품 쪽은 HTML 글자가 메뉴 47자뿐이고, 형식 번호·규격·압력은
+전부 jpg 안에 있다). 그래서 **글이 없을 때만** 그 쪽의 그림을 함께 모델에 보낸다.
+글이 있는 사이트에서는 그림을 받지도 않으므로, 이 비용은 그림뿐인 곳에서만 든다.
 """
 from __future__ import annotations
 
+import base64
 import html
+import io
 import json
 import re
 from urllib.parse import urljoin, urlparse
@@ -128,6 +135,91 @@ def _links(raw: str, base: str) -> list[str]:
     return out
 
 
+# 본문이 그림 한 장인 사이트가 있다. ACE Valve 의 제품 쪽은 HTML 에서 긁히는 글이
+# 메뉴 47자뿐이고, 사람이 보는 것(형식 번호·규격·압력)은 전부 content_product_01.jpg
+# 안에 인쇄돼 있다. 글만 읽고 "취급품목을 못 찾았다"고 답하면 그건 우리가 못 읽은
+# 것이지 그 회사가 안 적어 둔 것이 아니다. 글이 없을 때는 그림도 본다.
+#
+# 장식은 걸러야 한다 — 그림 수십 장 중 본문은 한두 장이고 나머지는 메뉴·로고·띠다.
+# 이름으로 한 번, 크기와 생김새로 한 번 거른다(아래 _usable_image).
+_CHROME = re.compile(
+    r"(logo|menu|nav|btn|button|icon|banner|spacer|blank|arrow|dot|bullet|"
+    r"copyright|footer|header|_bg|bg_|top_|left_|right_|bottom|title_|tab_)",
+    re.I,
+)
+MAX_IMAGES = 4         # 모델에 함께 보낼 그림 수 — 본문 쪽은 대개 한두 장이면 족하다
+IMG_TRIES = 14         # 내려받아 볼 후보 수(장식이 앞자리를 차지하고 있을 수 있다)
+MIN_IMG_BYTES = 12_000     # 이보다 작으면 글이 인쇄된 그림이 아니다(아이콘·버튼)
+MAX_IMG_BYTES = 5_000_000  # 이보다 크면 받지 않는다 — 스캔 한 번에 붙들 무게가 아니다
+IMG_LONG_EDGE = 1568       # 모델이 더 키워 봐야 못 읽는다. 넘으면 줄여서 보낸다
+
+
+def _image_urls(raws: list[tuple[str, str]]) -> list[str]:
+    """읽은 쪽들에서 본문일 법한 그림 주소를 순서대로. 이름으로 거른 1차 후보다."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for base, raw in raws:
+        for m in re.finditer(r'(?is)<img[^>]+src=["\']([^"\']+)["\']', raw):
+            src = m.group(1).strip()
+            if not src or src.lower().startswith("data:"):
+                continue
+            url = urljoin(base, src).split("#")[0]
+            if url in seen or _CHROME.search(url.rsplit("/", 1)[-1]):
+                continue
+            seen.add(url)
+            out.append(url)
+    return out
+
+
+def _usable_image(blob: bytes) -> str:
+    """그림 한 장을 모델에 보낼 JPEG(base64)로 — 글이 없을 그림이면 빈 문자열.
+
+    크기와 생김새로 거른다. 작은 것은 아이콘이고, 띠처럼 길쭉한 것은 머리글 장식이다
+    (ACE Valve 의 sub_top.jpg 는 1003×200 이다). 글이 인쇄된 쪽은 대개 네모지다.
+    """
+    from PIL import Image                      # 무거우므로 쓸 때만 불러온다
+
+    if len(blob) < MIN_IMG_BYTES:
+        return ""
+    try:
+        im = Image.open(io.BytesIO(blob))
+        im.load()
+    except Exception:
+        return ""
+    w, h = im.size
+    if w < 300 or h < 200:
+        return ""
+    ratio = w / h
+    if ratio > 4 or ratio < 0.25:
+        return ""
+    if max(w, h) > IMG_LONG_EDGE:
+        scale = IMG_LONG_EDGE / max(w, h)
+        im = im.resize((max(1, int(w * scale)), max(1, int(h * scale))), Image.LANCZOS)
+    buf = io.BytesIO()
+    im.convert("RGB").save(buf, format="JPEG", quality=80)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def fetch_images(urls: list[str]) -> list[str]:
+    """후보 주소에서 쓸 만한 그림을 골라 base64 JPEG 로. 최대 MAX_IMAGES 장."""
+    out: list[str] = []
+    with httpx.Client(timeout=TIMEOUT, follow_redirects=True,
+                      headers={"User-Agent": _UA}) as cli:
+        for url in urls[:IMG_TRIES]:
+            if len(out) >= MAX_IMAGES:
+                break
+            try:
+                r = cli.get(url)
+                if r.status_code >= 400 or len(r.content) > MAX_IMG_BYTES:
+                    continue
+                enc = _usable_image(r.content)
+            except Exception:
+                continue
+            if enc:
+                out.append(enc)
+    return out
+
+
 def fetch_site(website: str) -> dict:
     """홈페이지와 그 안의 몇 쪽을 읽어 본문을 모은다.
 
@@ -186,6 +278,8 @@ def fetch_site(website: str) -> dict:
         text = _text_of(body)[:PAGE_CHARS]
         pages.append({"url": base, "chars": len(text)})
         chunks.append(f"### {base}\n{text}")
+        # 그림은 글이 없던 쪽에서도 걷는다 — 오히려 거기가 본문이다(아래 참조).
+        raws: list[tuple[str, str]] = [(base, body)]
 
         for url in _links(body, base)[: MAX_PAGES - 1]:
             if sum(len(c) for c in chunks) >= TOTAL_CHARS:
@@ -197,6 +291,7 @@ def fetch_site(website: str) -> dict:
                 t = _text_of(sub.text)[:PAGE_CHARS]
             except Exception:
                 continue
+            raws.append((str(sub.url), sub.text))
             if len(t) < 80:            # 빈 쪽은 자리만 차지한다
                 continue
             pages.append({"url": url, "chars": len(t)})
@@ -206,7 +301,8 @@ def fetch_site(website: str) -> dict:
     # 첫 화면이 얇아도 안쪽 쪽에서 건졌으면 얇은 것이 아니다 — 전체로 판단한다.
     body_only = re.sub(r"### \S+", "", text).strip()
     return {"pages": pages, "text": text, "error": "",
-            "thin": len(body_only) < THIN_CHARS}
+            "thin": len(body_only) < THIN_CHARS,
+            "images": _image_urls(raws)}
 
 
 def _menus(s) -> tuple[list[dict], list[dict], dict, dict]:
@@ -254,8 +350,14 @@ _SCHEMA = {
 
 
 def _prompt(name: str, text: str, makers: list[dict], cats: list[dict],
-            kind: str = "vendor") -> str:
+            kind: str = "vendor", shots: bool = False) -> str:
     cat_menu = "\n".join(f"{c['id']}\t{c['code']}\t{c['path']}" for c in cats)
+    # 글이 통째로 그림인 사이트에서는 그림을 함께 보낸다 — 그 사정을 먼저 알려 둔다.
+    # 모르고 보면 "글이 없으니 고를 것이 없다"고 답해 버린다.
+    shot_note = ("\n\n**이 홈페이지는 본문이 그림으로 되어 있습니다.** 글 대신 앞에 붙인 "
+                 "그림들이 실제 쪽 내용입니다(제품 쪽·회사 소개 쪽). 그림에 인쇄된 글자를 "
+                 "읽어 근거로 삼으세요 — 아래 '홈페이지 본문'은 메뉴 글자뿐일 수 있습니다."
+                 if shots else "")
     # 제조사 명부는 거래선에만 낸다 — 제조사 자신은 '누구 것을 대 주나'라는 칸이 없다
     # (그 회사가 곧 그 브랜드다). 물어봐야 할 것은 '무엇을 만드는가' 하나뿐이다.
     if kind == "maker":
@@ -271,7 +373,7 @@ def _prompt(name: str, text: str, makers: list[dict], cats: list[dict],
                 "골라 주세요.")
         maker_block = (f"\n[제조사 명부] — 이 회사가 대 줄 수 있어 보이는 제조사의 번호를 "
                        f"maker_ids 에\n{maker_menu}\n")
-    return f"""{head}
+    return f"""{head}{shot_note}
 {maker_block}
 [부품 분류] — 이 회사가 {"만드는" if kind == "maker" else "다루는"} 품목의 번호를 category_ids 에
 {cat_menu}
@@ -309,24 +411,36 @@ def scan_partner(s, name: str, website: str, kind: str = "vendor") -> dict:
            "summary", "error"}
     """
     site = fetch_site(website)
-    base = {"pages": site["pages"], "makers": [], "categories": [],
+    base = {"pages": site["pages"], "images": 0, "makers": [], "categories": [],
             "unlisted_brands": [], "evidence": "", "summary": "", "error": ""}
     if site["error"]:
         return {**base, "error": site["error"]}
+
+    # 글이 없을 때만 그림을 본다. 글이 있는 사이트(대부분)에서는 그림을 받지도 않으므로
+    # 여기까지 오는 비용은 그림뿐인 곳에서만 든다 — 본문 한 장이 1,200 토큰 남짓이다.
+    shots: list[str] = []
     if site["thin"]:
-        return {**base, "error": (
-            "홈페이지에서 읽을 수 있는 글이 거의 없습니다 — 자바스크립트로만 그리는 "
-            "사이트일 수 있습니다. 취급품목 쪽 주소를 직접 넣어 다시 시도해 보세요.")}
+        shots = fetch_images(site.get("images") or [])
+        if not shots:
+            return {**base, "error": (
+                "홈페이지에서 읽을 수 있는 글이 거의 없습니다 — 자바스크립트로만 그리는 "
+                "사이트일 수 있습니다. 취급품목 쪽 주소를 직접 넣어 다시 시도해 보세요.")}
+    base["images"] = len(shots)
 
     makers, cats, maker_by_id, cat_by_id = _menus(s)
-    prompt = _prompt(name, site["text"], makers, cats, kind)
+    prompt = _prompt(name, site["text"], makers, cats, kind, bool(shots))
     client = _anthropic_client()
     kwargs = {
         # 상한을 넉넉히 — 4,000 이었을 때 협력사를 70곳 늘어놓은 답이 중간에서 잘려
         # JSON 이 깨졌다(AJIN Trading). 스트리밍이라 크게 잡아도 요청은 안 끊기고,
         # 과금은 실제로 쓴 만큼만이라 넉넉한 쪽이 언제나 낫다.
         "model": MODEL, "max_tokens": 16_000,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": [{"role": "user", "content": [
+            *({"type": "image",
+               "source": {"type": "base64", "media_type": "image/jpeg", "data": b}}
+              for b in shots),
+            {"type": "text", "text": prompt},
+        ]}],
         # effort=low — 목록에서 고르는 일이라 깊게 생각할 것이 없다(pdf_parser 와 같다).
         "output_config": {"effort": "low",
                           "format": {"type": "json_schema", "schema": _SCHEMA}},
@@ -364,6 +478,7 @@ def scan_partner(s, name: str, website: str, kind: str = "vendor") -> dict:
                    if isinstance(i, int) and i in cat_by_id]
     return {
         "pages": site["pages"],
+        "images": len(shots),
         "makers": picked_makers,
         "categories": picked_cats,
         "unlisted_brands": [str(b).strip() for b in (data.get("unlisted_brands") or [])
