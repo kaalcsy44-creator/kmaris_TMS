@@ -108,6 +108,13 @@ async function handle<T>(res: Response, path: string): Promise<T> {
   }
   if (!res.ok) {
     const e = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    // FastAPI 가 길을 못 찾았을 때 내놓는 기본 문구는 "Not Found" 한마디다. 그대로
+    // 띄우면 무엇이 없다는 말인지 알 수가 없다 — 우리 핸들러는 이 표기를 쓰지 않으므로
+    // (우리 것은 "Not found" 이거나 한국어다) 이 문구는 곧 "서버에 이 길이 없다"는
+    // 뜻이고, 화면만 새로 올라가고 API 가 예전 판으로 남았을 때 여기에 걸린다.
+    if (res.status === 404 && e?.detail === "Not Found") {
+      throw new Error(`서버에 이 기능이 아직 없습니다 (404 ${path}) — API 배포본이 화면보다 낮습니다.`);
+    }
     throw new Error(errorDetailToString(e?.detail) || `API ${res.status} ${res.statusText} — ${path}`);
   }
   return res.json() as Promise<T>;

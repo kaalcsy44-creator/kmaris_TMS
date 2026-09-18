@@ -35,6 +35,7 @@ MAX_PAGES = 5          # 첫 화면 + 따라 들어갈 링크 4개
 PAGE_CHARS = 6_000     # 한 쪽에서 가져갈 글자 수 — 뒤쪽은 대개 주소·저작권 문구다
 TOTAL_CHARS = 20_000   # 모델에 보낼 전체 상한
 THIN_CHARS = 400       # 이보다 짧으면 사람이 볼 내용이 없는 쪽으로 친다
+DOOR_CHARS = 120       # 이보다 짧고 링크도 없으면 '들어가기' 한 장으로 친다
 TIMEOUT = 15.0
 
 # 따라 들어갈 만한 링크 — 취급 브랜드와 품목은 거의 이 이름의 쪽에 있다.
@@ -50,6 +51,45 @@ _SKIP = re.compile(
     r"recruit|career|[.]pdf$|[.]jpg$|[.]png$|[.]zip$|mailto:|tel:|javascript:)",
     re.I,
 )
+
+# 첫 화면이 '들어가기' 한 장뿐인 사이트가 흔하다 — 인트로 그림에 지도를 얹어 두거나,
+# 자바스크립트로 /english/ 로 튕기거나, 본문을 프레임으로 감싼다. 브라우저는 알아서
+# 넘어가지만 우리는 그 자리에서 0자를 읽고 "읽을 글이 없다"고 답했다(ACE Valve 가
+# 그랬다 — 본문은 /english/ 에 멀쩡히 있었다). 그 한 칸은 우리도 넘어간다.
+_ENTER = (
+    # <meta http-equiv="refresh" content="0;url=/english/">
+    re.compile(r"""(?is)<meta[^>]+http-equiv\s*=\s*["']?refresh["']?[^>]*"""
+               r"""content\s*=\s*["'][^"']*?url\s*=\s*([^"'\s>]+)"""),
+    # location.href='/english/' · location.replace("…") · window.location="…"
+    re.compile(r"""(?is)location(?:\s*\.\s*(?:href|replace))?\s*(?:=|\()\s*["']([^"']+)["']"""),
+    # <frame src="main.html"> — 본문을 프레임으로 감싼 옛 사이트
+    re.compile(r"""(?is)<i?frame[^>]+src\s*=\s*["']([^"']+)["']"""),
+    # <area href="./english/"> — 인트로 그림에 지도를 얹어 '들어가기'를 만든 경우
+    re.compile(r"""(?is)<area[^>]+href\s*=\s*["']([^"'#]+)["']"""),
+)
+_NOT_A_PAGE = re.compile(r"[.](jpe?g|png|gif|svg|pdf|zip|css|js|ico)$", re.I)
+
+
+def _enter_url(raw: str, base: str) -> str:
+    """인트로 한 장에서 본문으로 들어가는 주소 — 없으면 빈 문자열.
+
+    같은 사이트 안으로만 간다. 바깥으로 튕기는 주소는 대개 광고나 옛 도메인이라,
+    따라가 봐야 그 회사의 취급품목과는 상관없는 글을 읽게 된다.
+    """
+    host = urlparse(base).netloc.lower()
+    here = base.split("#")[0].rstrip("/")
+    for pat in _ENTER:
+        for m in pat.finditer(raw):
+            href = (m.group(1) or "").strip()
+            if not href or href.lower().startswith(("javascript:", "mailto:", "tel:", "#")):
+                continue
+            url = urljoin(base, href).split("#")[0]
+            if urlparse(url).netloc.lower() != host or _NOT_A_PAGE.search(url):
+                continue
+            if url.rstrip("/") == here:
+                continue
+            return url
+    return ""
 
 
 def site_url(website: str) -> str:
@@ -105,18 +145,49 @@ def fetch_site(website: str) -> dict:
         try:
             r = cli.get(home)
         except Exception as exc:
-            return {"pages": [], "text": "",
-                    "error": f"열 수 없습니다 — {type(exc).__name__}", "thin": False}
+            # 앞머리 없이 적힌 주소에는 https 를 붙여 본다(site_url). 그런데 이 바닥의
+            # 오래된 사이트는 http 만 여는 곳이 아직 많아서, 그 한 번에 실패했다고
+            # "열 수 없습니다"로 끝내면 읽을 수 있는 곳을 못 읽는다.
+            r = None
+            if home.startswith("https://") and not website.strip().lower().startswith("https://"):
+                try:
+                    r = cli.get("http://" + home[len("https://"):])
+                except Exception:
+                    r = None
+            if r is None:
+                return {"pages": [], "text": "",
+                        "error": f"열 수 없습니다 — {type(exc).__name__}", "thin": False}
         if r.status_code >= 400:
             return {"pages": [], "text": "",
                     "error": f"열 수 없습니다 — HTTP {r.status_code}", "thin": False}
 
-        body = r.text
-        text = _text_of(body)[:PAGE_CHARS]
-        pages.append({"url": str(r.url), "chars": len(text)})
-        chunks.append(f"### {r.url}\n{text}")
+        body, base = r.text, str(r.url)
+        # 인트로 한 장이면 그 뒤로 들어간다. 두 칸까지만 — 그보다 깊게 겹친 곳은 못 봤고,
+        # 잘못 짚었을 때 엉뚱한 곳을 계속 따라가는 편이 못 읽는 것보다 나쁘다.
+        #
+        # 문(門)인지 방인지는 글자 수만으로 가르지 않는다. 메뉴 글자만 잡히는 첫 화면도
+        # THIN_CHARS 아래로 나오는데(ACE Valve 의 /english/ 는 353자다), 그건 넘어갈
+        # 자리가 아니라 우리가 링크를 따라 들어가야 할 진짜 첫 화면이다. 문은 글도
+        # 없고 따라 들어갈 링크도 없다 — 그 둘이 다 없을 때만 넘어간다.
+        for _ in range(2):
+            if len(_text_of(body)) >= DOOR_CHARS or _links(body, base):
+                break
+            nxt = _enter_url(body, base)
+            if not nxt:
+                break
+            try:
+                deep = cli.get(nxt)
+            except Exception:
+                break
+            if deep.status_code >= 400:
+                break
+            body, base = deep.text, str(deep.url)
 
-        for url in _links(body, str(r.url))[: MAX_PAGES - 1]:
+        text = _text_of(body)[:PAGE_CHARS]
+        pages.append({"url": base, "chars": len(text)})
+        chunks.append(f"### {base}\n{text}")
+
+        for url in _links(body, base)[: MAX_PAGES - 1]:
             if sum(len(c) for c in chunks) >= TOTAL_CHARS:
                 break
             try:

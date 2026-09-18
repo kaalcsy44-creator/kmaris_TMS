@@ -17,6 +17,9 @@ python-multipart>=0.0.9
 pdfplumber>=0.11.0
 # output_config(JSON 스키마 강제)·messages.stream 을 쓴다 — 0.111 이상이어야 한다.
 anthropic>=0.111.0
+# services/vendor_scan.py 가 거래선 홈페이지를 읽어 온다. anthropic 이 전이로 끌어오긴
+# 하지만 우리가 직접 import 하므로 여기에 적는다 — 전이 의존은 언제든 사라질 수 있다.
+httpx>=0.27.0
 openpyxl>=3.1.0
 # CI Excel(doc_xlsx) 의 로고·서명·직인 이미지 임베드에 필요(openpyxl Image → PIL).
 # pdfplumber 가 전이 설치하지만, 이미지 기능이 명시적이므로 직접 고정한다.

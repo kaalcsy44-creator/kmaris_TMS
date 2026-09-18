@@ -102,7 +102,10 @@ export function WebsiteScanPanel({
         ) : null}
       </div>
 
-      {err ? <span className="form-error">{err}</span> : null}
+      {/* 못 읽은 사유(scan-warn)와 같은 상자에 담되 색만 다르게 — 예전엔 아무 꾸밈도
+          없는 .form-error 였고(그 이름의 CSS 는 어디에도 없다), 그래서 "Not Found"
+          한 줄이 설명글처럼 보였다. 실패는 실패로 보여야 한다. */}
+      {err ? <span className="scan-warn scan-err">{err}</span> : null}
       {res?.error ? <span className="scan-warn">{res.error}</span> : null}
 
       {res && !res.error ? (
