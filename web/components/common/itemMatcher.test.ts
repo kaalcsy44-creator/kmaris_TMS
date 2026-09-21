@@ -120,3 +120,70 @@ test("P-007 ON PHOENIX — 6줄 중 5·6항만 실린 C/I 의 매입 합계", ()
   assert.equal(purTotal, 300000);
   assert.equal(Math.round(((salesTotal - purTotal) / salesTotal) * 1000) / 10, 30);
 });
+
+// ── 라인 ID(lid) — 벤더별로 줄을 갈라 보내기 시작한 뒤의 규칙 ─────────────────
+
+type LidItem = { part_no?: string; lid?: string; tag: string };
+
+function pairLid(base: LidItem[], doc: LidItem[]): (string | null)[] {
+  const match = makeItemMatcher(doc);
+  return base.map((b, i) => match(b, i)?.tag ?? null);
+}
+
+test("품번이 비어 있어도 라인 ID로 붙는다 — 품명만 아는 부품", () => {
+  const base: LidItem[] = [
+    { part_no: "", lid: "L01", tag: "b1" },
+    { part_no: "", lid: "L02", tag: "b2" },
+  ];
+  const doc: LidItem[] = [{ part_no: "", lid: "L02", tag: "d2" }];
+  assert.deepEqual(pairLid(base, doc), [null, "d2"]);
+});
+
+test("벤더가 자기 품번으로 바꿔 적어 와도 라인 ID로 붙는다", () => {
+  const base: LidItem[] = [{ part_no: "4611-041770", lid: "L02", tag: "b2" }];
+  const doc: LidItem[] = [{ part_no: "SJ-SENSOR-9", lid: "L02", tag: "d2" }];
+  assert.deepEqual(pairLid(base, doc), ["d2"]);
+});
+
+test("일부 줄만 갈라 보낸 문서 — 줄 순서가 달라도 제자리를 찾는다", () => {
+  const base: LidItem[] = [
+    { lid: "L01", tag: "b1" },
+    { lid: "L02", tag: "b2" },
+    { lid: "L03", tag: "b3" },
+    { lid: "L04", tag: "b4" },
+  ];
+  // 이 벤더에게는 3·1번만 물어봤고, 문서에는 그 순서로 실렸다.
+  const doc: LidItem[] = [
+    { lid: "L03", tag: "d3" },
+    { lid: "L01", tag: "d1" },
+  ];
+  assert.deepEqual(pairLid(base, doc), ["d1", null, "d3", null]);
+});
+
+test("시리얼이 품번 칸에 들어와 있어도 라인 ID가 이긴다", () => {
+  // 옛 규칙이라면 "s/n 51680007" 과 "811F" 는 서로 다른 품번이라 못 맞췄다.
+  const base: LidItem[] = [{ part_no: "s/n 51680007", lid: "L04", tag: "b4" }];
+  const doc: LidItem[] = [{ part_no: "811F", lid: "L04", tag: "d4" }];
+  assert.deepEqual(pairLid(base, doc), ["d4"]);
+});
+
+test("이름이 붙기 전 문서는 여전히 품번으로 붙는다 — 옛 딜이 끊기지 않는다", () => {
+  const base: LidItem[] = [
+    { part_no: "A-1", lid: "L01", tag: "b1" },
+    { part_no: "A-2", lid: "L02", tag: "b2" },
+  ];
+  const doc: LidItem[] = [{ part_no: "A-2", tag: "d2" }];   // lid 없음
+  assert.deepEqual(pairLid(base, doc), [null, "d2"]);
+});
+
+test("이름 있는 줄과 없는 줄이 섞여도 서로를 밀어내지 않는다", () => {
+  const base: LidItem[] = [
+    { part_no: "A-1", lid: "L01", tag: "b1" },
+    { part_no: "A-1", tag: "b2" },              // 같은 품번, 이름 없음
+  ];
+  const doc: LidItem[] = [
+    { part_no: "A-1", lid: "L01", tag: "d1" },
+    { part_no: "A-1", tag: "d2" },
+  ];
+  assert.deepEqual(pairLid(base, doc), ["d1", "d2"]);
+});

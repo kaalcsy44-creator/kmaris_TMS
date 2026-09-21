@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime
 from sqlalchemy import (
     Boolean, Column, DateTime, Enum as SAEnum,
-    Float, ForeignKey, Integer, LargeBinary, String, Text,
+    Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint,
 )
 from sqlalchemy.types import JSON
 from db.engine import Base
@@ -1042,3 +1042,39 @@ class EmailSyncState(Base):
     backfill_uid = Column(Integer, default=0)
     last_synced_at = Column(DateTime)
     last_error   = Column(Text)
+
+
+class DealLineAward(Base):
+    """딜의 품목 줄 하나를 어느 벤더 견적에서 살지 — 라인별 매입처 채택.
+
+    한 프로젝트에 품목이 열일곱 줄이면 그 열일곱 줄이 모두 한 곳에서 오지는 않는다.
+    A는 여섯 줄, B는 아홉 줄, 나머지 두 줄은 아직 아무도 못 준다고 한다. 지금까지는
+    그 선택이 사람 머릿속에만 있었고, 고객 견적서(4단계)와 벤더 발주서(6단계)를 만들
+    때마다 다시 떠올려야 했다. 이 표가 그 선택을 기억한다.
+
+    한 줄에 한 벤더다(rfq_id+lid 유일). 같은 품목을 두 곳에 쪼개 발주하지 않는다는
+    운영 규칙을 스키마로 못박았다 — 쪼개야 하면 1단계에서 줄을 둘로 나눈다.
+
+    lid 는 RFQ.items 의 라인 ID(불변). 품번이 아니라 lid 로 잡는 이유는 품번이
+    비거나("A/E GOVERNOR MOTOR"), 시리얼이 품번 칸에 들어오거나("s/n 51680007"),
+    벤더가 자기 품번으로 바꿔 회신하는 일이 실제로 흔하기 때문이다.
+    """
+    __tablename__ = "deal_line_awards"
+    id              = Column(Integer, primary_key=True)
+    rfq_id          = Column(Integer, ForeignKey("rfqs.id"), index=True, nullable=False)
+    lid             = Column(String(16), nullable=False)
+    # 채택한 벤더 견적. 견적이 지워지면 이 채택도 함께 지운다(라우터에서 정리).
+    vendor_quote_id = Column(Integer, ForeignKey("vendor_quotes.id"), index=True)
+    # 견적을 거슬러 올라가지 않고도 "누구에게 사기로 했나"를 바로 읽으려는 사본.
+    vendor_id       = Column(Integer, ForeignKey("vendors.id"))
+    # 채택 시점의 단가·통화·납기 스냅샷. 벤더가 견적을 고쳐 보내도 "그때 무엇을 보고
+    # 골랐는지"가 남는다(현재가는 vendor_quote_id 를 따라가면 언제든 다시 읽는다).
+    unit_cost       = Column(Float)
+    currency        = Column(String(10))
+    lead_time       = Column(String(60))
+    reason          = Column(String(200))   # 최저가가 아닌 곳을 고를 때의 근거(선택)
+    chosen_at       = Column(String(16))    # "YYYY-MM-DDTHH:MM" (KST)
+    chosen_by       = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at      = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("rfq_id", "lid", name="uq_deal_line_award"),)

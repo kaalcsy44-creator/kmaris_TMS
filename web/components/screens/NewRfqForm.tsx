@@ -88,6 +88,10 @@ type ItemRow = {
   category_id: number | null;
   /** 용역이 닿은 선박 계통(선택). 건마다 달라 품목 마스터로는 올리지 않고 라인에만 남는다. */
   applied_to?: number | null;
+  /** 라인 ID — 이 줄이 딜 안에서 갖는 불변의 이름(L01·L02…). 화면은 만들지도 고치지도
+   *  않고 그대로 왕복시키기만 한다. 새 줄은 비어 있고, 저장하면 서버가 붙인다.
+   *  이 값을 흘리면 2·3단계의 소싱 보드가 이 줄을 가리키던 실을 놓친다. */
+  lid?: string;
 };
 
 // 빈 품목 행 1개(초기값·+Add·reset 공용).
@@ -473,6 +477,7 @@ export default function NewRfqForm({
               qty: String(it.qty ?? 1),
               remark: it.remark ?? "",
               category_id: it.category_id ?? null,
+              lid: it.lid ?? "",
             }))
           : [{ ...EMPTY_ITEM }]
       );
@@ -486,7 +491,10 @@ export default function NewRfqForm({
   }
 
   // 화면의 품목 행 → API 페이로드(내용 없는 행은 버린다).
-  function toApiItems(rows: ItemRow[]) {
+  // fresh = 다른 딜로 옮겨 심는 중(Copy) — 라인 ID를 떼고 보낸다. 새 딜의 줄은 그
+  // 딜에서 새 이름을 받아야 한다. 원본에 남는 줄은 이름을 그대로 들고 있어야 하고
+  // (벤더 RFQ 가 아직 그 이름을 가리킨다), 그래서 저장·분할 잔여분에는 붙이지 않는다.
+  function toApiItems(rows: ItemRow[], fresh = false) {
     return rows
       .filter((it) => it.part_no.trim() || it.description.trim())
       .map((it) => ({
@@ -499,6 +507,7 @@ export default function NewRfqForm({
         qty: Number(it.qty) || 1,
         remark: it.remark,
         category_id: it.category_id,
+        lid: fresh ? "" : (it.lid || ""),
       }));
   }
 
@@ -591,7 +600,7 @@ export default function NewRfqForm({
       setCopyErr(companyName ? "Select a customer contact." : "Select a customer.");
       return;
     }
-    const picked = toApiItems(items.filter((_, i) => copyPick.has(i)));
+    const picked = toApiItems(items.filter((_, i) => copyPick.has(i)), true);
     if (!picked.length) {
       setCopyErr("Select at least one item to copy.");
       return;

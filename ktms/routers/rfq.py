@@ -32,6 +32,8 @@ from _core import (
     WorkType,
     USD_KRW_RATE,
     _apply_owner_filter,
+    assign_line_ids,
+    line_id_of,
     _assign_rfq_no,
     _close_reason_short,
     _next_kmaris_rfq_no,
@@ -354,7 +356,10 @@ def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
             "applied_to": it.applied_to,   # 용역이 닿은 계통(선택)
             # 옵션 표시행 표식 — 견적에서 나눠 둔 옵션이 이 문서에서도 그대로 서게 한다.
             "row_kind": (getattr(it, "row_kind", "") or ""),
+            "lid": (getattr(it, "lid", "") or "").strip(),
         } for it in body.items if (it.part_no or it.description)]
+        # 줄이 태어나는 자리 — 여기서 붙인 이름(L01·L02…)을 이후 모든 문서가 안고 다닌다.
+        assign_line_ids(items)
         src_files = _clean_source_files(body.source_files)
 
         try:
@@ -489,7 +494,7 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
             else:
                 raise HTTPException(status_code=400, detail="담당자(사용자)를 찾을 수 없습니다.")
         if body.items is not None:
-            rfq.items = [{
+            new_items = [{
                 "part_no": (it.part_no or "").strip(),
                 "description": (it.description or "").strip(),
                 "type": (it.type or "").strip(),
@@ -502,7 +507,13 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
                 "applied_to": it.applied_to,   # 용역이 닿은 계통(선택)
                 # 옵션 표시행 표식 — 견적에서 나눠 둔 옵션이 이 문서에서도 그대로 서게 한다.
                 "row_kind": (getattr(it, "row_kind", "") or ""),
+                "lid": (getattr(it, "lid", "") or "").strip(),
             } for it in body.items if (it.part_no or it.description)]
+            # 수정 전에 쓰던 이름은 예약해 둔다 — 마지막 줄을 지우고 새 줄을 더해도
+            # 방금 지운 이름이 되살아나면 안 된다(그 이름은 아직 벤더 RFQ 안에 있다).
+            prior = {line_id_of(it) for it in (rfq.items or []) if line_id_of(it)}
+            new_items = assign_line_ids(new_items, reserved=prior)
+            rfq.items = new_items
             apply_line_categories(s, rfq.items)
         if body.source_files is not None:
             # 프론트가 현재 전체 목록을 보내므로 통째로 교체.

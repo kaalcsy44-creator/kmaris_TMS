@@ -90,6 +90,8 @@ import type {
   MailAutoMatchResult,
   UnmatchedMailGroup,
   ProjectMail,
+  LineBoard,
+  AwardedItems,
 } from "./types";
 
 function authHeaders(json = false): HeadersInit {
@@ -258,7 +260,10 @@ export function createRfq(body: {
   consultant_id?: number;
   consultant_rate?: number | null;
   notes?: string;
-  items: { part_no: string; description: string; type?: string; serial_no?: string; qty: number; remark?: string; category_id?: number | null }[];
+  // lid = 라인 ID. 수정 때 받은 값을 그대로 돌려보내야 그 줄의 이름이 유지된다
+  // (새 줄은 비워 두면 서버가 붙인다). 이 값이 왕복하지 않으면 벤더 RFQ·견적·채택이
+  // 가리키던 줄이 저장할 때마다 사라진다.
+  items: { part_no: string; description: string; type?: string; serial_no?: string; qty: number; remark?: string; category_id?: number | null; row_kind?: string; lid?: string }[];
   source_files?: { name: string; media_type?: string; item_count: number; at?: string }[];
 }): Promise<{ ok: boolean; id: number; rfq_no: string }> {
   return post("/api/admin/rfq", body);
@@ -281,7 +286,8 @@ export function updateRfq(
     notes?: string;
     received_at?: string;
     assignee_id?: number;
-    items?: { part_no: string; description: string; type?: string; serial_no?: string; qty: number; remark?: string; category_id?: number | null }[];
+    // lid = 라인 ID(위 createRfq 주석 참고). 받은 값을 그대로 돌려보낸다.
+    items?: { part_no: string; description: string; type?: string; serial_no?: string; qty: number; remark?: string; category_id?: number | null; row_kind?: string; lid?: string }[];
     source_files?: { name: string; media_type?: string; item_count: number; at?: string }[];
   }
 ): Promise<{ ok: boolean; id: number }> {
@@ -2351,6 +2357,28 @@ export function toggleVendorRfqDecline(
   body?: { datetime?: string; reason?: string }
 ): Promise<{ ok: boolean; declined: boolean; status: string }> {
   return post(`/api/admin/vendor-rfq/${vrfqId}/toggle-decline`, body ?? {});
+}
+
+// ── 라인 소싱 보드 · 라인별 채택(2·3단계) ────────────────────────────────────
+
+/** 이 딜의 품목 줄 × 물어본 곳 현황표. 2단계(어디까지 나갔나)와 3단계(어디서 살까)가
+ *  같은 표를 본다 — 두 화면이 보는 사실이 다르면 안 되기 때문이다. */
+export function fetchLineBoard(rfqId: number): Promise<LineBoard> {
+  return get<LineBoard>(`/api/admin/rfq/${rfqId}/line-board`);
+}
+
+/** 줄별 매입처 채택 저장. 보낸 줄만 반영하고, vendor_quote_id 를 비우면 그 줄은 취소한다.
+ *  응답은 저장 뒤의 보드 전체라 화면이 다시 조회하지 않아도 된다. */
+export function saveLineAwards(
+  rfqId: number,
+  awards: { lid: string; vendor_quote_id: number | null; reason?: string }[]
+): Promise<LineBoard & { ok: boolean; saved: number; cleared: number }> {
+  return put(`/api/admin/rfq/${rfqId}/line-awards`, { awards });
+}
+
+/** 채택된 줄을 문서용 품목으로 — 4단계 고객 견적이 불러다 쓴다. */
+export function fetchAwardedItems(rfqId: number): Promise<AwardedItems> {
+  return get<AwardedItems>(`/api/admin/rfq/${rfqId}/awarded-items`);
 }
 
 export function fetchVendorQuoteDetail(id: number): Promise<VendorQuoteDetail> {

@@ -43,6 +43,11 @@ from _core import (
 from services.mail_compose import build_attachments, compose_body, compose_parts
 from services.vendor_match import suggest_vendors
 from _core import (
+    DealLineAward,
+    LineAwardsSave,
+    index_doc_by_line,
+    is_option_row,
+    line_id_of,
     _base_meta,
     cached_aggregate,
     _date_iso,
@@ -581,6 +586,7 @@ def create_vendor_rfq(rfq_id: int, body: VendorRfqCreate):
             "qty": it.get("qty", 1),
             # 옵션 표시행 표식 — 나눠 둔 옵션이 공급사 요청서에서도 그대로 서게 한다.
             "row_kind": it.get("row_kind", "") or "",
+            "lid": line_id_of(it),
         } for it in (rfq.items or [])]
 
         vrfq = VendorRFQ(
@@ -690,6 +696,9 @@ def update_vendor_rfq(vrfq_id: int, body: VendorRfqUpdate):
                 "unit": (it.get("unit") or "").strip(),
                 "remark": (it.get("remark") or "").strip(),
                 "row_kind": it.get("row_kind", "") or "",
+                # 라인 ID — 이 벤더에게 물어본 줄이 딜의 어느 줄인지. 떨어뜨리면
+                # 소싱 보드에서 이 벤더 칸이 통째로 빈다.
+                "lid": line_id_of(it),
             } for it in body.items if (it.get("part_no") or it.get("description"))]
         s.commit()
         return {"ok": True, "id": vr.id}
@@ -934,8 +943,346 @@ def delete_vendor_quote(vq_id: int):
         if not q:
             raise HTTPException(status_code=404, detail="Vendor 견적을 찾을 수 없습니다.")
         no = q.vendor_quote_no or ""
+        # 이 견적을 골라 둔 라인 채택도 함께 거둔다 — 남겨 두면 사라진 견적을 가리키는
+        # 채택이 되어, 4단계 "채택분 불러오기"가 값 없는 줄을 싣는다.
+        s.query(DealLineAward).filter_by(vendor_quote_id=vq_id).delete(synchronize_session=False)
         s.query(VendorQuote).filter_by(id=vq_id).delete(synchronize_session=False)
         s.commit()
         return {"ok": True, "vendor_quote_no": no}
+    finally:
+        s.close()
+
+
+# ── 라인 소싱 보드 · 라인별 채택 ───────────────────────────────────────────────
+# 한 딜의 품목 열일곱 줄이 모두 한 곳에서 오지는 않는다. 여섯 줄은 A, 아홉 줄은 B,
+# 두 줄은 아직 아무도 못 준다고 한다. 여태 그 사정은 벤더 RFQ 문서 세 장에 흩어져
+# 있었고, "무엇이 아직 안 나갔나"를 알려면 세 장을 다 열어 봐야 했다.
+#
+# 이 보드는 그 세 장을 한 표로 눕힌다 — 행은 딜의 품목 줄, 열은 물어본 곳.
+
+
+def _cell_cost(it) -> float | None:
+    """벤더 견적 줄의 단가. 값이 없으면 None(물어는 봤는데 값이 안 온 줄)."""
+    if not isinstance(it, dict):
+        return None
+    v = it.get("cost_price")
+    if v is None:
+        v = it.get("unit_price")
+    if v is None:
+        amt, qty = it.get("amount"), it.get("qty")
+        try:
+            if amt is not None and float(qty or 0):
+                return float(amt) / float(qty)
+        except (TypeError, ValueError, ZeroDivisionError):
+            return None
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _line_board(s, rfq) -> dict:
+    """딜 1건의 소싱 현황 — 품목 줄 × 물어본 곳 표, 그리고 줄마다의 채택."""
+    lines_src = [it for it in (rfq.items or []) if isinstance(it, dict) and not is_option_row(it)]
+    # 옛 딜에는 라인 ID가 없다. 화면에서 보기만 해도 이름이 붙게 하려면 여기서 심어야
+    # 하는데, 조회가 데이터를 고치는 것은 규칙 밖이다 — 대신 이름 없는 줄은 예전처럼
+    # 품번/순서 규칙으로 맞춘다(index_doc_by_line). 1단계에서 한 번 저장하면 생긴다.
+    lines = []
+    for i, it in enumerate(lines_src):
+        lines.append({
+            "lid": line_id_of(it) or f"#{i + 1}",
+            "no": i + 1,
+            "part_no": it.get("part_no") or "",
+            "description": it.get("description") or "",
+            "maker": it.get("maker") or "",
+            "qty": it.get("qty", 1) or 1,
+            "unit": it.get("unit") or "",
+            "remark": it.get("remark") or "",
+            "named": bool(line_id_of(it)),
+        })
+
+    vrfqs = (s.query(VendorRFQ).filter_by(rfq_id=rfq.id)
+             .order_by(VendorRFQ.id.asc()).all())
+    vendor_names = {v.id: v.name for v in s.query(Vendor).all()} if vrfqs else {}
+    vq_by_vrfq: dict[int, list] = {}
+    if vrfqs:
+        for q in (s.query(VendorQuote)
+                  .filter(VendorQuote.vendor_rfq_id.in_([v.id for v in vrfqs]))
+                  .order_by(VendorQuote.id.asc()).all()):
+            vq_by_vrfq.setdefault(q.vendor_rfq_id, []).append(q)
+
+    # 채택 기록 — 줄당 한 곳(스키마의 rfq_id+lid 유일 제약).
+    awards = {a.lid: a for a in s.query(DealLineAward).filter_by(rfq_id=rfq.id).all()}
+
+    cols = []
+    cells: dict[str, dict[str, dict]] = {}
+
+    for vr in vrfqs:
+        declined = (vr.status or "") == _VRFQ_DECLINED
+        quotes = vq_by_vrfq.get(vr.id, [])
+        cols.append({
+            "vrfq_id": vr.id,
+            "vendor_id": vr.vendor_id or 0,
+            "vendor": vendor_names.get(vr.vendor_id, "—"),
+            "kmaris_rfq_no": _rfq_no_disp(vr.kmaris_rfq_no or ""),
+            "sent_at": vr.sent_at or "",
+            "status": vr.status or "",
+            "declined": declined,
+            "quotes": [{
+                "id": q.id,
+                "vendor_quote_no": q.vendor_quote_no or "",
+                "currency": q.currency or "USD",
+                "received_at": q.received_at or q.received_date or "",
+            } for q in quotes],
+        })
+        # 이 벤더에게 물어본 줄 — 갈라 보냈으면 딜의 일부만 여기 있다.
+        asked = index_doc_by_line(lines_src, vr.items or [])
+        # 그 벤더가 값을 매긴 줄. 견적이 여러 장이면 나중 것이 앞선 것을 덮는다
+        # (같은 줄을 다시 견적해 왔다면 나중 값이 지금 값이다).
+        priced: dict[str, tuple] = {}
+        for q in quotes:
+            for lid, it in index_doc_by_line(lines_src, q.items or []).items():
+                priced[lid] = (q, it, _cell_cost(it))
+        for idx, ln in enumerate(lines):
+            key = line_id_of(lines_src[idx]) or ln["lid"]
+            hit, got = asked.get(key), priced.get(key)
+            if hit is None and got is None:
+                continue
+            if got is not None:
+                q, it, cost = got
+                cells.setdefault(ln["lid"], {})[str(vr.id)] = {
+                    "state": "quoted" if cost is not None else "no_price",
+                    "unit_cost": cost,
+                    "currency": q.currency or "USD",
+                    "lead_time": (it.get("lead_time") or "") if isinstance(it, dict) else "",
+                    "qty": (it.get("qty") if isinstance(it, dict) else None) or ln["qty"],
+                    "vendor_quote_id": q.id,
+                    "vendor_quote_no": q.vendor_quote_no or "",
+                }
+            elif declined:
+                cells.setdefault(ln["lid"], {})[str(vr.id)] = {"state": "declined"}
+            elif quotes:
+                # 물어봤고 답도 왔는데 이 줄만 빠졌다 — 가장 놓치기 쉬운 칸이다.
+                cells.setdefault(ln["lid"], {})[str(vr.id)] = {"state": "omitted"}
+            else:
+                cells.setdefault(ln["lid"], {})[str(vr.id)] = {"state": "sent"}
+
+    vendor_of_quote = {}
+    for c in cols:
+        for q in c["quotes"]:
+            vendor_of_quote[q["id"]] = (c["vendor_id"], c["vendor"])
+
+    for ln in lines:
+        row = cells.get(ln["lid"], {})
+        states = [c.get("state") for c in row.values()]
+        best = None
+        for key, c in row.items():
+            if c.get("state") != "quoted" or c.get("unit_cost") is None:
+                continue
+            if best is None or c["unit_cost"] < best["unit_cost"]:
+                best = {**c, "vrfq_id": int(key)}
+        ln["sent_count"] = len(states)
+        ln["quoted_count"] = sum(1 for x in states if x == "quoted")
+        # 최저가 — 통화가 섞이면 비교가 뜻을 잃으므로 한 통화일 때만 매긴다.
+        curs = {c.get("currency") for c in row.values() if c.get("state") == "quoted"}
+        ln["best"] = best if len(curs) <= 1 else None
+        ln["mixed_currency"] = len(curs) > 1
+        a = awards.get(ln["lid"])
+        if a is not None:
+            vid, vname = vendor_of_quote.get(a.vendor_quote_id, (a.vendor_id or 0, ""))
+            ln["award"] = {
+                "vendor_quote_id": a.vendor_quote_id,
+                "vendor_id": vid or (a.vendor_id or 0),
+                "vendor": vname or (vendor_names.get(a.vendor_id, "") or ""),
+                "unit_cost": a.unit_cost,
+                "currency": a.currency or "",
+                "lead_time": a.lead_time or "",
+                "reason": a.reason or "",
+                "chosen_at": a.chosen_at or "",
+            }
+            ln["state"] = "awarded"
+        else:
+            ln["award"] = None
+            if ln["quoted_count"]:
+                ln["state"] = "quoted"
+            elif not states:
+                ln["state"] = "not_sourced"
+            elif all(x == "declined" for x in states):
+                ln["state"] = "declined"
+            else:
+                ln["state"] = "sourcing"
+
+    return {
+        "rfq_id": rfq.id,
+        "lines": lines,
+        "vendors": cols,
+        "cells": cells,
+        # 옛 딜 안내용 — 이름 없는 줄이 있으면 화면이 "1단계에서 한 번 저장"을 권한다.
+        "lines_named": sum(1 for ln in lines if ln["named"]),
+        "lines_total": len(lines),
+        "summary": {
+            "not_sourced": sum(1 for ln in lines if ln["state"] == "not_sourced"),
+            "sourcing": sum(1 for ln in lines if ln["state"] == "sourcing"),
+            "quoted": sum(1 for ln in lines if ln["state"] == "quoted"),
+            "awarded": sum(1 for ln in lines if ln["state"] == "awarded"),
+            "declined": sum(1 for ln in lines if ln["state"] == "declined"),
+        },
+    }
+
+
+@app.get("/api/admin/rfq/{rfq_id}/line-board", dependencies=[Depends(require_token)])
+def line_board(rfq_id: int):
+    """2·3단계 공용 — 품목 줄 × 물어본 곳 현황표(+ 줄별 채택)."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        return _line_board(s, rfq)
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/rfq/{rfq_id}/line-awards", dependencies=[Depends(require_token)])
+def save_line_awards(rfq_id: int, body: LineAwardsSave, user: dict = Depends(get_current_user)):
+    """줄별 매입처 채택을 저장한다. 보낸 줄만 반영하고 나머지는 건드리지 않는다.
+
+    vendor_quote_id 를 비워 보내면 그 줄의 채택을 취소한다. 한 줄에 한 곳이므로
+    같은 줄을 다시 저장하면 앞선 선택을 덮는다."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        lines_src = [it for it in (rfq.items or [])
+                     if isinstance(it, dict) and not is_option_row(it)]
+        known = {line_id_of(it) for it in lines_src if line_id_of(it)}
+        # 이 딜에 딸린 벤더 견적만 고를 수 있다 — 남의 딜 견적을 채택할 길을 막는다.
+        vrfqs = s.query(VendorRFQ).filter_by(rfq_id=rfq.id).all()
+        vendor_of_vrfq = {v.id: v.vendor_id for v in vrfqs}
+        vq_map = {}
+        if vrfqs:
+            for q in s.query(VendorQuote).filter(
+                    VendorQuote.vendor_rfq_id.in_(list(vendor_of_vrfq.keys()))).all():
+                vq_map[q.id] = q
+        now = _kst_iso(datetime.utcnow())
+        saved, cleared = 0, 0
+        for a in body.awards:
+            lid = (a.lid or "").strip()
+            if not lid:
+                continue
+            if lid not in known:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"라인 ID를 알 수 없습니다({lid}). 1단계 품목을 한 번 저장해 라인 ID를 부여하세요.")
+            row = s.query(DealLineAward).filter_by(rfq_id=rfq.id, lid=lid).first()
+            if not a.vendor_quote_id:
+                if row is not None:
+                    s.delete(row)
+                    cleared += 1
+                continue
+            q = vq_map.get(a.vendor_quote_id)
+            if q is None:
+                raise HTTPException(status_code=400, detail="이 딜의 벤더 견적이 아닙니다.")
+            # 채택 시점의 값을 사본으로 남긴다 — 벤더가 견적을 고쳐 보내도 무엇을 보고
+            # 골랐는지가 남는다(현재가는 vendor_quote_id 를 따라가면 언제든 다시 읽는다).
+            hit = index_doc_by_line(lines_src, q.items or []).get(lid) or {}
+            if row is None:
+                row = DealLineAward(rfq_id=rfq.id, lid=lid)
+                s.add(row)
+            row.vendor_quote_id = q.id
+            row.vendor_id = vendor_of_vrfq.get(q.vendor_rfq_id) or None
+            row.unit_cost = _cell_cost(hit)
+            row.currency = q.currency or "USD"
+            row.lead_time = (hit.get("lead_time") or "")[:60]
+            row.reason = ((a.reason or "").strip() or None)
+            row.chosen_at = now
+            row.chosen_by = (user.get("id") or None) if user else None
+            saved += 1
+        s.commit()
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        return {"ok": True, "saved": saved, "cleared": cleared, **_line_board(s, rfq)}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/rfq/{rfq_id}/awarded-items", dependencies=[Depends(require_token)])
+def awarded_items(rfq_id: int):
+    """채택된 줄을 문서용 품목으로 — 4단계 고객 견적과 6단계 벤더 발주서가 쓴다.
+
+    `items` 는 딜의 품목 순서 그대로다(고객이 보는 견적서는 우리가 어디서 샀는지가
+    아니라 저들이 물어본 순서로 서야 한다). `by_vendor` 는 같은 줄을 벤더별로 묶은
+    것으로, 발주서를 벤더 수만큼 나눠 뽑을 때 쓴다."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        lines_src = [it for it in (rfq.items or [])
+                     if isinstance(it, dict) and not is_option_row(it)]
+        awards = {a.lid: a for a in s.query(DealLineAward).filter_by(rfq_id=rfq.id).all()}
+        if not awards:
+            return {"items": [], "by_vendor": [], "currencies": []}
+        vq_ids = [a.vendor_quote_id for a in awards.values() if a.vendor_quote_id]
+        vq_map = {q.id: q for q in s.query(VendorQuote).filter(VendorQuote.id.in_(vq_ids)).all()} if vq_ids else {}
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        # 견적마다 그 문서의 줄을 딜 라인에 붙여 둔다(단가·납기는 벤더가 쓴 것을 쓴다).
+        doc_lines = {qid: index_doc_by_line(lines_src, q.items or []) for qid, q in vq_map.items()}
+        items, groups, currencies = [], {}, []
+        for it in lines_src:
+            lid = line_id_of(it)
+            a = awards.get(lid) if lid else None
+            if a is None or not a.vendor_quote_id:
+                continue
+            q = vq_map.get(a.vendor_quote_id)
+            hit = (doc_lines.get(a.vendor_quote_id) or {}).get(lid) or {}
+            cur = (q.currency if q else a.currency) or "USD"
+            if cur not in currencies:
+                currencies.append(cur)
+            row = {
+                "lid": lid,
+                # 품번·품명은 우리가 받아 적은 쪽(딜)을 쓴다 — 고객이 쓴 말이 정본이다.
+                # 벤더가 자기 품번으로 바꿔 적어 보내는 일이 흔한데, 그 번호를 고객
+                # 견적서에 옮기면 우리 매입처의 코드를 고객에게 넘기는 셈이 된다.
+                "part_no": it.get("part_no") or "",
+                "description": it.get("description") or hit.get("description") or "",
+                # 벤더 쪽 품번은 따로 실어 보낸다 — 발주서(6단계)는 이쪽을 써야
+                # 벤더가 자기 번호로 알아본다.
+                "vendor_part_no": hit.get("part_no") or "",
+                "type": it.get("type") or hit.get("type") or "",
+                "serial_no": it.get("serial_no") or hit.get("serial_no") or "",
+                "maker": it.get("maker") or hit.get("maker") or hit.get("manufacturer") or "",
+                "qty": it.get("qty", 1) or 1,
+                "unit": hit.get("unit") or it.get("unit") or "PCS",
+                "cost_price": a.unit_cost if a.unit_cost is not None else _cell_cost(hit),
+                "currency": cur,
+                "lead_time": hit.get("lead_time") or a.lead_time or "",
+                "remark": it.get("remark") or "",
+                "category_id": it.get("category_id"),
+                "applied_to": it.get("applied_to"),
+                "vendor_id": a.vendor_id or 0,
+                "vendor": vendor_names.get(a.vendor_id, "") or "",
+                "vendor_quote_id": a.vendor_quote_id,
+                "vendor_quote_no": (q.vendor_quote_no or "") if q else "",
+            }
+            items.append(row)
+            g = groups.setdefault(a.vendor_id or 0, {
+                "vendor_id": a.vendor_id or 0,
+                "vendor": row["vendor"],
+                "currency": cur,
+                "vendor_quote_ids": [],
+                "items": [],
+            })
+            g["items"].append(row)
+            if a.vendor_quote_id not in g["vendor_quote_ids"]:
+                g["vendor_quote_ids"].append(a.vendor_quote_id)
+        return {
+            "items": items,
+            "by_vendor": list(groups.values()),
+            # 채택이 두 통화에 걸치면 고객 견적의 원가 통화를 하나로 고를 수 없다 —
+            # 화면이 그 사실을 먼저 알려 주도록 함께 내보낸다.
+            "currencies": currencies,
+        }
     finally:
         s.close()

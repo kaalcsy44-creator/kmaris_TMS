@@ -84,7 +84,7 @@ from db.models import (
     PackingList, TaxInvoiceData, ARRecord, APRecord, DeliveryProof,
     RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity, ScheduleEvent,
     MarketingAsset, FinancePayable, FinanceIncome, Consultant, Maker,
-    Claim, CreditNote,
+    Claim, CreditNote, DealLineAward,
 )
 
 # ── App / CORS ────────────────────────────────────────────────────────────────
@@ -210,7 +210,7 @@ def _sync_schema() -> None:
         from init_db import (
             migrate_columns, migrate_normalize_incoterms, migrate_backfill_price_history,
             migrate_reset_mail_sync_cursor, migrate_seed_mail_groups,
-            migrate_split_stage_dates_to_orders,
+            migrate_split_stage_dates_to_orders, migrate_seed_line_ids,
         )
 
         Base.metadata.create_all(bind=get_engine())
@@ -220,6 +220,7 @@ def _sync_schema() -> None:
         migrate_backfill_price_history()  # 품목 구매/판매가 이력 초기 백필(마커 가드 1회)
         migrate_reset_mail_sync_cursor()  # 메일 동기화 커서 되감기(최신부터 읽도록 고친 뒤 1회)
         migrate_seed_mail_groups()  # 한 문의에서 갈라진 형제 딜을 메일 묶음으로 연결
+        migrate_seed_line_ids()  # 기존 딜 품목 줄에 라인 ID 부여 + 벤더 문서에 물려주기
     except Exception as exc:  # 스키마 동기화 실패가 앱 기동을 막지 않도록 로그만 남긴다.
         print(f"[WARN] startup schema sync skipped: {exc}", file=sys.stderr)
     try:
@@ -1432,6 +1433,10 @@ def _item_view(it: dict) -> dict:
         # 옵션 표시행 표식(row_kind="option") — 빠뜨리면 편집기로 돌아왔을 때 옵션 제목이
         # 빈 품목 한 줄로 풀려 버린다.
         "row_kind": str(it.get("row_kind") or ""),
+        # 라인 ID — 편집기가 그대로 되돌려 보내야 이 줄의 이름이 유지된다.
+        # 이 값을 왕복시키지 않으면 저장할 때마다 새 이름이 붙어, 벤더 RFQ·견적·채택이
+        # 가리키던 줄이 매번 사라진다.
+        "lid": str(it.get("lid") or ""),
     }
 
 
@@ -1532,24 +1537,156 @@ Please confirm the following upon receipt:
     return body
 
 
+# ── 라인 ID(lid) — 딜 안에서 품목 줄을 가리키는 불변 이름 ─────────────────────
+# 단계를 건너다니는 품목 줄을 무엇으로 알아볼 것인가. 여태는 품번으로 맞춰 보고,
+# 품번이 없으면 줄 순서로 붙였다(web/lib/deal.ts makeItemMatcher). 벤더 한 곳에
+# 열일곱 줄을 통째로 물어보던 시절에는 그것으로 충분했다 — 문서마다 줄 순서가 같았다.
+#
+# 벤더별로 줄을 갈라 보내기 시작하면 두 근거가 함께 무너진다. 품번 칸이 비어 있거나
+# (품명만 아는 부품), 시리얼이 그 칸에 들어와 있거나("s/n 51680007"), 벤더가 자기
+# 품번으로 바꿔 회신하면 품번으로는 못 맞춘다. A에게 3·7·12번만 보냈으면 그 문서의
+# 첫 줄은 딜의 3번 줄이라 순서로도 못 맞춘다.
+#
+# 그래서 1단계에서 줄이 태어날 때 이름을 붙여 주고, 그 이름을 모든 문서가 안고 다니게
+# 한다. L01·L02… 로 읽히게 둔 것은 소싱 보드의 행 머리에 그대로 서기 때문이다.
+LINE_ID_KEY = "lid"
+_LID_RE = re.compile(r"^L(\d+)$")
+
+
+def line_id_of(it) -> str:
+    """품목 줄의 라인 ID. 없으면 빈 문자열(옛 문서·옵션 제목행)."""
+    if not isinstance(it, dict):
+        return ""
+    return str(it.get(LINE_ID_KEY) or "").strip()
+
+
+def assign_line_ids(items, reserved=None) -> list:
+    """품목 줄에 딜 안에서 변하지 않는 라인 ID(lid)를 매긴다(제자리 수정).
+
+    이미 이름이 있는 줄은 그대로 둔다 — 수정 화면이 돌려보낸 줄은 1단계에서 받은 그
+    줄이고, 여기서 새 이름을 주면 벤더 RFQ·견적이 가리키던 대상이 소리 없이 사라진다.
+
+    `reserved` 에는 이 딜이 한 번이라도 쓴 이름을 넘긴다(수정 전의 품목 줄). 마지막
+    줄을 지우고 새 줄을 더해도 방금 지운 이름이 되살아나지 않게 하려는 것이다 —
+    그 이름은 아직 벤더 RFQ 문서 안에 남아 있다.
+
+    옵션 제목행(row_kind="option")에는 붙이지 않는다. 그 줄은 품목이 아니라 아래
+    품목들을 묶는 제목이라 살 물건이 없다.
+    """
+    used = set(reserved or ())
+    top = 0
+    for lid in used:
+        m = _LID_RE.match(str(lid))
+        if m:
+            top = max(top, int(m.group(1)))
+    for it in (items or []):
+        lid = line_id_of(it)
+        if lid:
+            used.add(lid)
+            m = _LID_RE.match(lid)
+            if m:
+                top = max(top, int(m.group(1)))
+    for it in (items or []):
+        if not isinstance(it, dict):
+            continue
+        if is_option_row(it):
+            it.pop(LINE_ID_KEY, None)
+            continue
+        if line_id_of(it):
+            continue
+        top += 1
+        lid = f"L{top:02d}"
+        while lid in used:
+            top += 1
+            lid = f"L{top:02d}"
+        used.add(lid)
+        it[LINE_ID_KEY] = lid
+    return items
+
+
+def _part_key(v) -> str:
+    return str(v or "").strip().upper()
+
+
+def index_doc_by_line(base_items, doc_items) -> dict[str, dict]:
+    """문서(벤더 RFQ·벤더 견적 등)의 품목 줄을 딜의 라인(lid)에 붙여 돌려준다.
+
+    lid 가 적힌 줄은 그 이름으로 곧장 잇는다. lid 가 없던 시절의 문서는 예전 규칙
+    그대로 — 품번으로, 품번도 없으면 줄 순서로 맞춘다(web/lib/deal.ts 와 같은 규칙).
+    옛 딜을 건드리지 않고도 새 딜은 정확해지게 하려는 것이다.
+
+    돌려주는 열쇠는 기준 줄의 lid 이고, 아직 이름이 없는 줄(옛 딜)은 그 자리를 뜻하는
+    임시 열쇠 "#1"·"#2"… 를 쓴다. 이름이 없다고 그 줄이 표에서 빠지면, 옛 딜의 소싱
+    보드가 통째로 비어 "아무 데도 안 물어봤다"로 읽힌다.
+    """
+    base = [it for it in (base_items or []) if isinstance(it, dict)]
+    doc = [it for it in (doc_items or []) if isinstance(it, dict) and not is_option_row(it)]
+    keys = [line_id_of(b) or f"#{i + 1}" for i, b in enumerate(base)]
+    named = {k for k, b in zip(keys, base) if line_id_of(b)}
+    out: dict[str, dict] = {}
+    taken: set[int] = set()
+    for d in doc:
+        lid = line_id_of(d)
+        if lid and lid in named and lid not in out:
+            out[lid] = d
+            taken.add(id(d))
+    rest = [d for d in doc if id(d) not in taken]
+    if not rest:
+        return out
+    buckets: dict[str, list] = {}
+    for d in rest:
+        k = _part_key(d.get("part_no"))
+        if k:
+            buckets.setdefault(k, []).append(d)
+    keyed = bool(buckets)
+    for i, b in enumerate(base):
+        key = keys[i]
+        if key in out:
+            continue
+        if keyed:
+            k = _part_key(b.get("part_no"))
+            lst = buckets.get(k) if k else None
+            if lst:
+                out[key] = lst.pop(0)
+        elif i < len(rest):
+            out[key] = rest[i]
+    return out
+
+
 def _sanitize_vendor_rfq_items(raw) -> list[dict]:
     """발신 화면에서 넘어온 품목(선택·편집본)을 저장/문서용 dict 리스트로 정규화.
-    빈 행(부품번호·품명·수량이 모두 비어 있음)은 제거한다."""
+    빈 행(부품번호·품명·수량이 모두 비어 있음)은 제거한다.
+
+    라인 ID(lid)·옵션 표식(row_kind)·타입·시리얼은 값이 있을 때만 싣는다. lid 를
+    떨어뜨리면 이 벤더에게 무엇을 물어봤는지가 딜의 품목 줄과 끊어져, 소싱 보드가
+    다시 품번 추측으로 돌아간다."""
     out: list[dict] = []
     for it in (raw or []):
         part_no = str(it.get("part_no", "") or "").strip()
         desc = str(it.get("description", "") or "").strip()
         unit = str(it.get("unit", "") or "").strip()
         remark = str(it.get("remark", "") or "").strip()
+        typ = str(it.get("type", "") or "").strip()
+        serial = str(it.get("serial_no", "") or "").strip()
+        row_kind = str(it.get("row_kind", "") or "").strip()
+        lid = line_id_of(it)
         try:
             qty = float(it.get("qty") or 0)
         except (TypeError, ValueError):
             qty = 0
-        if not part_no and not desc and not qty:
+        if not part_no and not desc and not qty and not row_kind:
             continue
         row = {"part_no": part_no, "description": desc, "qty": qty, "unit": unit}
         if remark:
             row["remark"] = remark
+        if typ:
+            row["type"] = typ
+        if serial:
+            row["serial_no"] = serial
+        if row_kind:
+            row["row_kind"] = row_kind
+        if lid:
+            row[LINE_ID_KEY] = lid
         out.append(row)
     return out
 
@@ -1992,6 +2129,9 @@ class PoWorkItem(BaseModel):
     # 옵션 표시행(row_kind="option") — 품목이 아니라 그 아래 품목들을 묶는 제목 행.
     # 값을 흘려보내지 않으면 견적에서 나눠 둔 옵션이 발주·요청서로 넘어오며 풀린다.
     row_kind: str | None = ""
+    # 라인 ID — 딜의 품목 줄과 잇는 이름. 오더·발주서까지 안고 내려가야 개요의
+    # Quote → P/O → C/I 가로줄이 품번 추측 없이 맞는다.
+    lid: str | None = ""
 
 
 class OrderCreate(BaseModel):
@@ -3739,6 +3879,18 @@ class VendorQuoteCreate(BaseModel):
     source_files: list[dict] = []      # Auto-fill 소스 파일 메타(영구 보관)
 
 
+class LineAwardIn(BaseModel):
+    """라인 하나의 매입처 채택. vendor_quote_id 를 비우면 그 줄의 채택을 취소한다."""
+    lid: str
+    vendor_quote_id: int | None = None
+    reason: str | None = ""
+
+
+class LineAwardsSave(BaseModel):
+    """보낸 줄만 반영한다(부분 저장) — 비교표에서 한 줄만 바꿔도 나머지는 건드리지 않게."""
+    awards: list[LineAwardIn] = []
+
+
 class VendorQuoteUpdate(BaseModel):
     vendor_quote_no: str | None = None
     received_date: str | None = None
@@ -3874,6 +4026,9 @@ class RfqItemIn(BaseModel):
     # 옵션 표시행(row_kind="option") — 품목이 아니라 그 아래 품목들을 묶는 제목 행.
     # 값을 흘려보내지 않으면 견적에서 나눠 둔 옵션이 발주·요청서로 넘어오며 풀린다.
     row_kind: str | None = ""
+    # 라인 ID — 이 줄이 딜 안에서 갖는 불변의 이름(L01·L02…). 화면은 받은 값을 그대로
+    # 돌려보내고, 새 줄이면 비워 둔다(서버가 assign_line_ids 로 붙인다).
+    lid: str | None = ""
 
 
 class RfqSourceFileIn(BaseModel):
@@ -4267,6 +4422,13 @@ __all__ = [
     "_items_cost_total",
     "is_option_row",
     "option_blocks",
+    "DealLineAward",
+    "LINE_ID_KEY",
+    "assign_line_ids",
+    "line_id_of",
+    "index_doc_by_line",
+    "LineAwardIn",
+    "LineAwardsSave",
     "_kst",
     "_kst_iso",
     "_latest_ci",

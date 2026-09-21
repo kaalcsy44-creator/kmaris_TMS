@@ -229,21 +229,52 @@ export function ciPurchase(vendorPoLine: DocLine | undefined, ciLine: DocLine | 
  * 품번이 하나도 없는 문서(옛 데이터)는 배열 순서로 맞춘다 — 이때는 문서별 품목 수·순서가
  * 같아야만 맞으므로, 품번을 넣어 두는 편이 정확하다.
  *
+ * 라인 ID(lid)가 양쪽에 있으면 그것이 먼저다. 품번은 비거나(품명만 아는 부품), 시리얼이
+ * 들어와 있거나("s/n 51680007"), 벤더가 자기 번호로 바꿔 적어 보내면 틀리고, 줄 순서는
+ * 벤더별로 품목을 갈라 보내는 순간 어긋난다 — 그때도 이름은 그대로다.
+ *
  * 반환된 함수는 소비 상태를 들고 있으므로 기준 행을 처음부터 순서대로 훑어야 한다.
  */
-export function makeItemMatcher<T extends { part_no?: string }>(items: T[]) {
-  const keyed = items.some((it) => partKey(it.part_no));
+export function makeItemMatcher<T extends { part_no?: string; lid?: string }>(items: T[]) {
+  // 이름이 붙은 줄은 이름으로 먼저 집는다. 품번 버킷에는 넣지 않는다 — 한 줄이 두 길로
+  // 잡히면 같은 품번의 다음 줄이 엉뚱한 곳으로 밀린다.
+  const byLid = new Map<string, T[]>();
+  for (const it of items) {
+    const k = (it.lid || "").trim();
+    if (k) byLid.set(k, [...(byLid.get(k) ?? []), it]);
+  }
+  const unnamed = items.filter((it) => !(it.lid || "").trim());
+  const keyed = unnamed.some((it) => partKey(it.part_no));
   const buckets = new Map<string, T[]>();
   if (keyed) {
-    for (const it of items) {
+    for (const it of unnamed) {
       const k = partKey(it.part_no);
       if (!k) continue;
       buckets.set(k, [...(buckets.get(k) ?? []), it]);
     }
   }
   const used = new Map<string, number>();
-  return (base: { part_no?: string }, index: number): T | undefined => {
-    if (!keyed) return items[index];
+  const usedLid = new Map<string, number>();
+  return (base: { part_no?: string; lid?: string }, index: number): T | undefined => {
+    const lid = (base.lid || "").trim();
+    if (lid) {
+      const list = byLid.get(lid);
+      if (list) {
+        const n = usedLid.get(lid) ?? 0;
+        if (n < list.length) {
+          usedLid.set(lid, n + 1);
+          return list[n];
+        }
+      }
+      // 이름은 있는데 이 문서에 그 이름이 없다. 문서의 줄이 전부 이름을 달고 있다면
+      // 없는 것이 답이다 — 여기서 옛 규칙으로 흘려보내면, 이 벤더에게 묻지도 않은
+      // 줄에 옆 줄의 값이 붙는다. 이름 없는 줄이 섞여 있을 때만 아래로 내려간다
+      // (이름이 붙기 전에 만들어진 문서일 수 있어서다).
+      if (unnamed.length === 0) return undefined;
+    }
+    // 품번이 하나도 없는 문서를 줄 순서로 맞추는 것은 문서 전체가 이름 없이 만들어진
+    // 옛 문서일 때만이다. 이름이 섞여 있으면 순서가 이미 어긋나 있다.
+    if (!keyed) return unnamed.length === items.length ? items[index] : undefined;
     const k = partKey(base.part_no);
     if (!k) return undefined;
     const list = buckets.get(k);

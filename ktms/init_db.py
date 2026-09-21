@@ -1565,6 +1565,67 @@ def migrate_split_stage_dates_to_orders():
         s.close()
 
 
+def migrate_seed_line_ids():
+    """1회성: 기존 딜의 품목 줄에 라인 ID(lid)를 심고, 그 이름을 벤더 RFQ·견적에 물려준다.
+
+    라인 ID가 없으면 소싱 보드와 라인별 채택이 옛 딜에서는 전부 품번 추측으로 되돌아간다
+    (품번 칸이 비었거나 시리얼이 들어와 있으면 그 추측이 곧 틀린다). 지금 한 번 심어 두면
+    진행 중인 딜도 바로 새 화면을 쓸 수 있다.
+
+    벤더 문서로 내려보낼 때는 지금까지 쓰던 짝맞춤 규칙(품번 → 줄 순서)을 그대로 쓴다.
+    즉 이 마이그레이션은 화면이 여태 보여 주던 연결을 글로 적어 두는 일이고, 없던 연결을
+    새로 만들지 않는다. 옵션 제목행은 품목이 아니므로 건너뛴다.
+
+    applied_migrations 마커로 1회만 실행. 이미 lid 가 있는 줄은 손대지 않으므로
+    다시 돌려도 안전하다."""
+    eng = get_engine()
+    insp = inspect(eng)
+    if not (insp.has_table("rfqs") and insp.has_table("vendor_rfqs")):
+        return
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='seed_line_ids'")).first():
+            return
+    sys.path.insert(0, str(ROOT))
+    from _core import assign_line_ids, index_doc_by_line, line_id_of, LINE_ID_KEY
+    from db.models import VendorRFQ
+
+    s = get_session()
+    deals = docs = 0
+    try:
+        for rfq in s.query(RFQ).all():
+            items = [dict(it) for it in (rfq.items or []) if isinstance(it, dict)]
+            if not items:
+                continue
+            if all(line_id_of(it) for it in items
+                   if str(it.get("row_kind") or "") != "option"):
+                continue
+            assign_line_ids(items)
+            rfq.items = items          # JSON 열은 통째 대입해야 변경으로 잡힌다
+            deals += 1
+            vrfqs = s.query(VendorRFQ).filter_by(rfq_id=rfq.id).all()
+            vqs = (s.query(VendorQuote)
+                   .filter(VendorQuote.vendor_rfq_id.in_([v.id for v in vrfqs])).all()
+                   if vrfqs else [])
+            for doc in [*vrfqs, *vqs]:
+                rows = [dict(it) for it in (doc.items or []) if isinstance(it, dict)]
+                if not rows:
+                    continue
+                for lid, hit in index_doc_by_line(items, rows).items():
+                    hit[LINE_ID_KEY] = lid
+                doc.items = rows
+                docs += 1
+        if deals:
+            s.commit()
+    finally:
+        s.close()
+    with eng.begin() as conn:
+        conn.execute(text("INSERT INTO applied_migrations (name) VALUES ('seed_line_ids')"))
+    print(f"[OK] seed_line_ids applied: {deals} deal(s), {docs} vendor document(s) stamped.")
+
+
 if __name__ == "__main__":
     print("Initializing KTMS database...")
     create_tables()
@@ -1589,6 +1650,7 @@ if __name__ == "__main__":
     migrate_widen_specialization()
     migrate_normalize_incoterms()
     migrate_split_stage_dates_to_orders()
+    migrate_seed_line_ids()
     migrate_backfill_price_history()
     migrate_classify_item_types()
     # 낱말 추측으로 갈린 구분을 사람이 고른 분류로 바로잡는다(추측보다 분류가 정확).

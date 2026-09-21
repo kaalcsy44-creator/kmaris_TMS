@@ -667,6 +667,11 @@ export type VendorQuoteItem = {
   /** 옵션 표시행(row_kind="option") — 품목이 아니라 그 아래 품목들을 묶는 제목 행이다.
    *  description 이 옵션 제목이고 금액은 세지 않는다(lib/quoteOptions.ts). */
   row_kind?: string;
+  /** 라인 ID — 이 줄이 딜 안에서 갖는 불변의 이름(L01·L02…). 1단계에서 태어나 모든
+   *  단계의 문서가 안고 다닌다. 벤더별로 줄을 갈라 보내면 품번·줄 순서로는 같은 줄을
+   *  다시 찾을 수 없어서다(web/lib/deal.ts makeItemMatcher). 편집기는 받은 값을
+   *  그대로 돌려보내기만 하면 된다 — 새 줄이면 비워 두고 서버가 붙인다. */
+  lid?: string;
 };
 
 export type CustomerQuoteItem = {
@@ -692,6 +697,126 @@ export type CustomerQuoteItem = {
   /** 옵션 표시행(row_kind="option") — 품목이 아니라 그 아래 품목들을 묶는 제목 행이다.
    *  description 이 옵션 제목이고 금액은 세지 않는다(lib/quoteOptions.ts). */
   row_kind?: string;
+  /** 라인 ID — 이 줄이 딜 안에서 갖는 불변의 이름(L01·L02…). 1단계에서 태어나 모든
+   *  단계의 문서가 안고 다닌다. 벤더별로 줄을 갈라 보내면 품번·줄 순서로는 같은 줄을
+   *  다시 찾을 수 없어서다(web/lib/deal.ts makeItemMatcher). 편집기는 받은 값을
+   *  그대로 돌려보내기만 하면 된다 — 새 줄이면 비워 두고 서버가 붙인다. */
+  lid?: string;
+};
+
+// ── 라인 소싱 보드 · 라인별 채택(2·3단계) ────────────────────────────────────
+// 한 딜의 품목 줄이 모두 한 곳에서 오지는 않는다. 이 표가 "어느 줄을 누구에게
+// 물어봤고, 누가 값을 줬고, 어디서 사기로 했는지"를 한 화면에 눕힌다.
+
+/** 표의 한 칸 — 품목 줄(행) × 물어본 곳(열)이 만나는 자리. */
+export type LineCell = {
+  /** sent=물어봤고 아직 답 없음 · quoted=값이 왔다 · no_price=답은 왔는데 값이 비었다
+   *  · omitted=견적은 왔는데 이 줄만 빠졌다 · declined=견적 불가 통보 */
+  state: "sent" | "quoted" | "no_price" | "omitted" | "declined";
+  unit_cost?: number | null;
+  currency?: string;
+  lead_time?: string;
+  qty?: number;
+  vendor_quote_id?: number;
+  vendor_quote_no?: string;
+};
+
+export type LineAward = {
+  vendor_quote_id: number;
+  vendor_id: number;
+  vendor: string;
+  unit_cost: number | null;
+  currency: string;
+  lead_time: string;
+  reason: string;
+  chosen_at: string;
+};
+
+export type BoardLine = {
+  /** 라인 ID. 아직 이름이 없는 옛 딜은 자리를 뜻하는 "#1"·"#2"… 가 온다(채택 불가). */
+  lid: string;
+  no: number;
+  part_no: string;
+  description: string;
+  maker: string;
+  qty: number;
+  unit: string;
+  remark: string;
+  /** 진짜 라인 ID 를 가졌는가 — false 면 1단계에서 한 번 저장해야 채택할 수 있다. */
+  named: boolean;
+  sent_count: number;
+  quoted_count: number;
+  /** 최저가 칸(추천). 견적 통화가 섞이면 비교가 뜻을 잃어 null 이 온다. */
+  best: (LineCell & { vrfq_id: number }) | null;
+  mixed_currency: boolean;
+  award: LineAward | null;
+  state: "not_sourced" | "sourcing" | "quoted" | "awarded" | "declined";
+};
+
+export type BoardVendor = {
+  vrfq_id: number;
+  vendor_id: number;
+  vendor: string;
+  kmaris_rfq_no: string;
+  sent_at: string;
+  status: string;
+  declined: boolean;
+  quotes: { id: number; vendor_quote_no: string; currency: string; received_at: string }[];
+};
+
+export type LineBoard = {
+  rfq_id: number;
+  lines: BoardLine[];
+  vendors: BoardVendor[];
+  /** cells[lid][vrfq_id] — 비어 있으면 그 벤더에게 그 줄을 묻지 않았다는 뜻. */
+  cells: Record<string, Record<string, LineCell>>;
+  lines_named: number;
+  lines_total: number;
+  summary: {
+    not_sourced: number;
+    sourcing: number;
+    quoted: number;
+    awarded: number;
+    declined: number;
+  };
+};
+
+/** 채택된 줄을 문서용 품목으로 — 4단계 고객 견적·6단계 벤더 발주서가 쓴다. */
+export type AwardedItem = {
+  lid: string;
+  part_no: string;
+  /** 벤더가 자기 번호로 바꿔 적어 보낸 품번. 발주서는 이쪽을 쓰고, 고객 견적서는
+   *  쓰지 않는다 — 우리 매입처의 코드를 고객에게 넘기는 셈이 되기 때문이다. */
+  vendor_part_no: string;
+  description: string;
+  type: string;
+  serial_no: string;
+  maker: string;
+  qty: number;
+  unit: string;
+  cost_price: number | null;
+  currency: string;
+  lead_time: string;
+  remark: string;
+  category_id: number | null;
+  applied_to: number | null;
+  vendor_id: number;
+  vendor: string;
+  vendor_quote_id: number;
+  vendor_quote_no: string;
+};
+
+export type AwardedItems = {
+  items: AwardedItem[];
+  by_vendor: {
+    vendor_id: number;
+    vendor: string;
+    currency: string;
+    vendor_quote_ids: number[];
+    items: AwardedItem[];
+  }[];
+  /** 채택이 두 통화에 걸치면 원가 통화를 하나로 고를 수 없다 — 화면이 먼저 알린다. */
+  currencies: string[];
 };
 
 export type QuotationTerms = {
@@ -858,6 +983,11 @@ export type DocumentWorkItem = {
   // 문서에서 제외한 행 — 삭제와 달리 편집표에는 남고(회색) 언제든 되살릴 수 있다.
   // 저장은 되지만 합계와 발행 문서(PDF·Excel)에서는 빠진다(서버 normalize_items 가 거른다).
   excluded?: boolean;
+  /** 라인 ID — 이 줄이 딜 안에서 갖는 불변의 이름(L01·L02…). 1단계에서 태어나 모든
+   *  단계의 문서가 안고 다닌다. 벤더별로 줄을 갈라 보내면 품번·줄 순서로는 같은 줄을
+   *  다시 찾을 수 없어서다(web/lib/deal.ts makeItemMatcher). 편집기는 받은 값을
+   *  그대로 돌려보내기만 하면 된다 — 새 줄이면 비워 두고 서버가 붙인다. */
+  lid?: string;
 };
 
 export type DocumentDetail = {
@@ -1911,6 +2041,11 @@ export type RfqItem = {
   /** 옵션 표시행(row_kind="option") — 품목이 아니라 그 아래 품목들을 묶는 제목 행이다.
    *  description 이 옵션 제목이고 금액은 세지 않는다(lib/quoteOptions.ts). */
   row_kind?: string;
+  /** 라인 ID — 이 줄이 딜 안에서 갖는 불변의 이름(L01·L02…). 1단계에서 태어나 모든
+   *  단계의 문서가 안고 다닌다. 벤더별로 줄을 갈라 보내면 품번·줄 순서로는 같은 줄을
+   *  다시 찾을 수 없어서다(web/lib/deal.ts makeItemMatcher). 편집기는 받은 값을
+   *  그대로 돌려보내기만 하면 된다 — 새 줄이면 비워 두고 서버가 붙인다. */
+  lid?: string;
 };
 
 export type RfqStep = {

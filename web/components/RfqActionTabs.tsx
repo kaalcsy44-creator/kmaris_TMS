@@ -37,6 +37,7 @@ import {
   fetchCustomerQuotationDetail,
   updateCustomerQuotation,
   deleteCustomerQuotation,
+  fetchAwardedItems,
 } from "@/lib/api";
 import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { tr } from "@/lib/labels";
@@ -57,12 +58,14 @@ import type {
   CustomerQuotationDetail,
   RfqItem,
   RfqSourceFile,
+  AwardedItem,
 } from "@/lib/types";
 import NewRfqForm from "./screens/NewRfqForm";
 import WorkTypeBadge from "./WorkTypeBadge";
 import FilterTable, { ColumnDef } from "./common/FilterTable";
 import { identityColumns, projectNoColumn, statusColumns } from "./common/identityColumns";
 import VendorName from "./common/VendorName";
+import LineBoard from "./common/LineBoard";
 import type { VendorState } from "@/lib/deal";
 import VendorSelect from "./common/VendorSelect";
 import VendorContactFields, {
@@ -491,6 +494,13 @@ function EmbeddedVendorRfq({
   const [selId, setSelId] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const [declining, setDeclining] = useState(false);   // '견적 불가' 통보 일시·사유 입력창
+  // 소싱 보드 — 이 딜의 품목 줄이 어디까지 나갔는지. 벤더가 둘 이상이면 기본으로 펴 둔다
+  // (한 곳에만 물어본 딜에서는 표가 한 열뿐이라 굳이 자리를 차지할 이유가 없다).
+  const [board, setBoard] = useState(false);
+  // 보드에서 고른 줄 — 발신 폼이 이 줄만 싣고 열린다.
+  const [seedLids, setSeedLids] = useState<string[] | null>(null);
+  // 보드를 다시 읽을 구실 — 발신·삭제 뒤에 올린다.
+  const [boardSeq, setBoardSeq] = useState(0);
   const load = useCallback(() => {
     fetchVrfqOverview()
       .then((d) => setRows(d.rows))
@@ -509,6 +519,8 @@ function EmbeddedVendorRfq({
   const vstate = (r: VrfqRow): VendorState =>
     r.quote_count > 0 ? "quoted" : r.status === "견적 불가" ? "declined" : "plain";
   const cmp = useCompare(mine.length);
+  // 보드에서 줄을 골라 "→ Ask a vendor" 를 누르면 그 줄만 실은 발신 폼으로 넘어간다.
+  const askFor = (lids: string[]) => { setSeedLids(lids); setBoard(false); setAdding(true); };
   if (!loaded) return <div className="state">Loading details…</div>;
 
   if (adding || mine.length === 0) {
@@ -516,14 +528,26 @@ function EmbeddedVendorRfq({
       <div className="embedded-detail">
         {mine.length ? (
           <div className="embedded-add-head">
-            <button type="button" className="btn" onClick={() => setAdding(false)}>← Back</button>
+            <button type="button" className="btn" onClick={() => { setAdding(false); setSeedLids(null); }}>← Back</button>
+            {seedLids?.length ? (
+              <span className="embedded-add-note">
+                {seedLids.length} line(s) from the sourcing board — “Load customer RFQ” brings back all of them.
+              </span>
+            ) : null}
           </div>
         ) : null}
         <VendorRfqAction
           rfqId={rfqId ?? 0}
           vendors={vendors}
           kmarisNo={project?.crfq_no ?? ""}
-          onDone={() => { setAdding(false); load(); onChanged(); }}
+          seedLids={seedLids}
+          onDone={() => {
+            setAdding(false);
+            setSeedLids(null);
+            setBoardSeq((n) => n + 1);
+            load();
+            onChanged();
+          }}
         />
       </div>
     );
@@ -571,10 +595,28 @@ function EmbeddedVendorRfq({
               {selected.status === "견적 불가" ? "No quote ✓" : "No quote"}
             </button>
           ) : null}
+          {/* 벤더가 둘 이상이면 "어느 줄이 어디로 갔나"가 곧 이 단계의 질문이 된다. */}
+          <button
+            type="button"
+            className={"btn sm" + (board ? " primary" : "")}
+            onClick={() => setBoard((v) => !v)}
+            title="Which item lines went to which vendor — and which have not gone anywhere yet"
+          >
+            ⊞ Lines
+          </button>
           {cmp.canCompare ? <CompareButton on={cmp.comparing} onToggle={cmp.toggle} /> : null}
-          <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Send another</button>
+          <button type="button" className="btn primary sm" onClick={() => { setSeedLids(null); setAdding(true); }}>+ Send another</button>
         </div>
       </div>
+      {board ? (
+        <LineBoard
+          rfqId={rfqId ?? 0}
+          mode="coverage"
+          reloadKey={boardSeq}
+          onSendSelected={askFor}
+          onChanged={onChanged}
+        />
+      ) : null}
       {cmp.comparing ? (
         <div className="vm-compare">
           {mine.map((v) => (
@@ -673,6 +715,10 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
   const [selId, setSelId] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const [vendorRfqs, setVendorRfqs] = useState<RfqDetailT["vendor_rfqs"]>([]);
+  // 채택 매트릭스 — 줄마다 어느 벤더 견적에서 살지 고른다. 견적이 둘 이상일 때가
+  // 이 화면의 본디 질문이라 그때는 펴 둔 채로 시작한다.
+  const [board, setBoard] = useState(false);
+  const [boardSeq, setBoardSeq] = useState(0);
   const load = useCallback(() => {
     fetchVendorQuoteOverview()
       .then((d) => setRows(d.rows))
@@ -698,7 +744,7 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
         <VendorQuoteAction
           rfqId={rfqId ?? 0}
           vendorRfqs={vendorRfqs}
-          onDone={() => { setAdding(false); load(); onChanged(); }}
+          onDone={() => { setAdding(false); setBoardSeq((n) => n + 1); load(); onChanged(); }}
         />
       </div>
     );
@@ -725,9 +771,25 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
             <b className="rec-doc-no">{selected.vendor_quote_no || ""}</b>
           </span>
         )}
+        <button
+          type="button"
+          className={"btn sm" + (board ? " primary" : "")}
+          onClick={() => setBoard((v) => !v)}
+          title="Compare every quote line by line and pick where to buy each one"
+        >
+          ⊞ Compare &amp; award
+        </button>
         {cmp.canCompare ? <CompareButton on={cmp.comparing} onToggle={cmp.toggle} /> : null}
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Register another</button>
       </div>
+      {board ? (
+        <LineBoard
+          rfqId={rfqId ?? 0}
+          mode="award"
+          reloadKey={boardSeq}
+          onChanged={onChanged}
+        />
+      ) : null}
       {cmp.comparing ? (
         <div className="vm-compare">
           {mine.map((q) => (
@@ -2358,6 +2420,46 @@ function CustomerQuoteDetailModal({
     setErr(marginRangeError(defaultMargin));
   }
 
+  // 3단계에서 줄마다 고른 매입처를 그대로 이 견적에 싣는다. 벤더가 여럿이어도 고객이
+  // 받는 견적서는 한 장이라, 여기서 그 여러 곳이 한 줄씩 제자리에 선다.
+  async function importAwardedLines() {
+    setBusy(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const rid = d?.rfq_id || 0;
+      if (!rid) {
+        setErr("This quotation is not linked to a project, so there are no awarded lines to load.");
+        return;
+      }
+      const aw = await fetchAwardedItems(rid);
+      if (!aw.items.length) {
+        setErr("No lines have been awarded yet — pick a vendor per line in stage 3 (⊞ Compare & award).");
+        return;
+      }
+      // 채택이 두 통화에 걸치면 원가 통화를 하나로 고를 수 없다. 억지로 하나를 고르면
+      // 나머지 줄의 마진이 조용히 틀어지므로, 먼저 사실을 말하고 멈춘다.
+      if (aw.currencies.length > 1) {
+        setErr(
+          `Awarded lines are quoted in ${aw.currencies.join(" and ")}. This quotation carries a single cost currency — award one currency, or build the quotation by hand.`
+        );
+        return;
+      }
+      const cur = aw.currencies[0] || costCurrency;
+      setCostCurrency(cur);
+      setItems(customerQuoteItemsFromAwards(aw.items, defaultMargin, cur, currency, roundDigits, effRate));
+      const vendors = aw.by_vendor.map((g) => g.vendor).filter(Boolean);
+      setMsg(
+        `Loaded ${aw.items.length} awarded line(s) from ${vendors.length} vendor(s): ${vendors.join(" · ")}.`
+      );
+      setErr(marginRangeError(defaultMargin));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to load the awarded lines");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Pricing 밴드에 입력한 값(원가/판매 통화·환율·올림 단위·마진)을 Item list 전체에 한 번에 반영.
   function applyPricing() {
     if (items.length === 0) return;
@@ -2523,9 +2625,16 @@ function CustomerQuoteDetailModal({
             roundDigits={roundDigits}
             rate={effRate}
             headerActions={
-              <button className="btn sm" onClick={importFromVendorQuote} disabled={importVqId === ""}>
-                Load Vendor quote
-              </button>
+              <>
+                <button className="btn sm" onClick={importFromVendorQuote} disabled={importVqId === ""}>
+                  Load Vendor quote
+                </button>
+                {/* 줄마다 매입처가 다른 딜은 이쪽 — 3단계에서 고른 결과를 그대로 싣는다. */}
+                <button className="btn sm" onClick={importAwardedLines} disabled={busy}
+                        title="Load the lines you awarded in stage 3 — one row per line, each at its own vendor's price">
+                  Load awarded lines
+                </button>
+              </>
             }
           />
           <DiscountSummary
@@ -2719,11 +2828,15 @@ function VendorRfqAction({
   rfqId,
   vendors,
   kmarisNo,
+  seedLids,
   onDone,
 }: {
   rfqId: number;
   vendors: VendorOption[];
   kmarisNo: string;
+  // 소싱 보드에서 고른 줄(라인 ID). 주어지면 그 줄만 싣고 연다 — 여태는 열일곱 줄을
+  // 전부 불러다 필요 없는 행을 하나씩 지워야 했다.
+  seedLids?: string[] | null;
   onDone: () => void;
 }) {
   // 편집 뷰와 동일한 Detail/Email 탭 구조.
@@ -2768,10 +2881,16 @@ function VendorRfqAction({
     }
     let alive = true;
     fetchRfqDetail(rfqId)
-      .then((d) => { if (alive) setRfqItems(d.items || []); })
+      .then((d) => {
+        if (!alive) return;
+        const all = d.items || [];
+        // 보드에서 고른 줄이 있으면 그것만 — 딜의 순서는 그대로 지킨다.
+        const pick = seedLids && seedLids.length ? new Set(seedLids) : null;
+        setRfqItems(pick ? all.filter((it) => it.lid && pick.has(it.lid)) : all);
+      })
       .catch(() => { if (alive) setRfqItems([]); });
     return () => { alive = false; };
-  }, [rfqId]);
+  }, [rfqId, seedLids]);
 
   // 다음 자동채번 번호(vendor별 고유)를 미리 불러와 토글에서 보여준다.
   useEffect(() => {
@@ -2786,6 +2905,8 @@ function VendorRfqAction({
     if (!rfqId) return;
     fetchRfqDetail(rfqId)
       .then((d) => {
+        // 보드에서 좁혀 들어왔더라도 이 버튼은 늘 딜 전체를 되돌린다 — 되돌릴 곳이
+        // 없으면 좁혀 놓은 화면에서 빠져나갈 길이 없다.
         setRfqItems(d.items || []);
         if (d.notes) setNotes(d.notes);
       })
@@ -2794,7 +2915,7 @@ function VendorRfqAction({
 
   // 실제 내용이 있는 품목만 벤더에게 보낸다(행을 삭제해 제외).
   const effectiveItems = rfqItems
-    .map(({ part_no, description, type, serial_no, qty, unit, remark, row_kind }) => ({
+    .map(({ part_no, description, type, serial_no, qty, unit, remark, row_kind, lid }) => ({
       part_no: part_no || "",
       description: description || "",
       type: type || "",
@@ -2804,6 +2925,9 @@ function VendorRfqAction({
       remark: remark || "",
       // 옵션 구분행 표식 — 빠뜨리면 나눠 둔 옵션이 발신 문서에서 풀린다.
       row_kind: row_kind || "",
+      // 라인 ID — 이 벤더에게 물어본 줄이 딜의 어느 줄인지. 벤더별로 줄을 갈라 보내는
+      // 순간 품번·줄 순서로는 되찾을 수 없어, 이 이름이 유일한 실이 된다.
+      lid: lid || "",
     }))
     .filter((it) => it.part_no || it.description || it.qty);
 
@@ -3414,6 +3538,9 @@ function VendorQuoteAction({
           cost_price: null,
           lead_time: "",
           remark: it.remark || "",
+          // 우리가 물어본 줄의 이름을 그대로 들고 온다 — 벤더가 답을 자기 품번으로
+          // 바꿔 적어도 이 견적의 어느 줄이 딜의 어느 줄인지 흔들리지 않는다.
+          lid: it.lid || "",
         }));
       setItems(loaded);
       setParseMsg(
@@ -3879,6 +4006,9 @@ function normalizeVendorQuoteItem(raw: Partial<VendorQuoteItem> & { manufacturer
     cost_price: raw.cost_price === undefined || raw.cost_price === null ? 0 : Number(raw.cost_price),
     lead_time: raw.lead_time ?? "",
     remark: raw.remark ?? "",
+    // 라인 ID 는 정규화가 지우면 안 되는 값이다 — 파일에서 읽어 온 줄에는 없고,
+    // 벤더 RFQ 에서 불러온 줄에는 있다.
+    lid: raw.lid ?? "",
   };
 }
 
@@ -3932,6 +4062,46 @@ function customerQuoteItemsFromVendorQuote(
       amount: unit * qty,
       lead_time: it.lead_time ?? "",
       remark: it.remark ?? "",
+      lid: it.lid ?? "",
+    };
+  });
+}
+
+/** 채택된 줄(라인별 매입처)을 고객 견적 품목으로.
+ *
+ * 벤더 견적 한 장에서 통째로 불러오는 길(customerQuoteItemsFromVendorQuote)과 나란히
+ * 서는 두 번째 길이다. 열일곱 줄을 A·B·C 세 곳에서 나눠 샀어도 고객이 받는 견적서는
+ * 한 장이고, 그 한 장에는 우리가 어디서 샀는지가 드러나지 않아야 한다 — 그래서
+ * 벤더가 자기 번호로 바꿔 적어 보낸 품번(vendor_part_no)은 여기서 쓰지 않는다.
+ */
+function customerQuoteItemsFromAwards(
+  rows: AwardedItem[],
+  defaultMargin: number,
+  costCurrency: string,
+  saleCurrency: string,
+  roundDigits: number,
+  rate: number
+): CustomerQuoteItem[] {
+  return rows.map((it) => {
+    const cost = Number(it.cost_price ?? 0);
+    const qty = Number(it.qty || 1);
+    const unit = calcUnitPrice(cost, defaultMargin, costCurrency, saleCurrency, roundDigits, rate);
+    return {
+      part_no: it.part_no || "",
+      description: it.description || "",
+      type: it.type || "",
+      serial_no: it.serial_no || "",
+      qty,
+      unit: it.unit || "PCS",
+      cost_price: cost,
+      margin_pct: defaultMargin,
+      unit_price: unit,
+      amount: unit * qty,
+      lead_time: it.lead_time || "",
+      remark: it.remark || "",
+      category_id: it.category_id ?? null,
+      applied_to: it.applied_to ?? null,
+      lid: it.lid || "",
     };
   });
 }
@@ -4034,6 +4204,42 @@ function CustomerQuoteAction({
     setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
     // 품목은 들어왔지만 기본 마진이 계산 불가 값이면 단가가 원가 그대로 들어온다 — 알려 준다.
     setErr(marginRangeError(defaultMargin));
+  }
+
+  // 3단계에서 줄마다 고른 매입처를 그대로 이 견적에 싣는다. 한 벤더에서 다 사는 딜이면
+  // 위쪽 "Load Vendor quote" 로 족하고, 줄마다 매입처가 다르면 이쪽이다 — 벤더가 셋이어도
+  // 고객이 받는 견적서는 한 장이고, 그 한 장에 세 곳의 값이 한 줄씩 제자리에 선다.
+  async function importAwardedLines() {
+    setBusy(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const aw = await fetchAwardedItems(rfqId);
+      if (!aw.items.length) {
+        setErr("No lines have been awarded yet — pick a vendor per line in stage 3 (⊞ Compare & award).");
+        return;
+      }
+      // 채택이 두 통화에 걸치면 원가 통화를 하나로 고를 수 없다. 억지로 하나를 고르면
+      // 나머지 줄의 마진이 조용히 틀어지므로, 먼저 사실을 말하고 멈춘다.
+      if (aw.currencies.length > 1) {
+        setErr(
+          `Awarded lines are quoted in ${aw.currencies.join(" and ")}. This quotation carries a single cost currency — award one currency, or build the quotation by hand.`
+        );
+        return;
+      }
+      const cur = aw.currencies[0] || costCurrency;
+      setCostCurrency(cur);
+      setItems(customerQuoteItemsFromAwards(aw.items, defaultMargin, cur, currency, roundDigits, effRate));
+      const vendors = aw.by_vendor.map((g) => g.vendor).filter(Boolean);
+      setMsg(
+        `Loaded ${aw.items.length} awarded line(s) from ${vendors.length} vendor(s): ${vendors.join(" · ")}.`
+      );
+      setErr(marginRangeError(defaultMargin));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to load the awarded lines");
+    } finally {
+      setBusy(false);
+    }
   }
 
   // Pricing 밴드에 입력한 값(원가/판매 통화·환율·올림 단위·마진)을 Item list 전체에 한 번에 반영.
@@ -4244,9 +4450,17 @@ function CustomerQuoteAction({
         roundDigits={roundDigits}
         rate={effRate}
         headerActions={
-          <button className="btn sm" onClick={importFromVendorQuote} disabled={importVqId === ""}>
-            Load Vendor quote
-          </button>
+          <>
+            <button className="btn sm" onClick={importFromVendorQuote} disabled={importVqId === ""}>
+              Load Vendor quote
+            </button>
+            {/* 한 벤더에서 다 사는 딜이면 왼쪽 버튼이면 된다. 줄마다 매입처가 다르면
+                이쪽 — 3단계에서 고른 결과를 그대로 싣는다. */}
+            <button className="btn sm" onClick={importAwardedLines} disabled={busy}
+                    title="Load the lines you awarded in stage 3 — one row per line, each at its own vendor's price">
+              Load awarded lines
+            </button>
+          </>
         }
       />
 
