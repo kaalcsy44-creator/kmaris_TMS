@@ -54,6 +54,7 @@ export default function LineBoard({
   rfqId,
   mode,
   onSendSelected,
+  sendLabel = "→ Ask a vendor",
   onChanged,
   reloadKey,
 }: {
@@ -61,6 +62,9 @@ export default function LineBoard({
   mode: LineBoardMode;
   /** 2단계 — 고른 줄로 다음 벤더 RFQ 를 연다. 없으면 고르기 자체를 숨긴다. */
   onSendSelected?: (lids: string[]) => void;
+  /** 그 버튼의 말 — 발신 폼을 새로 여는 자리와, 이미 열린 폼의 품목을 바꾸는 자리는
+   *  같은 동작이지만 사용자가 서 있는 곳이 달라 같은 말로 부를 수 없다. */
+  sendLabel?: string;
   /** 채택이 바뀌면 알린다(상위 목록·배지 새로고침). */
   onChanged?: () => void;
   /** 값이 바뀌면 다시 불러온다 — 벤더 RFQ 를 하나 더 보낸 직후 등. */
@@ -182,7 +186,7 @@ export default function LineBoard({
                 onClick={() => onSendSelected([...picked])}
                 title="Open the Vendor RFQ form with just these lines"
               >
-                → Ask a vendor ({picked.size})
+                {sendLabel} ({picked.size})
               </button>
             </>
           ) : null}

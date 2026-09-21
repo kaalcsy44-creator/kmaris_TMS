@@ -494,9 +494,9 @@ function EmbeddedVendorRfq({
   const [selId, setSelId] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const [declining, setDeclining] = useState(false);   // '견적 불가' 통보 일시·사유 입력창
-  // 소싱 보드 — 이 딜의 품목 줄이 어디까지 나갔는지. 벤더가 둘 이상이면 기본으로 펴 둔다
-  // (한 곳에만 물어본 딜에서는 표가 한 열뿐이라 굳이 자리를 차지할 이유가 없다).
-  const [board, setBoard] = useState(false);
+  // 소싱 보드 — 이 딜의 품목 줄이 어디까지 나갔는지.
+  // null = 아직 사용자가 정한 적 없음(아래에서 딜을 보고 정한다). true/false = 사용자가 정했다.
+  const [board, setBoard] = useState<boolean | null>(null);
   // 보드에서 고른 줄 — 발신 폼이 이 줄만 싣고 열린다.
   const [seedLids, setSeedLids] = useState<string[] | null>(null);
   // 보드를 다시 읽을 구실 — 발신·삭제 뒤에 올린다.
@@ -508,6 +508,17 @@ function EmbeddedVendorRfq({
       .finally(() => setLoaded(true));
   }, []);
   useEffect(() => { load(); }, [load]);
+  // 이 딜의 품목이 몇 줄인지 — 보드를 처음부터 펴 둘지 정하는 근거.
+  // 두세 줄짜리 딜은 한 곳에 통째로 묻는 것이 보통이라 표가 자리만 차지한다.
+  const [lineCount, setLineCount] = useState(0);
+  useEffect(() => {
+    if (!rfqId) return;
+    let alive = true;
+    fetchRfqDetail(rfqId)
+      .then((d) => { if (alive) setLineCount((d.items || []).filter((it) => !isOptionRow(it)).length); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [rfqId]);
   // focusId 가 이 프로젝트의 벤더 RFQ 중 하나면 그 레코드를 선택한다(개요 로그 클릭 진입).
   useEffect(() => {
     if (focusId && rows.some((r) => r.id === focusId && r.rfq_id === rfqId)) setSelId(focusId);
@@ -519,22 +530,50 @@ function EmbeddedVendorRfq({
   const vstate = (r: VrfqRow): VendorState =>
     r.quote_count > 0 ? "quoted" : r.status === "견적 불가" ? "declined" : "plain";
   const cmp = useCompare(mine.length);
+  // 품목이 여럿인 딜에서는 펴 둔 채로 시작한다 — 그 딜에서는 "어느 줄이 어디로 가나"가
+  // 곧 이 단계의 질문이라, 버튼을 찾아 누르게 하면 질문이 화면에서 사라진다.
+  const boardOn = board ?? lineCount > 3;
   // 보드에서 줄을 골라 "→ Ask a vendor" 를 누르면 그 줄만 실은 발신 폼으로 넘어간다.
-  const askFor = (lids: string[]) => { setSeedLids(lids); setBoard(false); setAdding(true); };
+  // 이미 발신 폼에 있으면 폼은 그대로 두고 실린 줄만 바꾼다.
+  const askFor = (lids: string[]) => {
+    setSeedLids(lids);
+    setBoard(false);
+    setAdding(true);
+  };
   if (!loaded) return <div className="state">Loading details…</div>;
 
   if (adding || mine.length === 0) {
     return (
       <div className="embedded-detail">
-        {mine.length ? (
-          <div className="embedded-add-head">
+        <div className="embedded-add-head">
+          {mine.length ? (
             <button type="button" className="btn" onClick={() => { setAdding(false); setSeedLids(null); }}>← Back</button>
-            {seedLids?.length ? (
-              <span className="embedded-add-note">
-                {seedLids.length} line(s) from the sourcing board — “Load customer RFQ” brings back all of them.
-              </span>
-            ) : null}
-          </div>
+          ) : null}
+          {/* 첫 벤더에게 보내는 순간이야말로 "열일곱 줄 중 어느 걸 이 곳에 물을까"를
+              정하는 자리다. 여태 이 버튼이 여기 없어서, 정작 필요한 때에 표가 없었다. */}
+          <button
+            type="button"
+            className={"btn sm" + (boardOn ? " primary" : "")}
+            onClick={() => setBoard(!boardOn)}
+            title="Pick which item lines go to this vendor — and see which ones have not gone anywhere yet"
+          >
+            ⊞ Lines
+          </button>
+          {seedLids?.length ? (
+            <span className="embedded-add-note">
+              {seedLids.length} line(s) picked — “Load customer RFQ” brings back all of them.
+            </span>
+          ) : null}
+        </div>
+        {boardOn ? (
+          <LineBoard
+            rfqId={rfqId ?? 0}
+            mode="coverage"
+            reloadKey={boardSeq}
+            onSendSelected={askFor}
+            sendLabel="↓ Put these on the RFQ"
+            onChanged={onChanged}
+          />
         ) : null}
         <VendorRfqAction
           rfqId={rfqId ?? 0}
@@ -598,8 +637,8 @@ function EmbeddedVendorRfq({
           {/* 벤더가 둘 이상이면 "어느 줄이 어디로 갔나"가 곧 이 단계의 질문이 된다. */}
           <button
             type="button"
-            className={"btn sm" + (board ? " primary" : "")}
-            onClick={() => setBoard((v) => !v)}
+            className={"btn sm" + (boardOn ? " primary" : "")}
+            onClick={() => setBoard(!boardOn)}
             title="Which item lines went to which vendor — and which have not gone anywhere yet"
           >
             ⊞ Lines
@@ -608,7 +647,7 @@ function EmbeddedVendorRfq({
           <button type="button" className="btn primary sm" onClick={() => { setSeedLids(null); setAdding(true); }}>+ Send another</button>
         </div>
       </div>
-      {board ? (
+      {boardOn ? (
         <LineBoard
           rfqId={rfqId ?? 0}
           mode="coverage"
@@ -715,9 +754,10 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
   const [selId, setSelId] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const [vendorRfqs, setVendorRfqs] = useState<RfqDetailT["vendor_rfqs"]>([]);
-  // 채택 매트릭스 — 줄마다 어느 벤더 견적에서 살지 고른다. 견적이 둘 이상일 때가
-  // 이 화면의 본디 질문이라 그때는 펴 둔 채로 시작한다.
-  const [board, setBoard] = useState(false);
+  // 채택 매트릭스 — 줄마다 어느 벤더 견적에서 살지 고른다.
+  // null = 사용자가 아직 정한 적 없음. 견적이 둘 이상이면 그때가 이 화면의 본디
+  // 질문("어디서 살까")이라 펴 둔 채로 시작한다.
+  const [board, setBoard] = useState<boolean | null>(null);
   const [boardSeq, setBoardSeq] = useState(0);
   const load = useCallback(() => {
     fetchVendorQuoteOverview()
@@ -733,6 +773,7 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
   // 복수 Vendor Quote는 벤더 견적번호 오름차순(숫자 빠른 순)으로 좌→우 배치.
   const mine = sortByDocNo(rows.filter((r) => r.rfq_id === rfqId), (r) => r.vendor_quote_no, (r) => r.id);
   const cmp = useCompare(mine.length);
+  const boardOn = board ?? mine.length > 1;
   if (!loaded) return <div className="state">Loading details…</div>;
 
   if (adding || mine.length === 0) {
@@ -773,8 +814,8 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
         )}
         <button
           type="button"
-          className={"btn sm" + (board ? " primary" : "")}
-          onClick={() => setBoard((v) => !v)}
+          className={"btn sm" + (boardOn ? " primary" : "")}
+          onClick={() => setBoard(!boardOn)}
           title="Compare every quote line by line and pick where to buy each one"
         >
           ⊞ Compare &amp; award
@@ -782,7 +823,7 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
         {cmp.canCompare ? <CompareButton on={cmp.comparing} onToggle={cmp.toggle} /> : null}
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Register another</button>
       </div>
-      {board ? (
+      {boardOn ? (
         <LineBoard
           rfqId={rfqId ?? 0}
           mode="award"
