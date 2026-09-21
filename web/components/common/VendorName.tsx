@@ -13,14 +13,12 @@ import type { VendorEntry, VendorState } from "@/lib/deal";
 
 // 상태별 툴팁 — 칸이 좁아 표시가 기호 하나로 줄어드는 자리에서 말로 확인할 수 있게.
 //
-// out 과 declined 는 다른 사실이다. out 은 우리가 미루어 본 것("4단계를 넘겼는데 답이
-// 없으니 빠졌다고 본다")이고 declined 는 벤더가 알려 온 것이다. 취소선은 declined 에만
-// 긋기로 했으므로(globals.css .vendor-out-chip), 둘을 가르는 말은 이제 여기가 유일하다 —
-// "No quote received" 처럼 양쪽 다로 읽히는 말을 쓰면 구분이 화면에서 사라진다.
+// 여기 적는 말은 우리가 아는 것만이다. "아직 견적이 없다"와 "연락이 없었다"는 다른
+// 말인데, 시스템이 아는 것은 앞쪽뿐이다(벤더가 전화로 답했는지 우리는 모른다).
+// 그래서 waiting 은 상태를 적을 뿐 이유를 짐작하지 않는다.
 const STATE_TITLE: Record<VendorState, string> = {
   quoted: "Quote received",
-  waiting: "Awaiting quote",
-  out: "No reply — never heard back",
+  waiting: "No quote yet",
   declined: "Declined — told us they cannot quote",
   plain: "",
 };

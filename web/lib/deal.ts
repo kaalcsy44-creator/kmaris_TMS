@@ -78,21 +78,28 @@ export function vendorBadgesOf(r: PipelineRow): { name: string; quoted: boolean 
  *  declined '견적 불가'를 통보해 온 곳 — 검정 취소선(말이 있었던 곳과 없던 곳은 다르다)
  *  plain    표시할 근거가 없는 곳(RFQ 없이 발주만 나간 직발주·벤더별 상태가 없는 옛 데이터)
  */
-export type VendorState = "quoted" | "waiting" | "out" | "declined" | "plain";
+export type VendorState = "quoted" | "declined" | "waiting" | "plain";
 
 export type RfqVendor = { name: string; quoted: boolean; declined?: boolean; sent_at?: string };
 
-/** stage 4 = Quote Sent. 고객에게 견적을 낸 뒤라면 미회신 벤더는 사실상 제외로 본다. */
-export function vendorState(v: RfqVendor, r: PipelineRow): VendorState {
+/**
+ * 이 벤더가 이 딜에서 어디까지 왔는가 — 아는 사실만 말한다.
+ *
+ * 예전에는 네 번째 상태 "out"(끝내 미회신)이 있었다. 딜이 4단계(Quote Sent)를 넘겼는데
+ * 견적이 없으면 사실상 빠진 곳으로 "보고" 이름에 취소선을 그었다. 그런데 그것은 우리가
+ * 미루어 본 것이지 알고 있는 사실이 아니다 — 전화로 "그건 우리 게 아니다"라는 답을
+ * 받았어도, 견적 레코드가 없으면 똑같이 "연락 없음"으로 적혔다. 표시한 적 없는 상태가
+ * 화면에 나타나니 "내가 언제 그렇게 설정했나"를 되묻게 만들었고, 그 물음에 화면이
+ * 대답할 방법이 없었다.
+ *
+ * 그래서 추정을 걷어냈다. 답이 온 곳에는 체크(✓)가 붙으므로, 체크가 없다는 사실만으로도
+ * 누가 답했고 누가 아직인지는 한 칸에서 그대로 읽힌다. 없는 말을 덧붙일 이유가 없다.
+ * 못 준다는 통보를 실제로 받았을 때만 declined 로 적고, 그때만 선을 긋는다.
+ */
+export function vendorState(v: RfqVendor): VendorState {
   if (v.quoted) return "quoted";
   if (v.declined) return "declined";
-  if (r.stage < 4) return "waiting";
-  // 고객 견적을 낸 뒤에 물어본 곳은 지난 라운드의 낙오가 아니라 새 라운드다 — 공급사가
-  // 공급을 거절해 딜을 닫았다 다시 열고 여러 곳에 새 RFQ 를 보내는 일이 있다. 단계
-  // 번호만 보고 지워 버리면, 지금 답을 기다리는 곳이 이미 끝난 곳으로 읽힌다.
-  const quoteSent = stageDateOf(r, 4);
-  if (quoteSent && (v.sent_at || "") > quoteSent) return "waiting";
-  return "out";
+  return "waiting";
 }
 
 export type VendorEntry = { name: string; state: VendorState };
@@ -115,9 +122,9 @@ export function vendorEntriesOf(r: PipelineRow): VendorEntry[] {
   };
   for (const n of poVendorsOf(r)) {
     const v = byName.get(n);
-    push(n, v ? vendorState(v, r) : "plain");   // RFQ 없이 발주만 나간 곳(직발주)
+    push(n, v ? vendorState(v) : "plain");   // RFQ 없이 발주만 나간 곳(직발주)
   }
-  for (const [n, v] of byName) push(n, vendorState(v, r));
+  for (const [n, v] of byName) push(n, vendorState(v));
   // 벤더별 상태가 없는 옛 응답은 이름만 있다 — 전부 기본색으로 둔다(모르는 것을 흐리게
   // 칠하면 '견적 미수신'이라는 없는 사실을 말하게 된다).
   if (!out.length) for (const n of rfqVendorsOf(r)) push(n, "plain");

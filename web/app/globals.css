@@ -2442,25 +2442,18 @@ table.perm-matrix tr.perm-group:first-child td {
   word-break: break-word;
 }
 /* Vendor 표시 — 목록 표와 프로젝트 정보 칸이 같은 규칙을 쓴다(deal.vendorEntriesOf).
-   quoted=견적 수신(선명 + 체크) / waiting=견적 대기(회색) / out=끝내 미회신(회색 + 흐린 로고)
+   quoted=견적 수신(선명 + 체크) / waiting=아직 견적 없음(회색)
    / declined=견적 불가 통보(취소선 — 아래 .vendor-out-chip) / plain=근거 없음(기본색).
-   (.vendor-noquote 는 옛 클래스 — out 과 같게 둔다.)
 
-   취소선은 통보받은 곳에만 긋는다. out 은 우리가 추정한 상태이지 벤더가 알려 온 사실이
-   아니다 — 4단계를 넘겼는데 답이 없으면 빠진 것으로 "보는" 것뿐이다. 여기에도 선을
-   그으면 추정과 사실이 한 칸에서 같은 얼굴을 하게 되고(예전에는 선 색깔만 달랐다),
-   "No quote 를 누른 적이 없는데 왜 그어져 있나"를 화면이 스스로 설명하지 못한다.
-   그래서 out 은 흐리게만 두고(회색 글자 + 흐린 로고) 선은 declined 에만 남긴다.
-   어느 쪽인지는 마우스를 올리면 말로 뜬다(VendorName STATE_TITLE).
+   상태는 셋뿐이고, 셋 다 우리가 아는 사실이다. 예전에는 out(끝내 미회신)이 하나 더 있어
+   4단계를 넘긴 딜의 미회신 벤더에 취소선을 긋고 로고를 흐렸는데, 그것은 미루어 본 것이지
+   알고 있는 것이 아니었다 — 표시한 적 없는 상태가 화면에 나타나니 "언제 그렇게
+   설정했나"를 되묻게 만들었다. 체크(✓)가 답이 온 곳을 이미 말해 주므로, 체크가 없다는
+   사실만으로 충분하다. 선은 통보를 실제로 받은 곳에만 남는다.
 
    클래스가 붙는 곳은 로고+이름 묶음(.cust-name)이라 인라인 flex 다 — 취소선은 묶음이
    아니라 글자(.cust-name-text)에 그어야 선이 로고 위로 지나가지 않는다. */
-.vendor-waiting,
-.vendor-out,
-.vendor-noquote { color: #9aa7b8; }
-/* out 은 waiting 보다 한 걸음 더 간 상태다 — 선 대신 로고를 흐려 그 차이를 말한다. */
-.vendor-out .cust-logo,
-.vendor-noquote .cust-logo { opacity: 0.45; filter: grayscale(1); }
+.vendor-waiting { color: #9aa7b8; }
 /* 견적을 실제로 받은 곳 — 이름 뒤에 작은 초록 체크.
    4단계(Quote Sent)로 넘어간 딜에서 물어본 곳이 대여섯이면, 그중 값을 준 곳이 어디였는지
    딜을 열지 않고 셀 수 있어야 한다. 흐림과 선명의 차이만으로는 한 칸 안에서 표가 나지
