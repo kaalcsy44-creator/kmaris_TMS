@@ -159,6 +159,8 @@ export default function LineBoard({
     return <div className="state">This project has no items yet — add them in stage 1.</div>;
 
   const s = data.summary;
+  /* 고르기 칸이 있는지 — 왼쪽 붙박이 칸들의 left 오프셋이 이 한 칸만큼 밀린다. */
+  const pickable = mode === "coverage" && !!onSendSelected;
 
   return (
     <div className="lb">
@@ -209,7 +211,7 @@ export default function LineBoard({
       {err ? <div className="state error lb-msg">{err}</div> : null}
 
       <div className="lb-scroll">
-        <table className="lb-table">
+        <table className={"lb-table" + (pickable ? " has-pick" : "")}>
           <thead>
             <tr>
               {mode === "coverage" && onSendSelected ? <th className="lb-pick" /> : null}

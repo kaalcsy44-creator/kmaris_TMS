@@ -17795,10 +17795,65 @@ select.compose-tpl-version {
   top: 0;
   z-index: 2;
 }
+/* ── 왼쪽 다섯 칸은 붙박이 ───────────────────────────────────────
+   벤더가 늘면 열이 늘어 표를 가로로 굴리게 되는데, 그러면 "지금 보고 있는 것이
+   몇 번째 줄이었는가"를 잃는다. 그래서 줄을 알아보는 칸(고르기·#·Part No.·
+   Description·Qty)은 제자리에 세우고 벤더 칸만 그 아래로 지나가게 한다.
+   left 오프셋은 앞 칸들의 너비 합이라, 그 너비가 내용에 따라 늘어나면 칸이 어긋난다 —
+   붙박이 칸은 너비를 못박고(width=min=max), 넘칠 만한 글은 접어서 담는다. */
+.lb-table {
+  --lb-pick: 0px;
+  --lb-no: 68px;
+  --lb-part: 132px;
+  --lb-desc: 248px;
+  --lb-qty: 84px;
+}
+/* 고르기 칸은 2단계에만 열린다 — 그 칸이 없으면 너비도 0 이어야 뒤 칸들이 제자리에 선다. */
+.lb-table.has-pick { --lb-pick: 34px; }
+
+.lb-table .lb-pick,
+.lb-table .lb-no,
+.lb-table .lb-part,
+.lb-table .lb-desc,
+.lb-table .lb-qty {
+  position: sticky;
+  z-index: 1;
+  /* 밑이 비면 지나가는 벤더 칸이 글자 뒤로 비쳐 보인다. */
+  background: #fff;
+}
+.lb-table thead .lb-pick,
+.lb-table thead .lb-no,
+.lb-table thead .lb-part,
+.lb-table thead .lb-desc,
+.lb-table thead .lb-qty {
+  /* 위로도 왼쪽으로도 붙박이인 칸 — 둘 중 어느 쪽에도 가리지 않게 가장 위에 세운다. */
+  z-index: 4;
+  background: var(--head-bg);
+}
+.lb-table .lb-pick { left: 0; }
+.lb-table .lb-no   { left: var(--lb-pick); }
+.lb-table .lb-part { left: calc(var(--lb-pick) + var(--lb-no)); }
+.lb-table .lb-desc { left: calc(var(--lb-pick) + var(--lb-no) + var(--lb-part)); }
+.lb-table .lb-qty  {
+  left: calc(var(--lb-pick) + var(--lb-no) + var(--lb-part) + var(--lb-desc));
+  /* 붙박이가 어디에서 끝나는지 — 그림자 한 겹으로만 말한다(선을 또 그리면 첫 벤더
+     칸의 왼쪽 선과 겹쳐 두 겹이 된다). */
+  box-shadow: 3px 0 5px -3px rgba(15, 23, 42, 0.18);
+}
+
 /* 품명만은 줄바꿈을 허용한다 — 이 표에서 줄을 알아보는 단서가 대개 품명이다. */
-.lb-table .lb-desc { white-space: normal; min-width: 220px; max-width: 420px; }
-.lb-table .lb-pick { width: 32px; text-align: center; }
-.lb-table .lb-no   { width: 64px; color: var(--muted); }
+.lb-table .lb-desc {
+  white-space: normal;
+  width: var(--lb-desc); min-width: var(--lb-desc); max-width: var(--lb-desc);
+}
+.lb-table .lb-pick {
+  width: var(--lb-pick); min-width: var(--lb-pick); max-width: var(--lb-pick);
+  text-align: center;
+}
+.lb-table .lb-no   {
+  width: var(--lb-no); min-width: var(--lb-no); max-width: var(--lb-no);
+  color: var(--muted);
+}
 .lb-lid {
   display: inline-block;
   margin-left: 6px;
@@ -17806,8 +17861,17 @@ select.compose-tpl-version {
   font-size: 10.5px;
   color: #9aa6b8;
 }
-.lb-table .lb-part { font-family: var(--mono); font-size: 11.5px; min-width: 110px; }
-.lb-table .lb-qty  { text-align: right; width: 78px; }
+/* 긴 품번·단위가 칸을 밀어 넓히지 못하게 한다 — 붙박이 오프셋이 그 너비로 계산되므로. */
+.lb-table .lb-part {
+  font-family: var(--mono); font-size: 11.5px;
+  width: var(--lb-part); min-width: var(--lb-part); max-width: var(--lb-part);
+  white-space: normal; overflow-wrap: anywhere;
+}
+.lb-table .lb-qty  {
+  text-align: right;
+  width: var(--lb-qty); min-width: var(--lb-qty); max-width: var(--lb-qty);
+  white-space: normal;
+}
 .lb-table th.lb-v {
   text-align: center;
   min-width: 108px;
@@ -17892,6 +17956,7 @@ select.compose-tpl-version {
 }
 
 @media (max-width: 760px) {
-  .lb-table .lb-desc { min-width: 150px; }
+  /* 작은 화면에서는 붙박이가 화면을 다 차지해서는 안 된다 — 칸을 좀 좁힌다. */
+  .lb-table { --lb-part: 100px; --lb-desc: 160px; --lb-qty: 68px; }
   .lb-table th.lb-v, .lb-c { min-width: 86px; }
 }
