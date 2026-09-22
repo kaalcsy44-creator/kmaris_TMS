@@ -178,6 +178,7 @@ export default function VendorQuoteMergeModal({
 export function QuoteSourceBand({
   sources,
   manual,
+  legacy,
   costCurrency,
   onDrop,
   onOpen,
@@ -186,12 +187,15 @@ export function QuoteSourceBand({
   sources: CostSource[];
   /** 출처가 적혀 있지 않은 줄 수(손으로 친 줄·옛 견적). */
   manual: number;
+  /** 문서에만 걸려 있고 어느 줄에도 닿지 않은 옛 링크 — 그래도 어느 견적을 보고 만든
+   *  견적서인지는 말해 줘야 한다(줄과 맞지 않으면 값까지 옮겨 적을 수는 없다). */
+  legacy?: { vendor: string; vq_no: string } | null;
   costCurrency: string;
   onDrop?: (vqId: number) => void;
   onOpen?: () => void;
   disabled?: boolean;
 }) {
-  if (sources.length === 0 && manual === 0) return null;
+  if (sources.length === 0 && manual === 0 && !legacy) return null;
   const cur = (costCurrency || "USD").toUpperCase();
   return (
     <div className="qsb">
@@ -214,6 +218,16 @@ export function QuoteSourceBand({
           ) : null}
         </span>
       ))}
+      {legacy ? (
+        <span
+          className="qsb-chip qsb-chip--legacy"
+          title="This quotation is linked to that vendor quote, but none of its lines match the ones below — the prices here were edited or typed in."
+        >
+          <VendorName name={legacy.vendor} />
+          <span className="qsb-no">{legacy.vq_no || "—"}</span>
+          <span className="qsb-n">linked</span>
+        </span>
+      ) : null}
       {manual > 0 ? (
         <span
           className="qsb-chip qsb-chip--manual"

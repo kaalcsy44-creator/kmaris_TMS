@@ -18071,3 +18071,6 @@ select.compose-tpl-version {
 
 /* Basic Info 한 줄에 필드가 셋일 때(벤더 견적 드롭다운이 출처 띠로 옮겨간 뒤). */
 .quote-meta-grid--3 { grid-template-columns: 1.2fr 1.2fr 1.4fr; }
+/* 문서에만 걸려 있는 옛 출처 링크 — 줄과 맞지 않아 값은 못 옮겼다는 뜻으로 흐리게. */
+.qsb-chip--legacy { color: #6b7684; border-style: dashed; }
+.qsb-chip--legacy .qsb-n { color: #8a94a6; }

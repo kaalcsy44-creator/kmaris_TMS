@@ -200,6 +200,53 @@ export function mergeMessage(
   return parts.join(" ");
 }
 
+/** 출처를 줄에 적기 전에 저장된 견적에, 문서에 걸려 있던 링크를 줄로 옮겨 적는다.
+ *
+ * 옛 편집기는 벤더 견적 한 장을 골라 품목표를 통째로 채웠고, 어느 견적이었는지는 문서
+ * 한 곳(Quotation.vendor_quote_id)에만 적혔다. 그 링크를 화면에서 걷어내면 이미 저장된
+ * 견적서는 매입처를 잃는다 — 그래서 열 때 그 견적의 줄과 맞춰 보고, **실제로 맞는 줄에만**
+ * 출처를 적는다(맞지 않는 줄은 손으로 넣었거나 다른 데서 온 줄이므로 건드리지 않는다).
+ *
+ * 값은 건드리지 않는다. 환산 앵커(src_cost)는 통화가 같고 원가가 벤더의 숫자와 똑같을
+ * 때에만 단다 — 그 뒤로 사람이 고친 원가를 환율 변경이 되돌려 놓아서는 안 된다.
+ */
+export function attributeLegacySource(
+  items: readonly CustomerQuoteItem[],
+  quote: {
+    id: number;
+    vendor: string;
+    vendor_quote_no: string;
+    currency: string;
+    items: readonly { lid?: string; part_no?: string; description?: string; cost_price?: number | null }[];
+  },
+  docCostCurrency: string
+): { items: CustomerQuoteItem[]; stamped: number } {
+  const cur = (quote.currency || "").toUpperCase();
+  const at = new Map<string, { cost_price?: number | null }>();
+  (quote.items || []).forEach((it) => {
+    const key = lineKey({ lid: it.lid, part_no: it.part_no || "", description: it.description || "" });
+    if (!at.has(key)) at.set(key, it);
+  });
+  let stamped = 0;
+  const out = (items || []).map((it) => {
+    if (isOptionRow(it) || Number(it.src_vq_id || 0)) return it;
+    const hit = at.get(lineKey(it));
+    if (!hit) return it;
+    stamped += 1;
+    const same = cur === (docCostCurrency || "").toUpperCase()
+      && Number(hit.cost_price || 0) === Number(it.cost_price || 0);
+    return {
+      ...it,
+      src_vq_id: quote.id,
+      src_vendor: quote.vendor || "",
+      src_vq_no: quote.vendor_quote_no || "",
+      src_currency: cur,
+      src_cost: same ? Number(hit.cost_price || 0) : null,
+    };
+  });
+  return { items: stamped ? out : [...(items || [])], stamped };
+}
+
 /** USD↔KRW 만 환산할 수 있다(convertCurrency 와 같은 규칙). 그 밖의 통화쌍은 환율이
  *  없어 숫자가 그대로 통과하므로, 조용히 틀린 원가가 되기 전에 막아야 한다. */
 export function costConvertible(from: string | undefined, to: string | undefined): boolean {

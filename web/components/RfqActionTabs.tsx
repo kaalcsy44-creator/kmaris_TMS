@@ -72,6 +72,7 @@ import VendorQuoteMergeModal, { QuoteSourceBand } from "./common/VendorQuoteMerg
 import type { MergeMode } from "./common/VendorQuoteMerge";
 import {
   appendItems,
+  attributeLegacySource,
   costConvertible,
   costSources,
   manualLines,
@@ -2341,12 +2342,21 @@ function CustomerQuoteDetailModal({
         setAttn((data.terms as { attn?: string })?.attn || "");
         setRefNo((data.terms as { ref_no?: string })?.ref_no || "");
         setItems(data.items || []);
-        // 원가 출처로 저장해 둔 벤더 견적을 드롭다운에 시드 — 어떤 벤더 견적과 이어졌는지 보인다.
-        setImportVqId(typeof data.vendor_quote_id === "number" ? data.vendor_quote_id : "");
+        // 문서에 걸려 있던 원가 출처(옛 견적) — 줄에 출처가 적히기 전에 저장된 것이다.
+        const legacyId = typeof data.vendor_quote_id === "number" ? data.vendor_quote_id : "";
+        setImportVqId(legacyId);
         setMsg(null);
         if (data.rfq_id) {
           fetchRfqVendorQuotes(data.rfq_id)
-            .then((r) => setVendorQuotes(r.vendor_quotes))
+            .then((r) => {
+              setVendorQuotes(r.vendor_quotes);
+              // 그 링크를 줄로 옮겨 적는다 — 옛 견적도 "이 원가가 어디서 왔나"를 표와
+              // 출처 띠에서 그대로 읽을 수 있게(맞는 줄에만 적고 값은 건드리지 않는다).
+              const vq = legacyId === "" ? undefined : r.vendor_quotes.find((v) => v.id === legacyId);
+              if (!vq) return;
+              const cur = data.cost_currency || data.currency || DEFAULT_COST_CURRENCY;
+              setItems((prev) => attributeLegacySource(prev, vq, cur).items);
+            })
             .catch(() => setVendorQuotes([]));
         } else {
           setVendorQuotes([]);
@@ -2689,6 +2699,7 @@ function CustomerQuoteDetailModal({
           <QuoteSourceBand
             sources={costSources(items)}
             manual={manualLines(items)}
+            legacy={legacySourceChip(items, vendorQuotes, importVqId)}
             costCurrency={costCurrency}
             onDrop={canWriteNow ? dropSource : undefined}
             onOpen={canWriteNow ? () => setMergeOpen(true) : undefined}
@@ -4283,6 +4294,19 @@ function mergeVendorQuotes(opts: {
  *  옛 견적만 문서에 걸려 있던 옛 링크를 그대로 지킨다. */
 function docSourceId(items: CustomerQuoteItem[], legacy: number | null): number | null {
   return costSources(items).length > 0 ? soleSourceId(items) : legacy;
+}
+
+/** 문서에만 남아 있는 옛 링크를 띠에 세울지 — 그 견적에서 온 줄이 하나도 없을 때만.
+ *  줄이 있으면 그 줄들이 이미 출처 칩으로 서므로 같은 것을 두 번 적지 않는다. */
+function legacySourceChip(
+  items: CustomerQuoteItem[],
+  quotes: VendorQuoteForImport[],
+  legacy: number | ""
+): { vendor: string; vq_no: string } | null {
+  if (legacy === "") return null;
+  if (costSources(items).some((s) => s.vq_id === legacy)) return null;
+  const vq = quotes.find((v) => v.id === legacy);
+  return vq ? { vendor: vq.vendor, vq_no: vq.vendor_quote_no } : null;
 }
 
 /** 원가 통화·환율이 바뀌었을 때 이 줄의 원가. 벤더가 준 숫자가 줄에 남아 있으면(src_cost)

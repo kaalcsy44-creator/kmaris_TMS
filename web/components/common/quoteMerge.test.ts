@@ -8,6 +8,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
   appendItems,
+  attributeLegacySource,
   costConvertible,
   costSources,
   lineKey,
@@ -118,4 +119,44 @@ test("환산할 수 있는 통화쌍은 USD↔KRW 뿐이다", () => {
   assert.equal(costConvertible("USD", "KRW"), true);
   assert.equal(costConvertible("KRW", "KRW"), true);
   assert.equal(costConvertible("EUR", "KRW"), false);
+});
+
+test("옛 견적의 문서 링크는 맞는 줄에만 출처로 옮겨 적힌다", () => {
+  const items = [
+    row({ lid: "L01", part_no: "P-1", cost_price: 100 }),   // 벤더 견적에 있는 줄
+    row({ lid: "L02", part_no: "P-2", cost_price: 77 }),    // 그 견적에는 없는 줄(손으로 넣음)
+  ];
+  const vq = {
+    id: 9,
+    vendor: "The Marine Korea",
+    vendor_quote_no: "TMK-051",
+    currency: "KRW",
+    items: [{ lid: "L01", part_no: "P-1", cost_price: 100 }],
+  };
+  const r = attributeLegacySource(items, vq, "KRW");
+  assert.equal(r.stamped, 1);
+  assert.equal(r.items[0].src_vq_id, 9);
+  assert.equal(r.items[0].src_vq_no, "TMK-051");
+  assert.equal(r.items[0].src_cost, 100);        // 값이 벤더 숫자 그대로 → 환산 앵커를 단다
+  assert.equal(r.items[1].src_vq_id, undefined); // 맞지 않는 줄은 건드리지 않는다
+  assert.equal(manualLines(r.items), 1);
+});
+
+test("사람이 고친 원가에는 환산 앵커를 달지 않는다", () => {
+  const items = [row({ lid: "L01", part_no: "P-1", cost_price: 120 })];
+  const vq = { id: 9, vendor: "A", vendor_quote_no: "Q", currency: "KRW",
+               items: [{ lid: "L01", part_no: "P-1", cost_price: 100 }] };
+  const r = attributeLegacySource(items, vq, "KRW");
+  assert.equal(r.items[0].src_vq_id, 9);
+  assert.equal(r.items[0].src_cost, null);
+  assert.equal(r.items[0].cost_price, 120);      // 값은 그대로 둔다
+});
+
+test("이미 출처가 적힌 줄은 옛 링크가 덮어쓰지 않는다", () => {
+  const items = [fromVendor(1, "A", { lid: "L01", part_no: "P-1", cost_price: 100 })];
+  const vq = { id: 9, vendor: "B", vendor_quote_no: "Q", currency: "KRW",
+               items: [{ lid: "L01", part_no: "P-1", cost_price: 100 }] };
+  const r = attributeLegacySource(items, vq, "KRW");
+  assert.equal(r.stamped, 0);
+  assert.equal(r.items[0].src_vq_id, 1);
 });
