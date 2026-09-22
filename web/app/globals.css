@@ -17960,3 +17960,114 @@ select.compose-tpl-version {
   .lb-table { --lb-part: 100px; --lb-desc: 160px; --lb-qty: 68px; }
   .lb-table th.lb-v, .lb-c { min-width: 86px; }
 }
+
+/* ── 공급사 견적 취합(VendorQuoteMerge) ────────────────────────────────────
+   4단계에서 받은 견적 여러 장을 골라 한 품목표에 싣는 창. 견적 목록·붙일지 갈아
+   끼울지·통화가 다를 때의 경고가 한 화면에 선다. */
+.vqm { display: flex; flex-direction: column; gap: 10px; }
+.vqm-lead {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #53627c;
+}
+.vqm table.mini tbody tr { cursor: pointer; }
+.vqm table.mini tbody tr:hover { background: #f4f8fe; }
+.vqm-chk { width: 34px; text-align: center; }
+.vqm-empty { text-align: center; color: #8a94a6; padding: 18px 0; }
+.vqm-bad { background: #fff5f5; }
+.vqm-tag { font-size: 11.5px; color: #8a94a6; }
+.vqm-tag.on {
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: var(--blue, #0055a8);
+  background: #e8f1fd;
+  border: 1px solid #cfe0f5;
+}
+.vqm-mode {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border: 1px solid #e2eaf4;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+.vqm-mode label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #33415a;
+  cursor: pointer;
+}
+.vqm-mode b { color: var(--navy, #123); }
+.vqm-note, .vqm-err {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  padding: 7px 10px;
+  border-radius: 8px;
+}
+.vqm-note { color: #4a5a74; background: #f2f7fe; border: 1px solid #cfe0f5; }
+.vqm-err { color: #a32020; background: #fff3f3; border: 1px solid #f0cdcd; }
+.vqm-count { margin-right: auto; font-size: 12px; color: #6b7684; }
+
+/* ── 원가 출처 띠(QuoteSourceBand) ─────────────────────────────────────────
+   품목표 바로 위. 이 견적서의 원가가 어느 공급사 견적에서 왔는지 — 합쳐 담을 수
+   있게 된 뒤로 매입처가 한 곳이라는 보장이 없어, 그 사실이 표 곁에 늘 서 있어야 한다. */
+.qsb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+  padding: 7px 10px;
+  border: 1px solid #e2eaf4;
+  border-left: 3px solid #9ec2ea;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+.qsb-t {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #8a94a6;
+  white-space: nowrap;
+}
+.qsb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 4px 3px 8px;
+  font-size: 12px;
+  color: #33415a;
+  background: #fff;
+  border: 1px solid #dfe7f2;
+  border-radius: 999px;
+}
+.qsb-chip--manual { padding-right: 10px; color: #6b7684; }
+.qsb-no { font-size: 11.5px; color: #6b7684; }
+.qsb-n { font-size: 11.5px; color: var(--blue, #0055a8); }
+.qsb-amt { font-size: 11.5px; color: #33415a; }
+.qsb-x {
+  width: 18px;
+  height: 18px;
+  line-height: 1;
+  padding: 0;
+  font-size: 13px;
+  color: #8a94a6;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.qsb-x:hover { color: #a32020; background: #fdecec; }
+.qsb-add { margin-left: auto; }
+
+/* 품목표의 Source 칸 — 읽기만 하는 내부 표시(고객 문서에는 나가지 않는다). */
+.src-cell { white-space: nowrap; }
+.src-tag { font-size: 11.5px; }
+
+/* Basic Info 한 줄에 필드가 셋일 때(벤더 견적 드롭다운이 출처 띠로 옮겨간 뒤). */
+.quote-meta-grid--3 { grid-template-columns: 1.2fr 1.2fr 1.4fr; }

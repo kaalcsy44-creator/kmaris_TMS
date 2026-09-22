@@ -68,6 +68,17 @@ import VendorName from "./common/VendorName";
 import LineBoard from "./common/LineBoard";
 import type { VendorState } from "@/lib/deal";
 import VendorSelect from "./common/VendorSelect";
+import VendorQuoteMergeModal, { QuoteSourceBand } from "./common/VendorQuoteMerge";
+import type { MergeMode } from "./common/VendorQuoteMerge";
+import {
+  appendItems,
+  costConvertible,
+  costSources,
+  manualLines,
+  mergeMessage,
+  soleSourceId,
+  withoutSource,
+} from "@/lib/quoteMerge";
 import VendorContactFields, {
   contactIdsFromEmail,
   vendorContactEmails,
@@ -2282,7 +2293,10 @@ function CustomerQuoteDetailModal({
   const [refNo, setRefNo] = useState("");
   const [items, setItems] = useState<CustomerQuoteItem[]>([]);
   const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
+  // 출처를 줄에 적기 전에 만든 견적이 안고 있는 문서 링크(Quotation.vendor_quote_id).
+  // 새로 싣는 순간부터는 줄의 출처가 정본이 된다.
   const [importVqId, setImportVqId] = useState<number | "">("");
+  const [mergeOpen, setMergeOpen] = useState(false);
   const [defaultMargin, setDefaultMargin] = useState(DEFAULT_MARGIN_PCT);
   const effRate = fxRate ?? USD_KRW_RATE;
   const [msg, setMsg] = useState<string | null>(null);
@@ -2363,8 +2377,9 @@ function CustomerQuoteDetailModal({
       status,
       terms: termsForSave(),
       items,
-      // "Select Vendor quote"에서 고른 원가 출처. 수동입력(빈 값)이면 null 로 링크 해제.
-      vendor_quote_id: importVqId === "" ? null : importVqId,
+      // 원가 출처 링크 — 줄에 적힌 출처가 하나면 그 하나, 여럿이면 null(문서 한 장에
+      // 벤더 하나를 매다는 자리라 셋을 담을 수 없다. 셋은 줄에 적혀 있다).
+      vendor_quote_id: docSourceId(items, importVqId === "" ? null : importVqId),
     });
     onChanged();
   }
@@ -2447,18 +2462,39 @@ function CustomerQuoteDetailModal({
     }
   }
 
-  function importFromVendorQuote() {
-    if (importVqId === "") return;
-    const vq = vendorQuotes.find((v) => v.id === importVqId);
-    if (!vq) return;
-    // 원가 통화 = 공급사 견적 통화. 판매 통화(currency)는 사용자가 정한 값을 유지하고
-    // 단가는 판매 통화로 환산해 계산한다.
-    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin, currency, roundDigits, effRate));
-    if (vq.currency) setCostCurrency(vq.currency);
-    setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
-    setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
+  // 고른 공급사 견적들을 품목표에 싣는다 — 한 장이면 예전과 같고, 여러 장이면 합쳐 담는다.
+  function loadVendorQuotes(ids: number[], mode: MergeMode) {
+    const r = mergeVendorQuotes({
+      quotes: vendorQuotes, ids, mode, existing: items,
+      defaultMargin, saleCurrency: currency, costCurrency, roundDigits, rate: effRate,
+    });
+    setMergeOpen(false);
+    if ("err" in r) {
+      setMsg(null);
+      setErr(r.err);
+      return;
+    }
+    setItems(r.items);
+    setCostCurrency(r.costCurrency);
+    // 거래조건은 한 장만 골랐을 때에만 옮긴다 — 세 곳의 조건을 겹쳐 쓰면 마지막 한 곳의
+    // 조건이 고객에게 나가고, 어느 곳 것인지도 화면에 남지 않는다.
+    if (ids.length === 1) {
+      const vq = vendorQuotes.find((v) => v.id === ids[0]);
+      if (vq) setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
+    }
+    // 옛 문서 링크는 여기서 손을 뗀다 — 이제 출처는 줄에 적혀 있다.
+    setImportVqId("");
+    setMsg(r.msg);
     // 품목은 들어왔지만 기본 마진이 계산 불가 값이면 단가가 원가 그대로 들어온다 — 알려 준다.
     setErr(marginRangeError(defaultMargin));
+  }
+
+  // 잘못 부른 견적을 한 번에 되돌린다 — 그 출처에서 온 줄만 걷어낸다.
+  function dropSource(vqId: number) {
+    const gone = costSources(items).find((x) => x.vq_id === vqId);
+    setItems(withoutSource(items, vqId));
+    setErr(null);
+    setMsg(gone ? `Removed ${gone.lines} line(s) loaded from ${gone.vendor} (${gone.vq_no || "—"}).` : null);
   }
 
   // 3단계에서 줄마다 고른 매입처를 그대로 이 견적에 싣는다. 벤더가 여럿이어도 고객이
@@ -2545,21 +2581,10 @@ function CustomerQuoteDetailModal({
           {/* 문서 정보 — 견적 식별·일자. 4필드 한 줄. */}
           <div className="stage-card">
           <div className="form-section-title">Basic Info</div>
-          <div className="form-grid quote-meta-grid">
-            <div className="form-field">
-              <label>Select Vendor quote</label>
-              <VendorSelect
-                value={importVqId}
-                options={vendorQuotes.map((v) => ({
-                  id: v.id,
-                  name: v.vendor,
-                  label: `${v.received_date || "—"} · ${v.vendor} · ${v.vendor_quote_no}`,
-                }))}
-                placeholder={vendorQuotes.length === 0 ? "No Vendor quote received" : "Manual entry"}
-                disabled={vendorQuotes.length === 0}
-                onChange={setImportVqId}
-              />
-            </div>
+          {/* 원가 출처(어느 공급사 견적에서 왔나)는 여기 있던 드롭다운이 아니라 품목표 위
+              출처 띠에 선다 — 한 견적서가 여러 공급사 견적을 안고 있을 수 있어, 문서 머리에
+              벤더 한 곳만 걸어 두면 나머지가 화면에서 사라진다. */}
+          <div className="form-grid quote-meta-grid quote-meta-grid--3">
             <div className="form-field">
               <label>Quotation No.</label>
               <input value={qtnNo} onChange={(e) => setQtnNo(e.target.value)} placeholder="KMS-QUO-2606-001" />
@@ -2658,6 +2683,17 @@ function CustomerQuoteDetailModal({
               Apply
             </button>
           </div>
+          {/* 원가 출처 띠 — 이 견적서의 원가가 어디서 왔는지(공급사 견적별 줄 수·매입액).
+              합쳐 담을 수 있게 된 뒤로 매입처가 한 곳이라는 보장이 없어, 그 사실이 품목표
+              바로 위에 늘 서 있어야 한다. */}
+          <QuoteSourceBand
+            sources={costSources(items)}
+            manual={manualLines(items)}
+            costCurrency={costCurrency}
+            onDrop={canWriteNow ? dropSource : undefined}
+            onOpen={canWriteNow ? () => setMergeOpen(true) : undefined}
+            disabled={!canWriteNow}
+          />
           <CustomerQuoteItemEditor
             items={items}
             onChange={setItems}
@@ -2667,8 +2703,12 @@ function CustomerQuoteDetailModal({
             rate={effRate}
             headerActions={
               <>
-                <button className="btn sm" onClick={importFromVendorQuote} disabled={importVqId === ""}>
-                  Load Vendor quote
+                {/* 받은 견적을 골라 싣는다 — 한 장이면 그 한 장, 여러 장이면 한 표로 합쳐. */}
+                <button className="btn sm" onClick={() => setMergeOpen(true)} disabled={vendorQuotes.length === 0}
+                        title={vendorQuotes.length === 0
+                          ? "No vendor quote has been received for this deal yet"
+                          : "Pick one or more received vendor quotes and load their lines into this quotation"}>
+                  Load Vendor quote{vendorQuotes.length > 1 ? "s" : ""}
                 </button>
                 {/* 줄마다 매입처가 다른 딜은 이쪽 — 3단계에서 고른 결과를 그대로 싣는다. */}
                 <button className="btn sm" onClick={importAwardedLines} disabled={busy}
@@ -2678,6 +2718,15 @@ function CustomerQuoteDetailModal({
               </>
             }
           />
+          {mergeOpen ? (
+            <VendorQuoteMergeModal
+              quotes={vendorQuotes}
+              items={items}
+              costCurrency={costCurrency}
+              onLoad={loadVendorQuotes}
+              onClose={() => setMergeOpen(false)}
+            />
+          ) : null}
           <DiscountSummary
             subtotal={total}
             discountPct={discountPct}
@@ -4073,22 +4122,31 @@ function mergeTermsFromVendorQuote(
   return next;
 }
 
+/** 공급사 견적 한 장을 고객 견적 품목으로.
+ *
+ * 원가는 문서의 원가 통화(costCurrency)로 환산해 싣는다 — 견적서 한 장의 Cost 칸은
+ * 한 가지 자로 재야 매입 합계·마진이 말이 되기 때문이다. 벤더가 적어 보낸 숫자와 그
+ * 통화는 줄에 그대로 남겨 둔다(src_cost·src_currency): 환율을 고치면 그 숫자에서 다시
+ * 환산하고, "이 원가가 어디서 왔나"를 나중에도 되짚을 수 있다.
+ */
 function customerQuoteItemsFromVendorQuote(
   vq: VendorQuoteForImport,
   defaultMargin: number,
   saleCurrency = "USD",
   roundDigits: number = DEFAULT_ROUND_DIGITS,
-  rate: number = USD_KRW_RATE
+  rate: number = USD_KRW_RATE,
+  costCurrency?: string
 ): CustomerQuoteItem[] {
-  // 원가는 공급사 견적 통화(vq.currency), 단가는 판매 통화 기준으로 환산해 계산.
+  const costCur = (costCurrency || vq.currency || DEFAULT_COST_CURRENCY).toUpperCase();
   return vq.items.map((it) => {
     // 옵션 구분행은 제목만 있는 줄이라 원가·단가를 계산하지 않고 그대로 옮긴다.
     if (isOptionRow(it))
       return { part_no: "", description: it.description || "", qty: 0, unit: "",
                cost_price: null, margin_pct: null, unit_price: null, amount: null,
                row_kind: OPTION_ROW_KIND };
-    const cost = Number(it.cost_price ?? 0);
-    const unit = calcUnitPrice(cost, defaultMargin, vq.currency, saleCurrency, roundDigits, rate);
+    const srcCost = Number(it.cost_price ?? 0);
+    const cost = convertCurrency(srcCost, vq.currency, costCur, rate);
+    const unit = calcUnitPrice(cost, defaultMargin, costCur, saleCurrency, roundDigits, rate);
     const qty = Number(it.qty || 1);
     return {
       part_no: it.part_no || "",
@@ -4104,6 +4162,11 @@ function customerQuoteItemsFromVendorQuote(
       lead_time: it.lead_time ?? "",
       remark: it.remark ?? "",
       lid: it.lid ?? "",
+      src_vq_id: vq.id,
+      src_vendor: vq.vendor || "",
+      src_vq_no: vq.vendor_quote_no || "",
+      src_currency: (vq.currency || costCur).toUpperCase(),
+      src_cost: srcCost,
     };
   });
 }
@@ -4143,8 +4206,94 @@ function customerQuoteItemsFromAwards(
       category_id: it.category_id ?? null,
       applied_to: it.applied_to ?? null,
       lid: it.lid || "",
+      // 채택된 줄도 출처를 안고 간다 — 벤더 견적을 합쳐 담는 길과 같은 표식이라
+      // 출처 띠·저장 시 문서 링크가 두 길을 가리지 않는다.
+      src_vq_id: it.vendor_quote_id || null,
+      src_vendor: it.vendor || "",
+      src_vq_no: it.vendor_quote_no || "",
+      src_currency: (it.currency || costCurrency).toUpperCase(),
+      src_cost: cost,
     };
   });
+}
+
+/** 고른 공급사 견적들을 한 품목표로 — 4단계의 취합. 편집기 두 곳(신규 작성·상세 수정)이
+ *  같은 규칙을 써야 해서 여기 한 번만 적는다.
+ *
+ * 붙이기(append)면 지금 표 뒤에 잇고, 갈아 끼우기(replace)면 표를 비우고 싣는다. 겹치는
+ * 줄은 건너뛴다(lib/quoteMerge.appendItems). 원가 통화는 표가 비어 있을 때만 첫 견적을
+ * 따라가고, 이미 값이 실린 표에서는 문서의 통화를 지킨다 — 두 번째 견적을 부르는 일이
+ * 첫 번째 견적의 원가를 다른 자로 바꿔 놓아서는 안 된다.
+ */
+function mergeVendorQuotes(opts: {
+  quotes: VendorQuoteForImport[];
+  ids: number[];
+  mode: MergeMode;
+  existing: CustomerQuoteItem[];
+  defaultMargin: number;
+  saleCurrency: string;
+  costCurrency: string;
+  roundDigits: number;
+  rate: number;
+}): { items: CustomerQuoteItem[]; costCurrency: string; msg: string } | { err: string } {
+  const picked = opts.quotes.filter((q) => opts.ids.includes(q.id));
+  if (picked.length === 0) return { err: "Pick at least one vendor quote." };
+  const base = opts.mode === "replace" ? [] : opts.existing;
+  const hadItems = base.some((it) => !isOptionRow(it));
+  // 표가 비어 있으면 첫 견적의 통화를 문서의 원가 통화로 삼는다(예전 동작 그대로).
+  const costCur = (hadItems ? opts.costCurrency : picked[0].currency || opts.costCurrency).toUpperCase();
+  const bad = picked.filter((q) => !costConvertible(q.currency, costCur));
+  if (bad.length > 0) {
+    const who = bad.map((q) => `${q.vendor} (${(q.currency || "").toUpperCase()})`).join(", ");
+    return {
+      err: `${who} cannot be converted to ${costCur} — only USD↔KRW has a rate here. `
+        + `Load it into a quotation priced in its own currency, or enter those lines by hand.`,
+    };
+  }
+  let items = base;
+  let added = 0;
+  let filled = 0;
+  const skipped: string[] = [];
+  let converted = 0;
+  picked.forEach((q) => {
+    const rows = customerQuoteItemsFromVendorQuote(
+      q, opts.defaultMargin, opts.saleCurrency, opts.roundDigits, opts.rate, costCur
+    );
+    if ((q.currency || "").toUpperCase() !== costCur) converted += rows.filter((r) => !isOptionRow(r)).length;
+    const r = appendItems(items, rows);
+    items = r.items;
+    added += r.added;
+    filled += r.filled;
+    skipped.push(...r.skipped);
+  });
+  return {
+    items,
+    costCurrency: costCur,
+    msg: mergeMessage(
+      added,
+      picked.map((q) => ({ vendor: q.vendor, vq_no: q.vendor_quote_no })),
+      { converted, filled, skipped, options: hasOptions(items) },
+      costCur
+    ),
+  };
+}
+
+/** 문서에 매다는 원가 출처 링크(Quotation.vendor_quote_id). 줄에 출처가 적혀 있으면
+ *  그쪽이 정본이고 — 한 곳이면 그 한 곳, 여러 곳이면 null — 출처를 적기 전에 만든
+ *  옛 견적만 문서에 걸려 있던 옛 링크를 그대로 지킨다. */
+function docSourceId(items: CustomerQuoteItem[], legacy: number | null): number | null {
+  return costSources(items).length > 0 ? soleSourceId(items) : legacy;
+}
+
+/** 원가 통화·환율이 바뀌었을 때 이 줄의 원가. 벤더가 준 숫자가 줄에 남아 있으면(src_cost)
+ *  그 숫자에서 다시 환산한다 — 환산값을 다시 환산하면 오차가 쌓이고, 통화를 되돌려도
+ *  원래 숫자로 돌아오지 않는다. 손으로 고친 원가는 앵커가 지워져 있어 그대로 둔다. */
+function anchoredCost(it: CustomerQuoteItem, costCur: string, rate: number): number {
+  const srcCur = (it.src_currency || "").toUpperCase();
+  if (!srcCur || it.src_cost == null || !costConvertible(srcCur, costCur)) {
+    return Number(it.cost_price || 0);
+  }
+  return convertCurrency(Number(it.src_cost), srcCur, costCur, rate);
 }
 
 // 저장된 거래조건에 Payment Terms 가 비어 있으면 고객/공급사 정보의 기본 결제조건으로
@@ -4188,6 +4337,7 @@ function CustomerQuoteAction({
   );
   const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
   const [importVqId, setImportVqId] = useState<number | "">("");
+  const [mergeOpen, setMergeOpen] = useState(false);
   const [docType, setDocType] = useState<"quotation" | "proforma_invoice">("quotation");
   const [qtn, setQtn] = useState<{ id: number; qtn_no: string } | null>(null);
   const [email, setEmail] = useState<{ to: string; subject: string; body: string; smtp_configured: boolean } | null>(null);
@@ -4215,6 +4365,9 @@ function CustomerQuoteAction({
     fetchRfqDetail(rfqId)
       .then((d) =>
         setItems(
+          // 딜의 품목을 값이 비어 있는 자리로 먼저 깔아 둔다. 라인 ID·분류를 함께 옮기는
+          // 것은 공급사 견적을 부를 때 이 자리를 제 이름으로 되찾기 위해서다 — 품번만으로
+          // 맞추면 벤더가 품번을 제 번호로 바꿔 적은 줄이 새 줄로 하나 더 선다.
           d.items.map((it) => ({
             part_no: it.part_no,
             description: it.description,
@@ -4224,6 +4377,10 @@ function CustomerQuoteAction({
             margin_pct: DEFAULT_MARGIN_PCT,
             unit_price: 0,
             amount: 0,
+            lid: it.lid || "",
+            category_id: it.category_id ?? null,
+            applied_to: it.applied_to ?? null,
+            row_kind: it.row_kind || "",
           }))
         )
       )
@@ -4233,18 +4390,39 @@ function CustomerQuoteAction({
       .catch(() => setVendorQuotes([]));
   }, [rfqId]);
 
-  // 선택한 공급사 견적의 품목·cost_price 를 불러와 기본 마진을 적용한다.
-  function importFromVendorQuote() {
-    if (importVqId === "") return;
-    const vq = vendorQuotes.find((v) => v.id === importVqId);
-    if (!vq) return;
-    // 원가 통화 = 공급사 견적 통화. 판매 통화(currency)는 사용자 선택값을 유지.
-    setItems(customerQuoteItemsFromVendorQuote(vq, defaultMargin, currency, roundDigits, effRate));
-    if (vq.currency) setCostCurrency(vq.currency);
-    setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
-    setMsg(`Loaded ${vq.items.length} item(s) from quote ${vq.vendor_quote_no} (${vq.vendor}).`);
+  // 고른 공급사 견적들의 품목·cost_price 를 불러와 기본 마진을 적용한다. 여러 장을 고르면
+  // 한 품목표로 합쳐 담고, 딜 품목으로 미리 깔아 둔 빈 줄은 제자리에서 값이 채워진다.
+  function loadVendorQuotes(ids: number[], mode: MergeMode) {
+    const r = mergeVendorQuotes({
+      quotes: vendorQuotes, ids, mode, existing: items,
+      defaultMargin, saleCurrency: currency, costCurrency, roundDigits, rate: effRate,
+    });
+    setMergeOpen(false);
+    if ("err" in r) {
+      setMsg(null);
+      setErr(r.err);
+      return;
+    }
+    setItems(r.items);
+    setCostCurrency(r.costCurrency);
+    // 거래조건은 한 장만 골랐을 때에만 옮긴다 — 세 곳의 조건이 겹쳐 쓰이면 마지막 한 곳의
+    // 조건이 고객에게 나간다.
+    if (ids.length === 1) {
+      const vq = vendorQuotes.find((v) => v.id === ids[0]);
+      if (vq) setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
+    }
+    setImportVqId("");
+    setMsg(r.msg);
     // 품목은 들어왔지만 기본 마진이 계산 불가 값이면 단가가 원가 그대로 들어온다 — 알려 준다.
     setErr(marginRangeError(defaultMargin));
+  }
+
+  // 잘못 부른 견적을 한 번에 되돌린다 — 그 출처에서 온 줄만 걷어낸다.
+  function dropSource(vqId: number) {
+    const gone = costSources(items).find((x) => x.vq_id === vqId);
+    setItems(withoutSource(items, vqId));
+    setErr(null);
+    setMsg(gone ? `Removed ${gone.lines} line(s) loaded from ${gone.vendor} (${gone.vq_no || "—"}).` : null);
   }
 
   // 3단계에서 줄마다 고른 매입처를 그대로 이 견적에 싣는다. 한 벤더에서 다 사는 딜이면
@@ -4308,7 +4486,7 @@ function CustomerQuoteAction({
     setMsg(null);
     setErr(null);
     try {
-      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, terms, qtnNo, sentAt, costCurrency, roundDigits, discountPct, fxRate, importVqId === "" ? null : importVqId, defaultMargin);
+      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, terms, qtnNo, sentAt, costCurrency, roundDigits, discountPct, fxRate, docSourceId(items, importVqId === "" ? null : importVqId), defaultMargin);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
       setMsg(`Sent — ${r.qtn_no}`);
       onDone();
@@ -4377,21 +4555,9 @@ function CustomerQuoteAction({
       {/* 문서 정보 — 견적 식별·일자. 4필드 한 줄. */}
       <div className="stage-card">
       <div className="form-section-title">Basic Info</div>
-      <div className="form-grid quote-meta-grid">
-        <div className="form-field">
-          <label>Select Vendor quote</label>
-          <VendorSelect
-            value={importVqId}
-            options={vendorQuotes.map((v) => ({
-              id: v.id,
-              name: v.vendor,
-              label: `${v.received_date || "—"} · ${v.vendor} · ${v.vendor_quote_no}`,
-            }))}
-            placeholder={vendorQuotes.length === 0 ? "No Vendor quote received" : "— Manual entry —"}
-            disabled={vendorQuotes.length === 0}
-            onChange={setImportVqId}
-          />
-        </div>
+      {/* 원가 출처는 품목표 위 출처 띠에 선다 — 한 견적서가 공급사 견적 여러 장을 안을 수
+          있어, 문서 머리에 벤더 한 곳만 걸어 두면 나머지가 화면에서 사라진다. */}
+      <div className="form-grid quote-meta-grid quote-meta-grid--3">
         <div className="form-field">
           <label>Quotation No.</label>
           {noMode === "auto" ? (
@@ -4483,6 +4649,14 @@ function CustomerQuoteAction({
         </button>
       </div>
 
+      {/* 원가 출처 띠 — 이 견적서의 원가가 어느 공급사 견적에서 왔는지, 각각 몇 줄·얼마인지. */}
+      <QuoteSourceBand
+        sources={costSources(items)}
+        manual={manualLines(items)}
+        costCurrency={costCurrency}
+        onDrop={dropSource}
+        onOpen={() => setMergeOpen(true)}
+      />
       <CustomerQuoteItemEditor
         items={items}
         onChange={setItems}
@@ -4492,8 +4666,12 @@ function CustomerQuoteAction({
         rate={effRate}
         headerActions={
           <>
-            <button className="btn sm" onClick={importFromVendorQuote} disabled={importVqId === ""}>
-              Load Vendor quote
+            {/* 받은 견적을 골라 싣는다 — 여러 장을 고르면 한 품목표로 합쳐 담는다. */}
+            <button className="btn sm" onClick={() => setMergeOpen(true)} disabled={vendorQuotes.length === 0}
+                    title={vendorQuotes.length === 0
+                      ? "No vendor quote has been received for this deal yet"
+                      : "Pick one or more received vendor quotes and load their lines into this quotation"}>
+              Load Vendor quote{vendorQuotes.length > 1 ? "s" : ""}
             </button>
             {/* 한 벤더에서 다 사는 딜이면 왼쪽 버튼이면 된다. 줄마다 매입처가 다르면
                 이쪽 — 3단계에서 고른 결과를 그대로 싣는다. */}
@@ -4504,6 +4682,15 @@ function CustomerQuoteAction({
           </>
         }
       />
+      {mergeOpen ? (
+        <VendorQuoteMergeModal
+          quotes={vendorQuotes}
+          items={items}
+          costCurrency={costCurrency}
+          onLoad={loadVendorQuotes}
+          onClose={() => setMergeOpen(false)}
+        />
+      ) : null}
 
       <DiscountSummary
         subtotal={total}
@@ -4620,6 +4807,9 @@ function CustomerQuoteItemEditor({
         } else {
           (next[key] as string) = value;
         }
+        // 원가를 손으로 고쳤으면 그 값은 더 이상 벤더가 준 숫자가 아니다 — 환산 앵커를
+        // 놓는다(놓지 않으면 환율·원가 통화를 바꾸는 순간 손으로 고친 값이 되돌아간다).
+        if (key === "cost_price") next.src_cost = null;
         if (key === "cost_price" || key === "margin_pct" || key === "qty") {
           const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, roundDigits, rate);
           next.unit_price = unit;
@@ -4682,6 +4872,7 @@ function CustomerQuoteItemEditor({
   const normalizeRow = (it: CustomerQuoteItem, changed: string[]): CustomerQuoteItem => {
     if (isOptionRow(it)) return it;
     const next: CustomerQuoteItem = { ...it };
+    if (changed.includes("cost_price")) next.src_cost = null;   // 손으로 들어온 원가 — 앵커를 놓는다
     if (changed.includes("cost_price") || changed.includes("margin_pct") || changed.includes("qty")) {
       const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, roundDigits, rate);
       next.unit_price = unit;
@@ -4755,6 +4946,9 @@ function CustomerQuoteItemEditor({
     { key: "amount", label: `Amount (${saleCur})`, className: "num" },
     { key: "lead_time", label: "Lead Time" },
     { key: "remark", label: "Remark" },
+    // 원가 출처 — 공급사 견적 여러 장을 한 장에 합쳐 담으면 "이 줄은 어디서 왔나"가 표에서
+    // 바로 보여야 한다. 고객에게 나가는 문서에는 찍히지 않는 내부 칸이다(숨길 수 있다).
+    { key: "source", label: "Source" },
   ];
   // 폰 접기(phone 표식)를 쓰지 않는 유일한 품목표 — 이 표의 일은 "원가(Purchase) → 마진 →
   // 판매가(Sales)" 를 나란히 놓고 값을 맞추는 것이라, 그중 무엇을 감춰도 표가 제 일을
@@ -4965,6 +5159,7 @@ function CustomerQuoteItemEditor({
               <ItemTh grid={grid} k="amount" className="num">Amount ({saleCur})</ItemTh>
               <ItemTh grid={grid} k="lead_time">Lead Time</ItemTh>
               <ItemTh grid={grid} k="remark">Remark</ItemTh>
+              <ItemTh grid={grid} k="source">Source</ItemTh>
             </tr>
           </thead>
           <tbody>
@@ -5030,6 +5225,24 @@ function CustomerQuoteItemEditor({
                 <td><textarea {...keys.cell(i, 7)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
                 {/* 견적서 품목표의 Remark 칸에 그대로 찍히는 값. */}
                 <td><textarea {...keys.cell(i, 8)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+                {/* 원가 출처 — 읽기만 하는 칸이다. 고객 문서에는 나가지 않는다. */}
+                <td className="src-cell">
+                  {it.src_vq_id ? (
+                    <span
+                      className="src-tag"
+                      title={
+                        `${it.src_vendor || "—"} · ${it.src_vq_no || "—"}`
+                        + (it.src_cost != null && (it.src_currency || "").toUpperCase() !== costCur
+                          ? ` · quoted ${amountInputValue(it.src_cost)} ${it.src_currency}`
+                          : "")
+                      }
+                    >
+                      <VendorName name={it.src_vendor || ""} />
+                    </span>
+                  ) : (
+                    <span className="dash">—</span>
+                  )}
+                </td>
               </tr>
               {/* 상세 서브행 — 주행에서 내린 부수 필드. 접혀 있으면 렌더하지 않는다.
                   colSpan 은 표시 중인 주행 칸 수와 맞춘다(컬럼을 숨겨도 정렬 유지). */}
@@ -5250,6 +5463,9 @@ function applyMarginToAll(
 }
 
 // 통화·자릿수·마진 변경 시 단가·금액을 판매통화 기준으로 재환산.
+// 원가 통화가 바뀌면 원가 칸도 다시 쓴다 — 공급사 견적에서 온 줄은 벤더가 준 숫자에서
+// 곧장 환산한다(anchoredCost). 여러 공급사 견적을 합쳐 담은 견적서에서는 이 줄들이
+// 저마다 다른 통화로 왔을 수 있어, 화면의 Cost 칸 숫자만으로는 되돌릴 수 없다.
 function recomputeCustomerQuoteItems(
   items: CustomerQuoteItem[],
   costCur: string,
@@ -5259,7 +5475,8 @@ function recomputeCustomerQuoteItems(
 ): CustomerQuoteItem[] {
   return items.map((it) => {
     if (isOptionRow(it)) return it;   // 옵션 구분행에는 단가·마진이 없다
-    const unit = calcUnitPrice(Number(it.cost_price || 0), Number(it.margin_pct || 0), costCur, saleCur, roundDigits, rate);
-    return { ...it, unit_price: unit, amount: unit * Number(it.qty || 1) };
+    const cost = anchoredCost(it, costCur, rate);
+    const unit = calcUnitPrice(cost, Number(it.margin_pct || 0), costCur, saleCur, roundDigits, rate);
+    return { ...it, cost_price: cost, unit_price: unit, amount: unit * Number(it.qty || 1) };
   });
 }

@@ -702,6 +702,16 @@ export type CustomerQuoteItem = {
    *  다시 찾을 수 없어서다(web/lib/deal.ts makeItemMatcher). 편집기는 받은 값을
    *  그대로 돌려보내기만 하면 된다 — 새 줄이면 비워 두고 서버가 붙인다. */
   lid?: string;
+  /** 원가 출처 — 이 줄의 원가를 준 공급사 견적. 한 장의 고객 견적에 여러 공급사 견적을
+   *  합쳐 담을 수 있어서(web/lib/quoteMerge.ts), 출처는 문서가 아니라 줄이 안고 다닌다.
+   *  내부용이다 — 고객이 받는 견적서·Excel 에는 한 글자도 찍히지 않는다. */
+  src_vq_id?: number | null;
+  src_vendor?: string;
+  src_vq_no?: string;
+  /** 출처 견적의 통화와 그 통화로 적힌 원가 — 원가 통화가 다른 견적을 합쳤을 때의
+   *  환산 전 값이다. 문서의 원가 통화를 바꾸면 이 값에서 다시 환산한다. */
+  src_currency?: string;
+  src_cost?: number | null;
 };
 
 // ── 라인 소싱 보드 · 라인별 채택(2·3단계) ────────────────────────────────────
