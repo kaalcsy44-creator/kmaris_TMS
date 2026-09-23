@@ -46,10 +46,8 @@ export default function VendorQuoteMergeModal({
   // 지킬 값이 아직 없다. 값이 실린 표에서는 붙이기가 기본이다(먼저 부른 견적을 지킨다).
   const seedOnly = hasItems && rows.every((it) => !Number(it.src_vq_id || 0) && !Number(it.cost_price || 0));
   const [mode, setMode] = useState<MergeMode>(hasItems && !seedOnly ? "append" : "replace");
-  // 아직 안 실린 견적을 처음부터 골라 둔다 — 대개 그것을 부르려고 연 창이다.
-  const [picked, setPicked] = useState<Set<number>>(
-    () => new Set(quotes.filter((q) => !hasSource(items, q.id)).map((q) => q.id))
-  );
+  // 아무것도 골라 두지 않는다 — 무엇을 싣는지는 사람이 정한다.
+  const [picked, setPicked] = useState<Set<number>>(() => new Set());
   const cur = (costCurrency || "USD").toUpperCase();
 
   const toggle = (id: number) =>
