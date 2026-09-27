@@ -4547,7 +4547,7 @@ table.mini.items-edit td:last-child {
 /* ── 품목표 셀 안의 분류(Category) 선택 ─────────────────────────────────
    RFQ·견적·발주 품목표 공용(CategoryCell). 입력 셀과 같은 높이·테두리로 맞추고,
    경로가 길어도 셀을 넓히지 않도록 폭은 컬럼에 맡긴다(전체 경로는 툴팁). */
-select.cat-cell {
+.cat-cell {
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -4560,13 +4560,13 @@ select.cat-cell {
   background: #fff;
   box-sizing: border-box;
 }
-select.cat-cell:disabled {
+.cat-cell:disabled {
   background: #f4f6f9;
   color: var(--muted);
 }
 /* 이 라인에서 고른 값이 아니라 품목 마스터에서 따라온 분류 — 값이 왜 이미 채워져 있는지
    알 수 있게 옅게 표시(그대로 두면 마스터 분류가 유지된다). */
-select.cat-cell.inherited {
+.cat-cell.inherited {
   color: #5a6b85;
   border-style: dashed;
 }
@@ -4575,7 +4575,7 @@ select.cat-cell.inherited {
    않으므로, 열을 늘리면 쓰지 않는 폭이 모든 표에 남는다. */
 .cat-cell-2 { display: flex; flex-direction: column; gap: 3px; }
 /* 아래 칸은 딸린 값이라 한 단 물러서 보인다 — 위가 정본이고 이것은 그 위에 붙는 단서다. */
-select.cat-cell.cat-cell--applied {
+.cat-cell.cat-cell--applied {
   height: 26px;
   font-size: 11px;
   color: #5a6b85;
@@ -4643,6 +4643,45 @@ select.cat-cell.cat-cell--applied {
 }
 .ibf-f--wide .ibf-sel { max-width: 260px; }
 .ibf-clear { margin-left: auto; }
+/* 검색되는 분류 선택(CategorySelect) — 칸은 select 처럼 보이는 버튼, 누르면 위에 검색칸이
+   달린 목록이 뜬다. 목록 틀은 MakerCell 의 .mk-menu 를 그대로 쓴다. */
+.cat-pick {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+.cat-pick:disabled { cursor: default; }
+.ibf-sel.cat-pick { min-width: 180px; }
+.cat-pick-txt {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cat-pick.empty .cat-pick-txt { color: var(--muted); }
+.cat-pick-caret { flex: 0 0 auto; font-size: 10px; color: #8a96a8; }
+.cat-pick:focus-visible { outline: 2px solid #9cc0f0; outline-offset: -1px; }
+.cat-menu-search {
+  width: 100%;
+  height: 30px;
+  margin-bottom: 6px;
+  padding: 0 8px;
+  font-size: 13px;
+  border: 1px solid #c7d0de;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+.cat-menu-search:focus { outline: none; border-color: var(--blue); }
+.cat-menu-list { max-height: 320px; }
+.cat-opt { padding: 5px 8px; font-size: 12.5px; }
+.cat-opt.act { background: #eef3fb; }
+.cat-opt.on { background: #e1ebfb; font-weight: 600; }
+.cat-opt-parent { color: #8a96a8; font-weight: 400; }
+
 
 /* 부품 등급(Genuine/OEM/…) — 분류 셀과 같은 모양으로 맞춘다. 둘 다 고르는 칸이라
    생김새가 다르면 표 안에서 한 줄이 두 가지 규칙으로 읽힌다. */

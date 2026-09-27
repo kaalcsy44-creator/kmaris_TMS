@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { fetchItemCategories, fetchItemCategoryMap } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type { ItemCategory } from "@/lib/types";
@@ -142,9 +144,10 @@ export default function CategoryCell({
   const appliedHit = appliedTo != null ? opts.find((o) => o.id === appliedTo) : undefined;
 
   const cat = (
-    <select
+    <CategorySelect
       className={`cat-cell${inherited ? " inherited" : ""}`}
-      value={effective != null ? String(effective) : ""}
+      options={opts}
+      value={effective}
       disabled={disabled}
       // 셀이 좁아 경로가 잘려도 무엇이 선택됐는지 알 수 있게 툴팁으로 전체 경로를 보여준다.
       title={
@@ -154,38 +157,255 @@ export default function CategoryCell({
             : hit.path
           : "Category (optional)"
       }
-      onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
-    >
-      <option value="">—</option>
-      {/* 삭제·비활성된 분류가 저장돼 있으면 값이 조용히 사라지지 않게 자리를 남긴다. */}
-      {effective != null && !hit ? <option value={String(effective)}>(#{effective})</option> : null}
-      {opts.map((o) => (
-        <option key={o.id} value={o.id}>
-          {o.path}
-        </option>
-      ))}
-    </select>
+      onChange={onChange}
+    />
   );
 
   if (!showApplied) return cat;
   return (
     <div className="cat-cell-2">
       {cat}
-      <select
+      <CategorySelect
         className="cat-cell cat-cell--applied"
-        value={appliedTo != null ? String(appliedTo) : ""}
+        options={partOpts}
+        value={appliedTo ?? null}
+        prefix="on: "
         disabled={disabled}
         title={appliedHit ? `Applied to ${appliedHit.path}` : "Where on board this service was done (optional)"}
-        onChange={(e) => onAppliedToChange?.(e.target.value ? Number(e.target.value) : null)}
-      >
-        <option value="">on: —</option>
-        {appliedTo != null && !appliedHit ? <option value={String(appliedTo)}>(#{appliedTo})</option> : null}
-        {partOpts.map((o) => (
-          <option key={o.id} value={o.id}>
-            on: {o.path}
-          </option>
-        ))}
-      </select>
+        onChange={(id) => onAppliedToChange?.(id)}
+      />
     </div>
+  );
+}
+
+type MenuPos = { left: number; width: number; top?: number; bottom?: number };
+
+/** 검색어의 낱말이 모두 경로 어딘가에 들어 있으면 걸린다 — "piston ring", "engine valve"
+ *  처럼 대분류·부품 어느 쪽 이름으로 쳐도, 순서가 달라도 찾아진다. */
+function matchCategory(path: string, q: string): boolean {
+  const hay = path.toLowerCase();
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
+}
+
+/**
+ * 검색되는 분류 선택. 대분류×부품 150여 줄을 네이티브 <select> 로 펼치면 스크롤로 찾는
+ * 수밖에 없어서, 누르면 맨 위에 검색칸이 달린 목록을 띄운다(치는 대로 좁혀지고 ↑↓·Enter
+ * 로 고른다). 칸에 포커스가 있을 때 바로 글자를 쳐도 그 글자로 검색이 시작된다.
+ * 메뉴는 MakerCell 과 같은 이유로 body 에 portal + fixed — 품목표가 스크롤 상자 안이라
+ * 셀 안에 띄우면 잘린다.
+ */
+export function CategorySelect({
+  options,
+  value,
+  onChange,
+  className = "cat-cell",
+  placeholder = "—",
+  prefix = "",
+  clearLabel = "— (none) —",
+  title,
+  disabled,
+}: {
+  options: CategoryOption[];
+  value: number | null | undefined;
+  onChange: (id: number | null) => void;
+  className?: string;
+  /** 값이 없을 때 칸에 보이는 글자. */
+  placeholder?: string;
+  /** 칸·옵션 앞에 붙는 머리말(용역 부위 칸의 "on: "). */
+  prefix?: string;
+  /** 비우기 줄의 글자. null 이면 비우기 줄을 두지 않는다. */
+  clearLabel?: string | null;
+  title?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [active, setActive] = useState(0);
+  const [pos, setPos] = useState<MenuPos | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const hit = value != null ? options.find((o) => o.id === value) : undefined;
+  // 삭제·비활성된 분류가 저장돼 있으면 값이 조용히 사라지지 않게 id 라도 보인다.
+  const label = value != null ? (hit ? hit.path : `(#${value})`) : "";
+
+  const searching = !!q.trim();
+  const list = searching ? options.filter((o) => matchCategory(o.path, q)) : options;
+  // 키보드로 옮겨 다니는 줄: [비우기?, ...목록]. 검색 중에는 비우기 줄을 뺀다
+  // (Enter 가 첫 결과를 고르도록).
+  const rows: (CategoryOption | null)[] = clearLabel != null && !searching ? [null, ...list] : list;
+
+  function reposition() {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    const openUp = spaceBelow < 320 && r.top > spaceBelow;
+    // 경로가 길어 셀 폭으로는 모자라다 — 메뉴는 넓게 펴되 화면 밖으로는 안 나가게.
+    const width = Math.min(Math.max(r.width, 380), window.innerWidth - 16);
+    setPos({
+      left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)),
+      width,
+      top: openUp ? undefined : r.bottom + 3,
+      bottom: openUp ? window.innerHeight - r.top + 3 : undefined,
+    });
+  }
+
+  function openMenu(initial = "") {
+    if (disabled) return;
+    setQ(initial);
+    // 열자마자 지금 고른 줄에 서 있게 한다(검색어로 열었으면 첫 결과).
+    const idx = initial ? -1 : options.findIndex((o) => o.id === value);
+    setActive(idx >= 0 ? idx + (clearLabel != null ? 1 : 0) : 0);
+    reposition();
+    setOpen(true);
+  }
+
+  function close(refocus = false) {
+    setOpen(false);
+    if (refocus) btnRef.current?.focus();
+  }
+
+  function pick(o: CategoryOption | null) {
+    onChange(o ? o.id : null);
+    close(true);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    // 표를 밀거나 창 크기가 바뀌면 메뉴가 칸을 따라온다. 메뉴 안쪽 스크롤은 무시.
+    function onShift(e: Event) {
+      if (menuRef.current && e.target instanceof Node && menuRef.current.contains(e.target)) return;
+      reposition();
+    }
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onShift, true);
+    window.addEventListener("resize", onShift);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onShift, true);
+      window.removeEventListener("resize", onShift);
+    };
+  }, [open]);
+
+  // 키로 옮긴 줄이 목록 밖으로 나가면 따라 스크롤한다.
+  useEffect(() => {
+    if (!open) return;
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-idx="${active}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [active, open]);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        className={`${className} cat-pick${value == null ? " empty" : ""}`}
+        disabled={disabled}
+        title={title}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => (open ? close() : openMenu())}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openMenu();
+          } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            openMenu(e.key);
+          }
+        }}
+      >
+        <span className="cat-pick-txt">{prefix}{label || placeholder}</span>
+        <span className="cat-pick-caret" aria-hidden>▾</span>
+      </button>
+
+      {open && pos && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="mk-menu cat-menu"
+              style={{ position: "fixed", left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom }}
+            >
+              <input
+                className="cat-menu-search"
+                autoFocus
+                placeholder="Search category…"
+                value={q}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setActive(0);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setActive((a) => Math.min(a + 1, rows.length - 1));
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setActive((a) => Math.max(a - 1, 0));
+                  } else if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (rows.length) pick(rows[Math.min(active, rows.length - 1)]);
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    e.stopPropagation();   // 모달까지 닫히지 않게
+                    close(true);
+                  } else if (e.key === "Tab") {
+                    close();
+                  }
+                }}
+              />
+              <ul className="mk-menu-list cat-menu-list" role="listbox" ref={listRef}>
+                {rows.map((o, i) => {
+                  const cut = o ? o.path.lastIndexOf(" > ") : -1;
+                  return (
+                    <li key={o ? o.id : "_clear"}>
+                      <button
+                        type="button"
+                        data-idx={i}
+                        tabIndex={-1}
+                        role="option"
+                        aria-selected={o ? o.id === value : value == null}
+                        className={`mk-opt cat-opt${o ? "" : " mk-opt--clear"}${
+                          o && o.id === value ? " on" : ""}${i === active ? " act" : ""}`}
+                        onMouseEnter={() => setActive(i)}
+                        onClick={() => pick(o)}
+                      >
+                        {o ? (
+                          <span className="mk-opt-name" title={o.path}>
+                            {prefix}
+                            {cut >= 0 ? (
+                              <>
+                                {/* 위 단계는 옅게 — 눈이 먼저 닿아야 하는 것은 끝 이름이다. */}
+                                <span className="cat-opt-parent">{o.path.slice(0, cut + 3)}</span>
+                                {o.path.slice(cut + 3)}
+                              </>
+                            ) : (
+                              <b>{o.path}</b>
+                            )}
+                          </span>
+                        ) : (
+                          clearLabel
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+                {list.length === 0 ? (
+                  <li className="mk-menu-empty">No category matches “{q.trim()}”.</li>
+                ) : null}
+              </ul>
+            </div>,
+            document.body
+          )
+        : null}
+    </>
   );
 }

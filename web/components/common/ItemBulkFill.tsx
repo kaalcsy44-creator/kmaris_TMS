@@ -16,7 +16,7 @@
 import { useState } from "react";
 import MakerCell from "@/components/common/MakerCell";
 import { ITEM_GRADES } from "@/components/common/GradeCell";
-import { useCategoryOptions } from "@/components/common/CategoryCell";
+import { CategorySelect, useCategoryOptions } from "@/components/common/CategoryCell";
 
 export default function ItemBulkFill({
   count,
@@ -94,21 +94,16 @@ export default function ItemBulkFill({
       {onCategory ? (
         <label className="ibf-f ibf-f--wide">
           <span>Category</span>
-          <select
+          {/* 늘 "Set…" 으로 비어 있다 — 고르는 순간 적용되고 칸은 다시 비는 셈이다. */}
+          <CategorySelect
             className="ibf-sel"
-            value=""
+            options={cats}
+            value={null}
+            placeholder="Set…"
+            clearLabel="— Clear —"
             disabled={disabled}
-            onChange={(e) => {
-              if (!e.target.value) return;
-              onCategory(e.target.value === CLEAR ? null : Number(e.target.value));
-            }}
-          >
-            <option value="">Set…</option>
-            <option value={CLEAR}>— Clear —</option>
-            {cats.map((o) => (
-              <option key={o.id} value={o.id}>{o.path}</option>
-            ))}
-          </select>
+            onChange={onCategory}
+          />
         </label>
       ) : null}
 
