@@ -8682,6 +8682,27 @@ table.mini .num {
   color: #8a96a8;
   cursor: default;
 }
+/* 목록 맨 위 검색칸 — 목록을 굴려도 늘 위에 붙어 있다. */
+.vsel-search {
+  position: sticky;
+  top: -4px;
+  z-index: 1;
+  margin: -4px -4px 4px;
+  padding: 6px;
+  background: #fff;
+  border-bottom: 1px solid #eaf0f7;
+}
+.vsel-search input {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 12.5px;
+  border: 1px solid #c7d0de;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+.vsel-search input:focus { outline: none; border-color: var(--blue); }
+.vsel-empty { padding: 10px 8px; font-size: 12px; color: #8a96a8; text-align: center; }
 .vsel-item + .vsel-group {
   margin-top: 4px;
   border-top: 1px solid #eaf0f7;
