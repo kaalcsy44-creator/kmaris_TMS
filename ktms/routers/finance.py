@@ -2570,6 +2570,12 @@ def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW"
         s.close()
 
 
+def _settled_on_schedule(paid: bool, paid_on: str, occ: str) -> bool:
+    """예정 회차가 예정일 그날 결제됐는가 — 그러면 실입출금 칸을 따로 세우지 않으므로
+    (아래 pay_map 루프가 paid_on == sched 를 건너뛴다) 예정 칸 자신이 실입출금이다."""
+    return bool(paid) and (not paid_on or paid_on[:10] == occ[:10])
+
+
 @app.get("/api/admin/finance/calendar", dependencies=[Depends(require_token)])
 def finance_calendar(start: str = "", end: str = ""):
     """캘린더용 이벤트 — 구간 [start, end] 의 수금 예정(미수 due)·지급 예정(회차) 목록."""
@@ -2617,6 +2623,9 @@ def finance_calendar(start: str = "", end: str = ""):
         for r in s.query(FinanceIncome).all():
             who = r.counterparty or customer_names.get(r.customer_id, "") or r.description or "Income"
             for occ in _finance_occurrences(r, d0, d1):
+                paid = _finance_payable_paid_on(r, occ)
+                paid_on = ((r.paid_date or "") if (r.recurrence or "none") == "none"
+                           else (getattr(r, "payments", None) or {}).get(occ, ""))
                 events.append({
                     "kind": "receivable",
                     "date": occ,
@@ -2624,9 +2633,12 @@ def finance_calendar(start: str = "", end: str = ""):
                     "category": r.category or "기타",
                     "amount": round(r.amount or 0, 2),
                     "currency": r.currency or "KRW",
-                    "paid": _finance_payable_paid_on(r, occ),
-                    "paid_on": ((r.paid_date or "") if (r.recurrence or "none") == "none"
-                                else (getattr(r, "payments", None) or {}).get(occ, "")),
+                    "paid": paid,
+                    "paid_on": paid_on,
+                    # 예정일 당일에 받았으면(또는 날짜 없이 받음 처리) 따로 세울 실입금 칸이
+                    # 없다 — 이 칸이 곧 실제 입금이다. 취소선(지난 예정)으로 그리면 받은 돈이
+                    # 달력에서 사라진다.
+                    "actual": _settled_on_schedule(paid, paid_on, occ),
                     "ref_id": r.id,
                     "occurrence": occ,
                     "source": "income",
@@ -2657,6 +2669,10 @@ def finance_calendar(start: str = "", end: str = ""):
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         for p in s.query(FinancePayable).all():
             for occ in _finance_occurrences(p, d0, d1):
+                paid = _finance_payable_paid_on(p, occ)
+                # 실제 납부일(예정일과 다를 수 있음). 일회성은 paid_date.
+                paid_on = ((p.paid_date or "") if (p.recurrence or "none") == "none"
+                           else (getattr(p, "payments", None) or {}).get(occ, ""))
                 events.append({
                     "kind": "payable",
                     "date": occ,
@@ -2664,10 +2680,10 @@ def finance_calendar(start: str = "", end: str = ""):
                     "category": p.category or "기타",
                     "amount": round(p.amount or 0, 2),
                     "currency": p.currency or "KRW",
-                    "paid": _finance_payable_paid_on(p, occ),
-                    # 실제 납부일(예정일과 다를 수 있음). 일회성은 paid_date.
-                    "paid_on": ((p.paid_date or "") if (p.recurrence or "none") == "none"
-                                else (getattr(p, "payments", None) or {}).get(occ, "")),
+                    "paid": paid,
+                    "paid_on": paid_on,
+                    # 예정일 당일 납부 → 이 칸이 곧 실지급(수입 쪽과 같은 규칙).
+                    "actual": _settled_on_schedule(paid, paid_on, occ),
                     "ref_id": p.id,
                     "occurrence": occ,
                 })

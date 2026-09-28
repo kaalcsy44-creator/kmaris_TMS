@@ -15178,10 +15178,15 @@ table.mini tfoot .fin-foot-name { text-align: left; }
    돈이었나'이지 오간 돈 자체가 아니다. 이미 결제된 예정 칸은 취소선으로 지난 예정임을
    알리고, 실제로 오간 금액은 아래 .actual 칸이 진하게 받는다. */
 .fin-ev.paid { text-decoration: line-through; }
+/* 끝난 돈은 글자도 한 걸음 물러선다 — 달력에서 먼저 읽혀야 하는 것은 아직 오가지 않은
+   돈(진한 글씨의 예정 칸·연체)이다. 지난 예정(취소선)이 가장 옅고, 실입출금(✓)은 그보다
+   한 단계 진하게 남는다. */
+.fin-ev--receivable.paid { color: #8aa6c2; }
+.fin-ev--payable.paid { color: #bf9f6a; }
 /* 실입출금 자리 — 실제로 돈이 오간 칸만 계열을 한 단계 진하게 채우고 테두리를 두른다.
    취소선도 없다. 그래야 달력에서 '진한 칸 = 실제 오간 돈, 옅은 칸 = 예정일'로 읽힌다. */
-.fin-ev--receivable.actual { background: #bcd6f0; color: #14507c; }
-.fin-ev--payable.actual { background: #f7d49c; color: #6f4700; }
+.fin-ev--receivable.actual { background: #d3e3f4; color: #4f7599; }
+.fin-ev--payable.actual { background: #f9e2bc; color: #8f6b2e; }
 .fin-ev.actual {
   text-decoration: none;
   font-weight: 600;
