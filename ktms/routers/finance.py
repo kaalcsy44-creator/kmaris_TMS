@@ -2570,12 +2570,6 @@ def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW"
         s.close()
 
 
-def _settled_on_schedule(paid: bool, paid_on: str, occ: str) -> bool:
-    """예정 회차가 예정일 그날 결제됐는가 — 그러면 실입출금 칸을 따로 세우지 않으므로
-    (아래 pay_map 루프가 paid_on == sched 를 건너뛴다) 예정 칸 자신이 실입출금이다."""
-    return bool(paid) and (not paid_on or paid_on[:10] == occ[:10])
-
-
 @app.get("/api/admin/finance/calendar", dependencies=[Depends(require_token)])
 def finance_calendar(start: str = "", end: str = ""):
     """캘린더용 이벤트 — 구간 [start, end] 의 수금 예정(미수 due)·지급 예정(회차) 목록."""
@@ -2599,6 +2593,20 @@ def finance_calendar(start: str = "", end: str = ""):
                     "amount": r["outstanding"],
                     "currency": r["currency"],
                     "overdue": r["overdue"],
+                    "ref_id": r["id"],
+                    "source": "ar",
+                })
+            # 받은 부분의 예정 칸 — 취소선으로 남긴다(수동 항목과 같은 규칙). 예정과
+            # 실입금(✓, 아래)이 한 줄씩 서야 언제 받기로 했고 언제 받았는지가 함께 읽힌다.
+            if r["paid_amount"] > 0 and due and d0.isoformat() <= due <= d1.isoformat():
+                events.append({
+                    "kind": "receivable",
+                    "date": due,
+                    "title": r["customer"],
+                    "amount": r["paid_amount"],
+                    "currency": r["currency"],
+                    "paid": True,
+                    "paid_on": r["paid_date"],
                     "ref_id": r["id"],
                     "source": "ar",
                 })
@@ -2635,10 +2643,6 @@ def finance_calendar(start: str = "", end: str = ""):
                     "currency": r.currency or "KRW",
                     "paid": paid,
                     "paid_on": paid_on,
-                    # 예정일 당일에 받았으면(또는 날짜 없이 받음 처리) 따로 세울 실입금 칸이
-                    # 없다 — 이 칸이 곧 실제 입금이다. 취소선(지난 예정)으로 그리면 받은 돈이
-                    # 달력에서 사라진다.
-                    "actual": _settled_on_schedule(paid, paid_on, occ),
                     "ref_id": r.id,
                     "occurrence": occ,
                     "source": "income",
@@ -2648,7 +2652,10 @@ def finance_calendar(start: str = "", end: str = ""):
             else:
                 pay_map = dict(getattr(r, "payments", None) or {})
             for sched, paid_on in pay_map.items():
-                if not paid_on or paid_on == sched or not (d0.isoformat() <= paid_on <= d1.isoformat()):
+                # 예정일 당일에 받았어도(또는 날짜 없이 받음 처리) ✓ 칸을 따로 세운다 —
+                # 예정(취소선)과 실입금(✓)이 한 줄씩 나란히 서야 '받았다'가 읽힌다.
+                paid_on = paid_on or sched
+                if not paid_on or not (d0.isoformat() <= paid_on <= d1.isoformat()):
                     continue
                 events.append({
                     "kind": "receivable",
@@ -2682,21 +2689,18 @@ def finance_calendar(start: str = "", end: str = ""):
                     "currency": p.currency or "KRW",
                     "paid": paid,
                     "paid_on": paid_on,
-                    # 예정일 당일 납부 → 이 칸이 곧 실지급(수입 쪽과 같은 규칙).
-                    "actual": _settled_on_schedule(paid, paid_on, occ),
                     "ref_id": p.id,
                     "occurrence": occ,
                 })
-            # 실제 납부일이 예정일과 다르면 그 날짜에도 한 번 더 표시한다(actual=True).
+            # 실제 납부일에 한 번 더 표시한다(actual=True) — 예정일 당일 납부여도 따로 한 줄.
             # 예정 회차가 이 달 밖이어도 납부가 이 달이면 보이도록 payments 를 직접 훑는다.
             if (p.recurrence or "none") == "none":
                 pay_map = {(p.due_date or ""): (p.paid_date or "")} if p.paid else {}
             else:
                 pay_map = dict(getattr(p, "payments", None) or {})
             for sched, paid_on in pay_map.items():
-                if not paid_on or paid_on == sched:
-                    continue
-                if not (d0.isoformat() <= paid_on <= d1.isoformat()):
+                paid_on = paid_on or sched   # 날짜 없이 납부 처리 → 예정일에 ✓
+                if not paid_on or not (d0.isoformat() <= paid_on <= d1.isoformat()):
                     continue
                 events.append({
                     "kind": "payable",
@@ -2732,6 +2736,21 @@ def finance_calendar(start: str = "", end: str = ""):
                     "occurrence": None,
                     "source": "ap",
                 })
+            # 낸 부분의 예정 칸 — 취소선(AR 과 같은 규칙).
+            if ap["paid_amount"] > 0 and due and d0.isoformat() <= due <= d1.isoformat():
+                events.append({
+                    "kind": "payable",
+                    "date": due,
+                    "title": who,
+                    "category": "거래선지급",
+                    "amount": ap["paid_amount"],
+                    "currency": ap["currency"],
+                    "paid": True,
+                    "paid_on": ap["paid_date"],
+                    "ref_id": ap["id"],
+                    "occurrence": None,
+                    "source": "ap",
+                })
             # 지급분 — 실제 지급일 자리에 ✓ 로. 부분지급이면 예정일 쪽에 잔액이 함께 남는다.
             got = ap["paid_date"]
             if ap["paid_amount"] > 0 and got and d0.isoformat() <= got <= d1.isoformat():
@@ -2750,7 +2769,8 @@ def finance_calendar(start: str = "", end: str = ""):
                     "occurrence": None,
                     "source": "ap",
                 })
-        events.sort(key=lambda e: (e["date"], e["kind"]))
+        # 같은 날·같은 방향이면 예정(취소선) 다음 줄에 실입출금(✓) — 짝이 붙어 읽힌다.
+        events.sort(key=lambda e: (e["date"], e["kind"], e["title"], bool(e.get("actual"))))
         return {"rows": events, "start": d0.isoformat(), "end": d1.isoformat()}
     finally:
         s.close()
