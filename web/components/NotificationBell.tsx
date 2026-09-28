@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { fetchNotifications } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import type { NotificationItem } from "@/lib/types";
+import VendorTagSuggestions from "./common/VendorTagSuggestions";
 
 // 상단바 알림(종) — 팔로업이 필요한 딜(견적 보낸 뒤 무응답 등)과 D-3 이내·연체된
 // 수금/지급 예정을 모아 보여준다. 알림은 서버가 조회 때마다 기존 데이터에서 세우므로
@@ -16,7 +17,7 @@ const FRESH_MS = 2 * 60 * 1000;   // 화면 이동마다 머리줄이 다시 서
 type Cache = { key: string; at: number; items: NotificationItem[] };
 let cache: Cache | null = null;
 
-type Filter = "all" | "deal" | "finance";
+type Filter = "all" | "deal" | "finance" | "vendor";
 
 function storeKey(kind: string): string {
   return `ktms.notif.${kind}.${getUser()?.username ?? ""}`;
@@ -48,7 +49,15 @@ const TYPE_LABEL: Record<NotificationItem["type"], string> = {
   deal: "Project",
   receivable: "Receivable",
   payable: "Payable",
+  vendor_tag: "Vendor",
 };
+
+function inFilter(i: NotificationItem, f: Filter): boolean {
+  if (f === "all") return true;
+  if (f === "deal") return i.type === "deal";
+  if (f === "vendor") return i.type === "vendor_tag";
+  return i.type === "receivable" || i.type === "payable";
+}
 
 export default function NotificationBell() {
   const router = useRouter();
@@ -59,6 +68,8 @@ export default function NotificationBell() {
   const [read, setRead] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  // 펼친 거래선 제안(한 번에 하나) — 제안은 이동이 아니라 그 자리에서 Add/Dismiss 한다.
+  const [expanded, setExpanded] = useState<string>("");
   const boxRef = useRef<HTMLDivElement>(null);
 
   // 저장된 설정(내 것만/전체)과 읽음 목록 — 마운트 후 읽는다(SSR 과 어긋나지 않게).
@@ -129,15 +140,10 @@ export default function NotificationBell() {
 
   const unread = useMemo(() => items.filter((i) => !read.has(i.id)), [items, read]);
   const urgentUnread = unread.some((i) => i.level === "urgent");
-  const shown = useMemo(
-    () =>
-      items.filter((i) =>
-        filter === "all" ? true : filter === "deal" ? i.type === "deal" : i.type !== "deal"
-      ),
-    [items, filter]
-  );
-  const countDeal = items.filter((i) => i.type === "deal").length;
-  const countFin = items.length - countDeal;
+  const shown = useMemo(() => items.filter((i) => inFilter(i, filter)), [items, filter]);
+  const countDeal = items.filter((i) => inFilter(i, "deal")).length;
+  const countFin = items.filter((i) => inFilter(i, "finance")).length;
+  const countVendor = items.filter((i) => inFilter(i, "vendor")).length;
 
   function markRead(ids: string[]) {
     setRead((prev) => {
@@ -212,6 +218,15 @@ export default function NotificationBell() {
             >
               Finance <span>{countFin}</span>
             </button>
+            {countVendor ? (
+              <button
+                type="button"
+                className={filter === "vendor" ? "on" : ""}
+                onClick={() => setFilter("vendor")}
+              >
+                Vendors <span>{countVendor}</span>
+              </button>
+            ) : null}
             <button
               type="button"
               className="nbell-markall"
@@ -233,6 +248,70 @@ export default function NotificationBell() {
               shown.map((n) => {
                 const isRead = read.has(n.id);
                 const amt = fmtAmount(n.amount, n.currency);
+                if (n.type === "vendor_tag") {
+                  const isOpen = expanded === n.id;
+                  return (
+                    <div key={n.id} className={`nbell-vt${isOpen ? " open" : ""}`}>
+                      <button
+                        type="button"
+                        className={`nbell-item lv-${n.level}${isRead ? " read" : ""}`}
+                        aria-expanded={isOpen}
+                        onClick={() => {
+                          setExpanded(isOpen ? "" : n.id);
+                          markRead([n.id]);
+                        }}
+                      >
+                        <span className="nbell-dot" aria-hidden="true" />
+                        <span className="nbell-body">
+                          <span className="nbell-top">
+                            <span className="nbell-type">{TYPE_LABEL[n.type]}</span>
+                            <span className="nbell-proj">{n.company}</span>
+                            {n.date ? <span className="nbell-date">{n.date}</span> : null}
+                          </span>
+                          <span className="nbell-title">{n.title}</span>
+                          <span className="nbell-detail">
+                            <span className="nbell-detail-txt">
+                              {(n.suggestions ?? []).map((s) => s.label).join(" · ")}
+                            </span>
+                            <b className="nbell-amt">{isOpen ? "▾" : "▸"}</b>
+                          </span>
+                        </span>
+                      </button>
+                      {isOpen ? (
+                        <div className="nbell-vt-body">
+                          <VendorTagSuggestions
+                            compact
+                            company={n.company ?? ""}
+                            items={n.suggestions ?? []}
+                          />
+                          <div className="nbell-vt-foot">
+                            <button
+                              type="button"
+                              className="btn tiny"
+                              onClick={() => {
+                                setOpen(false);
+                                setExpanded("");
+                                router.push(n.href);
+                              }}
+                            >
+                              Open company info →
+                            </button>
+                            <button
+                              type="button"
+                              className="btn tiny"
+                              onClick={() => {
+                                setExpanded("");
+                                load(true);
+                              }}
+                            >
+                              Done
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                }
                 return (
                   <button
                     key={n.id}
@@ -261,7 +340,7 @@ export default function NotificationBell() {
             )}
           </div>
           <div className="nbell-foot">
-            Quote follow-up after 7 days · vendor quote after 5 · payments from D-3
+            Quote follow-up after 7 days · vendor quote after 5 · payments from D-3 · vendor tags from quotes/emails
           </div>
         </div>
       ) : null}

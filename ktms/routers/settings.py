@@ -2948,3 +2948,60 @@ def delete_user(row_id: int, user: dict = Depends(get_current_user)):
         return {"ok": True}
     finally:
         s.close()
+
+
+# ── 거래선 태그 제안(견적·발주·메일에서 드러난 메이커/분류) ─────────────────────
+# 계산은 services/vendor_tag_suggest. 여기서는 읽고, 사람이 고른 것을 태그에 넣거나
+# (accept) 다시 묻지 않게 접어 둔다(dismiss). 알림(종)도 같은 계산을 쓴다.
+from services import vendor_tag_suggest as _vts   # noqa: E402
+
+
+def vendor_tag_suggestion_rows(company: str | None = None) -> list[dict]:
+    s = get_session()
+    try:
+        cats = vendor_category_suggestions()["rows"]
+        return _vts.compute(s, company=company, category_rows=cats)
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/settings/vendors/tag-suggestions", dependencies=[Depends(require_token)])
+def vendor_tag_suggestions(company: str = ""):
+    """회사별 '태그에 추가할까요?' 목록 — company 를 주면 그 회사만."""
+    return {"rows": vendor_tag_suggestion_rows(company.strip() or None)}
+
+
+class VendorTagDecision(BaseModel):
+    company: str
+    kind: str          # "maker" | "category"
+    ref_id: int
+
+
+def _tag_decision(body: VendorTagDecision, accept: bool) -> dict:
+    if body.kind not in ("maker", "category") or not body.company.strip():
+        raise HTTPException(status_code=400, detail="kind 는 maker 또는 category 여야 합니다.")
+    s = get_session()
+    try:
+        n = 0
+        if accept:
+            n = _vts.accept(s, body.company, body.kind, body.ref_id)
+            if not n:
+                raise HTTPException(status_code=404, detail="해당 거래선을 찾을 수 없습니다.")
+        else:
+            _vts.dismiss(s, body.company, body.kind, body.ref_id)
+        s.commit()
+        return {"ok": True, "updated": n}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/vendors/tag-suggestions/accept", dependencies=[Depends(require_token)])
+def accept_vendor_tag_suggestion(body: VendorTagDecision):
+    """제안을 받아들여 그 회사 전 레코드의 태그(maker_ids / category_ids)에 더한다."""
+    return _tag_decision(body, True)
+
+
+@app.post("/api/admin/settings/vendors/tag-suggestions/dismiss", dependencies=[Depends(require_token)])
+def dismiss_vendor_tag_suggestion(body: VendorTagDecision):
+    """이 제안은 다시 묻지 않는다(회사별로 기억)."""
+    return _tag_decision(body, False)

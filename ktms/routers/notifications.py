@@ -29,6 +29,10 @@ from _core import (
     timedelta,
 )
 from routers.dashboard import pipeline_overview
+from routers.settings import vendor_tag_suggestion_rows
+
+import hashlib
+from urllib.parse import quote
 
 # 수금·지급 예정일을 며칠 전부터 알릴 것인가(D-3).
 DUE_SOON_DAYS = 3
@@ -186,6 +190,37 @@ def _pipeline_alerts(rows: list[dict], today: date) -> list[dict]:
     return out
 
 
+def _vendor_tag_alerts() -> list[dict]:
+    """거래선 태그 제안 — 회사마다 한 건. 안에 제안 목록을 실어 종 안에서 바로 Add/Dismiss.
+    id 에 제안 구성을 넣는다 — 새 근거로 새 제안이 생기면 다시 안 읽음이 된다."""
+    out = []
+    for r in vendor_tag_suggestion_rows():
+        items = r["items"]
+        if not items:
+            continue
+        keys = ",".join(sorted(f"{i['kind']}:{i['ref_id']}" for i in items))
+        digest = hashlib.md5(keys.encode()).hexdigest()[:10]
+        makers = [i["label"] for i in items if i["kind"] == "maker"]
+        cats = [i["label"] for i in items if i["kind"] == "category"]
+        parts = ([f"{len(makers)} maker{'s' if len(makers) > 1 else ''}"] if makers else []) +                 ([f"{len(cats)} item categor{'ies' if len(cats) > 1 else 'y'}"] if cats else [])
+        out.append({
+            "id": f"vtag:{r['company'].lower()}:{digest}",
+            "type": "vendor_tag",
+            "level": "info",
+            "title": f"Seen in quotes/emails — add {' & '.join(parts)}?",
+            "detail": r["company"],
+            "project_no": "",
+            "amount": None,
+            "currency": "",
+            "date": r.get("last") or "",
+            "days": 0,
+            "href": "/settings?tab=partners&side=vendors&company=" + quote(r["company"]),
+            "company": r["company"],
+            "suggestions": items,
+        })
+    return out
+
+
 _LEVEL_ORDER = {"urgent": 0, "warn": 1, "info": 2}
 
 
@@ -209,5 +244,7 @@ def notifications(mine: int = 1, user: dict = Depends(get_current_user)):
             items += _finance_alerts(s, today)
         finally:
             s.close()
+    if _can(role, "settings", "view"):
+        items += _vendor_tag_alerts()
     items.sort(key=lambda a: (_LEVEL_ORDER.get(a["level"], 9), -(a.get("days") or 0)))
     return {"items": items, "today": today.isoformat()}

@@ -11,6 +11,7 @@ import type {
   RfqOverview,
   CustomerOption,
   NotificationData,
+  VendorTagSuggestionRow,
   VendorOption,
   RfqDetail,
   DashboardData,
@@ -238,6 +239,21 @@ export function fetchRfqOverview(customerId?: number): Promise<RfqOverview> {
 
 export function fetchCustomers(): Promise<CustomerOption[]> {
   return get<CustomerOption[]>("/api/admin/customers");
+}
+
+/** 거래선 태그 제안 — company 를 주면 그 회사만. */
+export function fetchVendorTagSuggestions(company = ""): Promise<{ rows: VendorTagSuggestionRow[] }> {
+  return get<{ rows: VendorTagSuggestionRow[] }>(
+    `/api/admin/settings/vendors/tag-suggestions?company=${encodeURIComponent(company)}`
+  );
+}
+
+/** 제안을 태그에 넣는다(accept) 또는 다시 묻지 않게 접는다(dismiss). */
+export function decideVendorTag(
+  action: "accept" | "dismiss",
+  body: { company: string; kind: "maker" | "category"; ref_id: number }
+): Promise<{ ok: boolean; updated: number }> {
+  return post(`/api/admin/settings/vendors/tag-suggestions/${action}`, body);
 }
 
 /** 상단바 알림 — mine=1 이면 본인 담당 딜만(Finance 알림은 권한 있으면 항상). */

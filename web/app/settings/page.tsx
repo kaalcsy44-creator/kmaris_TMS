@@ -29,6 +29,7 @@ import {
   transferPartners,
   deletePartners,
   fetchVendorCategorySuggestions,
+  fetchVendorTagSuggestions,
   fetchSettingsVessels,
   parseBusinessCard,
   updateCompanyProfile,
@@ -116,6 +117,8 @@ import { CategoryBadges, CategoryTagPicker, useVendorCategoryOptions } from "@/c
 import { MakerBadges, MakerTagPicker, useMakerOptions } from "@/components/common/MakerCell";
 import { AgencyBadges, AgencyTagPicker } from "@/components/common/AgencyPicker";
 import { WebsiteScanPanel } from "@/components/common/WebsiteScanPanel";
+import VendorTagSuggestions from "@/components/common/VendorTagSuggestions";
+import type { VendorTagSuggestion } from "@/lib/types";
 import RegionCombo from "@/components/common/RegionPicker";
 // 목록의 상대처는 다른 화면과 같은 모양(로고 + 이름)으로 — 같은 회사를 두 표기로 읽지 않도록.
 import CustomerName from "@/components/common/CustomerName";
@@ -999,7 +1002,11 @@ function invalidatePartnerCaches() {
    길이가 있는 칸이 서너 줄로 접힌다. 한 번에 한 쪽만 전폭으로 보이고, 위의 알약
    전환으로 넘나든다(페이지 탭 밑의 한 급 아래 계층). */
 function PartnersTab() {
-  const [side, setSide] = useState<"customers" | "vendors" | "makers">("customers");
+  // ?side=vendors — 알림(종)의 거래선 태그 제안에서 그 회사 창으로 곧장 온다.
+  const sideParam = useSearchParams().get("side");
+  const [side, setSide] = useState<"customers" | "vendors" | "makers">(
+    sideParam === "vendors" || sideParam === "makers" ? sideParam : "customers"
+  );
   return (
     <>
       <div className="ms-party-tabs" role="tablist" aria-label="Partner type">
@@ -1930,6 +1937,18 @@ function CompanyInfoModal<
   // 나가므로, 나갔다는 사실이 화면에 남아야 한다 — 저장하면 읽기로 돌아오는데 그
   // 화면에는 방금 무엇이 일어났는지 말해 주는 것이 아무것도 없다.
   const [syncNote, setSyncNote] = useState("");
+  // 견적·발주·메일에서 드러났지만 아직 태그에 없는 메이커/분류(거래선 창에서만).
+  // 실패해도 창은 그대로 나와야 하므로 삼킨다.
+  const [tagSugg, setTagSugg] = useState<VendorTagSuggestion[]>([]);
+  useEffect(() => {
+    if (!makerTags) return;
+    let live = true;
+    fetchVendorTagSuggestions(origName)
+      .then((d) => { if (live) setTagSugg(d.rows[0]?.items ?? []); })
+      .catch(() => { if (live) setTagSugg([]); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [origName]);
   // 방금 지운 담당자. 창이 든 rows 는 열 때 찍은 사진이라 목록이 새로 그려져도 바뀌지
   // 않는다 — 지운 사람이 그대로 남아 있으면 지워졌는지 아닌지를 알 수 없다.
   const [gone, setGone] = useState<Set<number>>(new Set());
@@ -2145,6 +2164,21 @@ function CompanyInfoModal<
       ...(makerTags ? [["Makers supplied",
                         makerIds.length ? <MakerBadges ids={makerIds} /> : null,
                        ] as [string, React.ReactNode]] : []),
+      // 제안 — 명부엔 없지만 견적·발주·메일에서 확인된 것. Add 하면 서버가 이 회사 전
+      // 레코드의 태그에 넣고, 여기서는 위 두 칸에 곧바로 얹는다(다시 불러오기 전에도 보이게).
+      ...(makerTags && tagSugg.length ? [["Suggested tags",
+        <VendorTagSuggestions
+          key="vts"
+          company={origName}
+          items={tagSugg}
+          onDecided={(s, accepted) => {
+            if (!accepted) return;
+            if (s.kind === "maker") setMakerIds((p) => (p.includes(s.ref_id) ? p : [...p, s.ref_id]));
+            else setCatIds((p) => (p.includes(s.ref_id) ? p : [...p, s.ref_id]));
+            onSaved(origName);
+          }}
+        />,
+      ] as [string, React.ReactNode]] : []),
       // 대리점 — 이 브랜드를 어디서 사나. 메이커 창을 여는 가장 흔한 이유인데(명부의
       // 제조사 대부분은 담당자도 연락처도 없다 — 우리가 직접 사는 상대가 아니라서다)
       // 지금까지 그 답은 거래선 목록에만 흩어져 있었다.
@@ -2869,6 +2903,8 @@ function VendorsTab() {
   const [company, setCompany] = useState<
     CompanyNavCtx<SettingsVendor> | null
   >(null);
+  // ?company=<회사명> — 목록이 처음 불려 오면 그 회사의 Company info 창을 연다(한 번만).
+  const deepCompany = useRef(useSearchParams().get("company") ?? "");
   const [reloadKey, setReloadKey] = useState(0);
   // 마지막으로 저장한 회사명 — 새 목록에서 열려 있는 창의 회사를 되찾는 열쇠다.
   // 이름째 바꿔 저장하면 창이 든 사진의 이름은 이미 옛것이라 그것으로는 못 찾는다.
@@ -2961,10 +2997,17 @@ function VendorsTab() {
         // 저장 뒤 새로 불려 온 목록을 열려 있는 창에 그대로 건넨다 — 안 그러면 창은
         // 열 때 찍은 사진을 계속 들고 있어, 옆 회사에 갔다 오는 순간 저장 전 값이
         // 되돌아온다(그 상태로 다시 저장하면 방금 적은 것이 진짜로 지워진다).
-        onRowsSync: (find) =>
+        onRowsSync: (find) => {
+          // 알림에서 ?company= 로 왔으면 첫 목록에서 그 회사 창을 연다(한 번만).
+          if (deepCompany.current) {
+            const hit = find(deepCompany.current);
+            deepCompany.current = "";
+            if (hit) { setCompany(hit); return; }
+          }
           setCompany((cur) => (cur
             ? find(savedName.current || cur.groups[cur.index]?.[0]?.name || "") ?? cur
-            : cur)),
+            : cur));
+        },
         newRow: (rs) => withCompanyDefaults(EMPTY_VENDOR, rs, rs[0].name),
         summary: (g, n) => `${g} vendors · ${n} contacts`,
       }}

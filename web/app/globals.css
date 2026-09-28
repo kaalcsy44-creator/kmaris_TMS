@@ -18361,3 +18361,118 @@ select.compose-tpl-version {
 /* 문서에만 걸려 있는 옛 출처 링크 — 줄과 맞지 않아 값은 못 옮겼다는 뜻으로 흐리게. */
 .qsb-chip--legacy { color: #6b7684; border-style: dashed; }
 .qsb-chip--legacy .qsb-n { color: #8a94a6; }
+
+/* ── 거래선 태그 제안(VendorTagSuggestions) — 알림 종·Company info 공용 ───────── */
+.vts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.vts-row {
+  border: 1px solid #e6ecf4;
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: #fbfcfe;
+}
+.vts-row.decided {
+  opacity: 0.6;
+}
+.vts-main {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  min-width: 0;
+}
+.vts-kind {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+.vts-kind.maker {
+  background: #fff4d6;
+  color: #8a5a00;
+}
+.vts-kind.category {
+  background: #e8f0ff;
+  color: #1f4fa8;
+}
+.vts-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vts-count {
+  flex: none;
+  font-size: 11px;
+  color: #7b8aa0;
+}
+.vts-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+}
+.vts-state {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7b8aa0;
+}
+.vts-state.added {
+  color: #1f8a4c;
+}
+.vts-src {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: #5a6b82;
+  min-width: 0;
+}
+.vts-src-type {
+  flex: none;
+  font-weight: 600;
+  color: #7b8aa0;
+}
+.vts-src-proj {
+  flex: none;
+  font-weight: 700;
+  color: #0b2452;
+}
+.vts-src-date {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: #8fa0b6;
+}
+.vts-src-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vts.compact .vts-row {
+  padding: 6px 8px;
+}
+.vts-err {
+  color: #c62a2f;
+  font-size: 12px;
+}
+.nbell-vt.open {
+  background: #f6f9fe;
+  border-radius: 8px;
+}
+.nbell-vt-body {
+  padding: 0 10px 10px 28px;
+}
+.nbell-vt-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+}

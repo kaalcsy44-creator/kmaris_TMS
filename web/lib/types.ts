@@ -2301,9 +2301,33 @@ export type SearchData = { results: SearchResult[]; query: string };
 
 // ── 상단바 알림(종) ───────────────────────────────────────────────────────────
 // 서버가 조회 때마다 기존 데이터에서 세운다(저장된 알림 없음). id 는 읽음 표시용 안정 키.
+// 거래선 태그 제안 — 견적·발주·메일에서 드러났지만 Company info 에 안 적힌 메이커/분류.
+export type VendorTagSource = {
+  type: "quote" | "po" | "email" | "bought";
+  ref: string;
+  date: string;
+  text: string;
+  rfq_id?: number;
+  project_no?: string;
+  subject?: string;
+  email_id?: number;
+};
+export type VendorTagSuggestion = {
+  kind: "maker" | "category";
+  ref_id: number;
+  label: string;
+  sources: VendorTagSource[];
+};
+export type VendorTagSuggestionRow = {
+  company: string;
+  vendor_id: number;
+  items: VendorTagSuggestion[];
+  last: string;
+};
+
 export type NotificationItem = {
   id: string;
-  type: "deal" | "receivable" | "payable";
+  type: "deal" | "receivable" | "payable" | "vendor_tag";
   level: "urgent" | "warn" | "info";
   title: string;
   detail: string;
@@ -2315,6 +2339,8 @@ export type NotificationItem = {
   date: string;
   days: number;
   href: string;
+  company?: string;
+  suggestions?: VendorTagSuggestion[];
 };
 export type NotificationData = { items: NotificationItem[]; today: string };
 
