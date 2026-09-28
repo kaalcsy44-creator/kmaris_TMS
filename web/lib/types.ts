@@ -2299,6 +2299,25 @@ export type SearchResult = {
 };
 export type SearchData = { results: SearchResult[]; query: string };
 
+// ── 상단바 알림(종) ───────────────────────────────────────────────────────────
+// 서버가 조회 때마다 기존 데이터에서 세운다(저장된 알림 없음). id 는 읽음 표시용 안정 키.
+export type NotificationItem = {
+  id: string;
+  type: "deal" | "receivable" | "payable";
+  level: "urgent" | "warn" | "info";
+  title: string;
+  detail: string;
+  customer?: string;
+  project_no: string;
+  assignee?: string;
+  amount: number | null;
+  currency: string;
+  date: string;
+  days: number;
+  href: string;
+};
+export type NotificationData = { items: NotificationItem[]; today: string };
+
 // ── 통계 대시보드 ─────────────────────────────────────────────────────────────
 export type CurrencyKey = "USD" | "KRW";
 // 통계 탭의 통화 버킷 — 원통화 둘에 "KRWC"(USD를 매매기준율로 환산해 KRW와 합산한 값)를

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getUser, isAdmin, can, logout } from "@/lib/auth";
 import type { PermModule } from "@/lib/auth";
 import GlobalSearch from "./GlobalSearch";
+import NotificationBell from "./NotificationBell";
 
 type SubItem = { href: string; label: string };
 // perm: 열람 권한 확인에 쓸 모듈(생략 시 key 를 모듈로 사용).
@@ -118,6 +119,7 @@ export default function TopNav({ active }: { active: string }) {
 
         <div className="topnav-right">
           <GlobalSearch />
+          <NotificationBell />
           <span className="topnav-user">
             <span className="avatar">{initial}</span>
             <span className="uname">{user?.username ?? ""}</span>

@@ -10,6 +10,7 @@ import type {
   FinanceClaimsData,
   RfqOverview,
   CustomerOption,
+  NotificationData,
   VendorOption,
   RfqDetail,
   DashboardData,
@@ -237,6 +238,11 @@ export function fetchRfqOverview(customerId?: number): Promise<RfqOverview> {
 
 export function fetchCustomers(): Promise<CustomerOption[]> {
   return get<CustomerOption[]>("/api/admin/customers");
+}
+
+/** 상단바 알림 — mine=1 이면 본인 담당 딜만(Finance 알림은 권한 있으면 항상). */
+export function fetchNotifications(mine: boolean): Promise<NotificationData> {
+  return get<NotificationData>(`/api/admin/notifications?mine=${mine ? 1 : 0}`);
 }
 
 export function globalSearch(q: string): Promise<SearchData> {

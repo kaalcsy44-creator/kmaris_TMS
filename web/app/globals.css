@@ -277,6 +277,233 @@ body {
   color: #fff;
 }
 
+/* ── 알림(NotificationBell) ─────────────────────────────────────────────── */
+.nbell {
+  position: relative;
+  display: flex;
+}
+.nbell-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #c4cfde;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.nbell-btn:hover,
+.nbell-btn.on {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.nbell-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  border: 2px solid #0b1d3a;
+  box-sizing: content-box;
+}
+.nbell-badge.urgent {
+  background: #e5484d;
+}
+.nbell-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 14px 40px rgba(11, 29, 58, 0.22);
+  z-index: 200;
+  color: #1a2536;
+  display: flex;
+  flex-direction: column;
+  max-height: 75vh;
+}
+.nbell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 8px;
+  font-size: 14px;
+}
+.nbell-scope {
+  display: inline-flex;
+  border: 1px solid #dbe3ee;
+  border-radius: 7px;
+  overflow: hidden;
+}
+.nbell-scope button {
+  border: none;
+  background: #fff;
+  font: inherit;
+  font-size: 11.5px;
+  padding: 4px 9px;
+  color: #5a6b82;
+  cursor: pointer;
+}
+.nbell-scope button.on {
+  background: #0b2452;
+  color: #fff;
+}
+.nbell-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px 8px;
+  border-bottom: 1px solid #eef2f7;
+}
+.nbell-tabs button {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: #5a6b82;
+  cursor: pointer;
+}
+.nbell-tabs button span {
+  color: #8fa0b6;
+  margin-left: 2px;
+}
+.nbell-tabs button.on {
+  background: #eff5ff;
+  color: var(--blue);
+  font-weight: 600;
+}
+.nbell-tabs .nbell-markall {
+  margin-left: auto;
+  color: var(--blue);
+}
+.nbell-tabs .nbell-markall:disabled {
+  color: #b8c3d2;
+  cursor: default;
+}
+.nbell-list {
+  overflow-y: auto;
+  padding: 6px;
+}
+.nbell-empty {
+  padding: 22px 12px;
+  color: #7b8aa0;
+  font-size: 13px;
+  text-align: center;
+}
+.nbell-item {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.nbell-item:hover {
+  background: #eff5ff;
+}
+.nbell-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: #7aa2e3;
+}
+.nbell-item.lv-warn .nbell-dot {
+  background: #f59e0b;
+}
+.nbell-item.lv-urgent .nbell-dot {
+  background: #e5484d;
+}
+.nbell-item.read {
+  opacity: 0.55;
+}
+.nbell-item.read .nbell-title {
+  font-weight: 500;
+}
+.nbell-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.nbell-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #7b8aa0;
+}
+.nbell-type {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 10px;
+}
+.nbell-proj {
+  font-weight: 700;
+  color: #0b2452;
+  font-variant-numeric: tabular-nums;
+}
+.nbell-date {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.nbell-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.nbell-item.lv-urgent .nbell-title {
+  color: #c62a2f;
+}
+.nbell-detail {
+  font-size: 12px;
+  color: #5a6b82;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.nbell-detail-txt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nbell-amt {
+  margin-left: auto;
+  flex: none;
+  color: #1a2536;
+  font-variant-numeric: tabular-nums;
+}
+.nbell-foot {
+  border-top: 1px solid #eef2f7;
+  padding: 7px 14px;
+  font-size: 11px;
+  color: #8fa0b6;
+}
+
 /* ── 전역 검색(GlobalSearch) ─────────────────────────────────────────────── */
 .gsearch {
   position: relative;
