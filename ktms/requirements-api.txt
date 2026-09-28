@@ -9,14 +9,19 @@
 # tracking_status} pull the packages below.
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
-sqlalchemy>=2.0.0
+# 2.1 부터 postgresql:// 의 기본 드라이버가 psycopg2 → psycopg(v3) 로 바뀌었다. 우리는
+# psycopg2-binary 만 설치하므로 2.1 이 깔리면 엔진 생성이 실패해 부팅(init_db)에서 죽는다
+# — 2026-09-26 부터 Render 배포가 전부 실패하고 9/21 판이 계속 떠 있던 원인. 올리려면
+# psycopg[binary] 로 갈아타거나 URL 을 postgresql+psycopg2:// 로 명시한 뒤에.
+sqlalchemy>=2.0.0,<2.1
 psycopg2-binary>=2.9.0
 bcrypt>=4.1.0
 PyJWT>=2.8.0
 python-multipart>=0.0.9
 pdfplumber>=0.11.0
 # output_config(JSON 스키마 강제)·messages.stream 을 쓴다 — 0.111 이상이어야 한다.
-anthropic>=0.111.0
+# 1.x 는 메이저 판올림 — 검증 전까지 0.x 에 묶는다(>= 만 두면 배포 때 조용히 올라간다).
+anthropic>=0.111.0,<1
 # services/vendor_scan.py 가 거래선 홈페이지를 읽어 온다. anthropic 이 전이로 끌어오긴
 # 하지만 우리가 직접 import 하므로 여기에 적는다 — 전이 의존은 언제든 사라질 수 있다.
 httpx>=0.27.0
