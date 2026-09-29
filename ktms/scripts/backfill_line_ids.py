@@ -18,7 +18,6 @@ lid 가 생기기 전에 만든 딜, 그리고 Auto-fill 로 읽어 저장한 �
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -27,14 +26,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
 
-if not os.environ.get("DATABASE_URL"):
-    try:
-        from dotenv import load_dotenv
-        load_dotenv(ROOT / ".env")
-    except ImportError:
-        pass
-
-from db.engine import get_session                                   # noqa: E402
+# 접속 대상은 DATABASE_URL 로만 받는다. ktms/.env 를 dotenv 로 읽으면 감긴 긴 줄 때문에
+# sqlite 로 조용히 붙는다 — 라이브에 돌리려면 그 파일의 postgresql:// 줄을 직접 넘긴다.
+from db.engine import get_engine, get_session                                   # noqa: E402
 from db.models import RFQ, Quotation, VendorQuote, VendorRFQ        # noqa: E402
 from _core import (                                                  # noqa: E402
     assign_line_ids,
@@ -54,6 +48,10 @@ def _unnamed(items) -> int:
                and (str(it.get("part_no") or "").strip() or str(it.get("description") or "").strip()))
 
 
+def _norm(v: str) -> str:
+    return "".join(ch for ch in (v or "").upper() if ch.isalnum())
+
+
 def _label(it: dict) -> str:
     return " · ".join(x for x in (str(it.get("part_no") or "").strip(),
                                   str(it.get("description") or "").strip()[:50]) if x)
@@ -66,6 +64,9 @@ def main() -> None:
     ap.add_argument("--quiet", action="store_true", help="딜별 상세 없이 합계만")
     args = ap.parse_args()
 
+    url = get_engine().url
+    print(f"DB: {url.get_backend_name()} {url.host or url.database}"
+          f"  ({'APPLY' if args.apply else 'dry-run'})")
     s = get_session()
     tally: Counter = Counter()
     how: Counter = Counter()
@@ -105,8 +106,16 @@ def main() -> None:
                     tally[f"{kind}_docs"] += 1
                     how.update(m["how"] for m in res["matches"])
                 tally[f"{kind}_unmatched"] += len(res["unmatched"])
-                bits = [f"{m['lid']}←{_label(items[m['index']])[:40]}({m['how']})"
-                        for m in res["matches"]]
+                by_lid = {line_id_of(b): b for b in base if isinstance(b, dict)}
+
+                def _bit(m):
+                    doc_l = _label(items[m["index"]])[:40]
+                    base_l = _label(by_lid.get(m["lid"], {}))[:40]
+                    # 품번으로 잡은 게 아니면 딜 쪽 품목도 함께 — 눈으로 대조할 수 있게.
+                    same = _norm(doc_l) == _norm(base_l)
+                    tail = "" if m["how"] == "part" or same else f"   ⇢ 딜: {base_l}"
+                    return f"{m['lid']}←{doc_l}({m['how']}){tail}"
+                bits = [_bit(m) for m in res["matches"]]
                 miss = [_label(items[i])[:40] for i in res["unmatched"]]
                 if bits or miss:
                     log.append(f"  {kind} {tag}: +{len(bits)}"

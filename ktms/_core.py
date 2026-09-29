@@ -14,6 +14,7 @@ from __future__ import annotations
 import io
 import os
 import re
+from difflib import SequenceMatcher
 import secrets
 import sys
 import threading
@@ -1696,20 +1697,35 @@ def _line_tokens(it: dict) -> set[str]:
         str(it.get(k) or "") for k in ("description", "type")).upper()))
 
 
+def _sibling_parts(dk: set[str], bk: set[str]) -> bool:
+    """두 품번이 **닮았지만 다른** 번호인가(HG5110-4501 ↔ HG5110-4502). 그런 둘은 같은
+    품명을 달고 있어도 다른 부품(변형·사양 차이)이다 — 품명으로 이으면 틀린다.
+    벤더가 자기 식 번호를 쓴 경우(전혀 안 닮음)는 막지 않는다."""
+    if not dk or not bk or dk & bk:
+        return False
+    return any(SequenceMatcher(None, a, b).ratio() >= 0.7 for a in dk for b in bk)
+
+
 def _line_match_score(d: dict, b: dict) -> tuple[float, str]:
-    """문서 줄 d 가 딜 줄 b 일 가능성(0~1)과 그 근거."""
+    """문서 줄 d 가 딜 줄 b 일 가능성과 그 근거. 품명 유사도를 0.1 만큼 얹어, 같은 번호를
+    여러 줄이 나눠 가진 경우(보고서 번호·규격 번호)에도 품명으로 순서가 갈리게 한다."""
     dk = _code_keys(d.get("part_no"), d.get("serial_no"))
     bk = _code_keys(b.get("part_no"), b.get("serial_no"))
-    if dk & bk:
-        return 1.0, "part"
-    # 한쪽 품번이 다른 쪽 어딘가(품명 괄호 속 등)에 통째로 들어 있다.
-    db, bb = _line_blob(d), _line_blob(b)
-    if any(len(k) >= 5 and k in bb for k in dk) or any(len(k) >= 5 and k in db for k in bk):
-        return 0.85, "code"
     dt, bt = _line_tokens(d), _line_tokens(b)
-    if dt and bt:
-        return len(dt & bt) / len(dt | bt), "desc"
-    return 0.0, ""
+    jac = len(dt & bt) / len(dt | bt) if dt and bt else 0.0
+    if dk & bk:
+        return 1.0 + 0.1 * jac, "part"
+    # 한쪽 품번이 다른 쪽 어딘가(품명 괄호 속 등)에 통째로 들어 있다. 숫자가 섞인 열쇠만 —
+    # "SCANIA" 같은 낱말은 품번이 아니다.
+    db, bb = _line_blob(d), _line_blob(b)
+    coded = lambda k: len(k) >= 5 and any(ch.isdigit() for ch in k)   # noqa: E731
+    if any(coded(k) and k in bb for k in dk) or any(coded(k) and k in db for k in bk):
+        return 0.85 + 0.1 * jac, "code"
+    if _sibling_parts(dk, bk):
+        return 0.0, "sibling"
+    if jac:
+        return jac, "desc"
+    return 0.0, "differs" if dk and bk else ""
 
 
 def stamp_doc_line_ids(base_items, doc_items, scope_lids=None) -> dict:
@@ -1766,8 +1782,12 @@ def stamp_doc_line_ids(base_items, doc_items, scope_lids=None) -> dict:
     # 이 경우는 그 줄의 답이다. 다만 벤더가 붙여 보낸 운임·포장 줄은 품목이 아니다.
     if len(left) == 1 and len(free) == 1:
         i = next(iter(left))
-        if not _CHARGE_LINE.search(str(doc[i].get("description") or "")):
-            take(i, next(iter(free)), "only")
+        lid = next(iter(free))
+        _, why = _line_match_score(doc[i], free[lid])
+        # 품번이 양쪽에 다 있는데 닮지도, 품명이 겹치지도 않으면 다른 물건이다.
+        if why not in ("sibling", "differs") and not _CHARGE_LINE.search(
+                str(doc[i].get("description") or "")):
+            take(i, lid, "only")
 
     return {"matches": matches, "unmatched": sorted(left)}
 
