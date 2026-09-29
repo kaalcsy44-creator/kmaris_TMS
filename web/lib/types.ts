@@ -499,6 +499,8 @@ export type PoWorkItem = {
   /** 옵션 표시행(row_kind="option") — 품목이 아니라 그 아래 품목들을 묶는 제목 행이다.
    *  description 이 옵션 제목이고 금액은 세지 않는다(lib/quoteOptions.ts). */
   row_kind?: string;
+  /** 라인 ID — 딜의 품목 줄 이름(L01…). 개요가 품목 밑에 받은 견적을 세우는 열쇠다. */
+  lid?: string;
 };
 
 export type RfqOcrResult = {

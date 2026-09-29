@@ -16,6 +16,7 @@ import {
   fetchProjectMail,
   fetchRfqVendorQuotes,
   fetchFxRate,
+  fetchLineBoard,
 } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
 import { sortByDocNo } from "@/lib/sort";
@@ -32,7 +33,10 @@ import {
 import { buildActivities, hm, md, splitProjectNo, type Activity } from "@/lib/activity";
 import type {
   ApRow,
+  BoardLine,
   ClaimRow,
+  LineBoard,
+  LineCell,
   MailMessage,
   PipelineRow,
   PoWorkOptions,
@@ -200,19 +204,6 @@ type VqRef = {
   receivedDate: string;
   /** 그 견적서의 품목 줄 — 대안 묶음의 Purchase 열을 품목별로 채운다. */
   items: VendorQuoteItem[];
-};
-
-/** 대안 견적 묶음이 매출측으로 빌려 쓰는 기준 줄 — 품목과 이 딜의 판매가.
- *  벤더 견적에는 판매가가 없다. 매출을 비워 두면 마진도 못 세워, 애초에 견적을 더 받은
- *  이유(그래서 마진이 얼마나 달라지나)가 화면에서 사라진다. 그래서 **같은 판매가**에
- *  이 벤더의 원가를 대 본다 — 바뀌는 건 Purchase 와 Margin 뿐이다. */
-type AltBase = {
-  part_no?: string;
-  description?: string;
-  qty?: number;
-  unit?: string;
-  sales: number | null;
-  salesEx: boolean;
 };
 
 /** 벤더 견적서 총액 — 단가가 매겨진 줄만 더한다(하나도 없으면 null = "금액 미기재"). */
@@ -1308,7 +1299,21 @@ function ItemsSection({
   nav: DocNav;
 }) {
   const fold = useSectionFold("proj-ov.items");
+  // 품목 줄 × 물어본 곳 — 2·3단계 소싱 보드와 같은 표. 품목마다 받은 견적을 그 품목 밑에
+  // 세우는 데 쓴다. 예전엔 견적서 한 장마다 표를 통째로 다시 그려(Also quoted), 같은
+  // 품목이 견적 수만큼 되풀이되고 그 벤더가 답하지 않은 줄은 "—"로 채워졌다.
+  const { data: board } = useCachedData(`rfq:line-board:${nav.rfqId}`, () =>
+    fetchLineBoard(nav.rfqId));
+  const [showVq, setShowVq] = useState(true);
+  const hasBoardQuotes = !!board?.vendors.some((v) => v.quotes.length > 0);
   const hasGroups = orders.length > 0 || quotations.length > 0;
+  // 어느 고객 견적·P/O 에도 안 들어간 품목 — 표의 행이 문서 품목에서 나오다 보니, 견적에
+  // 넣지 않은 품목은 받은 견적과 함께 개요에서 사라졌다.
+  const uncovered = board ? uncoveredLines(board.lines, [
+    ...quotations.map((q) => q.items ?? []),
+    ...orders.map((o) => o.items ?? []),
+  ]) : [];
+  const vqBoard = showVq ? board ?? null : null;
   const phaseClass = (from: number) => (stage >= from ? "ov-phase-on" : "ov-phase-todo");
   const rfqPhase = phaseClass(1);
   const quotePhase = phaseClass(3);
@@ -1323,10 +1328,22 @@ function ItemsSection({
         <span className="proj-ov-src">
           {hasGroups
             ? "by vessel · Quote → P/O → C/I · purchase = vendor P/O"
-            : "from RFQ request — not priced until a quotation is created"}
+            : hasBoardQuotes
+              ? "vendor quotes received per item — no quotation sent yet"
+              : "from RFQ request — not priced until a quotation is created"}
         </span>
+        {hasBoardQuotes ? (
+          <button
+            type="button"
+            className="ov-vq-toggle"
+            onClick={() => setShowVq((v) => !v)}
+            title="Vendor quotes received for each item, listed under the item"
+          >
+            {showVq ? "Hide vendor quotes" : "Show vendor quotes"}
+          </button>
+        ) : null}
       </h2>
-      {!hasGroups ? (
+      {!hasGroups && !hasBoardQuotes ? (
         <RfqItemsTable items={rfqItems} />
       ) : (
         <div className="proj-ov-items-wrap">
@@ -1386,6 +1403,7 @@ function ItemsSection({
                   quote={quoteForOrder(o, quotations)}
                   vendorQuotes={vendorQuotes}
                   vendorQuoteNo={vendorQuoteNo}
+                  board={vqBoard}
                   nav={nav}
                 />
               ))
@@ -1397,10 +1415,19 @@ function ItemsSection({
                   quoteId={q.id}
                   vendorQuotes={vendorQuotes}
                   vendorQuoteNo={vendorQuoteNo}
+                  board={vqBoard}
                   nav={nav}
                 />
               ))
             )}
+            {board && uncovered.length ? (
+              <UnquotedGroup
+                lines={uncovered}
+                board={vqBoard}
+                title={hasGroups ? "Not in a quotation" : "Not quoted to customer yet"}
+                nav={nav}
+              />
+            ) : null}
           </table>
         </div>
       )}
@@ -1462,6 +1489,7 @@ function OrderItemGroup({
   quote: quoteRow,
   vendorQuotes,
   vendorQuoteNo,
+  board,
   nav,
 }: {
   order: ProjectOrder;
@@ -1470,6 +1498,8 @@ function OrderItemGroup({
   quote: ProjectQuote | null;
   vendorQuotes: VqRef[];
   vendorQuoteNo: string;
+  /** 품목별 받은 견적(소싱 보드). null 이면 품목 밑 견적 줄을 그리지 않는다. */
+  board: LineBoard | null;
   nav: DocNav;
 }) {
   // 원가·마진은 견적 목록에 없고 상세에만 있어 따로 받는다(_item_view 가 원가를 지움).
@@ -1575,26 +1605,24 @@ function OrderItemGroup({
   // (국내 매입 10% + 수출 매출 0%)는 흔하므로, 0 인 쪽도 0 으로 적어 대비를 보여준다.
   const hasVat = !!(ciPurVat || ciSalesVat);
 
-  // 대안 견적 묶음이 빌려 쓸 매출측 — 이 딜의 고객 견적 판매가와 그 품목.
-  const altBase: AltBase[] = lines.map((l) => ({
-    part_no: l.it.part_no,
-    description: l.it.description || l.qIt?.description || "",
-    qty: l.it.qty,
-    unit: l.it.unit,
-    sales: l.qSales,
-    salesEx: l.qEx,
-  }));
-  const alts = altQuotes(vendorQuotes, quote?.vendor_quote_id ?? null);
+  // 품목마다 딜의 줄(소싱 보드 행)을 찾아 둔다 — 그 밑에 받은 견적을 세운다.
+  const findLine = makeLineFinder(board?.lines ?? []);
+  const boardLines = lines.map((l) =>
+    findLine({
+      lid: l.it.lid || l.qIt?.lid,
+      part_no: l.it.part_no,
+      description: l.it.description || l.qIt?.description,
+    })
+  );
 
   return (
-    <>
     <tbody className="ov-grp">
       <GroupHead
         vessel={order.vessel}
         quoteDocs={quote ? { sales: quote.qtn_no || "—" } : null}
-        vendorQuotes={vendorQuotes}
+        vendorQuotes={costSources(vendorQuotes, quote ?? null)}
         srcVqId={quote?.vendor_quote_id ?? null}
-        vendorQuoteNo={quote?.vendor_quote_no || vendorQuoteNo}
+        vendorQuoteNo={quote?.vendor_quote_no || (quote ? "" : vendorQuoteNo)}
         poDocs={{ pur: vpoNos, sales: order.po_no || "—" }}
         ciNo={ci?.ci_no || ""}
         orderId={order.id}
@@ -1625,7 +1653,8 @@ function OrderItemGroup({
         qNote={qFxNote}
       />
       {lines.map((ln, i) => (
-        <tr key={i}>
+        <Fragment key={i}>
+        <tr>
           <td className="ov-it-n">{i + 1}</td>
           <td className="ov-it-part">{ln.it.part_no || <span className="muted">—</span>}</td>
           <td>{ln.it.description || ln.qIt?.description || "—"}</td>
@@ -1667,6 +1696,20 @@ function OrderItemGroup({
             <Money value={ln.cSales} currency={ciCur} excluded={ln.cSalesEx} />
           </td>
         </tr>
+        {board && boardLines[i] ? (
+          <VendorLineRows
+            line={boardLines[i]!}
+            board={board}
+            qty={Number(ln.it.qty || 1)}
+            sales={ln.qSales}
+            salesCur={qCur}
+            srcVqId={ln.qIt?.src_vq_id ?? quote?.vendor_quote_id ?? null}
+            rate={rate}
+            krwPer={krwPer}
+            nav={nav}
+          />
+        ) : null}
+        </Fragment>
       ))}
       {/* 부대비용 — 값이 있는 항목만 한 줄씩. 위 Total 에는 이미 더해져 있다. */}
       {CHARGE_LABELS.map(([k, label]) =>
@@ -1701,149 +1744,257 @@ function OrderItemGroup({
         />
       ) : null}
     </tbody>
-    {/* 원가로 쓰지 않은 견적은 묶음을 한 벌씩 더 그린다 — 위 묶음과 같은 자리, 같은 판매가.
-        합계에는 넣지 않는다(경쟁 견적은 합이 아니라 대안이다). */}
-    {alts.map((v) => (
-      <AltQuoteGroup
-        key={v.id}
-        vessel={order.vessel}
-        vq={v}
-        qtnNo={quote?.qtn_no || "—"}
-        base={altBase}
-        salesCur={qCur}
-        rate={rate}
-        krwPer={krwPer}
-        nav={nav}
-      />
-    ))}
+  );
+}
+
+/** 이 고객 견적이 원가로 쓴 벤더 견적만 — 줄마다 출처(src_vq_id)가 있으면 그 전부,
+ *  없으면 문서에 고른 한 건. 받기만 하고 안 쓴 견적은 품목 밑 견적 줄이 보여 준다. */
+function costSources(
+  vendorQuotes: VqRef[],
+  quote: { vendor_quote_id?: number | null; items?: { src_vq_id?: number | null }[] } | null
+): VqRef[] {
+  if (!quote) return [];
+  const ids = new Set<number>();
+  if (quote.vendor_quote_id) ids.add(quote.vendor_quote_id);
+  for (const it of quote.items ?? []) if (it.src_vq_id) ids.add(it.src_vq_id);
+  return vendorQuotes.filter((v) => ids.has(v.id));
+}
+
+const normKey = (v?: string) => (v || "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+
+/**
+ * 문서 품목 줄 → 딜의 품목 줄(소싱 보드 행). lid 가 있으면 그것으로만 찾고(보드에 없으면
+ * 없는 것이다 — 추측하지 않는다), lid 가 없는 옛 줄은 품번, 그다음 품명으로 찾는다.
+ * 한 번 짝지은 보드 줄은 다시 쓰지 않는다 — 같은 품번이 두 줄이면 차례로 붙는다.
+ */
+function makeLineFinder(lines: BoardLine[]) {
+  const used = new Set<string>();
+  return (it: { lid?: string; part_no?: string; description?: string }): BoardLine | undefined => {
+    const lid = (it.lid || "").trim();
+    let hit: BoardLine | undefined;
+    if (lid) {
+      hit = lines.find((l) => l.lid === lid);
+    } else {
+      const pk = normKey(it.part_no);
+      if (pk) hit = lines.find((l) => !used.has(l.lid) && normKey(l.part_no) === pk);
+      const dk = normKey(it.description);
+      if (!hit && dk) hit = lines.find((l) => !used.has(l.lid) && normKey(l.description) === dk);
+    }
+    if (hit) used.add(hit.lid);
+    return hit;
+  };
+}
+
+/** 어느 문서에도 안 들어간 딜 품목 줄. 문서마다 따로 짝지어(같은 줄이 견적과 P/O 에
+ *  함께 있어도 된다) 한 번이라도 잡힌 줄을 뺀다. 옵션 제목행은 품목이 아니다. */
+function uncoveredLines(
+  lines: BoardLine[],
+  docs: { lid?: string; part_no?: string; description?: string; row_kind?: string }[][]
+): BoardLine[] {
+  const covered = new Set<string>();
+  for (const items of docs) {
+    const find = makeLineFinder(lines);
+    for (const it of items) {
+      if (it.row_kind === "option") continue;
+      const hit = find(it);
+      if (hit) covered.add(hit.lid);
+    }
+  }
+  return lines.filter((l) => !covered.has(l.lid));
+}
+
+const CELL_STATE_LABEL: Record<LineCell["state"], string> = {
+  quoted: "",
+  no_price: "replied without a price",
+  omitted: "left this item out of the quote",
+  sent: "awaiting reply",
+  declined: "declined",
+};
+
+/**
+ * 한 품목 밑의 받은 견적 — 물어본 곳마다 한 줄.
+ *
+ * 매입(Purchase)은 그 벤더 단가 × 이 품목 수량, 마진은 **이 품목의 판매가**에 그 원가를
+ * 대 본 값이다. 여러 곳에 물어본 이유("어디서 사면 얼마 남나")가 품목 단위로 바로 읽힌다.
+ * 원가로 쓴 견적(★)을 맨 위에, 그다음 채택·값이 온 순(싼 것부터), 답이 없거나 빠뜨린
+ * 곳은 아래에 둔다. 합계에는 넣지 않는다 — 대안이지 합이 아니다.
+ */
+function VendorLineRows({
+  line,
+  board,
+  qty,
+  sales,
+  salesCur,
+  srcVqId,
+  rate,
+  krwPer,
+  nav,
+}: {
+  line: BoardLine;
+  board: LineBoard;
+  qty: number;
+  /** 이 품목의 판매 금액(견적). 없으면 마진을 세우지 않는다. */
+  sales: number | null;
+  salesCur: string;
+  /** 이 줄의 원가 출처 벤더 견적. */
+  srcVqId: number | null;
+  rate: number;
+  krwPer: KrwPer;
+  nav: DocNav;
+}) {
+  const cells = board.cells[line.lid] ?? {};
+  const vendorOf = new Map(board.vendors.map((v) => [String(v.vrfq_id), v]));
+  const awardQ = line.award?.vendor_quote_id ?? null;
+  const bestQ = line.best?.vendor_quote_id ?? null;
+  const order: Record<LineCell["state"], number> = { quoted: 2, no_price: 3, omitted: 4, sent: 5, declined: 6 };
+  const rows = Object.entries(cells)
+    .map(([k, c]) => ({ vrfqId: Number(k), v: vendorOf.get(k), c }))
+    .map((e) => ({
+      ...e,
+      src: !!e.c.vendor_quote_id && e.c.vendor_quote_id === srcVqId,
+      award: !!e.c.vendor_quote_id && e.c.vendor_quote_id === awardQ,
+    }))
+    .sort((a, b) => {
+      const ra = a.src ? 0 : a.award ? 1 : order[a.c.state];
+      const rb = b.src ? 0 : b.award ? 1 : order[b.c.state];
+      if (ra !== rb) return ra - rb;
+      return (a.c.unit_cost ?? Infinity) - (b.c.unit_cost ?? Infinity);
+    });
+  if (!rows.length) {
+    return (
+      <tr className="ov-vl ov-vl-none">
+        <td />
+        <td colSpan={3} className="ov-vl-who">
+          <span className="muted">Not asked to any vendor yet</span>
+        </td>
+        <td className="gs" colSpan={3} />
+        <td className="gs" colSpan={3} />
+        <td className="gs" colSpan={3} />
+      </tr>
+    );
+  }
+  return (
+    <>
+      {rows.map(({ vrfqId, v, c, src, award }, i) => {
+        const cur = c.currency || "USD";
+        const pur = c.state === "quoted" && c.unit_cost != null ? c.unit_cost * qty : null;
+        const note = convertible(cur, salesCur) ? "" : fxNote(cur, krwPer(cur));
+        return (
+          <tr
+            key={vrfqId}
+            className={`ov-vl${src ? " src" : ""}${c.state === "quoted" ? "" : " dim"}${
+              i === rows.length - 1 ? " last" : ""
+            }`}
+          >
+            <td />
+            <td colSpan={3} className="ov-vl-who">
+              <span className="ov-vl-mark" aria-hidden="true">{src ? "★" : "↳"}</span>
+              <span className="ov-vl-vendor">{v?.vendor || "—"}</span>
+              {c.vendor_quote_no ? (
+                <span className="ov-vl-no">
+                  <DocNoLink
+                    no={c.vendor_quote_no}
+                    stage={DOC_STAGE.vendorQuote}
+                    vrfqId={vrfqId}
+                    nav={nav}
+                  />
+                </span>
+              ) : null}
+              {src ? <span className="ov-vl-tag src">cost source</span> : null}
+              {award && !src ? <span className="ov-vl-tag award">awarded</span> : null}
+              {c.vendor_quote_id && c.vendor_quote_id === bestQ && !src ? (
+                <span className="ov-vl-tag best">lowest</span>
+              ) : null}
+              {CELL_STATE_LABEL[c.state] ? (
+                <span className={`ov-vl-state ${c.state}`}>{CELL_STATE_LABEL[c.state]}</span>
+              ) : null}
+            </td>
+            <td className="num gs">
+              {pur != null ? (
+                <span title={`${cur} ${Math.round(c.unit_cost ?? 0).toLocaleString()} × ${qty}`}>
+                  <Money value={pur} currency={cur} />
+                </span>
+              ) : (
+                <span className="muted">—</span>
+              )}
+            </td>
+            <td className="num">
+              <Pct value={marginPct(sales, pur, salesCur, cur, rate, krwPer)} note={note} />
+            </td>
+            <td className="num ov-vl-lead">{c.lead_time || ""}</td>
+            <td className="gs" colSpan={3} />
+            <td className="gs" colSpan={3} />
+          </tr>
+        );
+      })}
     </>
   );
 }
 
 /**
- * 원가로 쓰지 않은 벤더 견적 — 위 묶음과 **같은 꼴**로 한 벌 더 그린다.
- * 선박 줄부터 Total, 품목, 마진율, 판매가까지 자리가 같아서 두 묶음을 위아래로 겹쳐 읽으면
- * 바뀐 칸(Purchase·Margin)만 눈에 들어온다. 한 줄짜리 각주로는 "그래서 마진이 얼마나
- * 달라지나"가 안 보였다 — 여러 곳에 물어본 이유가 그 차이다.
- *
- * 판매가는 이 딜의 고객 견적 값을 그대로 빌린다(벤더 견적에는 판매가가 없다). 그러니
- * 이 묶음이 답하는 질문은 하나다 — "같은 값에 팔면서 이쪽에서 샀다면?"
- * P/O·C/I 칸은 비운다. 발주는 한 번뿐이라, 채우면 두 번 산 것처럼 읽힌다.
+ * 어느 고객 견적에도 안 들어간 품목 — 견적 발송 전의 딜이면 품목 전부가 여기 선다.
+ * 판매가가 없으니 마진은 비고, 받은 견적의 원가만 품목 밑에 나란히 선다.
  */
-function AltQuoteGroup({
-  vessel,
-  vq,
-  qtnNo,
-  base,
-  salesCur,
-  rate,
-  krwPer: parentKrw,
+function UnquotedGroup({
+  lines,
+  board,
+  title,
   nav,
 }: {
-  vessel: string;
-  vq: VqRef;
-  /** 판매가를 빌려 온 고객 견적번호 — 어느 매출과 견준 마진인지 밝힌다. */
-  qtnNo: string;
-  base: AltBase[];
-  salesCur: string;
-  rate: number;
-  /** 본 묶음이 이미 아는 환율(판매 통화 등). 이 견적의 통화만 여기서 더 받아 온다. */
-  krwPer: KrwPer;
+  lines: BoardLine[];
+  board: LineBoard | null;
+  title: string;
   nav: DocNav;
 }) {
-  // 이 견적의 통화가 EUR 처럼 딜 환율 밖이면 받은 날짜의 고시로 환산한다.
-  const krwVq = useKrwRate(vq.currency, vq.receivedDate, rate);
-  const krwPer: KrwPer = (c) =>
-    (c || "").toUpperCase() === vq.currency.toUpperCase() ? krwVq : parentKrw(c);
-  const note = convertible(vq.currency, salesCur) ? "" : fxNote(vq.currency, krwVq);
-  // 품목 짝맞춤은 본 묶음과 같은 규칙(품번 우선, 없으면 순서).
-  const match = makeItemMatcher(vq.items);
-  const rows = base.map((b, i) => {
-    const it = match(b, i);
-    const pur =
-      it && it.cost_price != null ? Number(it.cost_price) * Number(it.qty || 1) : null;
-    return { b, pur };
-  });
-  const purTotal = total(rows.map((r) => r.pur));
-  const salesTotal = total(base.map((b) => b.sales));
+  const basicKrw: KrwPer = (c) => {
+    const u = (c || "USD").toUpperCase();
+    return u === "KRW" ? 1 : u === "USD" ? USD_KRW_RATE : null;
+  };
   return (
-    <tbody className="ov-grp ov-grp-alt">
+    <tbody className="ov-grp ov-grp-unquoted">
       <tr className="ov-grp-head">
         <td colSpan={4}>
-          <span className="ov-grp-vessel">{vessel || "— no vessel —"}</span>
-          <span className="ov-alt-tag">
-            Also quoted{vq.vendor ? ` · ${vq.vendor}` : ""}
-          </span>
+          <span className="ov-grp-vessel">{title}</span>
         </td>
         <td colSpan={3} className="ov-grp-doc q gs">
-          <DocPair
-            hasPur
-            pur={
-              <DocNoLink
-                no={vq.no}
-                stage={DOC_STAGE.vendorQuote}
-                vrfqId={vq.vrfqId}
-                nav={nav}
-              />
-            }
-            sales={<DocNoLink no={qtnNo} stage={DOC_STAGE.quote} nav={nav} />}
-          />
+          <i className="muted">not quoted</i>
         </td>
         <td colSpan={3} className="ov-grp-doc p gs" />
         <td colSpan={3} className="ov-grp-doc c gs" />
       </tr>
-      <tr className="ov-grp-total">
-        <td colSpan={4} className="ov-it-totlabel">
-          Total
-        </td>
-        <td className="num gs">
-          <Money value={purTotal} currency={vq.currency} />
-        </td>
-        <td className="num">
-          <Pct
-            value={marginPct(salesTotal, purTotal, salesCur, vq.currency, rate, krwPer)}
-            note={note}
-          />
-        </td>
-        <td className="num ov-it-total">
-          <Money value={salesTotal} currency={salesCur} />
-        </td>
-        <td className="num gs" colSpan={3} />
-        <td className="num gs" colSpan={3} />
-      </tr>
-      {rows.map(({ b, pur }, i) => (
-        <tr key={i}>
-          <td className="ov-it-n">{i + 1}</td>
-          <td className="ov-it-part">{b.part_no || <span className="muted">—</span>}</td>
-          <td>{b.description || "—"}</td>
-          <td className="ov-it-qty">
-            {Number(b.qty || 1)}
-            {b.unit ? ` ${b.unit}` : ""}
-          </td>
-          <td className="num gs">
-            <Money value={pur} currency={vq.currency} />
-          </td>
-          <td className="num">
-            <Pct
-              value={marginPct(b.sales, pur, salesCur, vq.currency, rate, krwPer)}
-              excluded={b.salesEx}
-              note={note}
+      {lines.map((l) => (
+        <Fragment key={l.lid}>
+          <tr>
+            <td className="ov-it-n">{l.no}</td>
+            <td className="ov-it-part">{l.part_no || <span className="muted">—</span>}</td>
+            <td>{l.description || "—"}</td>
+            <td className="ov-it-qty">
+              {Number(l.qty || 1)}
+              {l.unit ? ` ${l.unit}` : ""}
+            </td>
+            <td className="num gs" colSpan={3}>
+              <span className="muted">—</span>
+            </td>
+            <td className="num gs" colSpan={3} />
+            <td className="num gs" colSpan={3} />
+          </tr>
+          {board ? (
+            <VendorLineRows
+              line={l}
+              board={board}
+              qty={Number(l.qty || 1)}
+              sales={null}
+              salesCur="USD"
+              srcVqId={null}
+              rate={USD_KRW_RATE}
+              krwPer={basicKrw}
+              nav={nav}
             />
-          </td>
-          <td className="num ov-sal">
-            <Money value={b.sales} currency={salesCur} excluded={b.salesEx} />
-          </td>
-          <td className="num gs" colSpan={3} />
-          <td className="num gs" colSpan={3} />
-        </tr>
+          ) : null}
+        </Fragment>
       ))}
     </tbody>
   );
-}
-
-/** 원가로 쓴 한 건을 뺀 나머지 — 그 한 건은 이미 표의 QUOTE 열이 말하고 있다. */
-function altQuotes(vendorQuotes: VqRef[], srcVqId: number | null): VqRef[] {
-  return vendorQuotes.filter((v) => v.id !== srcVqId);
 }
 
 /**
@@ -2068,11 +2219,13 @@ function QuoteOnlyGroup({
   quoteId,
   vendorQuotes,
   vendorQuoteNo,
+  board,
   nav,
 }: {
   quoteId: number;
   vendorQuotes: VqRef[];
   vendorQuoteNo: string;
+  board: LineBoard | null;
   nav: DocNav;
 }) {
   const { data: quote } = useCachedData(`quotation:${quoteId}`, () =>
@@ -2105,23 +2258,15 @@ function QuoteOnlyGroup({
       </tbody>
     );
   }
-  const altBase: AltBase[] = quote.items.map((it) => ({
-    part_no: it.part_no,
-    description: it.description,
-    qty: it.qty,
-    unit: it.unit,
-    sales: lineAmount(it),
-    salesEx: !!it.excluded,
-  }));
+  const findLine = makeLineFinder(board?.lines ?? []);
   return (
-    <>
     <tbody className="ov-grp">
       <GroupHead
         vessel={quote.vessel}
         quoteDocs={{ sales: quote.qtn_no || "—" }}
-        vendorQuotes={vendorQuotes}
+        vendorQuotes={costSources(vendorQuotes, quote)}
         srcVqId={quote.vendor_quote_id ?? null}
-        vendorQuoteNo={quote.vendor_quote_no || vendorQuoteNo}
+        vendorQuoteNo={quote.vendor_quote_no || ""}
         poDocs={{ pur: [], sales: "" }}
         ciNo=""
         nav={nav}
@@ -2142,8 +2287,11 @@ function QuoteOnlyGroup({
         krwPer={krwPer}
         qNote={qFxNote}
       />
-      {quote.items.map((it, i) => (
-        <tr key={i}>
+      {quote.items.map((it, i) => {
+        const bl = isOptionItem(it) ? undefined : findLine(it);
+        return (
+        <Fragment key={i}>
+        <tr>
           <td className="ov-it-n">{i + 1}</td>
           <td className="ov-it-part">{it.part_no || <span className="muted">—</span>}</td>
           <td>{it.description || "—"}</td>
@@ -2172,25 +2320,27 @@ function QuoteOnlyGroup({
             <span className="muted">—</span>
           </td>
         </tr>
-      ))}
+        {board && bl ? (
+          <VendorLineRows
+            line={bl}
+            board={board}
+            qty={Number(it.qty || 1)}
+            sales={lineAmount(it)}
+            salesCur={qCur}
+            srcVqId={it.src_vq_id ?? quote.vendor_quote_id ?? null}
+            rate={rate}
+            krwPer={krwPer}
+            nav={nav}
+          />
+        ) : null}
+        </Fragment>
+        );
+      })}
     </tbody>
-    {/* 비교용으로 더 받아 둔 벤더 견적(OrderItemGroup 과 같은 자리·같은 규칙). */}
-    {altQuotes(vendorQuotes, quote.vendor_quote_id ?? null).map((v) => (
-      <AltQuoteGroup
-        key={v.id}
-        vessel={quote.vessel}
-        vq={v}
-        qtnNo={quote.qtn_no || "—"}
-        base={altBase}
-        salesCur={qCur}
-        rate={rate}
-        krwPer={krwPer}
-        nav={nav}
-      />
-    ))}
-    </>
   );
 }
+
+const isOptionItem = (it: { row_kind?: string }) => it.row_kind === "option";
 
 /** 견적 전 — 고객이 요청한 RFQ 품목만. 단가가 없으므로 수량까지만 보여준다. */
 function RfqItemsTable({ items }: { items: RfqItem[] | null }) {

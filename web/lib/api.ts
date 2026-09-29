@@ -2418,7 +2418,13 @@ export function saveLineAwards(
   rfqId: number,
   awards: { lid: string; vendor_quote_id: number | null; reason?: string }[]
 ): Promise<LineBoard & { ok: boolean; saved: number; cleared: number }> {
-  return put(`/api/admin/rfq/${rfqId}/line-awards`, { awards });
+  return put<LineBoard & { ok: boolean; saved: number; cleared: number }>(
+    `/api/admin/rfq/${rfqId}/line-awards`,
+    { awards }
+  ).then((r) => {
+    invalidateCache("rfq:line-board:");   // 개요의 채택 표시
+    return r;
+  });
 }
 
 /** 채택된 줄을 문서용 품목으로 — 4단계 고객 견적이 불러다 쓴다. */
@@ -2478,6 +2484,7 @@ function dropQuotationCaches() {
 /** 벤더 견적을 고쳐 쓰면 개요가 읽는 수신 견적 목록도 버린다(번호·금액·통화가 바뀐다). */
 function dropVendorQuoteCaches() {
   invalidateCache("rfq:vendor-quotes:");
+  invalidateCache("rfq:line-board:");   // 개요의 품목별 받은 견적 줄
   dropQuotationCaches();   // 견적 머리의 매입측 번호가 이 목록에서 온다
 }
 

@@ -13841,18 +13841,35 @@ button.ov-tl-stage:hover { background: color-mix(in srgb, var(--ov-tone) 12%, tr
    건만 진하게 둔다 — 같은 무게로 찍으면 어느 값이 원가로 들어갔는지 표에서 읽을 수 없고,
    빼 버리면 비교하려고 받아 둔 견적이 개요에서 통째로 사라진다. */
 .ov-grp-doc .ov-doc-pur .ov-vq.src { font-weight: 600; color: #4a5a70; }
-/* 비교용으로 더 받아 둔 벤더 견적 묶음 — 본 묶음과 자리는 같게, 무게는 낮게. 같은 굵기로
-   그리면 발주를 두 번 한 것처럼 읽힌다. 선박 이름 옆의 꼬리표가 "이건 안 산 쪽"을 말한다. */
-.ov-grp-alt .ov-grp-head td, .ov-grp-alt .ov-grp-total td { opacity: 0.92; }
-.ov-grp-alt .ov-grp-vessel { font-weight: 600; }
-.ov-alt-tag {
-  margin-left: 8px; padding: 1px 7px; border-radius: 999px;
-  background: #eef2f7; color: #6b7c93;
-  font-size: var(--ov-t-cap); font-weight: 700; letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-/* 이 묶음의 윗선 — 위 묶음과 붙어 보이지 않게 한 칸 띄우는 대신 선으로 가른다. */
-.ov-grp-alt .ov-grp-head td { border-top: 2px solid var(--line-strong); }
+/* 품목 밑의 받은 견적 줄 — 그 품목을 견적한 곳마다 한 줄. 품목 줄보다 한 단 낮게(작은
+   글씨·옅은 바탕) 두어 "이 품목에 딸린 대안"으로 읽히게 한다. 합계에는 들어가지 않는다. */
+.proj-ov-grid tr.ov-vl td { font-size: var(--ov-t-cap); padding-top: 2px !important;
+  padding-bottom: 2px !important; border-top: 0; background: rgba(11, 29, 58, 0.025) !important; }
+.proj-ov-grid tr.ov-vl.last td { padding-bottom: 6px !important; }
+.proj-ov-grid tr.ov-vl.dim td { color: var(--muted); }
+.ov-vl-who { padding-left: 14px !important; white-space: normal; }
+.ov-vl-mark { color: var(--muted); margin-right: 6px; }
+tr.ov-vl.src .ov-vl-mark { color: #d97706; }
+.ov-vl-vendor { font-weight: 600; color: var(--ink); margin-right: 8px; }
+tr.ov-vl.dim .ov-vl-vendor { font-weight: 500; color: var(--muted); }
+.ov-vl-no { color: var(--muted); margin-right: 6px; }
+.ov-vl-tag { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; white-space: nowrap; line-height: 16px; }
+.ov-vl-tag.src { background: #fef3c7; color: #92400e; }
+.ov-vl-tag.award { background: #dcfce7; color: #166534; }
+.ov-vl-tag.best { background: #e0f2fe; color: #075985; }
+.ov-vl-state { margin-left: 6px; font-style: italic; }
+.ov-vl-state.omitted { color: #b45309; }
+.ov-vl-state.declined { color: #b42318; }
+.ov-vl-lead { color: var(--muted); white-space: nowrap; }
+.proj-ov-grid tr.ov-vl .ov-m { font-weight: 500; }
+.proj-ov-grid tr.ov-vl .ov-pct { font-weight: 600; }
+/* 섹션 머리의 보기 전환 — 품목이 많은 딜은 견적 줄을 접어 품목만 훑는다. */
+.ov-vq-toggle { margin-left: auto; font: inherit; font-size: var(--ov-t-meta); color: var(--blue);
+  background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted;
+  text-underline-offset: 3px; }
+/* 견적에 안 들어간 품목 묶음 — 판매가가 없는 줄이라 머리를 한 단 옅게. */
+.ov-grp-unquoted .ov-grp-vessel { font-weight: 700; color: #6b7c93; }
 /* 견적 상세를 못 받았을 때의 한 줄 — 빈 QUOTE 칸이 "견적 없음"으로 읽히지 않게. */
 .ov-load-err { color: #b42318; font-weight: 600; }
 /* 문서번호 = 그 문서를 다루는 단계로 가는 링크. 색·굵기는 칸이 이미 단계를 알려주므로
