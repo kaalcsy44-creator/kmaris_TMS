@@ -610,6 +610,13 @@ def make_proforma_invoice_xlsx(
     return out.getvalue()
 
 
+def _roundup(x: float, digits: int) -> float:
+    """Excel ROUNDUP(x, digits) — 0 에서 먼 쪽으로 올림(양수만 쓴다)."""
+    import math
+    f = 10.0 ** digits
+    return math.ceil(x * f - 1e-9) / f
+
+
 def _numcell(value: Any):
     """숫자 칸 — 숫자로 읽히면 숫자로 넣어 Excel 이 계산·서식을 걸 수 있게 한다.
     빈 값과 0 은 빈 칸으로 둔다(서식에 0 이 줄줄이 찍히지 않게)."""
@@ -1170,7 +1177,19 @@ def make_quotation_costing_xlsx(
     # 원가(cost) 통화 → 판매 통화 환산계수. Margin 수식에서 통화가 섞일 때 사용.
     cost_cur = (data.get("cost_currency") or currency).upper()
     fx = _num(data.get("fx_rate")) or 0.0
-    if cost_cur == currency or fx <= 0:
+    # 원가가 EUR 처럼 USD·KRW 밖이면 견적에 저장한 교차환율(terms.cost_fx: 1 cur = usd USD)을
+    # 쓴다. 예전엔 계수 1.0 이라 EUR 원가를 USD 로 보고 U/Price 수식을 다시 계산해, 화면·PDF
+    # (저장된 단가 1,320)와 Excel(1,100)이 어긋났다.
+    cfx = (data.get("terms") or {}).get("cost_fx") or {}
+    try:
+        cross_usd = float(cfx.get("usd") or 0) if str(cfx.get("cur") or "").upper() == cost_cur else 0.0
+    except (TypeError, ValueError):
+        cross_usd = 0.0
+    if cost_cur == currency:
+        factor = 1.0
+    elif cost_cur not in ("USD", "KRW") and cross_usd > 0:
+        factor = cross_usd if currency == "USD" else (cross_usd * fx if currency == "KRW" and fx > 0 else 1.0)
+    elif fx <= 0:
         factor = 1.0
     elif cost_cur == "KRW" and currency == "USD":
         factor = 1.0 / fx
@@ -1238,14 +1257,22 @@ def make_quotation_costing_xlsx(
         else:
             csell = cost * factor
             margin_frac = (1 - csell / unit_price) if unit_price else 0.0
+        # U/Price = 원가(판매통화 환산) ÷ (1−마진), 올림 — 샘플 수식. 다만 수식이 내는 값이
+        # 저장된 단가와 다르면(편집기에서 단가를 직접 고친 줄 등) 저장값을 그대로 쓴다 —
+        # 고객에게 나간 PDF 와 이 시트의 금액이 달라서는 안 된다.
+        u_formula = f"=IF(OR(F{r}=0,H{r}>=1),0,ROUNDUP(F{r}*{fx_str}/(1-H{r}),{rd}))"
+        if cost and margin_frac < 1:
+            expect = _roundup(cost * factor / (1 - margin_frac), rd)
+            u_cell = u_formula if abs(expect - unit_price) < 0.005 or not unit_price else unit_price
+        else:
+            u_cell = u_formula if not unit_price else unit_price
         cells = {
             1: ri, 2: it.get("part_no", ""), 3: it.get("description", ""),
             4: qty, 5: it.get("unit", ""),
             6: cost,                                   # Cost U/P (입력, 원가통화)
             7: f"=D{r}*F{r}",                          # Cost Amount = Qty × Cost
             8: margin_frac,                            # Margin % (입력, 분수)
-            # U/Price = 원가(판매통화 환산) ÷ (1−마진), 100단위 올림 — 샘플 수식.
-            9: f"=IF(OR(F{r}=0,H{r}>=1),0,ROUNDUP(F{r}*{fx_str}/(1-H{r}),{rd}))",
+            9: u_cell,
             10: f"=D{r}*I{r}",                         # Amount = Qty × U/Price
             11: str(it.get("lead_time", "") or ""), 12: it.get("remark", ""),
         }
