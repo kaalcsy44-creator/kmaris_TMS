@@ -27,6 +27,7 @@ import {
   fetchVendorQuoteOverview,
   fetchQuotationOverview,
   fetchVendorRfqDetail,
+  matchVendorQuoteLines,
   updateVendorRfq,
   deleteVendorRfq,
   toggleVendorRfqDecline,
@@ -39,6 +40,7 @@ import {
   deleteCustomerQuotation,
   fetchAwardedItems,
 } from "@/lib/api";
+import type { LineOption } from "@/lib/api";
 import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { tr } from "@/lib/labels";
 import type {
@@ -1883,6 +1885,7 @@ function VendorQuoteDetailModal({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [showOcr, setShowOcr] = useState(false); // Auto-fill 도구 접힘/펼침(1단계와 동일 포맷)
+  const lm = useLineMatch(d?.rfq_id ?? null, d?.vendor_rfq_id ?? null);
   // 편집 권한 = 역할 권한(rfq.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
   const canEditThis = can("rfq", "edit") && canEditDeal(d?.assignee_id);
   // 읽기모드에선 권한이 있어도 폼을 잠근다(같은 DOM, 껍데기만 CSS 로 벗김).
@@ -1920,6 +1923,7 @@ function VendorQuoteDetailModal({
       let added = 0;
       let ok = 0;
       const newFiles: RfqSourceFile[] = [];
+      let next = items;
       for (const file of files) {
         const r = await parseVendorQuoteFile(file);
         const parsed = r.items || [];
@@ -1931,8 +1935,11 @@ function VendorQuoteDetailModal({
           item_count: parsed.length,
           at: nowLocalDt(),
         });
-        setItems((prev) => accumulateVendorItems(prev, parsed));
+        next = accumulateVendorItems(next, parsed);
+        setItems(next);
       }
+      // 읽어 온 줄은 이름(lid)이 없다 — 딜의 어느 품목 줄인지 바로 짝지어 둔다.
+      setItems(await lm.run(next));
       setOcrFiles((prev) => [...prev, ...newFiles]);
       setParseMsg(
         added
@@ -1971,6 +1978,8 @@ function VendorQuoteDetailModal({
             qty: it.qty,
             unit: it.unit,
             cost_price: 0,
+            // 물어본 줄의 이름을 그대로 — 떨어뜨리면 이 견적이 딜의 줄과 끊긴다.
+            lid: it.lid || "",
           })
         )
       );
@@ -2100,15 +2109,30 @@ function VendorQuoteDetailModal({
             />
           </div>
           </div>
+          {lm.note ? <div className="hint-inline line-match-note">{lm.note}</div> : null}
           <VendorQuoteItemEditor
             items={items}
             onChange={setItems}
             currency={currency}
             rate={fxRate ?? USD_KRW_RATE}
+            lines={lm.lines}
+            asked={lm.asked}
             headerActions={
-              <button className="btn sm" onClick={loadVendorRfqItems} disabled={busy}>
-                Load Vendor RFQ items
-              </button>
+              <>
+                {canWriteNow && items.some((it) => !isOptionRow(it) && !(it.lid || "").trim()) ? (
+                  <button
+                    className="btn sm"
+                    disabled={busy}
+                    title="Link lines without a project item automatically (part no. · serial · description)"
+                    onClick={async () => setItems(await lm.run(items))}
+                  >
+                    Auto-link lines
+                  </button>
+                ) : null}
+                <button className="btn sm" onClick={loadVendorRfqItems} disabled={busy}>
+                  Load Vendor RFQ items
+                </button>
+              </>
             }
           />
           <TermsEditor terms={terms} onChange={setTerms} />
@@ -3558,6 +3582,7 @@ function VendorQuoteAction({
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [showOcr, setShowOcr] = useState(false); // Auto-fill 도구 접힘/펼침(1단계와 동일 포맷)
+  const lm = useLineMatch(rfqId, vrfqId === "" ? null : vrfqId);
 
   useEffect(() => {
     if (vrfqId === "") {
@@ -3582,6 +3607,7 @@ function VendorQuoteAction({
       let added = 0;
       let ok = 0;
       const newFiles: RfqSourceFile[] = [];
+      let next = items;
       for (const file of files) {
         const r = await parseVendorQuoteFile(file);
         const parsed = r.items || [];
@@ -3593,8 +3619,11 @@ function VendorQuoteAction({
           item_count: parsed.length,
           at: nowLocalDt(),
         });
-        setItems((prev) => accumulateVendorItems(prev, parsed));
+        next = accumulateVendorItems(next, parsed);
+        setItems(next);
       }
+      // 읽어 온 줄은 이름(lid)이 없다 — 딜의 어느 품목 줄인지 바로 짝지어 둔다.
+      setItems(await lm.run(next));
       setOcrFiles((prev) => [...prev, ...newFiles]);
       setParseMsg(
         added
@@ -3680,7 +3709,10 @@ function VendorQuoteAction({
         ocrFiles,
         fxRate
       );
-      setMsg(`Registered — ${r.vendor_quote_no}`);
+      setMsg(
+        `Registered — ${r.vendor_quote_no}` +
+          (r.unmatched ? ` · ${r.unmatched} line(s) not linked to a project item — open the quote to pick` : "")
+      );
       setNo("");
       setCurrency(DEFAULT_COST_CURRENCY);
       setNotes("");
@@ -3783,11 +3815,14 @@ function VendorQuoteAction({
           </div>
           </div>
 
+          {lm.note ? <div className="hint-inline line-match-note">{lm.note}</div> : null}
           <VendorQuoteItemEditor
             items={items}
             onChange={setItems}
             currency={currency}
             rate={fxRate ?? USD_KRW_RATE}
+            lines={lm.lines}
+            asked={lm.asked}
             headerActions={
               <button
                 type="button"
@@ -3830,12 +3865,67 @@ function VendorQuoteAction({
   );
 }
 
+/**
+ * 받은 견적의 줄이 딜의 어느 줄(lid)인지 — 선택지와 자동 짝짓기.
+ *
+ * Auto-fill 로 읽은 줄은 이름이 없어 개요·소싱 보드에서 품번 추측으로만 이어졌고, 벤더가
+ * 품번을 달리 적으면 "안 받은 줄"로 보였다. 파일을 읽은 직후 서버에 한 번 물어 이름을
+ * 붙이고(확실한 것만), 못 붙인 줄은 편집기의 Line 칸에서 사람이 고른다.
+ * 저장할 때도 서버가 같은 규칙을 한 번 더 돌린다 — 여기는 저장 전에 보여 주려는 것.
+ */
+function useLineMatch(rfqId: number | null, vrfqId: number | null) {
+  const [lines, setLines] = useState<LineOption[]>([]);
+  const [asked, setAsked] = useState<string[]>([]);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    setNote(null);
+    if (!rfqId) {
+      setLines([]);
+      setAsked([]);
+      return;
+    }
+    let alive = true;
+    matchVendorQuoteLines(rfqId, vrfqId, [])
+      .then((r) => {
+        if (!alive) return;
+        setLines(r.lines);
+        setAsked(r.asked);
+      })
+      .catch(() => {});   // 선택지를 못 받아도 편집은 된다 — Line 칸만 비어 있다
+    return () => {
+      alive = false;
+    };
+  }, [rfqId, vrfqId]);
+
+  /** 이름 없는 줄에 이름을 붙인 사본. 실패하면 받은 그대로 돌려준다. */
+  async function run(items: VendorQuoteItem[]): Promise<VendorQuoteItem[]> {
+    if (!rfqId || !items.some((it) => !isOptionRow(it) && !(it.lid || "").trim())) return items;
+    try {
+      const r = await matchVendorQuoteLines(rfqId, vrfqId, items);
+      setLines(r.lines);
+      setAsked(r.asked);
+      setNote(
+        r.matches.length || r.unmatched.length
+          ? `Linked ${r.matches.length} line(s) to project items` +
+              (r.unmatched.length ? ` · ${r.unmatched.length} need a pick in the Line column` : "")
+          : null
+      );
+      return r.items.map(normalizeVendorQuoteItem);
+    } catch {
+      return items;
+    }
+  }
+  return { lines, asked, note, run };
+}
+
 function VendorQuoteItemEditor({
   items,
   onChange,
   currency = "USD",
   rate = USD_KRW_RATE,
   headerActions,
+  lines,
+  asked,
 }: {
   items: VendorQuoteItem[];
   onChange: (items: VendorQuoteItem[]) => void;
@@ -3843,6 +3933,10 @@ function VendorQuoteItemEditor({
   rate?: number;
   // 품목표 헤더의 "+ Add" 옆 보조 액션(예: "Load Vendor RFQ items").
   headerActions?: React.ReactNode;
+  /** 딜의 품목 줄 — 있으면 Line 칸이 드롭다운이 된다(useLineMatch). */
+  lines?: LineOption[];
+  /** 이 벤더에게 물어본 줄 — 드롭다운 앞쪽에 세운다. */
+  asked?: string[];
 }) {
   const blank = (): VendorQuoteItem => ({
     part_no: "",
@@ -3890,6 +3984,7 @@ function VendorQuoteItemEditor({
   const cols: ItemCol[] = [
     { key: "__sel", fixed: true },
     { key: "__seq", fixed: true, className: "seq" },
+    { key: "lid", label: "Line" },
     { key: "part_no", label: "Part No." },
     { key: "description", label: "Description", phone: true },
     { key: "type", label: "Type" },
@@ -3952,6 +4047,9 @@ function VendorQuoteItemEditor({
             <tr>
               <ItemSelectHeaderCell count={items.length} sel={sel} />
               <th className="seq">No.</th>
+              <ItemTh grid={grid} k="lid">
+                <span title="Which project item (stage-1 line) this line answers — linked automatically when possible">Line</span>
+              </ItemTh>
               <ItemTh grid={grid} k="part_no">Part No.</ItemTh>
               <ItemTh grid={grid} k="description">Description</ItemTh>
               <ItemTh grid={grid} k="type">Type</ItemTh>
@@ -3980,6 +4078,7 @@ function VendorQuoteItemEditor({
                   <tr className="ig-subtotal-row" key={`t${entry.block.headerIndex}`}>
                     <td />{/* 1 sel */}
                     <td />{/* 2 No. */}
+                    <td />{/* lid */}
                     <td />{/* 3 part_no */}
                     <td />{/* 4 description */}
                     <td />{/* 5 type */}
@@ -4016,6 +4115,14 @@ function VendorQuoteItemEditor({
               <tr key={i} className={itemRowClass(i)}>
                 <ItemSelectCell index={i} sel={sel} />
                 <td className="seq">{entry.seq}</td>
+                <td>
+                  <LinePick
+                    value={it.lid || ""}
+                    lines={lines}
+                    asked={asked}
+                    onChange={(lid) => onChange(items.map((x, idx) => (idx === i ? { ...x, lid } : x)))}
+                  />
+                </td>
                 <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} /></td>
@@ -4037,6 +4144,7 @@ function VendorQuoteItemEditor({
             <tr>
               <td></td>{/* 1 sel */}
               <td></td>{/* 2 No. */}
+              <td></td>{/* lid */}
               <td></td>{/* 3 part_no */}
               <td></td>{/* 4 description */}
               <td></td>{/* 5 type */}
@@ -4057,6 +4165,57 @@ function VendorQuoteItemEditor({
         </table>
       </div>
     </div>
+  );
+}
+
+/** 견적 한 줄이 딜의 어느 품목 줄인지 고르는 칸. 선택지가 없으면(옛 딜) 이름만 보인다.
+ *  비어 있으면 눈에 띄게 둔다 — 이 줄은 개요·소싱 보드에서 어느 품목에도 안 붙는다. */
+function LinePick({
+  value,
+  lines,
+  asked,
+  onChange,
+}: {
+  value: string;
+  lines?: LineOption[];
+  asked?: string[];
+  onChange: (lid: string) => void;
+}) {
+  if (!lines || lines.length === 0) return <span className="muted">{value || "—"}</span>;
+  const askedSet = new Set(asked ?? []);
+  const label = (l: LineOption) =>
+    `${l.lid} · ${[l.part_no, l.description].filter(Boolean).join(" · ").slice(0, 60)}`;
+  const first = lines.filter((l) => askedSet.has(l.lid));
+  const rest = lines.filter((l) => !askedSet.has(l.lid));
+  const cur = lines.find((l) => l.lid === value);
+  return (
+    <select
+      className={`line-pick${value ? "" : " unlinked"}`}
+      value={value}
+      title={cur ? label(cur) : value || "Not linked to a project item"}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">— link —</option>
+      {value && !cur ? <option value={value}>{value}</option> : null}
+      {first.length && rest.length ? (
+        <>
+          <optgroup label="Asked this vendor">
+            {first.map((l) => (
+              <option key={l.lid} value={l.lid}>{label(l)}</option>
+            ))}
+          </optgroup>
+          <optgroup label="Other project items">
+            {rest.map((l) => (
+              <option key={l.lid} value={l.lid}>{label(l)}</option>
+            ))}
+          </optgroup>
+        </>
+      ) : (
+        lines.map((l) => (
+          <option key={l.lid} value={l.lid}>{label(l)}</option>
+        ))
+      )}
+    </select>
   );
 }
 

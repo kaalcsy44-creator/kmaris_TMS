@@ -2237,8 +2237,8 @@ export function createVendorQuote(
   terms?: QuotationTerms,
   sourceFiles?: RfqSourceFile[],
   fxRate?: number | null
-): Promise<{ ok: boolean; vendor_quote_no: string }> {
-  return post<{ ok: boolean; vendor_quote_no: string }>(`/api/admin/rfq/${rfqId}/vendor-quote`, {
+): Promise<{ ok: boolean; vendor_quote_no: string } & StampResult> {
+  return post<{ ok: boolean; vendor_quote_no: string } & StampResult>(`/api/admin/rfq/${rfqId}/vendor-quote`, {
     vendor_rfq_id: vendorRfqId,
     vendor_quote_no: vendorQuoteNo,
     amount,
@@ -2253,6 +2253,29 @@ export function createVendorQuote(
     dropVendorQuoteCaches();
     return r;
   });
+}
+
+/** 저장 때 서버가 붙인 라인 ID 결과 — 몇 줄을 딜의 줄에 이었고, 몇 줄은 못 이었나. */
+export type StampResult = { stamped?: number; unmatched?: number };
+
+/** 라인 지정 드롭다운의 선택지 — 딜의 이름 붙은 품목 줄. */
+export type LineOption = { lid: string; part_no: string; description: string; qty: number };
+
+/** 받은 견적 줄을 딜의 줄(lid)에 자동으로 짝지어 본다(저장하지 않음). 저장할 때도
+ *  서버가 같은 규칙을 한 번 더 돌린다 — 이 호출은 저장 전에 화면에 보여 주려는 것. */
+export function matchVendorQuoteLines(
+  rfqId: number,
+  vendorRfqId: number | null,
+  items: VendorQuoteItem[]
+): Promise<{
+  items: VendorQuoteItem[];
+  matches: { index: number; lid: string; how: "part" | "code" | "desc" | "only" }[];
+  unmatched: number[];
+  lines: LineOption[];
+  /** 이 벤더에게 물어본 줄 — 드롭다운에서 앞에 세운다. */
+  asked: string[];
+}> {
+  return post(`/api/admin/rfq/${rfqId}/match-lines`, { vendor_rfq_id: vendorRfqId, items });
 }
 
 export function parseVendorQuoteFile(file: File): Promise<{ items: Partial<VendorQuoteItem>[] }> {
@@ -2420,8 +2443,8 @@ export function updateVendorQuote(
     fx_rate?: number | null;
     source_files?: RfqSourceFile[];
   }
-): Promise<{ ok: boolean; vendor_quote_no: string; currency?: string }> {
-  return put<{ ok: boolean; vendor_quote_no: string; currency?: string }>(
+): Promise<{ ok: boolean; vendor_quote_no: string; currency?: string } & StampResult> {
+  return put<{ ok: boolean; vendor_quote_no: string; currency?: string } & StampResult>(
     `/api/admin/vendor-quote/${id}`,
     body
   ).then((r) => {

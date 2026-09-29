@@ -42,12 +42,14 @@ from _core import (
 )
 from services.mail_compose import build_attachments, compose_body, compose_parts
 from services.vendor_match import suggest_vendors
+from pydantic import BaseModel
 from _core import (
     DealLineAward,
     LineAwardsSave,
     index_doc_by_line,
     is_option_row,
     line_id_of,
+    stamp_doc_line_ids,
     _base_meta,
     cached_aggregate,
     _date_iso,
@@ -775,6 +777,55 @@ def vendor_quote_parse(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Vendor 견적 파싱 실패: {exc}") from exc
 
 
+def _stamp_vq_items(s, rfq_id, vrfq, items) -> tuple[list, dict]:
+    """벤더 견적 줄에 딜의 라인 ID 를 붙인 사본과 그 결과(stamp_doc_line_ids)를 돌려준다.
+
+    후보는 이 벤더에게 물어본 줄(벤더 RFQ 의 lid) — 옛 벤더 RFQ 라 이름이 없으면 딜 전체.
+    JSON 열은 제자리 수정을 못 알아채므로 사본에 붙여 통째로 갈아 끼운다."""
+    out = [dict(it) if isinstance(it, dict) else it for it in (items or [])]
+    rfq = s.query(RFQ).filter_by(id=rfq_id).first() if rfq_id else None
+    if not rfq:
+        return out, {"matches": [], "unmatched": []}
+    scope = [line_id_of(it) for it in ((vrfq.items if vrfq else None) or []) if line_id_of(it)]
+    res = stamp_doc_line_ids(rfq.items or [], out, scope)
+    return out, res
+
+
+def _line_options(rfq) -> list[dict]:
+    """라인 지정 드롭다운용 — 딜의 이름 붙은 품목 줄."""
+    return [{
+        "lid": line_id_of(it),
+        "part_no": it.get("part_no") or "",
+        "description": it.get("description") or "",
+        "qty": it.get("qty", 1) or 1,
+    } for it in (rfq.items or [])
+        if isinstance(it, dict) and line_id_of(it) and not is_option_row(it)]
+
+
+class LineMatchIn(BaseModel):
+    vendor_rfq_id: int | None = None
+    items: list[dict] = []
+
+
+@app.post("/api/admin/rfq/{rfq_id}/match-lines", dependencies=[Depends(require_token)])
+def match_lines(rfq_id: int, body: LineMatchIn):
+    """저장 전 미리보기 — 받은 견적 줄이 딜의 어느 줄인지 자동으로 짝지어 돌려준다.
+    저장하지 않는다(저장 때도 같은 규칙이 한 번 더 돈다)."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        vrfq = (s.query(VendorRFQ).filter_by(id=body.vendor_rfq_id, rfq_id=rfq_id).first()
+                if body.vendor_rfq_id else None)
+        items, res = _stamp_vq_items(s, rfq_id, vrfq, body.items)
+        return {"items": items, **res, "lines": _line_options(rfq),
+                "asked": [line_id_of(it) for it in ((vrfq.items if vrfq else None) or [])
+                          if line_id_of(it)]}
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/rfq/{rfq_id}/vendor-quote",
           dependencies=[Depends(require_token)])
 def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
@@ -796,6 +847,9 @@ def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
         if not received_at:
             received_at = _date_iso(body.received_date) or _kst_iso(datetime.utcnow())
 
+        # 딜의 줄 이름(lid)을 붙여 둔다 — Auto-fill 로 읽은 줄은 이름이 없다.
+        items, stamp = _stamp_vq_items(s, rfq_id, vrfq, items)
+
         vq = VendorQuote(
             vendor_rfq_id=vrfq.id,
             vendor_quote_no=body.vendor_quote_no.strip(),
@@ -814,7 +868,8 @@ def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
         if rfq and rfq.status == RFQStatus.SOURCING:
             rfq.status = RFQStatus.QUOTING
         s.commit()
-        return {"ok": True, "vendor_quote_no": vq.vendor_quote_no}
+        return {"ok": True, "id": vq.id, "vendor_quote_no": vq.vendor_quote_no,
+                "stamped": len(stamp["matches"]), "unmatched": len(stamp["unmatched"])}
     finally:
         s.close()
 
@@ -916,8 +971,10 @@ def update_vendor_quote(vq_id: int, body: VendorQuoteUpdate):
             q.received_date = body.received_at.strip()[:10]
         elif body.received_date is not None:
             q.received_date = body.received_date.strip()
+        stamp = {"matches": [], "unmatched": []}
         if body.items is not None:
-            q.items = body.items
+            vr = s.query(VendorRFQ).filter_by(id=q.vendor_rfq_id).first()
+            q.items, stamp = _stamp_vq_items(s, vr.rfq_id if vr else None, vr, body.items)
         if body.terms is not None:
             q.terms = body.terms
         if body.fx_rate is not None:
@@ -929,7 +986,8 @@ def update_vendor_quote(vq_id: int, body: VendorQuoteUpdate):
             s.execute(text("SELECT currency FROM vendor_quotes WHERE id = :id"), {"id": vq_id}).scalar()
             or "USD"
         )
-        return {"ok": True, "vendor_quote_no": q.vendor_quote_no, "currency": saved_currency}
+        return {"ok": True, "vendor_quote_no": q.vendor_quote_no, "currency": saved_currency,
+                "stamped": len(stamp["matches"]), "unmatched": len(stamp["unmatched"])}
     finally:
         s.close()
 

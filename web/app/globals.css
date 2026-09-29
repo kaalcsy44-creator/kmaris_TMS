@@ -18481,3 +18481,22 @@ select.compose-tpl-version {
   justify-content: space-between;
   margin-top: 8px;
 }
+
+/* 벤더 견적 편집기 Line 칸 — 딜의 품목 줄(lid) 지정. 비어 있으면 어느 품목에도 안 붙는
+   줄이라 눈에 띄게 둔다(개요·소싱 보드에서 빠진다). */
+.line-pick {
+  width: 100%;
+  min-width: 72px;
+  max-width: 180px;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+.line-pick.unlinked {
+  border-color: var(--warn, #d97706);
+  background: color-mix(in srgb, var(--warn, #d97706) 8%, transparent);
+  color: var(--warn, #b45309);
+}
+.line-match-note {
+  display: block;
+  margin: 6px 0 2px;
+}

@@ -1653,6 +1653,125 @@ def index_doc_by_line(base_items, doc_items) -> dict[str, dict]:
     return out
 
 
+# ── 받아 온 문서의 줄에 라인 ID 붙이기 ──────────────────────────────────────────
+# 벤더 RFQ 에서 불러와 단가만 적은 견적은 lid 를 안고 온다. 그런데 벤더가 보낸 PDF·
+# 엑셀을 Auto-fill 로 읽은 견적은 lid 가 없다 — 그 줄은 그 뒤로 영영 품번 추측으로만
+# 딜의 줄과 이어지고, 벤더가 품번을 자기 식으로 적었으면(시리얼만, 괄호 속 코드만)
+# 아무 데도 안 이어져 개요·소싱 보드에서 "안 받은 줄"로 보였다.
+#
+# 여기서는 저장할 때 한 번, 딜의 줄 중 **이 벤더에게 물어본 줄** 안에서 짝을 찾아
+# 이름을 붙인다. 원칙은 하나 — 확실할 때만 붙인다. 틀리게 붙은 이름은 빈 이름보다
+# 나쁘다(엉뚱한 줄의 원가가 되어 마진을 속인다). 애매한 줄은 비워 두고 화면이 사람에게
+# 묻는다.
+
+_CHARGE_LINE = re.compile(
+    r"\b(FREIGHT|PACKING|PACKAGING|DELIVERY|HANDLING|INSURANCE|DISCOUNT|SHIPPING|COURIER|CHARGE)\b"
+    r"|운임|포장|배송|택배|할인", re.I)
+
+_SN_PREFIX = re.compile(r"^\s*(?:S\s*/\s*N|SERIAL(?:\s*NO\.?)?|P\s*/\s*N|PART\s*NO\.?)[\s:.#-]*", re.I)
+
+
+def _code_keys(*vals) -> set[str]:
+    """품번·시리얼 칸에서 뽑은 비교 열쇠(영숫자만, 대문자). 's/n 51680007' 은 접두어를
+    뗀 '51680007' 로도 잡힌다 — 벤더는 대개 숫자만 적어 보낸다."""
+    keys: set[str] = set()
+    for v in vals:
+        s = str(v or "").strip()
+        if not s:
+            continue
+        for cand in (s, _SN_PREFIX.sub("", s)):
+            k = re.sub(r"[^0-9A-Z]", "", cand.upper())
+            if len(k) >= 3:
+                keys.add(k)
+    return keys
+
+
+def _line_blob(it: dict) -> str:
+    return re.sub(r"[^0-9A-Z]", "", " ".join(
+        str(it.get(k) or "") for k in ("part_no", "description", "type", "serial_no")).upper())
+
+
+def _line_tokens(it: dict) -> set[str]:
+    return set(re.findall(r"[0-9A-Z]{2,}", " ".join(
+        str(it.get(k) or "") for k in ("description", "type")).upper()))
+
+
+def _line_match_score(d: dict, b: dict) -> tuple[float, str]:
+    """문서 줄 d 가 딜 줄 b 일 가능성(0~1)과 그 근거."""
+    dk = _code_keys(d.get("part_no"), d.get("serial_no"))
+    bk = _code_keys(b.get("part_no"), b.get("serial_no"))
+    if dk & bk:
+        return 1.0, "part"
+    # 한쪽 품번이 다른 쪽 어딘가(품명 괄호 속 등)에 통째로 들어 있다.
+    db, bb = _line_blob(d), _line_blob(b)
+    if any(len(k) >= 5 and k in bb for k in dk) or any(len(k) >= 5 and k in db for k in bk):
+        return 0.85, "code"
+    dt, bt = _line_tokens(d), _line_tokens(b)
+    if dt and bt:
+        return len(dt & bt) / len(dt | bt), "desc"
+    return 0.0, ""
+
+
+def stamp_doc_line_ids(base_items, doc_items, scope_lids=None) -> dict:
+    """문서 줄 중 lid 가 없는 줄에 딜의 lid 를 붙인다(제자리 수정).
+
+    `scope_lids` 는 이 벤더에게 물어본 줄의 이름들 — 주어지면 그 안에서만 찾는다(열일곱
+    줄 중 세 줄만 물었다면 답도 그 세 줄 중에 있다). 비었으면 딜의 모든 줄이 후보다.
+
+    붙이는 순서: 품번·시리얼 일치 → 코드 포함 → 품명 유사(분명히 앞설 때만) → 남은 게
+    양쪽 한 줄씩이면 그 둘. 이미 이름이 있는 줄은 건드리지 않는다(사람이 고른 값이다).
+
+    돌려주는 값: {"matches": [{"index", "lid", "how"}], "unmatched": [index, ...]}
+    index 는 doc_items 안의 위치."""
+    base = [b for b in (base_items or []) if isinstance(b, dict) and line_id_of(b)
+            and not is_option_row(b)]
+    doc = list(doc_items or [])
+    targets = [i for i, d in enumerate(doc)
+               if isinstance(d, dict) and not is_option_row(d) and not line_id_of(d)
+               and (str(d.get("part_no") or "").strip() or str(d.get("description") or "").strip())]
+    if not base or not targets:
+        return {"matches": [], "unmatched": targets if base else []}
+    scope = {str(x).strip() for x in (scope_lids or []) if str(x or "").strip()}
+    cands = [b for b in base if not scope or line_id_of(b) in scope]
+    claimed = {line_id_of(d) for d in doc if isinstance(d, dict) and line_id_of(d)}
+    free = {line_id_of(b): b for b in cands if line_id_of(b) not in claimed}
+
+    matches: list[dict] = []
+    left = set(targets)
+
+    def take(i: int, lid: str, how: str):
+        doc[i][LINE_ID_KEY] = lid
+        free.pop(lid, None)
+        left.discard(i)
+        matches.append({"index": i, "lid": lid, "how": how})
+
+    # 점수 높은 짝부터. 품명 유사(desc)는 그 줄의 차점과 넉넉히 벌어질 때만 믿는다 —
+    # "PUMP SEAL" 과 "PUMP SEAL KIT" 가 둘 다 후보인데 한쪽을 찍으면 절반은 틀린다.
+    pairs = []
+    for i in targets:
+        scored = sorted(((*_line_match_score(doc[i], b), lid) for lid, b in free.items()),
+                        key=lambda x: -x[0])
+        for rank, (score, how, lid) in enumerate(scored):
+            if how in ("part", "code"):
+                pairs.append((score, i, lid, how))
+            elif how == "desc" and rank == 0 and score >= 0.5:
+                runner = scored[1][0] if len(scored) > 1 else 0.0
+                if score - runner >= 0.2:
+                    pairs.append((score, i, lid, how))
+    for score, i, lid, how in sorted(pairs, key=lambda p: -p[0]):
+        if i in left and lid in free:
+            take(i, lid, how)
+
+    # 남은 게 양쪽 한 줄씩 — 물어본 줄 하나에 답한 줄 하나. 품번을 전혀 다르게 적어도
+    # 이 경우는 그 줄의 답이다. 다만 벤더가 붙여 보낸 운임·포장 줄은 품목이 아니다.
+    if len(left) == 1 and len(free) == 1:
+        i = next(iter(left))
+        if not _CHARGE_LINE.search(str(doc[i].get("description") or "")):
+            take(i, next(iter(free)), "only")
+
+    return {"matches": matches, "unmatched": sorted(left)}
+
+
 def _sanitize_vendor_rfq_items(raw) -> list[dict]:
     """발신 화면에서 넘어온 품목(선택·편집본)을 저장/문서용 dict 리스트로 정규화.
     빈 행(부품번호·품명·수량이 모두 비어 있음)은 제거한다.
