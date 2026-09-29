@@ -68,9 +68,10 @@ export default function VendorQuoteMergeModal({
     <Modal title="Load vendor quotes" onClose={onClose} maxWidth={860}>
       <div className="vqm">
         <p className="vqm-lead">
-          Pick every vendor quote whose prices belong in this quotation. A line that is already
-          priced here is left as it is, and a line still waiting for a price is filled in place —
-          so the same line never lands twice.
+          Pick every vendor quote whose prices belong in this quotation. A line still waiting for a
+          price is filled in place; a line another vendor already priced is left as it is. Lines
+          from the same vendor — alternatives, or a second quote with a different spec — are all
+          added.
         </p>
 
         <div className="table-wrap">

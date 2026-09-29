@@ -111,6 +111,19 @@ function isPlaceholder(it: CustomerQuoteItem): boolean {
   return !Number(it.src_vq_id || 0) && !Number(it.cost_price || 0);
 }
 
+const vendorKey = (v: string | undefined) => String(v || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+/** 이미 있는 줄(there)과 같은 품목인 들어오는 줄(it)이 같은 업체가 준 대안인가.
+ *  justLoaded: there 가 이번 불러오기에서 같은 견적서로부터 막 실린 줄. */
+function isSameVendorAlternative(there: CustomerQuoteItem, it: CustomerQuoteItem, justLoaded: boolean): boolean {
+  const a = Number(there.src_vq_id || 0);
+  const b = Number(it.src_vq_id || 0);
+  if (!a || !b) return false;
+  if (a === b) return justLoaded;   // 같은 견적서: 방금 실은 줄의 대안이면 싣고, 다시 부른 거면 건너뜀
+  const va = vendorKey(there.src_vendor);
+  return !!va && va === vendorKey(it.src_vendor);
+}
+
 /** 들어오는 줄을 현재 품목표에 싣는다.
  *
  * 같은 줄(같은 라인 ID·같은 품번)이 이미 있으면 — 그 줄이 값이 비어 있는 자리였으면
@@ -118,9 +131,11 @@ function isPlaceholder(it: CustomerQuoteItem): boolean {
  * 같은 줄에 값을 줬을 때 어디서 살지는 3단계 채택 매트릭스가 정할 일이지, 여기서 같은
  * 줄을 두 줄로 늘려 둘 일이 아니다. 새 줄은 표 뒤에 붙는다.
  *
- * 다만 **같은 견적서 안에서** 한 품목에 줄이 여럿이면(대안: "Low + High" / "Low only")
- * 모두 싣는다. 그건 두 곳이 겹친 게 아니라 한 곳이 고를 거리를 준 것이고, 건너뛰면
- * 견적서에 있는 줄이 말없이 사라진다(WELTEC 3줄 중 2줄만 실리던 것). */
+ * 다만 **같은 업체**가 준 줄끼리는 겹친 게 아니라 고를 거리다 — 모두 싣는다.
+ *   · 한 견적서 안의 대안 줄("Low + High" / "Low only") — WELTEC 3줄 중 2줄만 실리던 것
+ *   · 같은 업체의 다른 견적서(사양·조건이 다른 두 번째 견적) — DESMI 두 건 중 한 건만
+ *     실리던 것
+ * 같은 견적서를 다시 부른 경우(이미 실린 출처)만 건너뛴다 — 그건 같은 줄이 두 번 서는 것이다. */
 export function appendItems(
   existing: readonly CustomerQuoteItem[],
   incoming: readonly CustomerQuoteItem[]
@@ -146,7 +161,7 @@ export function appendItems(
     const key = lineKey(it);
     const hit = at.get(key);
     const src = Number(it.src_vq_id || 0);
-    if (hit !== undefined && src && freshSrc.get(hit) === src) {
+    if (hit !== undefined && src && isSameVendorAlternative(items[hit], it, freshSrc.get(hit) === src)) {
       freshSrc.set(items.length, src);
       items.push(it);
       added += 1;

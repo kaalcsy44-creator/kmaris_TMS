@@ -76,6 +76,23 @@ test("같은 견적서 안에서 한 품목에 줄이 여럿이면(대안) 모�
   assert.equal(r3.skipped.length, 1);
 });
 
+test("같은 업체의 다른 견적서가 같은 품목에 준 줄은 둘 다 싣는다 — 다시 부른 견적은 건너뛴다", () => {
+  // DESMI QD050405_1040255 가 이미 실려 있고, 사양이 다른 QD050405_1045439 를 더한다.
+  const first = [row({ lid: "L05", part_no: "3314-050HA2MC", cost_price: 712, src_vq_id: 50, src_vendor: "DESMI" })];
+  const second = [row({ lid: "L05", part_no: "3304-050RA2MC", cost_price: 809, src_vq_id: 49, src_vendor: "DESMI" })];
+  const r = appendItems(first, second);
+  assert.equal(r.items.length, 2);
+  assert.equal(r.skipped.length, 0);
+  // 같은 견적서를 다시 부르면 두 번 서지 않는다.
+  const again = appendItems(r.items, [row({ lid: "L05", part_no: "3314-050HA2MC", cost_price: 712, src_vq_id: 50, src_vendor: "DESMI" })]);
+  assert.equal(again.items.length, 2);
+  assert.equal(again.skipped.length, 1);
+  // 다른 업체는 여전히 건너뛴다.
+  const other = appendItems(r.items, [row({ lid: "L05", cost_price: 600, src_vq_id: 77, src_vendor: "Alfa Laval" })]);
+  assert.equal(other.items.length, 2);
+  assert.equal(other.skipped.length, 1);
+});
+
 test("값이 아직 안 들어온 자리는 제자리에서 채워진다(딜 품목으로 깔아 둔 빈 줄)", () => {
   const seeded = [
     row({ lid: "L01", part_no: "P-1", description: "PUMP", qty: 6 }),
