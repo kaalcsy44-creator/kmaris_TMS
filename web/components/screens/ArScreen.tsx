@@ -44,6 +44,7 @@ import {
   amountInputValue,
   parseAmountInput,
   itemRowClass,
+  MoveRowsButtons,
 } from "@/components/common/itemTable";
 import { useItemGrid, ItemGridStyle, ItemTh, ItemColsButton, type ItemCol } from "@/components/common/itemGrid";
 import { useEditGate } from "@/lib/viewMode";
@@ -994,6 +995,7 @@ function ApAddForm({
             </select>
             <ItemColsButton grid={grid} />
             <ExcludeSelectedButton items={form.items} sel={sel} onChange={setItems} />
+            <MoveRowsButtons items={form.items} sel={sel} onChange={setItems} />
             <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(form.items, sel, setItems)} />
             <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
           </div>
@@ -1737,6 +1739,7 @@ function ArAddForm({
             </select>
             <ItemColsButton grid={grid} />
             <ExcludeSelectedButton items={form.items} sel={sel} onChange={setItems} />
+            <MoveRowsButtons items={form.items} sel={sel} onChange={setItems} />
             <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(form.items, sel, setItems)} />
             <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
           </div>

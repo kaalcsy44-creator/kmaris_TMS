@@ -34,6 +34,7 @@ import {
   ItemSelectCell,
   ItemSelectHeaderCell,
   useRowSelection,
+  MoveRowsButtons,
 } from "@/components/common/itemTable";
 
 // 품목 표에서 폭 조절·숨김 가능한 컬럼(관리번호·순번 열 제외)과 셀 렌더 메타.
@@ -982,6 +983,7 @@ export default function NewRfqForm({
           <ColumnsButton cols={RFQ_ITEM_COLS} layout={itemCols} />
           <ItemGridHint />
           <CopyRowsButton grid={itemKeys} sel={itemSel} />
+          <MoveRowsButtons items={items} sel={itemSel} onChange={setItems} />
           <DeleteSelectedButton sel={itemSel} onDelete={deleteSelectedItems} />
           <button type="button" className="btn sm items-head-add" onClick={addItem}>+ Add</button>
         </div>

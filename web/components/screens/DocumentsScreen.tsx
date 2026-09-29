@@ -54,6 +54,7 @@ import {
   itemRowClass,
   parseAmountInput,
   useRowSelection,
+  MoveRowsButtons,
 } from "@/components/common/itemTable";
 import {
   useItemGrid,
@@ -2786,6 +2787,7 @@ function ItemEditor({
           <ItemGridHint />
           <CopyRowsButton grid={keys} sel={sel} />
           <ExcludeSelectedButton items={items} sel={sel} onChange={setItems} />
+          <MoveRowsButtons items={items} sel={sel} onChange={setItems} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, setItems)} />
           <button className="btn sm items-head-add" onClick={() => setItems([...items, blankItem(packing)])}>+ Add</button>
         </div>

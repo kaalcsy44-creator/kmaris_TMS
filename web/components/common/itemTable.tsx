@@ -18,6 +18,8 @@ export type RowSelection = {
    *  50줄짜리 문의에서 "탁구공 15개"를 하나씩 찍게 두면 아무도 일괄 편집을 쓰지 않는다. */
   toggleAt: (i: number, extend: boolean) => void;
   setAll: (count: number, on: boolean) => void;
+  /** 선택을 이 행들로 바꾼다 — 행을 옮긴 뒤 선택이 그 행을 따라가게. */
+  select: (indices: number[]) => void;
   clear: () => void;
   count: number;
 };
@@ -63,12 +65,14 @@ export function useRowSelection(rowCount?: number): RowSelection {
     setSelected(on ? new Set(Array.from({ length: count }, (_, i) => i)) : new Set());
   }, []);
   const clear = useCallback(() => setSelected(new Set()), []);
+  const select = useCallback((indices: number[]) => setSelected(new Set(indices)), []);
   return {
     selected,
     isSelected: (i: number) => selected.has(i),
     toggle,
     toggleAt,
     setAll,
+    select,
     clear,
     count: selected.size,
   };
@@ -99,6 +103,79 @@ export function insertOptionRow<T>(items: T[], sel: RowSelection, row: T, hasAny
     ? Math.min(...Array.from(sel.selected))
     : (list.length && !hasAnyOption ? 0 : list.length);
   return [...list.slice(0, at), row, ...list.slice(at)];
+}
+
+// ── 행 순서 바꾸기 ──────────────────────────────────────────────────────────
+// 고른 행을 한 칸 위/아래로. 여러 줄을 골랐으면 서로의 순서를 지킨 채 함께 움직이고,
+// 끝에 닿은 줄은 제자리에 선다(그 뒤를 따르는 고른 줄도 그 줄을 넘지 않는다).
+// 옵션 제목행도 한 줄로 취급한다 — 품목을 옵션 사이로 옮기는 것도 같은 손짓이다.
+
+/** 옮긴 뒤의 목록과, 고른 행들이 새로 선 자리. */
+export function moveSelectedRows<T>(items: T[], selected: Set<number>, dir: -1 | 1): { items: T[]; selected: number[] } {
+  const list = [...(items || [])];
+  const order = Array.from(selected).filter((i) => i >= 0 && i < list.length)
+    .sort((a, b) => (dir < 0 ? a - b : b - a));
+  const landed = new Set<number>();
+  for (const i of order) {
+    const j = i + dir;
+    // 끝이거나, 바로 옆이 (움직이지 못한) 고른 줄이면 제자리.
+    if (j < 0 || j >= list.length || landed.has(j)) {
+      landed.add(i);
+      continue;
+    }
+    [list[i], list[j]] = [list[j], list[i]];
+    landed.add(j);
+  }
+  return { items: list, selected: Array.from(landed) };
+}
+
+/** 품목표 머리의 ↑ ↓ — 체크박스로 고른 행을 한 칸씩 옮긴다. Alt+↑/↓ 도 같다(useItemGridKeys). */
+export function MoveRowsButtons<T>({
+  items,
+  sel,
+  onChange,
+  onMoved,
+}: {
+  items: T[];
+  sel: RowSelection;
+  onChange: (next: T[]) => void;
+  /** 행 자리에 매달린 화면 상태(펼친 상세 등)가 있으면 여기서 정리한다. */
+  onMoved?: () => void;
+}) {
+  const idx = Array.from(sel.selected);
+  const top = idx.length ? Math.min(...idx) : -1;
+  const bottom = idx.length ? Math.max(...idx) : -1;
+  const n = items?.length ?? 0;
+  const move = (dir: -1 | 1) => {
+    const r = moveSelectedRows(items, sel.selected, dir);
+    onChange(r.items);
+    sel.select(r.selected);
+    onMoved?.();
+  };
+  return (
+    <span className="move-btns">
+      <button
+        type="button"
+        className="btn sm"
+        disabled={sel.count === 0 || top <= 0}
+        onClick={() => move(-1)}
+        title="Move the selected row(s) up"
+        aria-label="Move up"
+      >
+        ↑
+      </button>
+      <button
+        type="button"
+        className="btn sm"
+        disabled={sel.count === 0 || bottom < 0 || bottom >= n - 1}
+        onClick={() => move(1)}
+        title="Move the selected row(s) down"
+        aria-label="Move down"
+      >
+        ↓
+      </button>
+    </span>
+  );
 }
 
 // 선택된 행을 제거하고 선택 상태를 초기화. onChange 로 남은 행을 전달한다.
@@ -708,6 +785,22 @@ export function useItemGridKeys<T extends object>({
       return;
     }
 
+    // Alt+↑/↓ — 행 순서 바꾸기. 체크한 행이 있고 지금 행이 그 안이면 그 묶음을, 아니면 지금
+    // 행 하나를 옮긴다. 커서는 옮겨 간 자리의 같은 칸을 따라간다.
+    if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      e.preventDefault();
+      const dir = e.key === "ArrowUp" ? -1 : 1;
+      const group = sel && sel.selected.has(row) ? sel.selected : new Set([row]);
+      const r = moveSelectedRows(items, group, dir);
+      if (r.items.every((it, i) => it === items[i])) return;   // 끝에 닿아 못 움직였다
+      onChange(r.items);
+      if (sel && sel.selected.has(row)) sel.select(r.selected);
+      const table = el.closest("table");
+      const landed = r.items[row + dir] === items[row] ? row + dir : row;
+      if (table) pending.current = { table, row: landed, col };
+      return;
+    }
+
     if (e.key === "Enter") {
       // Alt+Enter — 셀 안 줄바꿈(엑셀 동일). 브라우저 기본값에 기대지 않고 직접 끼워넣는다.
       if (e.altKey) {
@@ -784,6 +877,7 @@ export function ItemGridHint() {
         "Enter — 아래 셀로 이동 / Shift+Enter — 위로",
         "Alt+Enter — 셀 안에서 줄바꿈",
         "Ctrl+D — 바로 위 셀의 값을 그대로 내려받기",
+        "Alt+↑ / Alt+↓ — 행 순서 바꾸기(체크한 행이 있으면 그 묶음째). 머리의 ↑ ↓ 버튼도 같다",
         "Ctrl+Z — 되돌리기 / Ctrl+Y (Ctrl+Shift+Z) — 다시하기 (행 추가·삭제·붙여넣기 포함)",
         "방향키 — 셀 이동 / Tab — 다음 셀",
         "Copy — 선택한 행(없으면 전체)을 엑셀로 붙여넣게 복사",

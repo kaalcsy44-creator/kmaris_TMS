@@ -18585,3 +18585,7 @@ select.compose-tpl-version {
 .undo-root { display: contents; }
 .undo-btns { display: inline-flex; gap: 2px; }
 .undo-btns .btn { min-width: 28px; padding-left: 6px; padding-right: 6px; }
+
+/* 품목표 머리의 행 이동 ↑ ↓ — 되돌리기 버튼과 같은 꼴(좁은 정사각). */
+.move-btns { display: inline-flex; gap: 2px; }
+.move-btns .btn { min-width: 28px; padding-left: 6px; padding-right: 6px; }

@@ -130,6 +130,7 @@ import {
   withCross,
   usdKrwOf,
   type Fx,
+  MoveRowsButtons,
 } from "./common/itemTable";
 import FxRateControl, { FxMode } from "./common/FxRateControl";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, igSpan, type ItemCol } from "./common/itemGrid";
@@ -1693,6 +1694,7 @@ function VendorRfqItemEditor({
           <ItemColsButton grid={grid} />
           <ItemGridHint />
           <CopyRowsButton grid={keys} sel={sel} />
+          <MoveRowsButtons items={items} sel={sel} onChange={onChange} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button
             type="button"
@@ -3557,6 +3559,7 @@ function VendorRfqAction({
               <ItemColsButton grid={grid} />
               <ItemGridHint />
           <CopyRowsButton grid={itemKeys} sel={itemSel} />
+              <MoveRowsButtons items={rfqItems} sel={itemSel} onChange={setRfqItems} />
               <DeleteSelectedButton sel={itemSel} onDelete={deleteSelectedItems} />
               <button
                 type="button"
@@ -4201,6 +4204,7 @@ function VendorQuoteItemEditor({
           <ItemColsButton grid={grid} />
           <ItemGridHint />
           <CopyRowsButton grid={keys} sel={sel} />
+          <MoveRowsButtons items={items} sel={sel} onChange={onChange} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button
             type="button"
@@ -5536,6 +5540,7 @@ function CustomerQuoteItemEditor({
           <ItemColsButton grid={grid} />
           <ItemGridHint />
           <CopyRowsButton grid={keys} sel={sel} />
+          <MoveRowsButtons items={items} sel={sel} onChange={onChange} onMoved={() => setOpenRows(new Set())} />
           <DeleteSelectedButton
             sel={sel}
             onDelete={() => { deleteSelectedRows(items, sel, onChange); setOpenRows(new Set()); }}

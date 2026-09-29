@@ -62,6 +62,7 @@ import {
   parseAmountInput,
   StageTotal,
   useRowSelection,
+  MoveRowsButtons,
 } from "@/components/common/itemTable";
 import { OPTION_ROW_KIND, isOptionRow, countedItems, hasOptions, optionPlan } from "@/lib/quoteOptions";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, type ItemCol } from "@/components/common/itemGrid";
@@ -2248,6 +2249,7 @@ function ItemEditor({
           <ItemGridHint />
           <CopyRowsButton grid={keys} sel={sel} />
           <ExcludeSelectedButton items={items} sel={sel} onChange={onChange} />
+          <MoveRowsButtons items={items} sel={sel} onChange={onChange} />
           <DeleteSelectedButton sel={sel} onDelete={() => deleteSelectedRows(items, sel, onChange)} />
           <button
             type="button"
