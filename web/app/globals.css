@@ -18565,3 +18565,8 @@ select.compose-tpl-version {
   display: block;
   margin: 6px 0 2px;
 }
+
+/* 되돌리기 범위 표시용 틀 — 레이아웃에는 끼어들지 않는다(자식이 제자리에 선다). */
+.undo-root { display: contents; }
+.undo-btns { display: inline-flex; gap: 2px; }
+.undo-btns .btn { min-width: 28px; padding-left: 6px; padding-right: 6px; }

@@ -41,6 +41,7 @@ import {
   fetchAwardedItems,
 } from "@/lib/api";
 import type { LineOption } from "@/lib/api";
+import { confirmDiscard, useDirty, useEditHistory } from "./common/editHistory";
 import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { tr } from "@/lib/labels";
 import type {
@@ -1225,6 +1226,8 @@ function VendorRfqDetailModal({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [dlBusy, setDlBusy] = useState(false);
   const [dlErr, setDlErr] = useState<string | null>(null);
+  // 저장본을 불러온 횟수 — 되돌리기 이력과 "고친 게 있나"의 기준점이 여기서 새로 선다.
+  const [loadTick, setLoadTick] = useState(0);
 
   // 미지정이면 다음 자동채번 번호를 미리 불러와 토글에서 보여준다.
   useEffect(() => {
@@ -1247,9 +1250,27 @@ function VendorRfqDetailModal({
         const assigned = !!cur && cur !== "-";
         setNoMode(assigned ? "manual" : "auto");
         setManualNo(assigned ? cur : "");
+        setLoadTick((n) => n + 1);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
   }, [id]);
+
+  const readyKey = loadTick ? loadTick : null;
+  const hist = useEditHistory({ items }, (v) => setItems(v.items), readyKey);
+  const { dirty, markClean } = useDirty(
+    { vendorId, email, status, sentAt, items, noMode, manualNo },
+    readyKey
+  );
+  // Cancel = 편집을 버리고 저장본으로(예전 팝업 모드는 편집 표시만 끄고 고친 값은 남겼다).
+  function cancelEdit() {
+    if (!confirmDiscard(dirty)) return;
+    setErr(null);
+    loadDetail();
+    if (!inline) setEditing(false);
+  }
+  function guardedClose() {
+    if (confirmDiscard(dirty)) onClose();
+  }
 
   useEffect(() => { loadDetail(); }, [loadDetail]);
 
@@ -1282,6 +1303,7 @@ function VendorRfqDetailModal({
       sent_at: sentAt,
       items,
     });
+    markClean();
     // K-Maris RFQ No. 배정: manual 은 값이 바뀐 경우만, auto 는 미지정일 때만(오배정 방지).
     if (d?.rfq_id) {
       const cur = (d.kmaris_rfq_no || "").trim();
@@ -1318,11 +1340,17 @@ function VendorRfqDetailModal({
     return res.blob();
   }
 
+  // 문서는 저장본으로 만든다 — 고친 게 있으면 저장할지 묻는다(예전엔 말없이 저장했다).
   async function openPreview() {
+    const saveFirst = canWriteNow && dirty && window.confirm(
+      "Save your changes before previewing?\n" +
+      "OK = save and preview · Cancel = preview the last saved version\n\n" +
+      "미리보기 전에 변경 사항을 저장할까요? (취소 = 저장본으로 미리보기)"
+    );
     setDlBusy(true);
     setDlErr(null);
     try {
-      if (canEditThis) await persist();
+      if (saveFirst) await persist();
       const blob = await fetchDocBlob("pdf");
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(URL.createObjectURL(blob));
@@ -1371,7 +1399,7 @@ function VendorRfqDetailModal({
   }
 
   return (
-    <Modal title={d ? <ModalTitle label="Vendor RFQ" projectNo={d.project_no} /> : "Vendor RFQ details"} onClose={onClose} wide inline={inline}>
+    <Modal title={d ? <ModalTitle label="Vendor RFQ" projectNo={d.project_no} /> : "Vendor RFQ details"} onClose={guardedClose} wide inline={inline}>
       {!d ? (
         <div className="state">Loading details…</div>
       ) : (
@@ -1434,17 +1462,22 @@ function VendorRfqDetailModal({
                 </div>
               </div>
 
+              <div className="undo-root" data-undo-scope onKeyDownCapture={hist.onKeyDownCapture}>
               <VendorRfqItemEditor
                 items={items}
                 onChange={setItems}
                 headerActions={
-                  d.rfq_id ? (
-                    <button className="btn sm" onClick={loadCustomerRfqItems} disabled={busy} title="Load items from the Customer RFQ">
-                      Load customer RFQ
-                    </button>
-                  ) : null
+                  <>
+                    <UndoRedoButtons hist={hist} />
+                    {d.rfq_id ? (
+                      <button className="btn sm" onClick={loadCustomerRfqItems} disabled={busy} title="Load items from the Customer RFQ">
+                        Load customer RFQ
+                      </button>
+                    ) : null}
+                  </>
                 }
               />
+              </div>
             </fieldset>
           ) : (
             <>
@@ -1491,13 +1524,13 @@ function VendorRfqDetailModal({
             {/* inline 은 편집 화면이 기본(읽기전용 토글 없음) → Cancel=편집값 되돌리기(저장본 재로드). */}
             {canWriteNow && inline ? (
               <>
-                <button className="btn" onClick={() => { setErr(null); loadDetail(); }} disabled={busy}>Cancel</button>
-                <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+                <button className="btn" onClick={cancelEdit} disabled={busy}>Cancel</button>
+                <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : dirty ? "Save •" : "Save"}</button>
               </>
             ) : canWriteNow && showEdit ? (
               <>
-                <button className="btn" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
-                <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+                <button className="btn" onClick={cancelEdit} disabled={busy}>Cancel</button>
+                <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : dirty ? "Save •" : "Save"}</button>
               </>
             ) : canWriteNow ? (
               <button className="btn" onClick={() => setEditing(true)}>✎ Edit</button>
@@ -1886,6 +1919,9 @@ function VendorQuoteDetailModal({
   const [err, setErr] = useState<string | null>(null);
   const [showOcr, setShowOcr] = useState(false); // Auto-fill 도구 접힘/펼침(1단계와 동일 포맷)
   const lm = useLineMatch(d?.rfq_id ?? null, d?.vendor_rfq_id ?? null);
+  // 저장본을 다시 읽는 횟수(Cancel = 편집 버리기) · 다 불러와 편집을 시작할 수 있는 시점.
+  const [loadSeq, setLoadSeq] = useState(0);
+  const [readyKey, setReadyKey] = useState<string | null>(null);
   // 편집 권한 = 역할 권한(rfq.edit) × 담당(PIC) 소유권. 없으면 읽기전용.
   const canEditThis = can("rfq", "edit") && canEditDeal(d?.assignee_id);
   // 읽기모드에선 권한이 있어도 폼을 잠근다(같은 DOM, 껍데기만 CSS 로 벗김).
@@ -1893,6 +1929,8 @@ function VendorQuoteDetailModal({
   const canDeleteThis = can("rfq", "delete") && canEditDeal(d?.assignee_id);
 
   useEffect(() => {
+    setReadyKey(null);
+    const ready = `${id}:${loadSeq}`;
     fetchVendorQuoteDetail(id)
       .then((data) => {
         setD(data);
@@ -1907,9 +1945,28 @@ function VendorQuoteDetailModal({
         // Payment Terms 미입력이면 벤더 정보에 등록된 기본 결제조건으로 채운다(수정 가능).
         setTerms(withDefaultTerms(seedPaymentTerms(data.terms, data.default_payment_terms)));
         setParseMsg(null);
+        setErr(null);
+        setReadyKey(ready);
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
-  }, [id]);
+  }, [id, loadSeq]);
+
+  // 되돌리기 이력 — 품목표(행 추가·삭제·붙여넣기·Auto-fill 포함).
+  const hist = useEditHistory({ items }, (v) => setItems(v.items), readyKey);
+  const { dirty, markClean } = useDirty(
+    { no, receivedAt, currency, notes, items, terms, fxRate, ocrFiles },
+    readyKey
+  );
+  // Cancel = 편집을 버리고 저장본으로. 단계 화면(inline)에서는 창이 그대로라 다시 읽는다 —
+  // 예전엔 목록만 다시 읽어서 고친 값이 화면에 그대로 남았다(저장된 것처럼 보였다).
+  function cancelEdit() {
+    if (!confirmDiscard(dirty)) return;
+    if (inline) setLoadSeq((n) => n + 1);
+    else onClose();
+  }
+  function guardedClose() {
+    if (confirmDiscard(dirty)) onClose();
+  }
 
   // 복수 파일 지원 — 여러 개를 순차 분석해 아이템을 누적한다(같은 part_no 는 병합).
   async function parseFile(input: File | FileList | null) {
@@ -2005,6 +2062,7 @@ function VendorQuoteDetailModal({
         fx_rate: fxRate,
         source_files: ocrFiles,
       });
+      markClean();
       onChanged();
       onClose();
     } catch (e) {
@@ -2029,11 +2087,11 @@ function VendorQuoteDetailModal({
   }
 
   return (
-    <Modal title={d ? <ModalTitle label={`Vendor quote — ${d.vendor_quote_no}`} projectNo={d.project_no} /> : "Vendor quote details"} onClose={onClose} wide inline={inline}>
+    <Modal title={d ? <ModalTitle label={`Vendor quote — ${d.vendor_quote_no}`} projectNo={d.project_no} /> : "Vendor quote details"} onClose={guardedClose} wide inline={inline}>
       {!d ? (
         <div className="state">Loading details…</div>
       ) : (
-        <div onPaste={handlePaste}>
+        <div onPaste={handlePaste} onKeyDownCapture={hist.onKeyDownCapture}>
           {!inline ? (
             <>
               <div className="form-section-title">Project info</div>
@@ -2110,6 +2168,7 @@ function VendorQuoteDetailModal({
           </div>
           </div>
           {lm.note ? <div className="hint-inline line-match-note">{lm.note}</div> : null}
+          <div className="undo-root" data-undo-scope>
           <VendorQuoteItemEditor
             items={items}
             onChange={setItems}
@@ -2119,6 +2178,7 @@ function VendorQuoteDetailModal({
             asked={lm.asked}
             headerActions={
               <>
+                <UndoRedoButtons hist={hist} />
                 {canWriteNow && items.some((it) => !isOptionRow(it) && !(it.lid || "").trim()) ? (
                   <button
                     className="btn sm"
@@ -2135,6 +2195,7 @@ function VendorQuoteDetailModal({
               </>
             }
           />
+          </div>
           <TermsEditor terms={terms} onChange={setTerms} />
           <div className="form-field" style={{ marginTop: 8 }}>
             <label>Notes</label>
@@ -2158,10 +2219,19 @@ function VendorQuoteDetailModal({
             {/* Cancel 은 편집을 버리고 저장본을 다시 읽는 버튼이다 — 읽기모드엔 버릴 편집이
                 없으니 "취소할 게 있나?" 만 묻게 된다. 나가는 길은 단계 창의 × 다. */}
             {!readMode ? (
-              <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+              <button
+                className="btn"
+                onClick={cancelEdit}
+                disabled={busy}
+                title={dirty ? "Discard your changes and go back to the saved quote" : "Nothing changed since the last save"}
+              >
+                Cancel
+              </button>
             ) : null}
             {canWriteNow ? (
-              <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+              <button className="btn primary" onClick={save} disabled={busy}>
+                {busy ? "Saving…" : dirty ? "Save •" : "Save"}
+              </button>
             ) : null}
           </div>
           {err ? <span className="action-err">{err}</span> : null}
@@ -2335,8 +2405,13 @@ function CustomerQuoteDetailModal({
   // 읽기모드에선 권한이 있어도 폼을 잠근다(같은 DOM, 껍데기만 CSS 로 벗김).
   const { editing: canWriteNow, readMode, fieldsetProps } = useEditGate(canEditThis);
   const canDeleteThis = can("rfq", "delete") && canEditDeal(d?.assignee_id);
+  // 저장본을 다시 읽는 횟수(Cancel = 편집 버리기) · 다 불러와 편집을 시작할 수 있는 시점.
+  const [loadSeq, setLoadSeq] = useState(0);
+  const [readyKey, setReadyKey] = useState<string | null>(null);
 
   useEffect(() => {
+    setReadyKey(null);
+    const ready = `${id}:${loadSeq}`;
     fetchCustomerQuotationDetail(id)
       .then((data) => {
         setD(data);
@@ -2370,6 +2445,7 @@ function CustomerQuoteDetailModal({
         const legacyId = typeof data.vendor_quote_id === "number" ? data.vendor_quote_id : "";
         setImportVqId(legacyId);
         setMsg(null);
+        setErr(null);
         if (data.rfq_id) {
           fetchRfqVendorQuotes(data.rfq_id)
             .then((r) => {
@@ -2381,13 +2457,46 @@ function CustomerQuoteDetailModal({
               const cur = data.cost_currency || data.currency || DEFAULT_COST_CURRENCY;
               setItems((prev) => attributeLegacySource(prev, vq, cur).items);
             })
-            .catch(() => setVendorQuotes([]));
+            .catch(() => setVendorQuotes([]))
+            // 옛 링크를 줄로 옮겨 적은 뒤를 저장본으로 — 그 보정이 "고친 것"으로 잡히지 않게.
+            .finally(() => setReadyKey(ready));
         } else {
           setVendorQuotes([]);
+          setReadyKey(ready);
         }
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
-  }, [id]);
+  }, [id, loadSeq]);
+
+  // 되돌리기 이력 — 품목과 가격 설정을 한 덩어리로(통화만 되돌리고 품목을 두면 숫자가 틀어진다).
+  const hist = useEditHistory(
+    { items, costCurrency, currency, roundDigits, fxRate, defaultMargin, discountPct },
+    (v) => {
+      setItems(v.items);
+      setCostCurrency(v.costCurrency);
+      setCurrency(v.currency);
+      setRoundDigits(v.roundDigits);
+      setFxRate(v.fxRate);
+      setDefaultMargin(v.defaultMargin);
+      setDiscountPct(v.discountPct);
+    },
+    readyKey
+  );
+  // 저장본과 달라졌나 — 폼 전체. Cancel·닫기·미리보기가 이것을 보고 묻는다.
+  const { dirty, markClean } = useDirty(
+    { qtnNo, currency, costCurrency, roundDigits, defaultMargin, discountPct, fxRate, sentAt,
+      validUntil, status, terms, messrs, attn, refNo, items },
+    readyKey
+  );
+  // Cancel = 편집을 버리고 저장본으로. 단계 화면(inline)에서는 창이 그대로라 다시 읽는다.
+  function cancelEdit() {
+    if (!confirmDiscard(dirty)) return;
+    if (inline) setLoadSeq((n) => n + 1);
+    else onClose();
+  }
+  function guardedClose() {
+    if (confirmDiscard(dirty)) onClose();
+  }
 
   // 옵션(대안)이 있으면 대표(첫) 옵션만 센다 — 택일하는 안을 더한 금액은 팔 값이 아니다.
   const total = countedItems(items).reduce((sum, it) => sum + Number(it.amount || 0), 0);
@@ -2415,6 +2524,7 @@ function CustomerQuoteDetailModal({
       // 벤더 하나를 매다는 자리라 셋을 담을 수 없다. 셋은 줄에 적혀 있다).
       vendor_quote_id: docSourceId(items, importVqId === "" ? null : importVqId),
     });
+    markClean();
     onChanged();
   }
 
@@ -2448,12 +2558,19 @@ function CustomerQuoteDetailModal({
     URL.revokeObjectURL(objUrl);
   }
 
-  // Preview: 현재 편집값을 먼저 저장한 뒤 A4 PDF 를 받아 iframe 모달로 표시한다.
+  // Preview: 문서는 서버의 저장본으로 만든다. 예전엔 미리보기 전에 말없이 저장해서,
+  // 미리보기만 눌러 봐도 편집이 저장되고 Cancel 로 되돌릴 수 없었다 — 이제는 고친 게
+  // 있으면 저장할지 묻는다(아니오 = 저장본 그대로 미리보기).
   async function openPreview() {
+    const saveFirst = canWriteNow && dirty && window.confirm(
+      "Save your changes before previewing?\n" +
+      "OK = save and preview · Cancel = preview the last saved version\n\n" +
+      "미리보기 전에 변경 사항을 저장할까요? (취소 = 저장본으로 미리보기)"
+    );
     setDlBusy(true);
     setDlErr(null);
     try {
-      if (canEditThis) await persist();
+      if (saveFirst) await persist();
       const blob = await fetchDocBlob("pdf");
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(URL.createObjectURL(blob));
@@ -2588,11 +2705,11 @@ function CustomerQuoteDetailModal({
   }
 
   return (
-    <Modal title={d ? <ModalTitle label={`Quotation — ${d.qtn_no}`} projectNo={d.project_no} /> : "Quotation details"} onClose={onClose} wide inline={inline}>
+    <Modal title={d ? <ModalTitle label={`Quotation — ${d.qtn_no}`} projectNo={d.project_no} /> : "Quotation details"} onClose={guardedClose} wide inline={inline}>
       {!d ? (
         <div className="state">Loading details…</div>
       ) : (
-        <>
+        <div className="undo-root" onKeyDownCapture={hist.onKeyDownCapture}>
           {/* 4단계는 견적서(Detail·Email) 옆에 Proforma Invoice 한 칸이 더 붙는다 —
               선급금을 먼저 받아야 하는 거래에서 P/O 전에 내보내는 청구서다.
               7단계(Delivery Readiness)의 Proforma Invoice 와 같은 한 장이라,
@@ -2653,7 +2770,7 @@ function CustomerQuoteDetailModal({
           </div>
 
           {/* 가격 설정 — 아래 Item list 단가 계산에 직접 반영되므로 표에 붙인 밴드로 둔다. */}
-          <div className="pricing-band">
+          <div className="pricing-band" data-undo-scope>
             <span className="pb-title">Pricing</span>
             <div className="form-field">
               <label>Cost</label>
@@ -2729,6 +2846,7 @@ function CustomerQuoteDetailModal({
             onOpen={canWriteNow ? () => setMergeOpen(true) : undefined}
             disabled={!canWriteNow}
           />
+          <div className="undo-root" data-undo-scope>
           <CustomerQuoteItemEditor
             items={items}
             onChange={setItems}
@@ -2738,6 +2856,7 @@ function CustomerQuoteDetailModal({
             rate={effRate}
             headerActions={
               <>
+                <UndoRedoButtons hist={hist} />
                 {/* 받은 견적을 골라 싣는다 — 한 장이면 그 한 장, 여러 장이면 한 표로 합쳐. */}
                 <button className="btn sm" onClick={() => setMergeOpen(true)} disabled={vendorQuotes.length === 0}
                         title={vendorQuotes.length === 0
@@ -2753,6 +2872,7 @@ function CustomerQuoteDetailModal({
               </>
             }
           />
+          </div>
           {mergeOpen ? (
             <VendorQuoteMergeModal
               quotes={vendorQuotes}
@@ -2762,6 +2882,7 @@ function CustomerQuoteDetailModal({
               onClose={() => setMergeOpen(false)}
             />
           ) : null}
+          <div className="undo-root" data-undo-scope>
           <DiscountSummary
             subtotal={total}
             discountPct={discountPct}
@@ -2769,6 +2890,7 @@ function CustomerQuoteDetailModal({
             currency={currency}
             rate={effRate}
           />
+          </div>
           <TermsEditor terms={terms} onChange={setTerms} clauses />
           </fieldset>
           <div className="form-actions quote-editor-actions">
@@ -2787,10 +2909,19 @@ function CustomerQuoteDetailModal({
             {/* Cancel 은 편집을 버리고 저장본을 다시 읽는 버튼이다 — 읽기모드엔 버릴 편집이
                 없으니 "취소할 게 있나?" 만 묻게 된다. 나가는 길은 단계 창의 × 다. */}
             {!readMode ? (
-              <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+              <button
+                className="btn"
+                onClick={cancelEdit}
+                disabled={busy}
+                title={dirty ? "Discard your changes and go back to the saved quotation" : "Nothing changed since the last save"}
+              >
+                Cancel
+              </button>
             ) : null}
             {canWriteNow ? (
-              <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+              <button className="btn primary" onClick={save} disabled={busy}>
+                {busy ? "Saving…" : dirty ? "Save •" : "Save"}
+              </button>
             ) : null}
           </div>
           {msg ? <span className="action-ok">{msg}</span> : null}
@@ -2827,7 +2958,7 @@ function CustomerQuoteDetailModal({
             onSent={onChanged}
           />
           )}
-        </>
+        </div>
       )}
     </Modal>
   );
@@ -3862,6 +3993,20 @@ function VendorQuoteAction({
       {msg ? <span className="action-ok">{msg}</span> : null}
       {err ? <span className="action-err">{err}</span> : null}
     </div>
+  );
+}
+
+/** 품목표 머리의 되돌리기·다시하기 — 단축키(Ctrl+Z / Ctrl+Y)를 모르는 사람도 쓰게. */
+function UndoRedoButtons({ hist }: { hist: { undo: () => boolean; redo: () => boolean; canUndo: boolean; canRedo: boolean } }) {
+  return (
+    <span className="undo-btns">
+      <button type="button" className="btn sm" onClick={hist.undo} disabled={!hist.canUndo} title="Undo (Ctrl+Z)" aria-label="Undo">
+        ↶
+      </button>
+      <button type="button" className="btn sm" onClick={hist.redo} disabled={!hist.canRedo} title="Redo (Ctrl+Y)" aria-label="Redo">
+        ↷
+      </button>
+    </span>
   );
 }
 

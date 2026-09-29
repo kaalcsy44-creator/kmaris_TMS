@@ -744,6 +744,7 @@ export function ItemGridHint() {
         "Enter — 아래 셀로 이동 / Shift+Enter — 위로",
         "Alt+Enter — 셀 안에서 줄바꿈",
         "Ctrl+D — 바로 위 셀의 값을 그대로 내려받기",
+        "Ctrl+Z — 되돌리기 / Ctrl+Y (Ctrl+Shift+Z) — 다시하기 (행 추가·삭제·붙여넣기 포함)",
         "방향키 — 셀 이동 / Tab — 다음 셀",
         "Copy — 선택한 행(없으면 전체)을 엑셀로 붙여넣게 복사",
       ].join("\n")}
