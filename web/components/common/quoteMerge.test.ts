@@ -53,6 +53,29 @@ test("같은 줄에 값을 준 두 번째 벤더는 건너뛴다 — 한 줄은 
   assert.equal(r.items[0].src_vendor, "A");
 });
 
+test("같은 견적서 안에서 한 품목에 줄이 여럿이면(대안) 모두 싣는다", () => {
+  // WELTEC: L01 거버너 · L02 센서(Low + High) · L02 센서(Low only) — 3줄이 다 실려야 한다.
+  const q = [
+    row({ lid: "L01", part_no: "158510-64691", cost_price: 1300000, src_vq_id: 45 }),
+    row({ lid: "L02", part_no: "4611-041770", description: "SENSOR (Low + High)", cost_price: 650000, src_vq_id: 45 }),
+    row({ lid: "L02", part_no: "4611-041770", description: "SENSOR (Low only)", cost_price: 580000, src_vq_id: 45 }),
+  ];
+  const r = appendItems([], q);
+  assert.equal(r.items.length, 3);
+  assert.equal(r.skipped.length, 0);
+  // 깔아 둔 빈 자리가 있어도: 첫 줄은 자리를 채우고, 대안 줄은 그 뒤에 붙는다.
+  const seeded = [row({ lid: "L01", cost_price: 0 }), row({ lid: "L02", cost_price: 0 })];
+  const r2 = appendItems(seeded, q);
+  assert.equal(r2.items.length, 3);
+  assert.equal(r2.filled, 2);
+  assert.equal(r2.added, 1);
+  // 다른 곳 견적이 같은 품목에 값을 주면 여전히 건너뛴다(한 줄은 한 곳에서 산다).
+  const other = [row({ lid: "L02", part_no: "4611-041770", cost_price: 700000, src_vq_id: 99 })];
+  const r3 = appendItems(r.items, other);
+  assert.equal(r3.items.length, 3);
+  assert.equal(r3.skipped.length, 1);
+});
+
 test("값이 아직 안 들어온 자리는 제자리에서 채워진다(딜 품목으로 깔아 둔 빈 줄)", () => {
   const seeded = [
     row({ lid: "L01", part_no: "P-1", description: "PUMP", qty: 6 }),

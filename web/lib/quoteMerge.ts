@@ -116,7 +116,11 @@ function isPlaceholder(it: CustomerQuoteItem): boolean {
  * 같은 줄(같은 라인 ID·같은 품번)이 이미 있으면 — 그 줄이 값이 비어 있는 자리였으면
  * 제자리에서 채우고, 값이 이미 있으면 건너뛴다. 한 줄은 한 곳에서 사기 때문이다. 두 곳이
  * 같은 줄에 값을 줬을 때 어디서 살지는 3단계 채택 매트릭스가 정할 일이지, 여기서 같은
- * 줄을 두 줄로 늘려 둘 일이 아니다. 새 줄은 표 뒤에 붙는다. */
+ * 줄을 두 줄로 늘려 둘 일이 아니다. 새 줄은 표 뒤에 붙는다.
+ *
+ * 다만 **같은 견적서 안에서** 한 품목에 줄이 여럿이면(대안: "Low + High" / "Low only")
+ * 모두 싣는다. 그건 두 곳이 겹친 게 아니라 한 곳이 고를 거리를 준 것이고, 건너뛰면
+ * 견적서에 있는 줄이 말없이 사라진다(WELTEC 3줄 중 2줄만 실리던 것). */
 export function appendItems(
   existing: readonly CustomerQuoteItem[],
   incoming: readonly CustomerQuoteItem[]
@@ -132,6 +136,8 @@ export function appendItems(
   const skipped: string[] = [];
   let added = 0;
   let filled = 0;
+  // 이번에 새로 실은 줄의 출처 — 같은 견적서의 다음 줄이 같은 품목이면 그건 대안이다.
+  const freshSrc = new Map<number, number>();
   (incoming || []).forEach((it) => {
     if (isOptionRow(it)) {
       items.push(it);
@@ -139,6 +145,13 @@ export function appendItems(
     }
     const key = lineKey(it);
     const hit = at.get(key);
+    const src = Number(it.src_vq_id || 0);
+    if (hit !== undefined && src && freshSrc.get(hit) === src) {
+      freshSrc.set(items.length, src);
+      items.push(it);
+      added += 1;
+      return;
+    }
     if (hit !== undefined) {
       const there = items[hit];
       if (!isPlaceholder(there)) {
@@ -154,10 +167,12 @@ export function appendItems(
         lid: there.lid || it.lid || "",
         category_id: there.category_id ?? it.category_id ?? null,
       };
+      if (src) freshSrc.set(hit, src);
       filled += 1;
       return;
     }
     at.set(key, items.length);
+    if (src) freshSrc.set(items.length, src);
     items.push(it);
     added += 1;
   });
