@@ -2,7 +2,12 @@
 
 import type { QuotationTerms } from "@/lib/types";
 import { TERM_PRESETS, QUOTATION_CLAUSES, selectedClauseIds } from "@/lib/terms";
-import ComboBox from "./ComboBox";
+import { fetchTermValues } from "@/lib/api";
+import { useCachedData } from "@/lib/useCachedData";
+import ComboBox, { type ComboSection } from "./ComboBox";
+
+/** 목록에서 같은 값(공백·대소문자만 다른 것 포함)을 한 번만 — 앞에 나온 묶음이 이긴다. */
+const normTerm = (v: string) => v.split(/\s+/).join(" ").trim().toLowerCase();
 
 // 거래조건(Terms & Conditions) 편집기 — 견적(3·4단계)·오더(5)·발주서(6)에서 공통 사용.
 // 각 필드는 콤보박스(선택 + 자유입력). 필수 항목은 라벨에 " *" 를 붙여 표시한다.
@@ -15,12 +20,36 @@ export default function TermsEditor({
   onChange,
   clauses,
   omit,
+  suggest,
 }: {
   terms: QuotationTerms;
   onChange: (terms: QuotationTerms) => void;
   clauses?: boolean;
   omit?: (keyof QuotationTerms)[];
+  /** 이 딜에서 받은 견적들이 적어 보낸 값 — 목록 맨 앞 "From vendor quotes" 묶음에 선다. */
+  suggest?: Partial<Record<keyof QuotationTerms, string[]>>;
 }) {
+  // 지금까지 문서에 적힌 값 — 코드에 박힌 기본값만으로는 벤더가 보낸 "Shanghai, China" 가
+  // 목록에 없었다. 한 번 쓴 값은 다음부터 선택지에 선다(서버 집계, 저장하면 새로 받는다).
+  const { data: learned } = useCachedData("term-values", fetchTermValues, 10 * 60_000);
+
+  function sectionsFor(key: keyof QuotationTerms, presets: readonly string[]): ComboSection[] {
+    const seen = new Set<string>();
+    const take = (vals: readonly string[] | undefined) =>
+      (vals ?? []).filter((v) => {
+        const k = normTerm(v || "");
+        if (!k || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+    const groups: ComboSection[] = [
+      { label: "From vendor quotes", options: take(suggest?.[key]) },
+      { label: "Standard", options: take(presets) },
+      { label: "Used before", options: take(learned?.[key as string]) },
+    ];
+    return groups.filter((g) => g.options.length > 0);
+  }
+
   function field(key: keyof QuotationTerms, label: string) {
     if (omit?.includes(key)) return null;
     const presets = (TERM_PRESETS as Record<string, readonly string[]>)[key];
@@ -32,7 +61,7 @@ export default function TermsEditor({
           <ComboBox
             value={value}
             onChange={(v) => onChange({ ...terms, [key]: v })}
-            options={presets}
+            sections={sectionsFor(key, presets)}
           />
         ) : (
           <input value={value} onChange={(e) => onChange({ ...terms, [key]: e.target.value })} />

@@ -48,8 +48,8 @@ const FX_FALLBACK_UNKNOWN = {
   hint: "백엔드가 조회 실패 사유를 보내지 않는다 — API 서버가 아직 이전 버전일 수 있다.",
 };
 
-const fmtRate = (v: number) =>
-  v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtRate = (v: number, digits = 2) =>
+  v.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 /** 오늘 날짜 "YYYY-MM-DD" (로컬 기준). */
 function todayLocal(): string {
@@ -70,6 +70,7 @@ export default function FxRateControl({
   onMode,
   date,
   cur = "USD",
+  per = "KRW",
   label = "FX rate (1 USD = KRW)",
 }: {
   rate: number | null;
@@ -78,8 +79,13 @@ export default function FxRateControl({
   onMode: (m: FxMode) => void;
   date?: string; // YYYY-MM-DD 또는 datetime-local. 매매기준율 조회 기준일.
   cur?: string;
+  /** 무엇으로 잴까 — 기본 KRW(1 cur = ? KRW). "USD" 면 교차환율(1 EUR = ? USD): 같은 날
+   *  고시의 cur/KRW ÷ USD/KRW. 살 때·팔 때는 교차로 만들면 뜻이 흐려 기준율만 보인다. */
+  per?: string;
   label?: string;
 }) {
+  const cross = (per || "KRW").toUpperCase() !== "KRW";
+  const digits = cross ? 4 : 2;
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [ref, setRef] = useState<FxRef | null>(null);
@@ -87,35 +93,44 @@ export default function FxRateControl({
 
   const load = useCallback(
     (d: string) => {
-      lastFetch.current = `${d}|${cur}`;
+      lastFetch.current = `${d}|${cur}|${per}`;
       setLoading(true);
       setFailed(false);
-      fetchFxRate(d, cur)
-        .then((r) =>
-          setRef({
+      const perUnit = (r: { rate: number; unit?: number }) => r.rate / (r.unit && r.unit > 0 ? r.unit : 1);
+      (cross
+        ? Promise.all([fetchFxRate(d, cur), fetchFxRate(d, per)]).then(([a, b]) => ({
+            base: perUnit(a) / perUnit(b),
+            tts: null,
+            ttb: null,
+            date: a.date_used,
+            source: a.source === "exim" && b.source === "exim" ? ("exim" as const) : ("fixed" as const),
+            reason: a.reason || b.reason,
+          }))
+        : fetchFxRate(d, cur).then((r) => ({
             base: r.rate,
             tts: r.tts,
             ttb: r.ttb,
             date: r.date_used,
             source: r.source,
             reason: r.reason,
-          })
-        )
+          }))
+      )
+        .then((r) => setRef(r))
         .catch(() => {
           setRef(null);
           setFailed(true);
         })
         .finally(() => setLoading(false));
     },
-    [cur]
+    [cur, per, cross]
   );
 
   // 고시 조회는 모드와 무관하게 날짜·통화가 바뀔 때만.
   useEffect(() => {
     const d = (date || "").slice(0, 10);
-    if (lastFetch.current === `${d}|${cur}`) return;
+    if (lastFetch.current === `${d}|${cur}|${per}`) return;
     load(d);
-  }, [date, cur, load]);
+  }, [date, cur, per, load]);
 
   // 문서 날짜가 며칠 지난 뒤 열면 참고줄도 그날 고시에 머문다 — 지금 시세를 확인해야
   // 할 때 눌러 오늘자 고시로 갈아끼운다. 매매기준율 모드면 값도 함께 따라간다.
@@ -123,7 +138,8 @@ export default function FxRateControl({
 
   // 매매기준율 모드에서는 조회된 기준율을 그대로 값으로 쓴다.
   useEffect(() => {
-    if (mode === "auto" && ref) onRate(ref.base);
+    // 교차환율을 못 만들었으면(고시 실패) 값으로 쓰지 않는다 — 폴백 USD 환율끼리 나눈 1.0 은 거짓이다.
+    if (mode === "auto" && ref && (!cross || ref.source === "exim")) onRate(Number(ref.base.toFixed(digits)));
     // onRate 는 의존성에서 제외(부모 리렌더로 값이 되돌아가는 것을 막는다).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, ref]);
@@ -151,12 +167,12 @@ export default function FxRateControl({
         <input
           className="fx-rate-input"
           type="number"
-          step="0.01"
+          step={cross ? "0.0001" : "0.01"}
           inputMode="decimal"
           value={rate ?? ""}
           readOnly={mode === "auto"}
           onChange={(e) => onRate(e.target.value === "" ? null : Number(e.target.value))}
-          placeholder="1 USD = ? KRW"
+          placeholder={`1 ${cur} = ? ${per}`}
         />
       </div>
       {/* 그날 고시 참고 — 매매기준율/살 때(TTS)/팔 때(TTB). 직접입력 모드에서도 보인다. */}
@@ -170,14 +186,14 @@ export default function FxRateControl({
             const f = (ref.reason && FX_FALLBACK[ref.reason]) || FX_FALLBACK_UNKNOWN;
             return (
               <span className="fx-ref-note" title={f.hint}>
-                {f.text} · fixed {fmtRate(ref.base)}
+                {cross ? `${f.text} — enter the rate by hand` : `${f.text} · fixed ${fmtRate(ref.base)}`}
               </span>
             );
           })()
         ) : (
           <>
             <span className="fx-ref-item" title="매매기준율">
-              Base <b>{fmtRate(ref.base)}</b>
+              Base <b>{fmtRate(ref.base, digits)}</b>
             </span>
             {ref.tts ? (
               <span className="fx-ref-item" title="전신환 보내실 때 — 외화를 살 때">

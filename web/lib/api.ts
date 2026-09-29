@@ -2255,6 +2255,12 @@ export function createVendorQuote(
   });
 }
 
+/** 거래조건 칸의 선택지 — 지금까지 문서에 적힌 값(많이 쓴 순). 키: incoterms ·
+ *  delivery_place · payment_terms · packing · warranty. */
+export function fetchTermValues(): Promise<Record<string, string[]>> {
+  return get(`/api/admin/term-values`);
+}
+
 /** 저장 때 서버가 붙인 라인 ID 결과 — 몇 줄을 딜의 줄에 이었고, 몇 줄은 못 이었나. */
 export type StampResult = { stamped?: number; unmatched?: number };
 
@@ -2479,6 +2485,7 @@ export function deleteVendorQuote(
 function dropQuotationCaches() {
   invalidateCache("quotation:");
   invalidateCache("po:work-options");
+  invalidateCache("term-values");   // 새로 적은 Place 등이 다음 선택지에 서게
 }
 
 /** 벤더 견적을 고쳐 쓰면 개요가 읽는 수신 견적 목록도 버린다(번호·금액·통화가 바뀐다). */

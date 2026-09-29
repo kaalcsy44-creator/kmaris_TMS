@@ -140,8 +140,8 @@ export default function VendorQuoteMergeModal({
         ) : null}
         {chosen.length > 1 ? (
           <p className="vqm-note">
-            Terms (Incoterms · Payment · Delivery …) are not merged when you load more than one quote —
-            three vendors carry three sets of terms, and the customer must see one. Set them below.
+            Terms (Incoterms · Place · Payment …) are copied only where every picked quote says the
+            same thing — where they differ, the customer must still see one, so set those below.
           </p>
         ) : null}
         {blocked.length > 0 ? (

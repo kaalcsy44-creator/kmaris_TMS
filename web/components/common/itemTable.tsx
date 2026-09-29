@@ -325,19 +325,59 @@ export function roundUp(value: number, digits = 0): number {
 }
 
 // USD↔KRW 고정환율 변환. 그 외 통화쌍은 환율이 없으므로 원값을 그대로 둔다.
+/**
+ * 환산 기준. 숫자 하나면 1 USD = ? KRW(예전 그대로). USD·KRW 밖의 통화(EUR 원가 등)를
+ * 환산하려면 교차환율을 함께 준다 — cross[EUR] = 1 EUR 이 몇 USD 인가.
+ *
+ * 예전엔 숫자 하나만 받아 EUR→USD 를 1:1 로 돌려줬다: 712 EUR 가 712 USD 로 계산돼
+ * 단가와 마진이 통째로 틀렸다.
+ */
+export type FxRates = { usdKrw: number; cross?: Record<string, number> };
+export type Fx = number | FxRates;
+
+/** 환산 기준에서 USD↔KRW 환율만 — 이중통화 표기·환율 문구가 쓰는 값. */
+export function usdKrwOf(fx: Fx | undefined): number {
+  const r = typeof fx === "number" ? fx : fx?.usdKrw;
+  return r && Number.isFinite(r) && r > 0 ? r : USD_KRW_RATE;
+}
+
+/** USD↔KRW 환율에 원가 통화의 교차환율(1 cur = usd USD)을 얹는다. 값이 없으면 숫자 그대로. */
+export function withCross(usdKrw: number, cur: string | undefined, usd: number | null | undefined): Fx {
+  const c = (cur || "").toUpperCase();
+  if (!c || c === "USD" || c === "KRW" || !usd || !(usd > 0)) return usdKrw;
+  return { usdKrw, cross: { [c]: usd } };
+}
+
+/** 그 통화 1단위가 몇 KRW 인가. 모르면 null. */
+function krwPer(cur: string, fx: Fx): number | null {
+  if (cur === "KRW") return 1;
+  const r = usdKrwOf(fx);
+  if (cur === "USD") return r;
+  const usd = typeof fx === "number" ? undefined : fx.cross?.[cur];
+  return usd && usd > 0 ? usd * r : null;
+}
+
+/** 이 환산 기준으로 두 통화를 오갈 수 있나 — 같은 통화·USD↔KRW·교차환율이 있는 통화. */
+export function canConvert(from: string | undefined, to: string | undefined, fx: Fx = USD_KRW_RATE): boolean {
+  const f = (from || "USD").toUpperCase();
+  const t = (to || "USD").toUpperCase();
+  return f === t || (krwPer(f, fx) != null && krwPer(t, fx) != null);
+}
+
 export function convertCurrency(
   amount: number,
   from: string | undefined,
   to: string | undefined,
-  rate: number = USD_KRW_RATE
+  rate: Fx = USD_KRW_RATE
 ): number {
   const f = (from || "USD").toUpperCase();
   const t = (to || "USD").toUpperCase();
-  const r = rate && Number.isFinite(rate) && rate > 0 ? rate : USD_KRW_RATE;
   if (!Number.isFinite(amount) || f === t) return amount;
-  if (f === "KRW" && t === "USD") return amount / r;
-  if (f === "USD" && t === "KRW") return amount * r;
-  return amount;
+  const kf = krwPer(f, rate);
+  const kt = krwPer(t, rate);
+  // 환산할 길이 없으면 값을 그대로 둔다(예전 동작) — 부르는 쪽이 canConvert 로 먼저 막는다.
+  if (kf == null || kt == null || !kt) return amount;
+  return (amount * kf) / kt;
 }
 
 export function moneyText(value: number | string | null | undefined): string {

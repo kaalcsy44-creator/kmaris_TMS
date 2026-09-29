@@ -852,6 +852,8 @@ export type QuotationTerms = {
   vendor_quote_no?: string;
   /** 납기요청일 — 발주서 "Requested Delivery / Service Date"(YYYY-MM-DD). */
   requested_date?: string;
+  /** 고객 견적의 원가 교차환율 — 원가 통화가 USD·KRW 밖일 때 1 cur = usd USD. */
+  cost_fx?: { cur: string; usd: number; mode?: string };
 };
 
 // Customer Quotation 작성 시 공급사 견적에서 cost 불러오기용

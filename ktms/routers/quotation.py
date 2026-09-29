@@ -34,6 +34,7 @@ from _core import (
     _rfq_no_disp,
     _status_label,
     app,
+    cached_aggregate,
     is_option_row,
     build_payload,
     make_document_xlsx,
@@ -76,6 +77,40 @@ def fx_rate(date: str = "", cur: str = "USD"):
     return {"rate": USD_KRW_RATE, "unit": 1, "tts": None, "ttb": None, "reason": err,
             "date_used": "", "cur": (cur or "USD").upper(), "source": "fixed"}
 
+
+
+_TERM_VALUE_KEYS = ("incoterms", "delivery_place", "payment_terms", "packing", "warranty")
+
+
+@app.get("/api/admin/term-values", dependencies=[Depends(require_token)])
+@cached_aggregate()
+def term_values():
+    """거래조건 칸의 선택지 — 지금까지 문서(받은 견적·고객 견적·오더·발주서)에 적힌 값.
+
+    Place 선택지가 코드에 박힌 셋(Busan·Incheon·named port)뿐이라 벤더가 "Shanghai, China"
+    로 보내도 목록에 없었다. 한 번이라도 쓴 값은 다음부터 목록에 선다 — 많이 쓴 순.
+    """
+    from collections import Counter
+    from db.models import PurchaseOrder
+
+    counts = {k: Counter() for k in _TERM_VALUE_KEYS}
+    shown: dict[str, dict[str, str]] = {k: {} for k in _TERM_VALUE_KEYS}
+    s = get_session()
+    try:
+        for model in (VendorQuote, Quotation, Order, PurchaseOrder):
+            for (t,) in s.query(model.terms).all():
+                if not isinstance(t, dict):
+                    continue
+                for k in _TERM_VALUE_KEYS:
+                    v = " ".join(str(t.get(k) or "").split())
+                    if not v or len(v) > 120:
+                        continue
+                    key = v.casefold()   # 대소문자만 다른 것은 한 값 — 처음 본 표기로 보인다
+                    counts[k][key] += 1
+                    shown[k].setdefault(key, v)
+    finally:
+        s.close()
+    return {k: [shown[k][x] for x, _ in counts[k].most_common(40)] for k in _TERM_VALUE_KEYS}
 
 
 @app.get("/api/admin/quotation/next-no", dependencies=[Depends(require_token)])

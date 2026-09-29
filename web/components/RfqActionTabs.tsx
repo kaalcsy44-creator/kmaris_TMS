@@ -126,6 +126,10 @@ import {
   StageTotal,
   USD_KRW_RATE,
   useRowSelection,
+  canConvert,
+  withCross,
+  usdKrwOf,
+  type Fx,
 } from "./common/itemTable";
 import FxRateControl, { FxMode } from "./common/FxRateControl";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, igSpan, type ItemCol } from "./common/itemGrid";
@@ -2394,6 +2398,11 @@ function CustomerQuoteDetailModal({
   const [mergeOpen, setMergeOpen] = useState(false);
   const [defaultMargin, setDefaultMargin] = useState(DEFAULT_MARGIN_PCT);
   const effRate = fxRate ?? USD_KRW_RATE;
+  // 원가 통화가 EUR 처럼 USD·KRW 밖이면 교차환율(1 EUR = ? USD)이 따로 있어야 한다 —
+  // 예전엔 EUR→USD 를 1:1 로 환산했다(712 EUR = 712 USD). terms.cost_fx 에 저장한다.
+  const [costFx, setCostFx] = useState<{ cur: string; usd: number | null } | null>(null);
+  const [costFxMode, setCostFxMode] = useState<FxMode>("auto");
+  const fxAll = withCross(effRate, costFx?.cur, costFx?.usd);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -2436,6 +2445,11 @@ function CustomerQuoteDetailModal({
         setStatus(data.status || "");
         // Payment Terms 미입력이면 고객 정보에 등록된 기본 결제조건으로 채운다(수정 가능).
         setTerms(withDefaultTerms(seedPaymentTerms(data.terms, data.default_payment_terms)));
+        // 저장해 둔 원가 교차환율(1 EUR = ? USD). 저장본이 있으면 그 값 그대로(직접입력으로 연다) —
+        // 열 때마다 오늘 시세로 바뀌면 보낸 견적의 단가가 달라진다.
+        const cfx = (data.terms as { cost_fx?: { cur?: string; usd?: number } } | undefined)?.cost_fx;
+        setCostFx(cfx?.cur && cfx.usd ? { cur: cfx.cur.toUpperCase(), usd: Number(cfx.usd) } : null);
+        setCostFxMode(cfx?.cur && cfx.usd ? "manual" : "auto");
         // 헤더 문서 필드 — terms JSON 에 저장한 값(Attn 은 미입력 시 담당자 이름 시드).
         setMessrs((data.terms as { messrs?: string })?.messrs || "");
         setAttn((data.terms as { attn?: string })?.attn || "");
@@ -2470,9 +2484,10 @@ function CustomerQuoteDetailModal({
 
   // 되돌리기 이력 — 품목과 가격 설정을 한 덩어리로(통화만 되돌리고 품목을 두면 숫자가 틀어진다).
   const hist = useEditHistory(
-    { items, costCurrency, currency, roundDigits, fxRate, defaultMargin, discountPct },
+    { items, costCurrency, currency, roundDigits, fxRate, defaultMargin, discountPct, costFx },
     (v) => {
       setItems(v.items);
+      setCostFx(v.costFx);
       setCostCurrency(v.costCurrency);
       setCurrency(v.currency);
       setRoundDigits(v.roundDigits);
@@ -2485,7 +2500,7 @@ function CustomerQuoteDetailModal({
   // 저장본과 달라졌나 — 폼 전체. Cancel·닫기·미리보기가 이것을 보고 묻는다.
   const { dirty, markClean } = useDirty(
     { qtnNo, currency, costCurrency, roundDigits, defaultMargin, discountPct, fxRate, sentAt,
-      validUntil, status, terms, messrs, attn, refNo, items },
+      validUntil, status, terms, messrs, attn, refNo, items, costFx },
     readyKey
   );
   // Cancel = 편집을 버리고 저장본으로. 단계 화면(inline)에서는 창이 그대로라 다시 읽는다.
@@ -2503,7 +2518,7 @@ function CustomerQuoteDetailModal({
   const finalTotal = total * (1 - Number(discountPct || 0) / 100);
 
   // 헤더 문서 필드(Attn/Messrs/Ref No.)는 terms JSON 에 함께 저장한다.
-  const termsForSave = (): QuotationTerms => ({ ...terms, messrs, attn, ref_no: refNo });
+  const termsForSave = (): QuotationTerms => withCostFx({ ...terms, messrs, attn, ref_no: refNo }, costCurrency, costFx, costFxMode);
 
   // 현재 편집값을 서버에 저장(모달은 닫지 않음). save()·미리보기가 공유.
   async function persist() {
@@ -2617,7 +2632,7 @@ function CustomerQuoteDetailModal({
   function loadVendorQuotes(ids: number[], mode: MergeMode) {
     const r = mergeVendorQuotes({
       quotes: vendorQuotes, ids, mode, existing: items,
-      defaultMargin, saleCurrency: currency, costCurrency, roundDigits, rate: effRate,
+      defaultMargin, saleCurrency: currency, costCurrency, roundDigits, rate: fxAll,
     });
     setMergeOpen(false);
     if ("err" in r) {
@@ -2627,12 +2642,10 @@ function CustomerQuoteDetailModal({
     }
     setItems(r.items);
     setCostCurrency(r.costCurrency);
-    // 거래조건은 한 장만 골랐을 때에만 옮긴다 — 세 곳의 조건을 겹쳐 쓰면 마지막 한 곳의
-    // 조건이 고객에게 나가고, 어느 곳 것인지도 화면에 남지 않는다.
-    if (ids.length === 1) {
-      const vq = vendorQuotes.find((v) => v.id === ids[0]);
-      if (vq) setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
-    }
+    // 거래조건은 고른 견적들이 **모두 같게** 적은 것만 옮긴다(한 장이면 그 한 장 전부).
+    // 세 곳이 서로 다르게 적은 조건을 겹쳐 쓰면 마지막 한 곳의 조건이 고객에게 나간다 —
+    // 그런 칸은 그대로 두고, 같은 값(DESMI 두 건의 "Shanghai, China")은 옮긴다.
+    setTerms((prev) => mergeTermsFromVendorQuote(prev, agreedTerms(vendorQuotes.filter((v) => ids.includes(v.id)))));
     // 옛 문서 링크는 여기서 손을 뗀다 — 이제 출처는 줄에 적혀 있다.
     setImportVqId("");
     setMsg(r.msg);
@@ -2675,7 +2688,7 @@ function CustomerQuoteDetailModal({
       }
       const cur = aw.currencies[0] || costCurrency;
       setCostCurrency(cur);
-      setItems(customerQuoteItemsFromAwards(aw.items, defaultMargin, cur, currency, roundDigits, effRate));
+      setItems(customerQuoteItemsFromAwards(aw.items, defaultMargin, cur, currency, roundDigits, fxAll));
       const vendors = aw.by_vendor.map((g) => g.vendor).filter(Boolean);
       setMsg(
         `Loaded ${aw.items.length} awarded line(s) from ${vendors.length} vendor(s): ${vendors.join(" · ")}.`
@@ -2700,7 +2713,7 @@ function CustomerQuoteDetailModal({
       return;
     }
     setErr(null);
-    setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits, effRate));
+    setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits, fxAll));
     setMsg(pricingAppliedMsg(items.length, defaultMargin, costCurrency, currency, roundDigits, effRate));
   }
 
@@ -2776,29 +2789,49 @@ function CustomerQuoteDetailModal({
               <label>Cost</label>
               <CurrencyToggle
                 value={costCurrency}
-                onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency, roundDigits, effRate)); }}
+                onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency, roundDigits, fxAll)); }}
               />
             </div>
             <div className="form-field">
               <label>→ Sale</label>
               <CurrencyToggle
                 value={currency}
-                onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c, roundDigits, effRate)); }}
+                onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c, roundDigits, fxAll)); }}
               />
             </div>
             <FxRateControl
               label="FX 1 USD ="
               rate={fxRate}
-              onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, v ?? USD_KRW_RATE)); }}
+              onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, withCross(v ?? USD_KRW_RATE, costFx?.cur, costFx?.usd))); }}
               mode={fxMode}
               onMode={setFxMode}
               date={sentAt}
             />
+            {needsCross(costCurrency) ? (
+              <FxRateControl
+                label={`FX 1 ${costCurrency} = USD`}
+                cur={costCurrency}
+                per="USD"
+                rate={costFx?.cur === costCurrency.toUpperCase() ? costFx.usd : null}
+                onRate={(v) => {
+                  setCostFx({ cur: costCurrency.toUpperCase(), usd: v });
+                  setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, withCross(effRate, costCurrency, v)));
+                }}
+                mode={costFxMode}
+                onMode={setCostFxMode}
+                date={sentAt}
+              />
+            ) : null}
+            {needsCross(costCurrency) && !(costFx?.cur === costCurrency.toUpperCase() && costFx.usd) ? (
+              <span className="pb-warn">
+                Enter the {costCurrency} → USD rate — {costCurrency} costs are not converted until then.
+              </span>
+            ) : null}
             <div className="form-field">
               <label>Round up to</label>
               <RoundUnitSelect
                 value={roundDigits}
-                onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d, effRate)); }}
+                onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d, fxAll)); }}
               />
             </div>
             <div className="form-field">
@@ -2854,6 +2887,7 @@ function CustomerQuoteDetailModal({
             costCurrency={costCurrency}
             roundDigits={roundDigits}
             rate={effRate}
+            fx={fxAll}
             headerActions={
               <>
                 <UndoRedoButtons hist={hist} />
@@ -2891,7 +2925,7 @@ function CustomerQuoteDetailModal({
             rate={effRate}
           />
           </div>
-          <TermsEditor terms={terms} onChange={setTerms} clauses />
+          <TermsEditor terms={terms} onChange={setTerms} clauses suggest={vendorTermSuggest(vendorQuotes)} />
           </fieldset>
           <div className="form-actions quote-editor-actions">
             <button className="btn" onClick={openPreview} disabled={busy || dlBusy}>
@@ -4421,6 +4455,50 @@ function cleanVendorQuoteItems(items: VendorQuoteItem[]): VendorQuoteItem[] {
   return items.map(normalizeVendorQuoteItem).filter((it) => it.part_no || it.description);
 }
 
+/** 원가 통화가 USD·KRW 밖이라 교차환율(1 cur = ? USD)이 필요한가. */
+function needsCross(cur: string): boolean {
+  const c = (cur || "").toUpperCase();
+  return !!c && c !== "USD" && c !== "KRW";
+}
+
+/** 저장할 거래조건에 원가 교차환율을 싣는다(필요 없으면 뺀다). */
+function withCostFx(
+  terms: QuotationTerms,
+  costCur: string,
+  costFx: { cur: string; usd: number | null } | null,
+  mode: FxMode
+): QuotationTerms {
+  const { cost_fx: _drop, ...rest } = terms as QuotationTerms & { cost_fx?: unknown };
+  void _drop;
+  const c = (costCur || "").toUpperCase();
+  if (!needsCross(c) || !costFx || costFx.cur !== c || !costFx.usd) return rest;
+  return { ...rest, cost_fx: { cur: c, usd: costFx.usd, mode } };
+}
+
+/** 고른 견적들이 모두 같게 적은 거래조건만 — 값이 하나라도 다르거나 빈 곳이 있으면 뺀다. */
+function agreedTerms(quotes: VendorQuoteForImport[]): QuotationTerms | undefined {
+  if (quotes.length === 0) return undefined;
+  if (quotes.length === 1) return quotes[0].terms;
+  const out: Record<string, string> = {};
+  TERM_TEXT_KEYS.forEach((k) => {
+    const vals = quotes.map((q) => String((q.terms as Record<string, unknown> | undefined)?.[k] ?? "").trim());
+    if (vals[0] && vals.every((v) => v === vals[0])) out[k] = vals[0];
+  });
+  return out as QuotationTerms;
+}
+
+/** 이 딜에서 받은 견적들이 적어 보낸 거래조건 값 — Terms 편집기 목록 맨 앞에 세운다. */
+function vendorTermSuggest(quotes: VendorQuoteForImport[]): Partial<Record<keyof QuotationTerms, string[]>> {
+  const out: Partial<Record<keyof QuotationTerms, string[]>> = {};
+  (["incoterms", "delivery_place", "payment_terms", "packing", "warranty"] as const).forEach((k) => {
+    const vals = quotes
+      .map((q) => String((q.terms as Record<string, unknown> | undefined)?.[k] ?? "").trim())
+      .filter(Boolean);
+    out[k] = [...new Set(vals)];
+  });
+  return out;
+}
+
 // 공급사 견적의 거래조건을 고객 견적으로 병합 — 값이 있는 항목만 덮어써
 // 사용자가 이미 입력한 조건을 빈 값으로 지우지 않는다.
 function mergeTermsFromVendorQuote(
@@ -4449,7 +4527,7 @@ function customerQuoteItemsFromVendorQuote(
   defaultMargin: number,
   saleCurrency = "USD",
   roundDigits: number = DEFAULT_ROUND_DIGITS,
-  rate: number = USD_KRW_RATE,
+  rate: Fx = USD_KRW_RATE,
   costCurrency?: string
 ): CustomerQuoteItem[] {
   const costCur = (costCurrency || vq.currency || DEFAULT_COST_CURRENCY).toUpperCase();
@@ -4499,7 +4577,7 @@ function customerQuoteItemsFromAwards(
   costCurrency: string,
   saleCurrency: string,
   roundDigits: number,
-  rate: number
+  rate: Fx
 ): CustomerQuoteItem[] {
   return rows.map((it) => {
     const cost = Number(it.cost_price ?? 0);
@@ -4549,7 +4627,7 @@ function mergeVendorQuotes(opts: {
   saleCurrency: string;
   costCurrency: string;
   roundDigits: number;
-  rate: number;
+  rate: Fx;
 }): { items: CustomerQuoteItem[]; costCurrency: string; msg: string } | { err: string } {
   const picked = opts.quotes.filter((q) => opts.ids.includes(q.id));
   if (picked.length === 0) return { err: "Pick at least one vendor quote." };
@@ -4557,7 +4635,7 @@ function mergeVendorQuotes(opts: {
   const hadItems = base.some((it) => !isOptionRow(it));
   // 표가 비어 있으면 첫 견적의 통화를 문서의 원가 통화로 삼는다(예전 동작 그대로).
   const costCur = (hadItems ? opts.costCurrency : picked[0].currency || opts.costCurrency).toUpperCase();
-  const bad = picked.filter((q) => !costConvertible(q.currency, costCur));
+  const bad = picked.filter((q) => !canConvert(q.currency, costCur, opts.rate));
   if (bad.length > 0) {
     const who = bad.map((q) => `${q.vendor} (${(q.currency || "").toUpperCase()})`).join(", ");
     return {
@@ -4616,9 +4694,9 @@ function legacySourceChip(
 /** 원가 통화·환율이 바뀌었을 때 이 줄의 원가. 벤더가 준 숫자가 줄에 남아 있으면(src_cost)
  *  그 숫자에서 다시 환산한다 — 환산값을 다시 환산하면 오차가 쌓이고, 통화를 되돌려도
  *  원래 숫자로 돌아오지 않는다. 손으로 고친 원가는 앵커가 지워져 있어 그대로 둔다. */
-function anchoredCost(it: CustomerQuoteItem, costCur: string, rate: number): number {
+function anchoredCost(it: CustomerQuoteItem, costCur: string, rate: Fx): number {
   const srcCur = (it.src_currency || "").toUpperCase();
-  if (!srcCur || it.src_cost == null || !costConvertible(srcCur, costCur)) {
+  if (!srcCur || it.src_cost == null || !canConvert(srcCur, costCur, rate)) {
     return Number(it.cost_price || 0);
   }
   return convertCurrency(Number(it.src_cost), srcCur, costCur, rate);
@@ -4660,6 +4738,11 @@ function CustomerQuoteAction({
   const [validUntil, setValidUntil] = useState(() => defaultValidUntil(nowLocalDt()));
   const [defaultMargin, setDefaultMargin] = useState(DEFAULT_MARGIN_PCT);
   const effRate = fxRate ?? USD_KRW_RATE;
+  // 원가 통화가 EUR 처럼 USD·KRW 밖이면 교차환율(1 EUR = ? USD)이 따로 있어야 한다 —
+  // 예전엔 EUR→USD 를 1:1 로 환산했다(712 EUR = 712 USD). terms.cost_fx 에 저장한다.
+  const [costFx, setCostFx] = useState<{ cur: string; usd: number | null } | null>(null);
+  const [costFxMode, setCostFxMode] = useState<FxMode>("auto");
+  const fxAll = withCross(effRate, costFx?.cur, costFx?.usd);
   const [terms, setTerms] = useState<QuotationTerms>(
     withDefaultTerms({ remarks: "Bank charges outside Korea shall be borne by Buyer." })
   );
@@ -4723,7 +4806,7 @@ function CustomerQuoteAction({
   function loadVendorQuotes(ids: number[], mode: MergeMode) {
     const r = mergeVendorQuotes({
       quotes: vendorQuotes, ids, mode, existing: items,
-      defaultMargin, saleCurrency: currency, costCurrency, roundDigits, rate: effRate,
+      defaultMargin, saleCurrency: currency, costCurrency, roundDigits, rate: fxAll,
     });
     setMergeOpen(false);
     if ("err" in r) {
@@ -4733,12 +4816,10 @@ function CustomerQuoteAction({
     }
     setItems(r.items);
     setCostCurrency(r.costCurrency);
-    // 거래조건은 한 장만 골랐을 때에만 옮긴다 — 세 곳의 조건이 겹쳐 쓰이면 마지막 한 곳의
-    // 조건이 고객에게 나간다.
-    if (ids.length === 1) {
-      const vq = vendorQuotes.find((v) => v.id === ids[0]);
-      if (vq) setTerms((prev) => mergeTermsFromVendorQuote(prev, vq.terms));
-    }
+    // 거래조건은 고른 견적들이 **모두 같게** 적은 것만 옮긴다(한 장이면 그 한 장 전부).
+    // 세 곳이 서로 다르게 적은 조건을 겹쳐 쓰면 마지막 한 곳의 조건이 고객에게 나간다 —
+    // 그런 칸은 그대로 두고, 같은 값(DESMI 두 건의 "Shanghai, China")은 옮긴다.
+    setTerms((prev) => mergeTermsFromVendorQuote(prev, agreedTerms(vendorQuotes.filter((v) => ids.includes(v.id)))));
     setImportVqId("");
     setMsg(r.msg);
     // 품목은 들어왔지만 기본 마진이 계산 불가 값이면 단가가 원가 그대로 들어온다 — 알려 준다.
@@ -4776,7 +4857,7 @@ function CustomerQuoteAction({
       }
       const cur = aw.currencies[0] || costCurrency;
       setCostCurrency(cur);
-      setItems(customerQuoteItemsFromAwards(aw.items, defaultMargin, cur, currency, roundDigits, effRate));
+      setItems(customerQuoteItemsFromAwards(aw.items, defaultMargin, cur, currency, roundDigits, fxAll));
       const vendors = aw.by_vendor.map((g) => g.vendor).filter(Boolean);
       setMsg(
         `Loaded ${aw.items.length} awarded line(s) from ${vendors.length} vendor(s): ${vendors.join(" · ")}.`
@@ -4801,7 +4882,7 @@ function CustomerQuoteAction({
       return;
     }
     setErr(null);
-    setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits, effRate));
+    setItems((prev) => applyMarginToAll(prev, defaultMargin, costCurrency, currency, roundDigits, fxAll));
     setMsg(pricingAppliedMsg(items.length, defaultMargin, costCurrency, currency, roundDigits, effRate));
   }
 
@@ -4814,7 +4895,7 @@ function CustomerQuoteAction({
     setMsg(null);
     setErr(null);
     try {
-      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, terms, qtnNo, sentAt, costCurrency, roundDigits, discountPct, fxRate, docSourceId(items, importVqId === "" ? null : importVqId), defaultMargin);
+      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, withCostFx(terms, costCurrency, costFx, costFxMode), qtnNo, sentAt, costCurrency, roundDigits, discountPct, fxRate, docSourceId(items, importVqId === "" ? null : importVqId), defaultMargin);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
       setMsg(`Sent — ${r.qtn_no}`);
       onDone();
@@ -4918,29 +4999,49 @@ function CustomerQuoteAction({
           <label>Cost</label>
           <CurrencyToggle
             value={costCurrency}
-            onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency, roundDigits, effRate)); }}
+            onChange={(c) => { setCostCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, c, currency, roundDigits, fxAll)); }}
           />
         </div>
         <div className="form-field">
           <label>→ Sale</label>
           <CurrencyToggle
             value={currency}
-            onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c, roundDigits, effRate)); }}
+            onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c, roundDigits, fxAll)); }}
           />
         </div>
         <FxRateControl
           label="FX 1 USD ="
           rate={fxRate}
-          onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, v ?? USD_KRW_RATE)); }}
+          onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, withCross(v ?? USD_KRW_RATE, costFx?.cur, costFx?.usd))); }}
           mode={fxMode}
           onMode={setFxMode}
           date={sentAt}
         />
+        {needsCross(costCurrency) ? (
+          <FxRateControl
+            label={`FX 1 ${costCurrency} = USD`}
+            cur={costCurrency}
+            per="USD"
+            rate={costFx?.cur === costCurrency.toUpperCase() ? costFx.usd : null}
+            onRate={(v) => {
+              setCostFx({ cur: costCurrency.toUpperCase(), usd: v });
+              setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, withCross(effRate, costCurrency, v)));
+            }}
+            mode={costFxMode}
+            onMode={setCostFxMode}
+            date={sentAt}
+          />
+        ) : null}
+        {needsCross(costCurrency) && !(costFx?.cur === costCurrency.toUpperCase() && costFx.usd) ? (
+          <span className="pb-warn">
+            Enter the {costCurrency} → USD rate — {costCurrency} costs are not converted until then.
+          </span>
+        ) : null}
         <div className="form-field">
           <label>Round up to</label>
           <RoundUnitSelect
             value={roundDigits}
-            onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d, effRate)); }}
+            onChange={(d) => { setRoundDigits(d); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, d, fxAll)); }}
           />
         </div>
         <div className="form-field">
@@ -4992,6 +5093,7 @@ function CustomerQuoteAction({
         costCurrency={costCurrency}
         roundDigits={roundDigits}
         rate={effRate}
+        fx={fxAll}
         headerActions={
           <>
             {/* 받은 견적을 골라 싣는다 — 여러 장을 고르면 한 품목표로 합쳐 담는다. */}
@@ -5028,7 +5130,7 @@ function CustomerQuoteAction({
         rate={effRate}
       />
 
-      <TermsEditor terms={terms} onChange={setTerms} clauses />
+      <TermsEditor terms={terms} onChange={setTerms} clauses suggest={vendorTermSuggest(vendorQuotes)} />
 
       <div className="form-actions">
         <StageTotal label="Final" value={finalTotal} currency={currency} rate={effRate} />
@@ -5109,6 +5211,7 @@ function CustomerQuoteItemEditor({
   costCurrency = "USD",
   roundDigits = DEFAULT_ROUND_DIGITS,
   rate = USD_KRW_RATE,
+  fx,
   headerActions,
 }: {
   items: CustomerQuoteItem[];
@@ -5117,9 +5220,12 @@ function CustomerQuoteItemEditor({
   costCurrency?: string;
   roundDigits?: number;
   rate?: number;
+  /** 원가 환산 기준 — 원가가 EUR 처럼 USD·KRW 밖이면 교차환율을 함께 담는다. 없으면 rate. */
+  fx?: Fx;
   // 품목표 헤더의 "+ Add" 옆 보조 액션(예: "Load Vendor quote").
   headerActions?: React.ReactNode;
 }) {
+  const conv: Fx = fx ?? rate;
   function patch(i: number, key: keyof CustomerQuoteItem, value: string) {
     onChange(
       items.map((it, idx) => {
@@ -5139,7 +5245,7 @@ function CustomerQuoteItemEditor({
         // 놓는다(놓지 않으면 환율·원가 통화를 바꾸는 순간 손으로 고친 값이 되돌아간다).
         if (key === "cost_price") next.src_cost = null;
         if (key === "cost_price" || key === "margin_pct" || key === "qty") {
-          const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, roundDigits, rate);
+          const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, roundDigits, conv);
           next.unit_price = unit;
           next.amount = unit * Number(next.qty || 1);
         }
@@ -5202,7 +5308,7 @@ function CustomerQuoteItemEditor({
     const next: CustomerQuoteItem = { ...it };
     if (changed.includes("cost_price")) next.src_cost = null;   // 손으로 들어온 원가 — 앵커를 놓는다
     if (changed.includes("cost_price") || changed.includes("margin_pct") || changed.includes("qty")) {
-      const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, roundDigits, rate);
+      const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, roundDigits, conv);
       next.unit_price = unit;
       next.amount = unit * Number(next.qty || 1);
     }
@@ -5221,7 +5327,7 @@ function CustomerQuoteItemEditor({
   const sumsOf = (list: CustomerQuoteItem[]) => {
     const purchase = list.reduce((sum, it) => sum + Number(it.cost_price || 0) * Number(it.qty || 1), 0);
     const sales = list.reduce((sum, it) => sum + Number(it.amount || 0), 0);
-    const purchaseInSale = convertCurrency(purchase, costCurrency, currency, rate);
+    const purchaseInSale = convertCurrency(purchase, costCurrency, currency, conv);
     const profit = sales - purchaseInSale;
     return { purchase, sales, purchaseInSale, profit, marginPct: sales > 0 ? (profit / sales) * 100 : null };
   };
@@ -5726,7 +5832,7 @@ function calcUnitPrice(
   costCur?: string,
   saleCur?: string,
   roundDigits: number = DEFAULT_ROUND_DIGITS,
-  rate: number = USD_KRW_RATE
+  rate: Fx = USD_KRW_RATE
 ) {
   const converted = convertCurrency(cost, costCur, saleCur, rate);
   const denom = 1 - Number(marginPct || 0) / 100;
@@ -5781,7 +5887,7 @@ function applyMarginToAll(
   costCur: string,
   saleCur: string,
   roundDigits: number,
-  rate: number = USD_KRW_RATE
+  rate: Fx = USD_KRW_RATE
 ): CustomerQuoteItem[] {
   return items.map((it) => {
     if (isOptionRow(it)) return it;   // 옵션 구분행에는 단가·마진이 없다
@@ -5799,7 +5905,7 @@ function recomputeCustomerQuoteItems(
   costCur: string,
   saleCur: string,
   roundDigits: number = DEFAULT_ROUND_DIGITS,
-  rate: number = USD_KRW_RATE
+  rate: Fx = USD_KRW_RATE
 ): CustomerQuoteItem[] {
   return items.map((it) => {
     if (isOptionRow(it)) return it;   // 옵션 구분행에는 단가·마진이 없다
