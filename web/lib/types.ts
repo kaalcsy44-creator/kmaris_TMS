@@ -1975,6 +1975,34 @@ export type PipelineRow = {
     margin_pct: number | null;
     lowest: boolean;            // 가장 싼 줄 — 딜의 매입(purchase_total)·마진이 이 값이다
   }[];
+  /** 품목(1단계 RFQ 줄) 순서대로 받은 견적·판매가 — 발주 전이고 받은 견적이 있을 때.
+   *  있으면 목록 금액 칸이 업체별 총액(quote_lines) 대신 이것을 그린다. 업체마다 다른
+   *  품목을 견적한 딜에서 총액끼리 견주면 뜻이 없어서다. total 은 고객 견적에 들어간
+   *  품목만, 품목마다 원가 출처(없으면 최저가) 견적을 더한 값. */
+  item_quotes?: {
+    total: { purchase: string; sales: string; margin: string; margin_pct: number | null } | null;
+    items: {
+      no: number;
+      lid: string;
+      part_no: string;
+      description: string;
+      qty: number;
+      unit: string;
+      /** 이 품목을 물어본 곳 수 — 견적이 없을 때 "물어봤는데 안 왔나"를 가른다. */
+      asked: number;
+      /** 고객 견적의 이 품목 판매 금액(이중통화). 견적에 안 넣었으면 "". */
+      sales: string;
+      quotes: {
+        vendor: string;
+        quote_no: string;
+        purchase: string;       // 벤더 단가 × RFQ 수량
+        margin: string;         // 이 품목 판매가 − 매입. 판매가 없으면 ""
+        margin_pct: number | null;
+        src: boolean;           // 고객 견적이 원가로 쓴 견적
+        lowest: boolean;        // 둘 이상 받았을 때 가장 싼 곳
+      }[];
+    }[];
+  } | null;
   vessels: string;            // 오더별 선박 목록(줄바꿈). 단일이면 1개
   customer_po_nos: string;    // 고객 P/O No. 목록(줄바꿈)
   order_amount: string;

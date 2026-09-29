@@ -1997,16 +1997,20 @@ function MoneyLines({
   sales,
   margin,
   pct,
+  single = false,
 }: {
   purchase?: string | null;
   sales?: string | null;
   margin?: string | null;
   pct?: number | null;
+  /** 첫 통화 한 줄만 — 품목별 줄처럼 여럿이 쌓이는 자리에서 환산 줄을 뺀다. */
+  single?: boolean;
 }) {
   const pur = amountByCur(purchase);
   const sal = amountByCur(sales);
   const mar = amountByCur(margin);
-  const curs = currencyOrder(sal, pur, mar);
+  const all = currencyOrder(sal, pur, mar);
+  const curs = single ? all.slice(0, 1) : all;
   if (curs.length === 0) return <span className="muted">—</span>;
   return (
     <>
@@ -2019,6 +2023,76 @@ function MoneyLines({
         </div>
       ))}
     </>
+  );
+}
+
+/**
+ * 품목별 금액 — 1단계 RFQ 에 적힌 품목 수와 순서 그대로, 품목마다 받은 견적을 한 줄씩.
+ *
+ * 업체별 견적서 총액을 나란히 세우던 목록은 업체마다 다른 품목을 견적한 딜에서 뜻을
+ * 잃었다(커플링 한 줄만 견적한 곳이 "lowest"가 되고 마진이 97.9% 로 찍혔다). 견줄 것은
+ * 같은 품목의 값끼리다. 판매가는 그 품목 머리 줄에, 마진은 업체 줄마다 "그 판매가에
+ * 이 원가"로 — 고객 견적이 원가로 쓴 곳은 ★. 맨 위 Total 은 고객 견적에 들어간 품목만.
+ */
+function ItemAmounts({ data }: { data: NonNullable<PipelineRow["item_quotes"]> }) {
+  const t = data.total;
+  return (
+    <td className="pl-td-amounts pl-amt-items">
+      {t ? (
+        <div className="pl-amt-group">
+          <div className="pl-amt-vend low" title="Quoted items only — each item's cost-source quote (or the lowest)">
+            <span className="pl-amt-vend-name">Total · quoted items</span>
+          </div>
+          <MoneyLines purchase={t.purchase} sales={t.sales} margin={t.margin} pct={t.margin_pct} />
+        </div>
+      ) : null}
+      {data.items.map((it) => {
+        const name = it.description || it.part_no || "—";
+        return (
+          <div key={it.lid} className="pl-amt-item">
+            <div className="pl-amt-item-head" title={[it.part_no, it.description].filter(Boolean).join(" · ")}>
+              <span className="pl-amt-item-no">{it.no}</span>
+              <span className="pl-amt-item-name">{name}</span>
+              <span className="pl-amt-item-qty">
+                ×{Number(it.qty)}
+                {it.unit ? ` ${it.unit}` : ""}
+              </span>
+            </div>
+            {it.quotes.length === 0 ? (
+              <>
+                {it.sales ? <MoneyLines sales={it.sales} single /> : null}
+                <div className="pl-amt-none">
+                  {it.asked ? `asked ${it.asked} · no quote yet` : "not asked yet"}
+                </div>
+              </>
+            ) : (
+              it.quotes.map((q, i) => (
+                <div key={i} className="pl-amt-q">
+                  <div
+                    className={`pl-amt-vend${q.src ? " low" : ""}`}
+                    title={q.quote_no ? `${q.vendor} · quote ${q.quote_no}` : q.vendor}
+                  >
+                    {q.src ? <span className="pl-amt-star" aria-label="cost source">★</span> : null}
+                    <span className="pl-amt-vend-name">{q.vendor}</span>
+                    {q.lowest ? (
+                      <span className="pl-amt-low" title="Lowest quote for this item">lowest</span>
+                    ) : null}
+                  </div>
+                  {/* 판매가는 품목당 하나라 첫 줄에만 — 줄마다 찍으면 같은 숫자가 쌓인다. */}
+                  <MoneyLines
+                    purchase={q.purchase}
+                    sales={i === 0 ? it.sales : ""}
+                    margin={q.margin}
+                    pct={q.margin_pct}
+                    single
+                  />
+                </div>
+              ))
+            )}
+          </div>
+        );
+      })}
+    </td>
   );
 }
 
@@ -2159,6 +2233,8 @@ function PipelineCell({
         </td>
       );
     case "amounts": {
+      // 발주 전, 받은 견적이 있으면 품목(RFQ 줄) 순서대로 — 품목마다 받은 견적을 그 밑에.
+      if (r.item_quotes?.items.length) return <ItemAmounts data={r.item_quotes} />;
       // 두 곳 이상에서 견적을 받은 딜(발주 전)은 곳마다 한 덩이 — 값이 다를 것이 뻔한데
       // 목록이 가장 싼 것 하나로 접어 버리면 얼마 차이인지 보려고 딜을 열어야 한다.
       const lines = r.quote_lines ?? [];

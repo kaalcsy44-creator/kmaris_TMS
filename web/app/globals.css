@@ -3766,6 +3766,54 @@ table.pipeline td.pl-td-amounts .pl-amt-low {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+/* 품목별 금액 — 품목 머리(번호·이름·수량) 한 줄, 그 밑에 받은 견적마다 이름 + 금액 한 줄.
+   품목 사이는 점선으로 가른다. 환산 통화 줄은 빼서(single) 품목이 많아도 덜 길게. */
+table.pipeline td.pl-td-amounts .pl-amt-item {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line, #e3e8f0);
+}
+table.pipeline td.pl-td-amounts .pl-amt-group + .pl-amt-item { margin-top: 10px; }
+table.pipeline td.pl-td-amounts .pl-amt-item:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+table.pipeline td.pl-td-amounts .pl-amt-item-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 700;
+  color: var(--navy);
+  text-align: left;
+}
+table.pipeline td.pl-td-amounts .pl-amt-item-no {
+  flex: none;
+  min-width: 16px;
+  color: var(--muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+table.pipeline td.pl-td-amounts .pl-amt-item-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+table.pipeline td.pl-td-amounts .pl-amt-item-qty {
+  flex: none;
+  color: var(--muted);
+  font-weight: 500;
+}
+table.pipeline td.pl-td-amounts .pl-amt-q { margin-top: 3px; }
+table.pipeline td.pl-td-amounts .pl-amt-q .pl-amt-vend { padding-left: 22px; margin-bottom: 0; }
+table.pipeline td.pl-td-amounts .pl-amt-q .pl-amt-row { margin-top: 0; }
+table.pipeline td.pl-td-amounts .pl-amt-star { flex: none; color: #d97706; }
+table.pipeline td.pl-td-amounts .pl-amt-none {
+  padding-left: 22px;
+  font-size: 10px;
+  color: var(--muted);
+  font-style: italic;
+  text-align: left;
+}
 /* 종결 프로젝트 — 목록에 남기되(Show closed) 눈에 먼저 걸리지 않게. */
 table.pipeline tbody tr.closed td {
   color: var(--muted);
