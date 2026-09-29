@@ -2042,6 +2042,11 @@ function ItemAmounts({ data }: { data: NonNullable<PipelineRow["item_quotes"]> }
         <div className="pl-amt-group">
           <div className="pl-amt-vend low" title="Quoted items only — each item's cost-source quote (or the lowest)">
             <span className="pl-amt-vend-name">Total · quoted items</span>
+            {data.fx ? (
+              <span className="pl-amt-fx" title="USD↔KRW rate used here — the quotation's FX">
+                FX 1 USD = {Math.round(data.fx).toLocaleString()} KRW
+              </span>
+            ) : null}
           </div>
           <MoneyLines purchase={t.purchase} sales={t.sales} margin={t.margin} pct={t.margin_pct} />
         </div>
@@ -2074,6 +2079,7 @@ function ItemAmounts({ data }: { data: NonNullable<PipelineRow["item_quotes"]> }
                   >
                     {q.src ? <span className="pl-amt-star" aria-label="cost source">★</span> : null}
                     <span className="pl-amt-vend-name">{q.vendor}</span>
+                    {q.note ? <span className="pl-amt-note" title={q.note}>{q.note}</span> : null}
                     {q.lowest ? (
                       <span className="pl-amt-low" title="Lowest quote for this item">lowest</span>
                     ) : null}

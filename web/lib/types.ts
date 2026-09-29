@@ -1980,7 +1980,9 @@ export type PipelineRow = {
    *  품목을 견적한 딜에서 총액끼리 견주면 뜻이 없어서다. total 은 고객 견적에 들어간
    *  품목만, 품목마다 원가 출처(없으면 최저가) 견적을 더한 값. */
   item_quotes?: {
-    total: { purchase: string; sales: string; margin: string; margin_pct: number | null } | null;
+    total: { purchase: string; sales: string; margin: string; margin_pct: number | null; fx?: number } | null;
+    /** 환산에 쓴 USD↔KRW 환율 — 이 딜 고객 견적의 FX(없으면 벤더 견적 FX → 고정환율). */
+    fx?: number;
     items: {
       no: number;
       lid: string;
@@ -1995,6 +1997,8 @@ export type PipelineRow = {
       quotes: {
         vendor: string;
         quote_no: string;
+        /** 한 견적서가 이 품목에 대안을 여럿 줬을 때 그 줄의 품명(예: "… (Low only)"). */
+        note?: string;
         purchase: string;       // 벤더 단가 × RFQ 수량
         margin: string;         // 이 품목 판매가 − 매입. 판매가 없으면 ""
         margin_pct: number | null;

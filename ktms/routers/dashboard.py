@@ -171,6 +171,31 @@ def _line_sales(it) -> float | None:
     return None
 
 
+def _dual_at(value: float, cur: str, usd_krw: float) -> str:
+    """이중통화 문자열 — _dual_money 와 같은 꼴이되 환율을 받는다. 목록의 품목별 금액은
+    그 딜의 견적 환율(FX)로 환산해야 편집기에 보이는 숫자와 같아진다. 고정환율
+    (USD_KRW_RATE)로 바꾸면 KRW 1,300,000 이 USD 842 가 된다(견적 FX 1,300 이면 1,000)."""
+    cur = (cur or "USD").upper()
+    v = float(value or 0)
+    if cur == "KRW":
+        return f"KRW {v:,.0f} USD {v / usd_krw:,.0f}"
+    if cur == "USD":
+        return f"USD {v:,.0f} KRW {round(v * usd_krw):,}"
+    return f"{cur} {v:,.0f}"
+
+
+def _alt_note(desc: str, base_desc: str) -> str:
+    """대안 줄을 가르는 말 — RFQ 품명과 겹치는 앞부분을 떼고 남은 것("(Low only)").
+    목록 칸이 좁아 품명 전체를 적으면 정작 다른 끝부분이 말줄임으로 잘린다."""
+    d = " ".join((desc or "").split())
+    bd = " ".join((base_desc or "").split())
+    n = 0
+    while n < min(len(d), len(bd)) and d[n].upper() == bd[n].upper():
+        n += 1
+    rest = d[n:].strip(" ,-:·")
+    return rest if rest and n >= 8 else d
+
+
 def _item_quote_lines(base_items, vrfqs, vqs, qtns, vendor_of) -> dict | None:
     """품목(1단계 RFQ 줄) 순서대로 — 품목마다 받은 견적과 판매가.
 
@@ -182,69 +207,97 @@ def _item_quote_lines(base_items, vrfqs, vqs, qtns, vendor_of) -> dict | None:
     매입은 벤더 단가 × **RFQ 수량**(업체가 다른 수량으로 답해도 같은 자로 잰다). 마진은
     그 품목의 판매가(고객 견적 줄)에 그 원가를 대 본 값. 딜 합계는 고객 견적에 들어간
     품목만, 품목마다 원가 출처 견적(없으면 최저가)을 더한다.
-    환산은 KRW 를 거친다 — USD 는 고정환율, 그 밖(EUR 등)은 견적 받은 날의 고시. 고시를
-    못 받으면 그 줄의 마진은 비운다(지어낸 환율로 낸 마진은 없느니만 못하다).
+
+    환율: USD↔KRW 는 **그 판매가를 낸 고객 견적의 FX**(없으면 딜의 다른 견적 → 벤더 견적
+    FX → 고정환율). 편집기가 그 FX 로 단가를 냈으니 목록도 같은 자로 재야 마진이 같게
+    나온다. 그 밖(EUR 등)은 견적 받은 날의 고시 — 못 받으면 그 줄의 마진은 비운다.
+
+    한 견적서가 한 품목에 줄을 여럿 주면(대안: Low+High / Low only) 모두 세우고, 원가
+    출처는 고객 견적 줄의 원가와 단가가 맞는 쪽이다.
     """
     base = [it for it in (base_items or []) if isinstance(it, dict) and not is_option_row(it)]
     if not base:
         return None
     keys = [line_id_of(b) or f"#{i + 1}" for i, b in enumerate(base)]
 
-    def krw_per(cur: str, day: str) -> float | None:
+    def _fx(obj) -> float | None:
+        try:
+            v = float(getattr(obj, "fx_rate", None) or 0)
+        except (TypeError, ValueError):
+            return None
+        return v if v > 0 else None
+
+    deal_fx = next((r for r in (_fx(q) for q in (qtns or [])) if r), None) \
+        or next((r for r in (_fx(q) for q in (vqs or [])) if r), None) \
+        or float(USD_KRW_RATE)
+
+    def krw_per(cur: str, day: str, usd_krw: float) -> float | None:
         cur = (cur or "USD").upper()
         if cur == "KRW":
             return 1.0
         if cur == "USD":
-            return float(USD_KRW_RATE)
+            return usd_krw
         rate, used = day_base_rate((day or "")[:10] or date.today().isoformat(), cur)
         return rate if used else None
 
-    # 물어본 곳: 줄별로 누가 받았나(견적 없음 표시용).
+    # 물어본 곳: 줄별로 몇 곳에 물었나(견적 없음 표시용).
     asked: dict[str, int] = {}
     for vr in vrfqs or []:
         for k in index_doc_by_line(base, vr.items or []):
             asked[k] = asked.get(k, 0) + 1
 
-    # 받은 견적: 줄 → [(vq, 단가, 통화, 받은 날)]
-    offers: dict[str, list] = {}
+    # 받은 견적: 줄 → [offer]. 같은 벤더가 다시 보낸 견적이면 나중 것이 지금 값.
+    offers: dict[str, list[dict]] = {}
     for vq in sorted(vqs or [], key=lambda q: q.id):
         cur = (getattr(vq, "currency", None) or "USD").upper()
         day = getattr(vq, "received_date", None) or ""
-        for k, it in index_doc_by_line(base, vq.items or []).items():
-            cost = _line_cost(it)
-            if cost is None or cost <= 0:
-                continue
-            # 같은 벤더가 다시 보낸 견적이면 나중 것이 지금 값 — 벤더 RFQ 단위로 덮는다.
-            lst = [o for o in offers.get(k, []) if o[0].vendor_rfq_id != vq.vendor_rfq_id]
-            lst.append((vq, cost, cur, day))
-            offers[k] = lst
+        doc = [d for d in (vq.items or []) if isinstance(d, dict) and not is_option_row(d)]
+        mapped = index_doc_by_line(base, doc)
+        for k in list(offers):
+            offers[k] = [o for o in offers[k] if o["vq"].vendor_rfq_id != vq.vendor_rfq_id]
+        for k, first in mapped.items():
+            # 짝지어진 줄 + 같은 이름(lid)을 단 나머지 줄 = 이 견적서가 이 품목에 준 대안들.
+            lines = [first] + [d for d in doc if d is not first and line_id_of(d) and line_id_of(d) == k]
+            for d in lines:
+                cost = _line_cost(d)
+                if cost is None or cost <= 0:
+                    continue
+                offers.setdefault(k, []).append({
+                    "vq": vq, "cost": cost, "cur": cur, "day": day,
+                    "desc": (d.get("description") or "").strip(), "alt": len(lines) > 1,
+                })
 
-    # 판매: 줄 → (금액, 통화, 원가 출처 견적 id). 고객 견적은 최신부터 — 먼저 잡힌 게 이긴다.
+    # 판매: 줄 → (금액, 통화, 그 견적의 FX, 원가 출처 offer). 고객 견적은 최신부터.
     sales: dict[str, tuple] = {}
     for q in qtns or []:
         qcur = (getattr(q, "currency", None) or "USD").upper()
+        q_fx = _fx(q) or deal_fx
         for k, it in index_doc_by_line(base, q.items or []).items():
             if k in sales:
                 continue
             amt = _line_sales(it)
             if not amt:
                 continue   # 뺀 줄·0원 줄은 판 품목이 아니다
-            # 원가 출처: 줄에 적힌 것 → 문서에 고른 것(그 견적이 이 품목을 실제로 냈을 때만)
-            # → 견적 줄의 원가와 단가가 같은 견적. 문서 하나에 여러 곳 견적을 합쳐 담으면
-            # 문서의 출처는 한 곳뿐이라, 그대로 믿으면 다른 품목에 엉뚱한 ★가 붙는다.
-            ids = {o[0].id for o in offers.get(k, [])}
-            src = it.get("src_vq_id")
-            if src not in ids:
-                src = getattr(q, "vendor_quote_id", None)
-            if src not in ids:
-                src = None
-                try:
-                    c = float(it.get("src_cost") or it.get("cost_price") or 0)
-                except (TypeError, ValueError):
-                    c = 0
-                if c:
-                    src = next((o[0].id for o in offers.get(k, []) if abs(o[1] - c) < 0.005), None)
-            sales[k] = (amt, qcur, src)
+            cands = offers.get(k, [])
+            # 원가 출처: 줄에 적힌 견적 → 문서에 고른 견적(그 견적이 이 품목을 냈을 때만) →
+            # 없으면 전부. 그중 견적 줄의 원가(벤더 통화 src_cost, 없으면 cost_price)와 단가가
+            # 같은 것 — 한 견적서의 대안 둘 중 어느 쪽을 팔았는지가 여기서 갈린다.
+            pool = [o for o in cands if o["vq"].id == it.get("src_vq_id")] \
+                or [o for o in cands if o["vq"].id == getattr(q, "vendor_quote_id", None)]
+            try:
+                c = float(it.get("src_cost") or it.get("cost_price") or 0)
+            except (TypeError, ValueError):
+                c = 0.0
+            src = next((o for o in (pool or cands) if c and abs(o["cost"] - c) < 0.005), None)
+            if src is None and len(pool) >= 1:
+                src = pool[0]
+            sales[k] = (amt, qcur, q_fx, src)
+
+    def money_in(v_krw: float, cur: str, usd_krw: float) -> str:
+        cur = (cur or "USD").upper()
+        if cur == "KRW":
+            return _dual_at(v_krw, "KRW", usd_krw)
+        return _dual_at(v_krw / usd_krw, "USD", usd_krw)
 
     items_out = []
     tot_pur_krw = tot_sales_krw = 0.0
@@ -256,37 +309,33 @@ def _item_quote_lines(base_items, vrfqs, vqs, qtns, vendor_of) -> dict | None:
         except (TypeError, ValueError):
             qty = 1.0
         sale = sales.get(k)
+        fx = sale[2] if sale else deal_fx
         s_krw = None
         if sale:
             sales_cur = sales_cur or sale[1]
-            s_rate = krw_per(sale[1], "")
+            s_rate = krw_per(sale[1], "", fx)
             s_krw = sale[0] * s_rate if s_rate else None
         quotes = []
-        for vq, cost, cur, day in offers.get(k, []):
-            rate = krw_per(cur, day)
-            pur = cost * qty
+        for o in offers.get(k, []):
+            rate = krw_per(o["cur"], o["day"], fx)
+            pur = o["cost"] * qty
             pur_krw = pur * rate if rate else None
             m = None
-            if s_krw is not None and pur_krw is not None and s_krw:
+            if s_krw and pur_krw is not None:
                 m_krw = s_krw - pur_krw
                 m = (m_krw, round(m_krw / s_krw * 100, 1))
-            quotes.append({"vq": vq, "pur": pur, "cur": cur, "pur_krw": pur_krw, "m": m})
+            quotes.append({"o": o, "pur": pur, "pur_krw": pur_krw, "m": m})
         priced = [x for x in quotes if x["pur_krw"] is not None]
         low = min(priced, key=lambda x: x["pur_krw"]) if len(priced) >= 2 else None
-        src_id = sale[2] if sale else None
-        chosen = next((x for x in quotes if src_id and x["vq"].id == src_id), None)             or (min(priced, key=lambda x: x["pur_krw"]) if priced else None)
+        src = sale[3] if sale else None
+        chosen = next((x for x in quotes if x["o"] is src), None) \
+            or (min(priced, key=lambda x: x["pur_krw"]) if priced else None)
         if s_krw is not None:
             tot_sales_krw += s_krw
             if chosen and chosen["pur_krw"] is not None:
                 tot_pur_krw += chosen["pur_krw"]
             else:
                 tot_ok = False   # 판 품목인데 원가를 모른다 — 합계 마진을 세우지 않는다
-
-        def money_krw(v_krw: float, cur: str) -> str:
-            cur = (cur or "USD").upper()
-            if cur == "KRW":
-                return _dual_money(v_krw, "KRW")
-            return _dual_money(v_krw / USD_KRW_RATE, "USD")
 
         items_out.append({
             "no": i + 1,
@@ -296,32 +345,35 @@ def _item_quote_lines(base_items, vrfqs, vqs, qtns, vendor_of) -> dict | None:
             "qty": qty,
             "unit": b.get("unit") or "",
             "asked": asked.get(k, 0),
-            "sales": _dual_money(sale[0], sale[1]) if sale else "",
+            "sales": _dual_at(sale[0], sale[1], fx) if sale else "",
             "quotes": [{
-                "vendor": vendor_of.get(x["vq"].vendor_rfq_id, "—"),
-                "quote_no": getattr(x["vq"], "vendor_quote_no", None) or "",
-                "purchase": _dual_money(x["pur"], x["cur"]),
-                "margin": money_krw(x["m"][0], sale[1]) if (x["m"] and sale) else "",
+                "vendor": vendor_of.get(x["o"]["vq"].vendor_rfq_id, "—"),
+                "quote_no": getattr(x["o"]["vq"], "vendor_quote_no", None) or "",
+                # 대안이 여럿인 견적서면 어느 줄인지 — 품명(벤더가 적은 그대로)으로 가른다.
+                "note": _alt_note(x["o"]["desc"], b.get("description") or "") if x["o"]["alt"] else "",
+                "purchase": _dual_at(x["pur"], x["o"]["cur"], fx),
+                "margin": money_in(x["m"][0], sale[1], fx) if (x["m"] and sale) else "",
                 "margin_pct": x["m"][1] if x["m"] else None,
-                "src": bool(src_id and x["vq"].id == src_id),
+                "src": x["o"] is src,
                 "lowest": x is low,
             } for x in sorted(quotes, key=lambda x: (
-                0 if (src_id and x["vq"].id == src_id) else 1,
+                0 if x["o"] is src else 1,
                 x["pur_krw"] if x["pur_krw"] is not None else float("inf")))],
         })
 
     total = None
     if tot_sales_krw:
         cur = sales_cur or "USD"
-        conv = (lambda v: _dual_money(v, "KRW")) if cur == "KRW" else             (lambda v: _dual_money(v / USD_KRW_RATE, "USD"))
+        conv = lambda v: money_in(v, cur, deal_fx)   # noqa: E731
         total = {
             "purchase": conv(tot_pur_krw) if tot_ok else "",
             "sales": conv(tot_sales_krw),
             "margin": conv(tot_sales_krw - tot_pur_krw) if tot_ok else "",
             "margin_pct": round((tot_sales_krw - tot_pur_krw) / tot_sales_krw * 100, 1)
             if tot_ok else None,
+            "fx": deal_fx,
         }
-    return {"items": items_out, "total": total}
+    return {"items": items_out, "total": total, "fx": deal_fx}
 
 
 @app.get("/api/admin/pipeline", dependencies=[Depends(require_token)])
