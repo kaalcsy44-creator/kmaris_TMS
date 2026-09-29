@@ -246,15 +246,14 @@ def _item_quote_lines(base_items, vrfqs, vqs, qtns, vendor_of) -> dict | None:
         for k in index_doc_by_line(base, vr.items or []):
             asked[k] = asked.get(k, 0) + 1
 
-    # 받은 견적: 줄 → [offer]. 같은 벤더가 다시 보낸 견적이면 나중 것이 지금 값.
+    # 받은 견적: 줄 → [offer]. 같은 업체의 견적이 두 장이어도 둘 다 — 사양·조건이 다른
+    # 두 번째 견적일 수 있어서다(DESMI 두 건). 갱신본이라 앞 것을 버릴 거면 앞 것을 지운다.
     offers: dict[str, list[dict]] = {}
     for vq in sorted(vqs or [], key=lambda q: q.id):
         cur = (getattr(vq, "currency", None) or "USD").upper()
         day = getattr(vq, "received_date", None) or ""
         doc = [d for d in (vq.items or []) if isinstance(d, dict) and not is_option_row(d)]
         mapped = index_doc_by_line(base, doc)
-        for k in list(offers):
-            offers[k] = [o for o in offers[k] if o["vq"].vendor_rfq_id != vq.vendor_rfq_id]
         for k, first in mapped.items():
             # 짝지어진 줄 + 같은 이름(lid)을 단 나머지 줄 = 이 견적서가 이 품목에 준 대안들.
             lines = [first] + [d for d in doc if d is not first and line_id_of(d) and line_id_of(d) == k]
@@ -325,8 +324,15 @@ def _item_quote_lines(base_items, vrfqs, vqs, qtns, vendor_of) -> dict | None:
                 m_krw = s_krw - pur_krw
                 m = (m_krw, round(m_krw / s_krw * 100, 1))
             quotes.append({"o": o, "pur": pur, "pur_krw": pur_krw, "m": m})
+        # 한 업체가 이 품목에 줄을 여럿 줬나(견적서 둘 · 대안) — 그러면 줄마다 무엇인지 적는다.
+        multi: dict[int, int] = {}
+        for x in quotes:
+            multi[x["o"]["vq"].vendor_rfq_id] = multi.get(x["o"]["vq"].vendor_rfq_id, 0) + 1
         priced = [x for x in quotes if x["pur_krw"] is not None]
         low = min(priced, key=lambda x: x["pur_krw"]) if len(priced) >= 2 else None
+        # 환율을 못 받아 원화로 못 바꿨어도 통화가 모두 같으면 값끼리 견줄 수 있다.
+        if low is None and len(quotes) >= 2 and len({x["o"]["cur"] for x in quotes}) == 1:
+            low = min(quotes, key=lambda x: x["pur"])
         src = sale[3] if sale else None
         chosen = next((x for x in quotes if x["o"] is src), None) \
             or (min(priced, key=lambda x: x["pur_krw"]) if priced else None)
@@ -350,7 +356,8 @@ def _item_quote_lines(base_items, vrfqs, vqs, qtns, vendor_of) -> dict | None:
                 "vendor": vendor_of.get(x["o"]["vq"].vendor_rfq_id, "—"),
                 "quote_no": getattr(x["o"]["vq"], "vendor_quote_no", None) or "",
                 # 대안이 여럿인 견적서면 어느 줄인지 — 품명(벤더가 적은 그대로)으로 가른다.
-                "note": _alt_note(x["o"]["desc"], b.get("description") or "") if x["o"]["alt"] else "",
+                "note": _alt_note(x["o"]["desc"], b.get("description") or "")
+                if (x["o"]["alt"] or multi.get(x["o"]["vq"].vendor_rfq_id, 0) > 1) else "",
                 "purchase": _dual_at(x["pur"], x["o"]["cur"], fx),
                 "margin": money_in(x["m"][0], sale[1], fx) if (x["m"] and sale) else "",
                 "margin_pct": x["m"][1] if x["m"] else None,
