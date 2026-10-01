@@ -1393,6 +1393,27 @@ def make_quotation_costing_xlsx(
         trow = last + 1
         write_total(trow, "Total", first, last if ri else first - 1)
 
+    # ── 할인(4단계 Summary 의 Discount %) — Total 밑에 할인액·최종금액 행 ──
+    # 할인액은 화면·PDF 와 같이 정수 단위 반올림(quotation_discount 참고).
+    discount_pct = _num(data.get("discount_pct", 0))
+    if discount_pct:
+        tot_row = trow
+        for label, val in ((f"Discount ({discount_pct:g}%)", f"=-ROUND(J{tot_row}*{discount_pct!r}/100,0)"),
+                           ("Final Total", f"=J{tot_row}+J{tot_row + 1}")):
+            trow += 1
+            merge(trow, 1, trow, 5)
+            tc = ws.cell(trow, 1, label); tc.font = bold16; tc.alignment = center
+            for col in range(1, NCOL + 1):
+                ws.cell(trow, col).border = bdr
+            for col in (6, 7, 8):
+                ws.cell(trow, col).fill = cost_fill
+            vc = ws.cell(trow, 10, val); vc.font = bold16; vc.alignment = right
+            vc.number_format = num_fmt
+            if label == "Final Total":
+                for col in (9, 10):
+                    ws.cell(trow, col).fill = lightblue
+            ws.row_dimensions[trow].height = 16
+
     # 섹션 헤더(네이비 바) 헬퍼.
     def section_bar(r, title):
         merge(r, 1, r, NCOL)

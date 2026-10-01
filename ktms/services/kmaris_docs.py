@@ -1992,6 +1992,17 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
     return buffer.getvalue()
 
 
+def quotation_discount(total: float, discount_pct: Any) -> tuple:
+    """견적 할인 → (할인액, 최종금액). 할인액은 화면 Summary 와 같은 정수 단위로 반올림한다
+    — 화면은 "USD 840 / Final 7,500" 으로 보이는데 종이에 839.84 / 7,500.16 이 찍히면
+    고객에게 낸 숫자와 화면이 어긋난다. 할인율이 없으면 (0, total)."""
+    pct = _num(discount_pct)
+    if not pct:
+        return 0.0, total
+    disc = float(round(Decimal(str(total * pct / 100.0)), 0))
+    return disc, total - disc
+
+
 def _qnum(value: Any) -> str:
     """견적서 금액 표기 — 천단위 구분, 정수면 소수 생략(첨부 양식과 동일)."""
     try:
@@ -2192,6 +2203,20 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
         _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
         _p(f"<b>{_qnum(total)}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
     ])
+    # 할인(4단계 Summary 의 Discount %) — Total 밑에 할인액과 최종금액을 붙인다.
+    discount_pct = _num(data.get("discount_pct", 0))
+    disc_rows: List[int] = []
+    if discount_pct:
+        disc, final = quotation_discount(total, discount_pct)
+        for label, amt in ((f"Discount ({discount_pct:g}%)", f"-{_qnum(disc)}"),
+                           ("Final Total", _qnum(final))):
+            disc_rows.append(len(rows))
+            rows.append([
+                _p(f"<b>{label}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+                _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+                _p(f"<b>{amt}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+            ])
+        total_rows.append(disc_rows[-1])
     items_table = Table(rows, colWidths=[w * mm for w in widths], repeatRows=1)
     tcmds = [
         ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -2207,6 +2232,9 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
             ("SPAN", (0, r), (5, r)),
             ("ALIGN", (0, r), (0, r), "CENTER"),
         ]
+    if disc_rows:   # 할인행은 음영 없이 라벨만 가운데 — 최종금액 행은 위 total_rows 에서 칠한다
+        tcmds += [("SPAN", (0, disc_rows[0]), (5, disc_rows[0])),
+                  ("ALIGN", (0, disc_rows[0]), (0, disc_rows[0]), "CENTER")]
     # 옵션 제목행 — 표 폭 전체를 한 칸으로 써서 구분선처럼 보이게 한다.
     for r in option_rows:
         tcmds += [
