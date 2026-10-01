@@ -2284,10 +2284,17 @@ export function matchVendorQuoteLines(
   return post(`/api/admin/rfq/${rfqId}/match-lines`, { vendor_rfq_id: vendorRfqId, items });
 }
 
-export function parseVendorQuoteFile(file: File): Promise<{ items: Partial<VendorQuoteItem>[] }> {
+// vendor_quote_no·currency 는 견적서 머리글에서 읽은 값 — 못 찾으면 null/빈칸.
+export type VendorQuoteParseResult = {
+  items: Partial<VendorQuoteItem>[];
+  vendor_quote_no?: string | null;
+  currency?: string | null;
+};
+
+export function parseVendorQuoteFile(file: File): Promise<VendorQuoteParseResult> {
   const fd = new FormData();
   fd.append("file", file);
-  return postForm<{ items: Partial<VendorQuoteItem>[] }>("/api/admin/vendor-quote-parse", fd);
+  return postForm<VendorQuoteParseResult>("/api/admin/vendor-quote-parse", fd);
 }
 
 // 해당일의 고시환율(수출입은행) 조회. source: "exim"(고시값) | "fixed"(폴백 고정환율).

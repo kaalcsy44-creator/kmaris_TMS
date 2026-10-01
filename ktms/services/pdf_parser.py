@@ -343,7 +343,7 @@ _ORDER_JSON_SCHEMA = _doc_schema(
     _nullable_str("customer_hint", "po_no", "order_date", "vessel_name", "promised_delivery"),
     _ORDER_ITEM_FIELDS,
 )
-_VQ_JSON_SCHEMA = _doc_schema({}, _VQ_ITEM_FIELDS)
+_VQ_JSON_SCHEMA = _doc_schema(_nullable_str("vendor_quote_no", "currency"), _VQ_ITEM_FIELDS)
 
 # 여러 쪽에 걸친 부품표에서 한 줄도 흘리지 않게 하는 지시. 구역 제목(예: CYLINDER BLOCK)이
 # 품목 행으로 둔갑하던 것과, 뒤쪽 페이지를 "이하 동일"로 요약해 버리던 것을 함께 막는다.
@@ -442,7 +442,12 @@ _VQ_INSTRUCTIONS = (
     "unit (e.g. PCS/SET, default PCS), cost_price (unit price as a number, no currency "
     "symbols or thousands separators; 0 if missing), lead_time (delivery lead time text), "
     "remark (technical remarks or alternatives). Use empty string for missing text fields "
-    "and 0 for missing numbers. Do NOT invent rows that are not in the document."
+    "and 0 for missing numbers. Do NOT invent rows that are not in the document. "
+    "Also capture from the document header: vendor_quote_no = the vendor's own quotation / "
+    "reference number (labels such as 'Quotation No', 'Quote No', 'Our Ref', '견적번호', "
+    "'문서번호'); never use the buyer's RFQ number ('Your Ref') or a date. "
+    "currency = the ISO code the prices are in (KRW, USD, EUR, JPY, CNY, SGD; '원'/'₩' = KRW). "
+    "Use null when not printed."
 )
 
 

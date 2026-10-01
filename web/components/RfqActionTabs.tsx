@@ -1990,6 +1990,11 @@ function VendorQuoteDetailModal({
       for (const file of files) {
         const r = await parseVendorQuoteFile(file);
         const parsed = r.items || [];
+        // 견적서 머리글의 견적번호는 비어 있을 때만, 통화는 표에 아직 단가가 없을 때만 채운다.
+        const pno = (r.vendor_quote_no || "").trim();
+        if (pno) setNo((cur) => cur.trim() || pno);
+        const pcur = (r.currency || "").toUpperCase();
+        if (pcur && VQ_CURRENCIES.includes(pcur) && !next.some((it) => Number(it.cost_price))) setCurrency(pcur);
         added += parsed.length;
         ok++;
         newFiles.push({
@@ -3779,6 +3784,11 @@ function VendorQuoteAction({
       for (const file of files) {
         const r = await parseVendorQuoteFile(file);
         const parsed = r.items || [];
+        // 견적서 머리글의 견적번호는 비어 있을 때만, 통화는 표에 아직 단가가 없을 때만 채운다.
+        const pno = (r.vendor_quote_no || "").trim();
+        if (pno) setNo((cur) => cur.trim() || pno);
+        const pcur = (r.currency || "").toUpperCase();
+        if (pcur && VQ_CURRENCIES.includes(pcur) && !next.some((it) => Number(it.cost_price))) setCurrency(pcur);
         added += parsed.length;
         ok++;
         newFiles.push({
@@ -5796,6 +5806,7 @@ const DEFAULT_MARGIN_PCT = 40;
 // 매출(고객 견적 판매가)은 선주·해외 고객 상대라 USD 로 시작한다. 저장된 값이 있으면
 // 그쪽이 이기고, 화면에서도 언제든 바꿀 수 있다.
 const DEFAULT_COST_CURRENCY = "KRW";
+const VQ_CURRENCIES = ["USD", "KRW", "CNY", "EUR", "JPY", "SGD"];
 const DEFAULT_SALE_CURRENCY = "USD";
 
 // 품목들이 공유하는 마진(%) — 밴드 마진을 따로 저장하기 전에 만든 견적을 다시 열 때,

@@ -42,6 +42,7 @@ from _core import (
 )
 from services.mail_compose import build_attachments, compose_body, compose_parts
 from services.vendor_match import suggest_vendors
+from services.quote_response_parser import extract_vq_header
 from pydantic import BaseModel
 from _core import (
     DealLineAward,
@@ -734,48 +735,64 @@ def vendor_quote_parse(file: UploadFile = File(...)):
     Claude 텍스트 파서로, 이미지/캡쳐는 Claude 비전으로 추출한다.
     """
     name = file.filename or ""
-    lower = name.lower()
-    img_media = _ocr_image_media_type(file)
     try:
         file.file.seek(0)
         raw = file.file.read()
-
-        # 1) 이미지/캡쳐 → Claude 비전
-        if img_media:
-            return parse_vendor_quote_image(raw, img_media)
-
-        # 2) Excel/정형 PDF → 표 파서 우선
-        if lower.endswith((".xlsx", ".xls", ".pdf")):
-            items = parse_vendor_quote_bytes(raw, name)
-            if items:
-                return {"items": items}
-
-            # 3) 표 파서 실패 → Claude 폴백
+        result = _parse_vq_file(file, raw, name)
+        # 견적번호·통화 — 모델이 못 읽었거나 표 파서 경로라 비어 있으면 본문/파일명에서 찾는다.
+        if not (result.get("vendor_quote_no") and result.get("currency")):
+            lower = name.lower()
+            text = ""
             if lower.endswith(".pdf"):
-                # 3a) 텍스트가 있으면 텍스트 파서
-                text = extract_text_from_pdf(io.BytesIO(raw))
-                if text:
-                    result = parse_vendor_quote_text(text)
-                    if result.get("items"):
-                        return result
-                # 3b) 텍스트 없음(스캔본)·텍스트 파서 실패 → PDF 비전 파서
-                return parse_vendor_quote_pdf_document(raw)
-
-            # Excel 비정형 → 셀 전체를 텍스트로 덤프해 Claude 텍스트 파서로 폴백
-            xls_text = excel_to_text(raw)
-            if xls_text:
-                return parse_vendor_quote_text(xls_text)
-            return {"items": []}
-
-        raise HTTPException(
-            status_code=400,
-            detail="PDF·Excel 또는 이미지(PNG·JPG·WEBP) 파일만 업로드할 수 있습니다.",
-        )
+                text = extract_text_from_pdf(io.BytesIO(raw)) or ""
+            elif lower.endswith((".xlsx", ".xls")):
+                text = excel_to_text(raw) or ""
+            head = extract_vq_header(text, name)
+            for k, v in head.items():
+                if v and not result.get(k):
+                    result[k] = v
+        return result
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Vendor 견적 파싱 실패: {exc}") from exc
 
+
+def _parse_vq_file(file: UploadFile, raw: bytes, name: str) -> dict:
+    lower = name.lower()
+    img_media = _ocr_image_media_type(file)
+
+    # 1) 이미지/캡쳐 → Claude 비전
+    if img_media:
+        return parse_vendor_quote_image(raw, img_media)
+
+    # 2) Excel/정형 PDF → 표 파서 우선
+    if lower.endswith((".xlsx", ".xls", ".pdf")):
+        items = parse_vendor_quote_bytes(raw, name)
+        if items:
+            return {"items": items}
+
+        # 3) 표 파서 실패 → Claude 폴백
+        if lower.endswith(".pdf"):
+            # 3a) 텍스트가 있으면 텍스트 파서
+            text = extract_text_from_pdf(io.BytesIO(raw))
+            if text:
+                result = parse_vendor_quote_text(text)
+                if result.get("items"):
+                    return result
+            # 3b) 텍스트 없음(스캔본)·텍스트 파서 실패 → PDF 비전 파서
+            return parse_vendor_quote_pdf_document(raw)
+
+        # Excel 비정형 → 셀 전체를 텍스트로 덤프해 Claude 텍스트 파서로 폴백
+        xls_text = excel_to_text(raw)
+        if xls_text:
+            return parse_vendor_quote_text(xls_text)
+        return {"items": []}
+
+    raise HTTPException(
+        status_code=400,
+        detail="PDF·Excel 또는 이미지(PNG·JPG·WEBP) 파일만 업로드할 수 있습니다.",
+    )
 
 def _stamp_vq_items(s, rfq_id, vrfq, items) -> tuple[list, dict]:
     """벤더 견적 줄에 딜의 라인 ID 를 붙인 사본과 그 결과(stamp_doc_line_ids)를 돌려준다.

@@ -310,3 +310,66 @@ def parse_vendor_quote_bytes(file_bytes: bytes, filename: str = "") -> List[Dict
     except Exception:
         pass
     return _parse_pdf(file_bytes)
+
+
+# ── 견적서 머리 정보(견적번호·통화) ─────────────────────────────────────────
+# 표 파서는 품목 표만 읽는다. 견적번호는 표 밖 머리글에 있으므로 따로 찾는다.
+import re as _re
+
+# "견적번호: SW-2609-0307" / "Quotation No. Q-123" / "Ref No : ABC/24/001" 같은 줄.
+_VQ_NO_LABEL = _re.compile(
+    r"(?<![A-Za-z])(?:견\s*적\s*(?:서\s*)?(?:번\s*호|no\.?)|문\s*서\s*번\s*호|"
+    r"(?:quotation|quote|offer|proposal|estimate)\s*(?:no|number|ref|#)\.?|"
+    r"(?:our|your)?\s*ref(?:erence)?\s*(?:no|number|#)?\.?)"
+    r"\s*[:：#.\-]?\s*([A-Za-z0-9][A-Za-z0-9\-_/.]{2,39})",
+    _re.IGNORECASE,
+)
+# 번호처럼 보이는가 — 숫자가 하나는 있어야 한다(라벨 뒤의 "DATE" 같은 낱말을 거른다).
+_HAS_DIGIT = _re.compile(r"\d")
+# 파일 이름 속 문서번호 — "SW-2609-0307 견적.pdf" (영문 머리 + 숫자 마디, 하이픈으로 잇는다).
+_FILENAME_NO = _re.compile(r"(?<![A-Za-z0-9])([A-Za-z]{1,6}-?\d{2,}(?:[-_/]\d+)+)(?![A-Za-z0-9])")
+
+_CURRENCY_HINTS = [
+    ("KRW", [r"\bKRW\b", r"원\s*\)", r"₩", r"\(\s*원", r"금\s*액\s*\(원"]),
+    ("USD", [r"\bUSD\b", r"US\s*\$", r"U\.S\.\s*DOLLAR"]),
+    ("EUR", [r"\bEUR\b", r"€"]),
+    ("JPY", [r"\bJPY\b", r"¥"]),
+    ("CNY", [r"\bCNY\b", r"\bRMB\b"]),
+    ("SGD", [r"\bSGD\b", r"S\$"]),
+]
+
+
+def _clean_no(v: str) -> str:
+    return (v or "").strip().strip(".-_/:")
+
+
+def extract_vq_header(text: str, filename: str = "") -> Dict[str, Optional[str]]:
+    """견적서 본문(없으면 파일 이름)에서 견적번호와 통화를 찾는다. 못 찾으면 None."""
+    no: Optional[str] = None
+    weak: Optional[str] = None  # "Our Ref" 류 — 견적번호 라벨이 없을 때만 쓴다
+    for m in _VQ_NO_LABEL.finditer(text or ""):
+        cand = _clean_no(m.group(1))
+        if not _HAS_DIGIT.search(cand):
+            continue
+        label = m.group(0)[: m.start(1) - m.start(0)].strip().lower()
+        if label.startswith("your"):  # "Your Ref" = 우리 쪽 RFQ 번호
+            continue
+        if "ref" in label and not _re.search(r"quot|quote|offer|견|문", label):
+            weak = weak or cand
+            continue
+        no = cand
+        break
+    no = no or weak
+    if not no and filename:
+        stem = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1].rsplit(".", 1)[0]
+        m = _FILENAME_NO.search(stem)
+        if m:
+            no = _clean_no(m.group(1))
+
+    currency: Optional[str] = None
+    best = 0
+    for cur, pats in _CURRENCY_HINTS:
+        hits = sum(len(_re.findall(p, text or "", _re.IGNORECASE)) for p in pats)
+        if hits > best:
+            currency, best = cur, hits
+    return {"vendor_quote_no": no, "currency": currency}
