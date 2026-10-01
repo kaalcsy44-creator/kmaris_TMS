@@ -425,6 +425,115 @@ def quotation_pdf(qtn_id: int, doc_type: str = "quotation"):
         s.close()
 
 
+def _combined_quotation_payload(s, rfq_id: int, ids: str):
+    """한 딜의 고객 견적 여러 장을 한 장으로 — 확인·출력용 통합본(저장하지 않는다).
+
+    품목 하나에 한 줄. 같은 품목(lid)을 뒤 견적이 값을 매겨 다시 냈으면(빠뜨린 품목만
+    따로 낸 재견적 등) 뒤 견적의 줄이 앞 견적의 그 자리를 갈음한다 — 0원·제외 줄은
+    갈음하지 않는다. 다른 견적에서 온 줄은 Remark 에 그 견적번호를 적어 출처가 보이게
+    한다. 머리글·약관은 가장 먼저 낸 견적의 것을 쓴다."""
+    q = s.query(Quotation).filter(Quotation.rfq_id == rfq_id)
+    want = [int(x) for x in (ids or "").split(",") if x.strip().isdigit()]
+    if want:
+        q = q.filter(Quotation.id.in_(want))
+    qtns = sorted(q.all(), key=lambda x: x.id)
+    if not qtns:
+        raise HTTPException(status_code=404, detail="견적서를 찾을 수 없습니다.")
+    curs = {(x.currency or "USD").upper() for x in qtns}
+    if len(curs) > 1:
+        raise HTTPException(status_code=400,
+                            detail=f"통화가 다른 견적은 합칠 수 없습니다: {', '.join(sorted(curs))}")
+    base = qtns[0]
+
+    def priced(it: dict) -> bool:
+        if it.get("excluded"):
+            return False
+        try:
+            if it.get("amount") not in (None, ""):
+                return float(it["amount"]) != 0
+            return float(it.get("unit_price") or 0) * float(it.get("qty") or 1) != 0
+        except (TypeError, ValueError):
+            return False
+
+    order: list[str] = []
+    lines: dict[str, dict] = {}
+    for x in qtns:
+        for i, it in enumerate(x.items or []):
+            if not isinstance(it, dict):
+                continue
+            lid = str(it.get("lid") or "").strip()
+            key = lid if lid and not is_option_row(it) else f"{x.id}#{i}"
+            row = dict(it)
+            if x.id != base.id:
+                tag = f"per {x.qtn_no}"
+                row["remark"] = f"{row.get('remark') or ''}\n{tag}".strip()
+            if key not in lines:
+                order.append(key)
+                lines[key] = row
+            elif priced(it):
+                lines[key] = row
+    items = [lines[k] for k in order]
+    # 모두 딜 품목 줄(lid)이면 RFQ 순서로 세운다 — 재견적에만 있던 품목이 맨 끝에 붙지 않게.
+    rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+    rank = {str(it.get("lid") or ""): n for n, it in enumerate((rfq.items or []) if rfq else [])
+            if isinstance(it, dict) and it.get("lid")}
+    if rank and all(str(it.get("lid") or "") in rank for it in items):
+        items.sort(key=lambda it: rank[str(it.get("lid"))])
+
+    payload = _quotation_payload(s, base)
+    payload["items"] = items
+    nos = [x.qtn_no for x in qtns if x.qtn_no]
+    if len(nos) > 1:
+        payload["doc_no"] = " + ".join(nos)
+    terms = dict(payload.get("terms") or {})
+    seen, notes = set(), []
+    for x in qtns:
+        for line in str((x.terms or {}).get("remarks") or "").splitlines():
+            if line.strip() and line.strip() not in seen:
+                seen.add(line.strip())
+                notes.append(line.strip())
+    if len(nos) > 1:
+        notes.append(f"Consolidated copy of {', '.join(nos)} — where an item was re-quoted, "
+                     "the later quotation applies.")
+    terms["remarks"] = "\n".join(notes)
+    payload["terms"] = terms
+    return payload, (" + ".join(nos) if nos else "Quotation")
+
+
+@app.get("/api/admin/rfq/{rfq_id}/quotations/combined/pdf", dependencies=[Depends(require_token)])
+def combined_quotation_pdf(rfq_id: int, ids: str = ""):
+    s = get_session()
+    try:
+        payload, name = _combined_quotation_payload(s, rfq_id, ids)
+        return Response(
+            content=generate_pdf("quotation", payload),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": 'attachment; filename="combined_quotation.pdf"',
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            },
+        )
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/rfq/{rfq_id}/quotations/combined/xlsx", dependencies=[Depends(require_token)])
+def combined_quotation_xlsx(rfq_id: int, ids: str = ""):
+    s = get_session()
+    try:
+        payload, name = _combined_quotation_payload(s, rfq_id, ids)
+        return Response(
+            content=make_document_xlsx("quotation", payload),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": 'attachment; filename="combined_quotation.xlsx"',
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            },
+        )
+    finally:
+        s.close()
+
+
 @app.get("/api/admin/quotations/{qtn_id}/xlsx", dependencies=[Depends(require_token)])
 def quotation_xlsx(qtn_id: int, doc_type: str = "quotation"):
     s = get_session()

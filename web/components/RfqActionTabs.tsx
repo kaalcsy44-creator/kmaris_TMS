@@ -20,6 +20,7 @@ import {
   parseVendorQuoteFile,
   createCustomerQuote,
   quotationPdfUrl,
+  combinedQuotationUrl,
   quotationXlsxUrl,
   previewQuotationEmail,
   sendQuotationEmail,
@@ -916,6 +917,7 @@ function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onC
           </span>
         )}
         {cmp.canCompare ? <CompareButton on={cmp.comparing} onToggle={cmp.toggle} /> : null}
+        {mine.length > 1 && rfqId ? <CombinedQuoteButton rfqId={rfqId} ids={mine.map((r) => r.id)} /> : null}
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ New quotation</button>
       </div>
       {cmp.comparing ? (
@@ -933,6 +935,84 @@ function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onC
         <CustomerQuoteDetailModal id={selected.id} onClose={() => { load(); onChanged(); }} onChanged={() => { load(); onChanged(); }} inline />
       )}
     </div>
+  );
+}
+
+/** 견적서가 여러 장인 딜 — 한 장으로 합친 확인용 통합본(PDF 미리보기·인쇄, Excel).
+ *  빠뜨린 품목을 따로 재견적한 경우처럼, 고객이 받은 견적 전체를 한 표로 대조하려는 용도.
+ *  같은 품목은 뒤 견적이 앞 견적을 갈음한다(서버 _combined_quotation_payload). */
+function CombinedQuoteButton({ rfqId, ids }: { rfqId: number; ids: number[] }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function fetchBlob(format: "pdf" | "xlsx"): Promise<Blob> {
+    const res = await fetch(combinedQuotationUrl(rfqId, format, ids), {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.detail || "통합본을 만들 수 없습니다.");
+    }
+    return res.blob();
+  }
+  async function open() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const blob = await fetchBlob("pdf");
+      if (url) URL.revokeObjectURL(url);
+      setUrl(URL.createObjectURL(blob));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Preview failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function download(format: "pdf" | "xlsx") {
+    setBusy(true);
+    setErr(null);
+    try {
+      const blob = await fetchBlob(format);
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = `Combined_Quotation.${format}`;
+      a.click();
+      URL.revokeObjectURL(objUrl);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Download failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+  function close() {
+    if (url) URL.revokeObjectURL(url);
+    setUrl(null);
+  }
+  return (
+    <>
+      <button
+        type="button"
+        className="btn sm"
+        onClick={open}
+        disabled={busy}
+        title="Merge every quotation of this deal into one document for review / print — a re-quoted item replaces the earlier line"
+      >
+        {busy && !url ? "Opening…" : "▤ Combined preview"}
+      </button>
+      {err && !url ? <span className="action-err">{err}</span> : null}
+      {url ? (
+        <QuotationPreview
+          filename="Combined quotation (review copy)"
+          pdfUrl={url}
+          onClose={close}
+          onDownloadPdf={() => download("pdf")}
+          onDownloadXlsx={() => download("xlsx")}
+          busy={busy}
+          err={err}
+        />
+      ) : null}
+    </>
   );
 }
 

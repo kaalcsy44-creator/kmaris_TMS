@@ -2378,6 +2378,12 @@ export function quotationXlsxUrl(qtnId: number, docType = "quotation"): string {
   return `${API_BASE}/api/admin/quotations/${qtnId}/xlsx?doc_type=${encodeURIComponent(docType)}`;
 }
 
+/** 한 딜의 고객 견적 여러 장을 한 장으로 합친 확인용 통합본(저장하지 않는다). */
+export function combinedQuotationUrl(rfqId: number, format: "pdf" | "xlsx", ids: number[] = []): string {
+  const q = ids.length ? `?ids=${ids.join(",")}` : "";
+  return `${API_BASE}/api/admin/rfq/${rfqId}/quotations/combined/${format}${q}`;
+}
+
 export function previewQuotationEmail(
   qtnId: number,
   lang: "en" | "ko"
