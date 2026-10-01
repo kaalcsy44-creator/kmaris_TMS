@@ -35,6 +35,7 @@ import type {
   ApRow,
   BoardLine,
   ClaimRow,
+  CustomerQuotationDetail,
   LineBoard,
   LineCell,
   MailMessage,
@@ -1314,6 +1315,10 @@ function ItemsSection({
     ...orders.map((o) => o.items ?? []),
   ]) : [];
   const vqBoard = showVq ? board ?? null : null;
+  // 같은 품목을 뒤 견적이 다시 매겼으면(빠뜨린 품목만 따로 낸 견적 등) 앞 견적의 그 줄
+  // 밑에 새 값을 세운다. 견적서별 묶음만 그리면 재견적이 표 맨 아래 따로 떨어져, 그
+  // 품목 줄은 옛 값(0)에 머문 것처럼 읽혔다.
+  const requoted = requotedLines(quotations, board?.lines ?? []);
   const phaseClass = (from: number) => (stage >= from ? "ov-phase-on" : "ov-phase-todo");
   const rfqPhase = phaseClass(1);
   const quotePhase = phaseClass(3);
@@ -1416,6 +1421,8 @@ function ItemsSection({
                   vendorQuotes={vendorQuotes}
                   vendorQuoteNo={vendorQuoteNo}
                   board={vqBoard}
+                  requoted={board ? requoted.get(q.id) : undefined}
+                  lineBoard={board ?? null}
                   nav={nav}
                 />
               ))
@@ -2220,32 +2227,26 @@ function QuoteOnlyGroup({
   vendorQuotes,
   vendorQuoteNo,
   board,
+  requoted,
+  lineBoard,
   nav,
 }: {
   quoteId: number;
   vendorQuotes: VqRef[];
   vendorQuoteNo: string;
+  /** 품목 밑 받은 견적 줄용 — 견적 줄을 접으면 null. */
   board: LineBoard | null;
+  /** 이 견적의 품목 중 뒤 견적이 다시 매긴 것(lid → 그 견적). */
+  requoted?: Map<string, RequoteRef>;
+  /** 품목 줄 짝짓기용 — 견적 줄을 접어도 재견적은 보여야 해서 board 와 따로 받는다. */
+  lineBoard: LineBoard | null;
   nav: DocNav;
 }) {
   const { data: quote } = useCachedData(`quotation:${quoteId}`, () =>
     fetchCustomerQuotationDetail(quoteId)
   );
   // 훅은 아래 "불러오는 중" 반환보다 위에 있어야 한다 — 호출 순서가 렌더마다 같아야 하므로.
-  const qCur = quote?.currency || "USD";
-  const qCostCur = quote?.cost_currency || qCur;
-  const rate = quote?.fx_rate && quote.fx_rate > 0 ? quote.fx_rate : USD_KRW_RATE;
-  const qDate = quote?.sent_date || quote?.date || "";
-  const krwQCost = useKrwRate(qCostCur, qDate, rate);
-  const krwQSales = useKrwRate(qCur, qDate, rate);
-  const krwPer: KrwPer = (c) => {
-    const u = (c || "USD").toUpperCase();
-    if (u === "KRW") return 1;
-    if (u === "USD") return rate;
-    if (u === qCostCur.toUpperCase()) return krwQCost;
-    if (u === qCur.toUpperCase()) return krwQSales;
-    return null;
-  };
+  const { qCur, qCostCur, rate, krwQCost, krwPer } = useQuoteFx(quote);
   const qFxNote = convertible(qCostCur, qCur) ? "" : fxNote(qCostCur, krwQCost);
   if (!quote) {
     return (
@@ -2258,7 +2259,7 @@ function QuoteOnlyGroup({
       </tbody>
     );
   }
-  const findLine = makeLineFinder(board?.lines ?? []);
+  const findLine = makeLineFinder(lineBoard?.lines ?? []);
   return (
     <tbody className="ov-grp">
       <GroupHead
@@ -2289,12 +2290,20 @@ function QuoteOnlyGroup({
       />
       {quote.items.map((it, i) => {
         const bl = isOptionItem(it) ? undefined : findLine(it);
+        const rq = bl ? requoted?.get(bl.lid) : undefined;
         return (
         <Fragment key={i}>
-        <tr>
+        <tr className={rq ? "ov-superseded" : undefined}>
           <td className="ov-it-n">{i + 1}</td>
           <td className="ov-it-part">{it.part_no || <span className="muted">—</span>}</td>
-          <td>{it.description || "—"}</td>
+          <td>
+            {it.description || "—"}
+            {rq ? (
+              <span className="ov-vl-tag requote" title={`Re-quoted in ${rq.no}`}>
+                re-quoted
+              </span>
+            ) : null}
+          </td>
           <td className="ov-it-qty">
             {it.qty}
             {it.unit ? ` ${it.unit}` : ""}
@@ -2320,7 +2329,10 @@ function QuoteOnlyGroup({
             <span className="muted">—</span>
           </td>
         </tr>
-        {board && bl ? (
+        {rq && bl ? (
+          // 받은 견적 줄도 새 견적의 판매가·원가 출처에 대 본다 — 옛 줄(0원)에 대면 마진이 빈다.
+          <RequoteRows requote={rq} line={bl} lineBoard={lineBoard} board={board} nav={nav} />
+        ) : board && bl ? (
           <VendorLineRows
             line={bl}
             board={board}
@@ -2337,6 +2349,146 @@ function QuoteOnlyGroup({
         );
       })}
     </tbody>
+  );
+}
+
+/** 견적의 통화·환율 — Quote 열의 마진을 잴 자. QuoteOnlyGroup 과 재견적 줄이 같이 쓴다. */
+function useQuoteFx(quote: CustomerQuotationDetail | null | undefined) {
+  const qCur = quote?.currency || "USD";
+  const qCostCur = quote?.cost_currency || qCur;
+  const rate = quote?.fx_rate && quote.fx_rate > 0 ? quote.fx_rate : USD_KRW_RATE;
+  const qDate = quote?.sent_date || quote?.date || "";
+  const krwQCost = useKrwRate(qCostCur, qDate, rate);
+  const krwQSales = useKrwRate(qCur, qDate, rate);
+  const krwPer: KrwPer = (c) => {
+    const u = (c || "USD").toUpperCase();
+    if (u === "KRW") return 1;
+    if (u === "USD") return rate;
+    if (u === qCostCur.toUpperCase()) return krwQCost;
+    if (u === qCur.toUpperCase()) return krwQSales;
+    return null;
+  };
+  return { qCur, qCostCur, rate, krwQCost, krwPer };
+}
+
+type RequoteRef = { qid: number; no: string };
+
+/**
+ * 견적별 "뒤 견적이 다시 매긴 품목" — 견적 id → (lid → 그 품목을 마지막으로 매긴 견적).
+ *
+ * 뒤 견적 = 나중에 만든 것(id 순). 같은 선박의 견적끼리만 잇는다 — 선박이 다르면 같은
+ * 품목이라도 다른 판매다. 값이 매겨진 줄(제외·0원 아님)만 재견적으로 친다.
+ */
+function requotedLines(
+  quotes: ProjectQuote[],
+  lines: BoardLine[]
+): Map<number, Map<string, RequoteRef>> {
+  const out = new Map<number, Map<string, RequoteRef>>();
+  if (!lines.length || quotes.length < 2) return out;
+  const pricedLids = (q: ProjectQuote) => {
+    const find = makeLineFinder(lines);
+    const lids = new Set<string>();
+    for (const it of q.items ?? []) {
+      if (it.row_kind === "option") continue;
+      const lid = find(it)?.lid;   // 짝짓기 순서를 지키려고 거를 줄도 먼저 찾는다
+      if (lid && lineAmount(it)) lids.add(lid);
+    }
+    return lids;
+  };
+  const byAge = [...quotes].sort((a, b) => a.id - b.id);
+  const priced = new Map(byAge.map((q) => [q.id, pricedLids(q)]));
+  byAge.forEach((q, i) => {
+    const m = new Map<string, RequoteRef>();
+    for (const later of byAge.slice(i + 1)) {
+      if ((later.vessel_id || 0) !== (q.vessel_id || 0)) continue;
+      // 뒤로 갈수록 덮어써서 가장 나중 견적이 남는다.
+      for (const lid of priced.get(later.id) ?? []) m.set(lid, { qid: later.id, no: later.qtn_no });
+    }
+    if (m.size) out.set(q.id, m);
+  });
+  return out;
+}
+
+/** 앞 견적의 품목 줄 밑에 — 그 품목을 다시 매긴 견적의 값, 그리고 그 값에 대 본 받은 견적. */
+function RequoteRows({
+  requote,
+  line,
+  lineBoard,
+  board,
+  nav,
+}: {
+  requote: RequoteRef;
+  line: BoardLine;
+  lineBoard: LineBoard | null;
+  board: LineBoard | null;
+  nav: DocNav;
+}) {
+  const { data: quote } = useCachedData(`quotation:${requote.qid}`, () =>
+    fetchCustomerQuotationDetail(requote.qid)
+  );
+  const { qCur, qCostCur, rate, krwPer } = useQuoteFx(quote);
+  const find = makeLineFinder(lineBoard?.lines ?? []);
+  const it = quote?.items.find((x) => !isOptionItem(x) && find(x)?.lid === line.lid);
+  const head = (
+    <>
+      <span className="ov-vl-mark" aria-hidden="true">↻</span>
+      Re-quoted in{" "}
+      <DocNoLink no={requote.no} stage={DOC_STAGE.quote} nav={nav} />
+    </>
+  );
+  if (!quote || !it) {
+    return (
+      <tr className="ov-requote">
+        <td />
+        <td colSpan={3} className="ov-vl-who">
+          {head} <span className="muted">{quote ? "" : "· loading…"}</span>
+        </td>
+        <td className="gs" colSpan={3} />
+        <td className="gs" colSpan={3} />
+        <td className="gs" colSpan={3} />
+      </tr>
+    );
+  }
+  const qty = Number(it.qty || 1);
+  return (
+    <>
+      <tr className="ov-requote">
+        <td />
+        <td colSpan={3} className="ov-vl-who">
+          {head}
+          {quote.sent_date ? <span className="muted"> · {quote.sent_date}</span> : null}
+        </td>
+        <td className="num gs">
+          <Money
+            value={it.excluded || it.cost_price == null ? null : Number(it.cost_price) * qty}
+            currency={qCostCur}
+            excluded={it.excluded}
+          />
+        </td>
+        <td className="num">
+          <Pct value={it.margin_pct ?? null} excluded={it.excluded} />
+        </td>
+        <td className="num ov-sal">
+          <Money value={lineAmount(it)} currency={qCur} excluded={it.excluded} />
+        </td>
+        <td className="num gs" colSpan={6}>
+          <span className="muted">—</span>
+        </td>
+      </tr>
+      {board ? (
+        <VendorLineRows
+          line={line}
+          board={board}
+          qty={qty}
+          sales={lineAmount(it)}
+          salesCur={qCur}
+          srcVqId={it.src_vq_id ?? quote.vendor_quote_id ?? null}
+          rate={rate}
+          krwPer={krwPer}
+          nav={nav}
+        />
+      ) : null}
+    </>
   );
 }
 
