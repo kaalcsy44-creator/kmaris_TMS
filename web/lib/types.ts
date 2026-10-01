@@ -2347,6 +2347,23 @@ export type VendorTagSource = {
   project_no?: string;
   subject?: string;
   email_id?: number;
+  /** 메일 글에 실제로 적힌 낱말 — 전문을 펼쳤을 때 강조할 자리. */
+  term?: string;
+};
+export type MailMessageFull = {
+  id: number;
+  direction: string;
+  from_addr: string;
+  from_name: string;
+  to_addrs: string[];
+  cc_addrs: string[];
+  subject: string;
+  sent_at: string;
+  body_text: string;
+  truncated: boolean;
+  attachments: { name: string; size?: number }[];
+  rfq_id: number;
+  project_no: string;
 };
 export type VendorTagSuggestion = {
   kind: "maker" | "category";

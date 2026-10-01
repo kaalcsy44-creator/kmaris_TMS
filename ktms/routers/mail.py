@@ -476,6 +476,34 @@ def project_mail(rfq_id: int, summarize: bool = False):
         s.close()
 
 
+@app.get("/api/admin/mail/message/{email_id}", dependencies=[Depends(require_token)])
+def mail_message(email_id: int):
+    """메일 한 통 전문 — 알림의 거래선 태그 제안처럼 한 문장만 보여 주던 자리에서
+    "앞뒤가 어떤 내용인가"를 펼쳐 볼 때 쓴다."""
+    s = get_session()
+    try:
+        m = s.query(EmailMessage).filter_by(id=email_id).first()
+        if not m:
+            raise HTTPException(status_code=404, detail="메일을 찾을 수 없습니다.")
+        return {
+            "id": m.id,
+            "direction": m.direction or "",
+            "from_addr": m.from_addr or "",
+            "from_name": m.from_name or "",
+            "to_addrs": m.to_addrs or [],
+            "cc_addrs": m.cc_addrs or [],
+            "subject": m.subject or "",
+            "sent_at": m.sent_at or "",
+            "body_text": m.body_text or "",
+            "truncated": bool(m.truncated),
+            "attachments": m.attachments or [],
+            "rfq_id": m.rfq_id or 0,
+            "project_no": _project_no_map(s).get(m.rfq_id or 0, "") if m.rfq_id else "",
+        }
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/mail/project/{rfq_id}/rollup", dependencies=[Depends(require_token)])
 def project_mail_rollup(rfq_id: int):
     """이 딜의 메일 흐름을 3~5줄로 — 개별 요약을 재료로 한 번만 만들고 캐시한다."""

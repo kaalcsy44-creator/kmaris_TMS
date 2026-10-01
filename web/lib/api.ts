@@ -12,6 +12,7 @@ import type {
   CustomerOption,
   NotificationData,
   VendorTagSuggestionRow,
+  MailMessageFull,
   VendorOption,
   RfqDetail,
   DashboardData,
@@ -249,6 +250,11 @@ export function fetchVendorTagSuggestions(company = ""): Promise<{ rows: VendorT
 }
 
 /** 제안을 태그에 넣는다(accept) 또는 다시 묻지 않게 접는다(dismiss). */
+// 메일 한 통 전문 — 태그 제안 근거(한 문장)를 펼쳐 앞뒤 내용까지 확인할 때.
+export function fetchMailMessage(id: number): Promise<MailMessageFull> {
+  return get<MailMessageFull>(`/api/admin/mail/message/${id}`);
+}
+
 export function decideVendorTag(
   action: "accept" | "dismiss",
   body: { company: string; kind: "maker" | "category"; ref_id: number }

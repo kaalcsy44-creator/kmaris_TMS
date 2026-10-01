@@ -143,13 +143,14 @@ class _MakerIndex:
                 return hit
         return None
 
-    def find_in(self, text: str) -> list[tuple[int, str, str]]:
+    def find_in(self, text: str) -> list[tuple[int, str, str, str]]:
+        """(메이커 id, 이름, 앞뒤 한 줄, 글에 실제로 적힌 낱말)."""
         out, seen = [], set()
         for pat, mid, nm in self._pats:
             m = pat.search(text)
             if m and mid not in seen:
                 seen.add(mid)
-                out.append((mid, nm, _snippet(text, m.start(), m.end())))
+                out.append((mid, nm, _snippet(text, m.start(), m.end()), m.group(0)))
         return out
 
 
@@ -304,8 +305,9 @@ def compute(s, company: str | None = None, category_rows: list[dict] | None = No
         base = {"type": "email", "ref": f"mail{m.id}", "date": (m.sent_at or "")[:10],
                 "rfq_id": m.rfq_id or 0, "project_no": pno.get(m.rfq_id or 0, ""),
                 "subject": (m.subject or "")[:120], "email_id": m.id}
-        for mid, nm, snip in mk.find_in(text):
-            add(co, "maker", mid, nm, {**base, "text": snip})
+        # term = 글에 적힌 그대로의 낱말 — 메일 전문을 펼쳤을 때 그 자리를 짚어 준다.
+        for mid, nm, snip, term in mk.find_in(text):
+            add(co, "maker", mid, nm, {**base, "text": snip, "term": term})
         seen: set[int] = set()
         for pat, cid, label in cat_pats:
             if cid in seen:
@@ -313,7 +315,8 @@ def compute(s, company: str | None = None, category_rows: list[dict] | None = No
             hit = pat.search(text)
             if hit:
                 seen.add(cid)
-                add(co, "category", cid, label, {**base, "text": _snippet(text, hit.start(), hit.end())})
+                add(co, "category", cid, label, {**base, "text": _snippet(text, hit.start(), hit.end()),
+                                                 "term": hit.group(0)})
 
     # 4) 값을 준·산 품목의 분류(실적) — 이미 세어 둔 것을 들여온다.
     for row in category_rows or []:
