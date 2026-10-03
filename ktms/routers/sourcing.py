@@ -189,7 +189,7 @@ def rfq_vendor_suggestions(rfq_id: int, limit: int = 6):
                 if v.vendor_id]
         return suggest_vendors(s, rfq.items or [],
                                limit=max(1, min(int(limit or 6), 12)),
-                               exclude_ids=sent)
+                               exclude_ids=sent, title=rfq.project_title or "")
     finally:
         s.close()
 

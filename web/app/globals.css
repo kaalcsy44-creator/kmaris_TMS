@@ -9183,6 +9183,12 @@ table.mini .num {
   background: #e9f0fa;
   color: #2c5487;
 }
+/* 같은 제조사 물건을 다뤄 본 이력 — 품번 일치(part) 다음으로 센 실적이다. */
+.vsug-reason.maker {
+  background: #e8f1f0;
+  color: #1f6560;
+  font-weight: 600;
+}
 /* 스스로 밝힌 취급 분류 — 거래 이력(category)보다 한 톤 옅다. 근거의 세기가 곧
    색의 세기여야, 목록을 훑는 눈이 무엇이 실적이고 무엇이 신고인지 갈라 읽는다. */
 .vsug-reason.declared {

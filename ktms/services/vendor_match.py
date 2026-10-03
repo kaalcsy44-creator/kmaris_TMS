@@ -8,6 +8,7 @@
 근거는 센 것부터:
   1) 같은 품번을 이미 산 곳 > 견적을 준 곳 > 물어본 곳
   2) 같은 분류(대>중>소)에서 거래한 이력이 있는 곳
+  2-a) 같은 제조사 품목을 다뤄 본 곳(품번은 달라도 그 브랜드 것을 견적해 본 곳)
   3) 그 분류를 취급한다고 **밝혀 둔** 곳(Settings > Vendor 의 Item categories)
   3-a) 그것을 만드는 제조사의 **대리점**인 곳(Vendor 의 Makers supplied → Maker 의 분류)
   4) 취급품목·회사소개 글귀가 품목 낱말(제조사명 포함)과 겹치는 곳
@@ -28,7 +29,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 from db.models import (
-    ItemCategory, ItemMaster, ItemPriceHistory, Maker, Vendor, VendorQuote, VendorRFQ,
+    RFQ, ItemCategory, ItemMaster, ItemPriceHistory, Maker, Vendor, VendorQuote, VendorRFQ,
 )
 from services.item_ledger import build_master_index, match_key, suggest_categories
 
@@ -57,6 +58,15 @@ _W_CAT = {"bought": 18.0, "quoted": 12.0, "asked": 7.0}
 # 우리가 한 번 물어본 것(7)보다는 세다 — 물어본 것은 우리 짐작이지만 태그는 그 회사가
 # 스스로 밝힌 것이라서다. 상위 분류만 맞으면 거래 이력과 같은 규칙으로 절반만 센다.
 _W_DECLARED = 10.0
+# 같은 제조사의 다른 품목을 다뤄 본 곳. 품번이 같지 않아도 그 브랜드 물건을 대 본
+# 곳은 이번 것도 댈 공산이 크다 — 분류 이력(18/12/7)보다 세게 둔다. 분류는 '무엇'만
+# 맞히지만 제조사는 '누구 것'까지 맞힌다(MAN B&W 피스톤과 Yanmar 피스톤은 다른 거래선).
+# 품목 마스터에 분류가 아직 안 선 품목이 많아, 분류만으로는 이 이력이 아예 안 걸렸다.
+_W_MAKER = {"bought": 24.0, "quoted": 18.0, "asked": 9.0}
+_MAKER_MAX = 2
+# 그 제조사의 대리점이라고 밝혀 둔 곳(Makers supplied 에 그 제조사가 바로 있다).
+# 분류를 건너 추론하는 _W_AGENT 와 달리 이름이 곧장 맞으므로 태그보다 세다.
+_W_AGENT_DIRECT = 14.0
 # 그것을 만드는 제조사의 대리점이라고 밝혀 둔 곳(Makers supplied → 그 제조사의 분류).
 # 태그(10)보다 약하다 — 한 다리 건넌 추론이라서다: 대리점이라고 그 브랜드의 모든
 # 품목을 다 대는 것은 아니다. 그래도 우리가 한 번 물어본 이력(7)과 비슷하게는 둔다.
@@ -74,6 +84,38 @@ _NOTE_W = 0.5
 _MIN_SCORE = 6.0       # 이보다 약한 근거는 추천하지 않는다(빈칸이 헛다리보다 낫다)
 
 _KIND_VERB = {"bought": "Supplied", "quoted": "Quoted", "asked": "Asked for"}
+
+
+def _maker_key(name) -> str:
+    """제조사 이름 대조용 키 — 'YUMYUNG Electric Co., Ltd.' -> 'yumyung electric'.
+    회사 형태(co·ltd…)를 걷어 내야 같은 회사가 표기 차이로 갈리지 않는다."""
+    return " ".join(_tokens(name))
+
+
+def _maker_same(a: str, b: str) -> bool:
+    """두 제조사 키가 같은 회사를 가리키는가. 한쪽 낱말이 다른 쪽에 다 들어 있으면
+    같다고 본다 — 'yumyung' 과 'yumyung electric' 은 같은 회사다."""
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    sa, sb = set(a.split()), set(b.split())
+    return sa <= sb or sb <= sa
+
+
+def _makers_in_text(text, known: dict) -> set[str]:
+    """글귀(딜 제목 등)에 이름이 통째로 들어 있는 제조사 키. 품목 줄의 maker 칸을
+    비워 두고 제목에만 'YUMYUNG Main Control Unit' 처럼 적는 일이 흔해서다."""
+    words = set(_tokens(text))
+    # 이름 첫 낱말(브랜드)만 맞으면 된다 — 제목에는 'YUMYUNG' 만 적고 명부에는
+    # 'YUMYUNG Electric' 으로 올라 있는 식이 흔하다. 세 글자 브랜드(ABB·MAN 등)는
+    # 품명 낱말과 우연히 겹치기 쉬워 글귀에서는 찾지 않는다 — 품목 줄의 maker 칸으로만 걸린다.
+    out = set()
+    for k in known:
+        head = k.split()[0] if k else ""
+        if len(head) >= 4 and head in words:
+            out.add(k)
+    return out
 
 
 def _stem(word: str) -> str:
@@ -160,14 +202,58 @@ def _resolve_categories(session, lines: list[dict], cats: dict,
     return by_key, summary
 
 
-def _vendor_experience(session, cats: dict, idx: dict, masters: dict) -> dict[int, dict]:
+def _rfq_makers(session) -> tuple[dict, dict, dict, dict]:
+    """딜(고객 RFQ)별 품목 제조사 — 벤더 RFQ·매입 이력 줄에 maker 칸이 비어 있어도
+    그 딜의 1단계 품목표에는 적혀 있는 일이 많다. 줄 키로 먼저, 안 되면 딜 전체로 쓴다.
+
+    반환: ({rfq_id: {줄 키: 제조사 키}}, {rfq_id: {제조사 키}}, {rfq_id: 딜 제목},
+           {제조사 키: 원래 표기}) — 마지막 것은 딜 제목에서 이름을 찾는 사전이 된다."""
+    by_rfq_key: dict[int, dict[str, str]] = {}
+    by_rfq: dict[int, set[str]] = {}
+    titles: dict[int, str] = {}
+    names: dict[str, str] = {}
+    for rid, title, items in session.query(RFQ.id, RFQ.project_title, RFQ.items).all():
+        by_key, allm = {}, set()
+        for it in (items if isinstance(items, list) else []):
+            if not isinstance(it, dict):
+                continue
+            mk = _maker_key(it.get("maker"))
+            if mk:
+                k = match_key(it.get("part_no"), it.get("description"))
+                if k:
+                    by_key.setdefault(k, mk)
+                allm.add(mk)
+                names.setdefault(mk, str(it.get("maker")).strip())
+        by_rfq_key[rid], by_rfq[rid], titles[rid] = by_key, allm, title or ""
+    return by_rfq_key, by_rfq, titles, names
+
+
+def _vendor_experience(session, cats: dict, idx: dict, masters: dict,
+                       known_makers: dict, rfq_makers: tuple) -> dict[int, dict]:
     """벤더별 거래 경험 색인 — 어떤 품번을, 어떤 분류를, 어떤 세기로 다뤄 봤는가.
 
     출처는 셋이다: 구매 이력(item_price_history 의 buy 행) = 실제로 산 것,
-    벤더 견적(vendor_quotes) = 값을 준 것, 벤더 RFQ(vendor_rfqs) = 물어본 것."""
+    벤더 견적(vendor_quotes) = 값을 준 것, 벤더 RFQ(vendor_rfqs) = 물어본 것.
+    품번·분류와 함께 '어느 제조사 물건이었나'도 모은다(makers)."""
     cat_of = {mid: m.category_id for mid, m in masters.items()}
+    maker_of = {mid: _maker_key(m.maker) for mid, m in masters.items()}
     exp: dict[int, dict] = defaultdict(
-        lambda: {"parts": {}, "cats": {}, "docs": set(), "deals": 0, "last": ""})
+        lambda: {"parts": {}, "cats": {}, "makers": {}, "docs": set(), "deals": 0, "last": ""})
+
+    rfq_mk_by_key, rfq_mk_all, rfq_title = rfq_makers
+
+    def line_maker(raw_maker, key, item_id, rfq_id) -> str:
+        return (_maker_key(raw_maker)
+                or (rfq_mk_by_key.get(rfq_id) or {}).get(key, "")
+                or maker_of.get(item_id or idx.get(key, 0), ""))
+
+    def touch_maker(vid, mk, kind, when):
+        if not (vid and mk):
+            return
+        m = exp[vid]["makers"]
+        got = m.get(mk)
+        m[mk] = ((_best(got[0], kind), got[1] + 1, max(got[2], when or ""))
+                 if got else (kind, 1, when or ""))
 
     def touch(vid, key, cid, kind, when):
         if not vid:
@@ -194,8 +280,10 @@ def _vendor_experience(session, cats: dict, idx: dict, masters: dict) -> dict[in
         # 매입 이력에는 발주(po)와 벤더 견적(vendor_quote)이 함께 들어 있다
         # (services/item_ledger). 둘을 안 가르면 견적만 주고 끝난 거래선이 근거란에
         # "Supplied …" 로 서고, bought(45)·quoted(30)의 점수 차이도 뜻을 잃는다.
-        touch(h.vendor_id, key, cid,
-              "bought" if h.source_type == "po" else "quoted", h.doc_date or "")
+        kind = "bought" if h.source_type == "po" else "quoted"
+        touch(h.vendor_id, key, cid, kind, h.doc_date or "")
+        touch_maker(h.vendor_id, line_maker("", key, h.item_id, h.rfq_id),
+                    kind, h.doc_date or "")
         if h.vendor_id:
             exp[h.vendor_id]["docs"].add((h.source_type, h.source_id))
 
@@ -205,12 +293,23 @@ def _vendor_experience(session, cats: dict, idx: dict, masters: dict) -> dict[in
         when = (v.sent_at or "")[:10] or (v.sent_date or "")
         if v.vendor_id:
             exp[v.vendor_id]["docs"].add(("vrfq", v.id))
+        found: set[str] = set()
         for it in (v.items if isinstance(v.items, list) else []):
             if not isinstance(it, dict):
                 continue
             key = match_key(it.get("part_no"), it.get("description"))
             cid = cat_of.get(idx.get(key, 0))
             touch(v.vendor_id, key, cid, kind, when)
+            mk = line_maker(it.get("maker"), key, None, v.rfq_id)
+            if mk:
+                found.add(mk)
+        # 줄마다 제조사를 못 찾았으면 그 딜이 다룬 제조사로 갈음한다(품목표 → 딜 제목).
+        if not found and v.rfq_id:
+            found = set(rfq_mk_all.get(v.rfq_id) or ())
+            if not found:
+                found = _makers_in_text(rfq_title.get(v.rfq_id), known_makers)
+        for mk in found:
+            touch_maker(v.vendor_id, mk, kind, when)
     for e in exp.values():
         # 거래 건수 = 그 벤더가 얽힌 문서 수(발주·견적요청). 화면에 "몇 번 거래한 곳"으로 보인다.
         e["deals"] = len(e["docs"])
@@ -271,7 +370,8 @@ def _maker_index(session) -> dict[int, tuple[str, set[int]]]:
     return out
 
 
-def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=()) -> dict:
+def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
+                    title: str = "") -> dict:
     """딜 품목(1단계 Item list) -> 추천 벤더 목록과 그 근거."""
     lines = []
     for it in (items if isinstance(items, list) else []):
@@ -301,9 +401,34 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=()) -> dict:
 
     excluded = {int(x) for x in exclude_ids}
     all_vendors = session.query(Vendor).order_by(Vendor.name).all()
-    exp = _vendor_experience(session, cats, idx, masters)
-    per_tokens, idf = _text_index(all_vendors)
     makers = _maker_index(session)
+    # 알려진 제조사 이름 — 명부(makers)와 품목 마스터의 maker 칸. 딜 제목에서 이름을
+    # 찾아낼 때 쓴다. 키 -> 화면에 보일 원래 표기.
+    known: dict[str, str] = {}
+    for nm, _c in makers.values():
+        known.setdefault(_maker_key(nm), nm)
+    for m in masters.values():
+        if m.maker:
+            known.setdefault(_maker_key(m.maker), m.maker.strip())
+    rfq_mk = _rfq_makers(session)
+    for k, nm in rfq_mk[3].items():
+        known.setdefault(k, nm)
+    known.pop("", None)
+    exp = _vendor_experience(session, cats, idx, masters, known, rfq_mk[:3])
+    per_tokens, idf = _text_index(all_vendors)
+
+    # 이 딜 품목의 제조사 — 품목 줄의 maker 칸, 마스터의 maker, 그리고 딜 제목·품명에
+    # 이름이 통째로 적힌 제조사.
+    deal_makers: dict[str, str] = {}
+    for it in (items if isinstance(items, list) else []):
+        if isinstance(it, dict) and _maker_key(it.get("maker")):
+            deal_makers.setdefault(_maker_key(it.get("maker")), str(it.get("maker")).strip())
+    for ln in lines:
+        m = masters.get(idx.get(ln["key"], 0))
+        if m is not None and _maker_key(m.maker):
+            deal_makers.setdefault(_maker_key(m.maker), m.maker.strip())
+    for mk in _makers_in_text(" ".join([title or ""] + [ln["text"] for ln in lines]), known):
+        deal_makers.setdefault(mk, known[mk])
 
     # 품목 쪽 낱말 — 품명·품번·비고 + 분류 이름. 원래 대소문자는 근거 문구에 쓴다.
     query_w: dict[str, float] = defaultdict(float)
@@ -367,6 +492,25 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=()) -> dict:
             near = "related to " if indirect else ""
             reasons.append({"kind": "category", "text": f"{n} deal(s) in {near}{name}"})
 
+        # 2-a) 같은 제조사의 물건을 다뤄 본 적이 있다(품번은 달라도).
+        mk_hits = []
+        if e and deal_makers:
+            for mk, (kind, n, when) in e["makers"].items():
+                label = next((deal_makers[d] for d in deal_makers if _maker_same(d, mk)), None)
+                if label:
+                    mk_hits.append((_W_MAKER[kind], kind, n, when, label))
+        mk_hits.sort(key=lambda h: (-h[0], -h[2]))
+        seen_mk: set[str] = set()
+        for w, kind, n, when, label in mk_hits:
+            if label in seen_mk or len(seen_mk) >= _MAKER_MAX:
+                continue
+            seen_mk.add(label)
+            score += w
+            tail = f" ({when[:7]})" if when else ""
+            times = f" ×{n}" if n > 1 else ""
+            reasons.append({"kind": "maker",
+                            "text": f"{_KIND_VERB[kind]} {label} items{times}{tail}"})
+
         # 3) 그 분류를 취급한다고 밝혀 둔 곳. 거래 이력이 있으면 그쪽이 이미 세었으므로
         #    여기서는 아직 안 세어진 분류만 본다 — 같은 계통을 두 번 세면 태그만 널리
         #    달아 둔 벤더가 실제로 납품해 본 벤더를 앞지른다.
@@ -407,6 +551,7 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=()) -> dict:
         # 베껴 두지 않고 물을 때마다 따라간다. 제조사의 분류를 고치면 그 대리점 전부가
         # 곧바로 따라오고, 같은 사실이 두 군데 적혀 어긋나는 일도 없다.
         ag_hits = []
+        direct_ag: set[str] = set()
         for raw in (getattr(v, "maker_ids", None) or []):
             try:
                 hit = makers.get(int(raw))
@@ -415,6 +560,14 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=()) -> dict:
             if not hit:
                 continue
             mk_name, mk_cats = hit
+            mkk = _maker_key(mk_name)
+            if mkk and any(_maker_same(d, mkk) for d in deal_makers):
+                # 이름이 곧장 맞았으면 분류를 건넌 추론은 덧세지 않는다.
+                if mkk not in direct_ag:
+                    direct_ag.add(mkk)
+                    score += _W_AGENT_DIRECT
+                    reasons.append({"kind": "agent", "text": f"Agent for {mk_name}"})
+                continue
             for cid in mk_cats:
                 # 태그·이력이 이미 센 분류는 다시 세지 않는다(태그 쪽과 같은 규칙).
                 if cid in counted_dec or cid not in cats:
