@@ -1927,6 +1927,9 @@ function CompanyInfoModal<
   // 주소가 갈라지는 것은 언제나 사고였지 뜻한 바가 아니었다. 그래도 칸을 보이게
   // 두는 까닭은, 이 저장이 지금 보고 있는 명부 밖에까지 닿는다는 것을 알려야 해서다.
   const twinKinds = (twins ?? []).filter((k) => k !== "");
+  // 담당자 줄까지 함께 가는 짝 — 거래선 ↔ 메이커뿐이다. scan 은 그 두 창에만 붙는다
+  // (고객사 창이면 저쪽이 거래선이어도 담당자는 잇지 않는다).
+  const contactTwins = scan ? twinKinds.filter((k) => k === "vendors" || k === "makers") : [];
   const [syncTwins, setSyncTwins] = useState(true);
   const [catIds, setCatIds] = useState<number[]>(() => [...(tags?.initial ?? [])]);
   const [makerIds, setMakerIds] = useState<number[]>(() => [...(makerTags?.initial ?? [])]);
@@ -2422,6 +2425,11 @@ function CompanyInfoModal<
             The values above are company-level — editing them applies to all {contacts.length}{" "}
             {contacts.length === 1 ? "contact" : "contacts"} at once. Name, role, email, phone and
             region belong to each contact — press ✎ to edit that row in place.
+            {/* 거래선 ↔ 메이커는 담당자 줄도 함께 간다(서버 _sync_contact_twins). 고객 명부는
+                담당자가 '사는 사람'이라 잇지 않는다 — 그래서 그 짝일 때만 적는다. */}
+            {contactTwins.length
+              ? ` Adding, editing or deleting a contact here does the same in the ${contactTwins.map((k) => PARTNER_KIND_LABEL[k as PartnerImportKind]).join(" · ")} book.`
+              : ""}
           </p>
         </div>
         <div className="form-actions">

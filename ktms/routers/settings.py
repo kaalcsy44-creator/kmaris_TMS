@@ -345,6 +345,109 @@ def _sync_company_twins(s, self_kind: str, body: CompanyInfoSave) -> dict[str, i
     return out
 
 
+# 담당자 줄을 명부 건너 함께 고치는 짝. 거래선과 메이커만 잇는다 — 같은 회사라도 고객
+# 명부의 담당자는 우리에게 **사는** 사람(구매팀)이고, 거래선·메이커 명부의 담당자는 우리에게
+# **파는** 사람(영업·부품 창구)이라, 고객 쪽까지 옮기면 남의 명단에 엉뚱한 사람이 선다.
+_CONTACT_TWIN_KINDS = {"vendors": ("makers",), "makers": ("vendors",)}
+
+
+def _contact_snap(row) -> dict:
+    """저쪽 짝 줄을 찾을 열쇠 — 고치기 **전** 값으로 찾아야 해서 미리 떠 둔다."""
+    return {"name": row.name or "", "contact": row.contact or "", "email": row.email or ""}
+
+
+def _find_contact_twin(rows: list, snap: dict):
+    """회사 줄들 가운데 같은 사람. 이름이 열쇠이고, 같은 이름이 둘이면 대표 메일로 가린다.
+    이름 없는 줄은 메일까지 같아야 같은 사람으로 본다(이름 빈 줄끼리 아무나 붙지 않게)."""
+    c = _norm_company(snap["contact"])
+    e = snap["email"].strip().lower()
+    same = [r for r in rows if _norm_company(r.contact or "") == c]
+    if not c:
+        same = [r for r in same if (r.email or "").strip().lower() == e]
+    if len(same) > 1 and e:
+        same = [r for r in same if (r.email or "").strip().lower() == e] or same
+    return same[0] if same else None
+
+
+def _copy_contact(dst, src) -> None:
+    """사람에 딸린 값만 옮긴다. 주소는 회사 값이라 저쪽 것을 그대로 둔다."""
+    dst.contact = src.contact or ""
+    dst.duty = src.duty or ""
+    _apply_multi(dst, _mv_list(src.emails) or [src.email or ""],
+                 _mv_list(src.phones) or [src.contact_phone or ""],
+                 _mv_list(src.regions) or [src.country or ""],
+                 _mv_list(dst.addresses) or [dst.address or ""])
+
+
+def _new_contact_like(Model, template, src):
+    """저쪽 회사의 기존 줄을 본떠 담당자 한 줄을 더 세운다 — 회사 값(분류·결제조건·로고…)은
+    저쪽 명부가 적어 둔 것을 따르고, 사람 값만 이쪽에서 가져간다."""
+    obj = Model(name=template.name)
+    for f in ("address", "website", "specialization", "note", "logo", "payment_terms",
+              "country"):
+        if hasattr(obj, f):
+            setattr(obj, f, getattr(template, f, None) or "")
+    for f in ("addresses", "category_ids", "maker_ids"):
+        if hasattr(obj, f):
+            setattr(obj, f, list(getattr(template, f, None) or []))
+    if hasattr(obj, "maker_id"):
+        obj.maker_id = getattr(template, "maker_id", None)
+    _copy_contact(obj, src)
+    return obj
+
+
+def _sync_contact_twins(s, self_kind: str, before: dict | None, row) -> dict[str, str]:
+    """담당자 한 줄의 추가(before=None)·수정·삭제(row=None)를 짝 명부의 같은 회사에 옮긴다.
+
+    명부 사이 복사는 회사 값만 이어 두어서, 복사 뒤 한쪽에 더한 담당자(예: Alfa Laval 메이커
+    쪽의 Spares 창구)는 저쪽에 끝내 나타나지 않았다. 저쪽에 그 회사가 없으면 아무것도 하지
+    않는다 — 짝이 없는 회사를 저쪽 명부에 새로 세우는 것은 복사의 일이다.
+
+    지우기는 저쪽 회사의 **마지막 담당자**이거나 거래 기록이 걸린 줄이면 남긴다. 마지막 줄을
+    지우면 회사가 저쪽 명부에서 통째로 사라지는데, 그건 이 손짓이 뜻한 바가 아니다."""
+    out: dict[str, str] = {}
+    s.flush()        # 세션이 autoflush 를 끄고 있어, 방금 더한 줄도 아래 조회에 잡히게 한다
+    company = (before or {}).get("name") or (row.name if row is not None else "")
+    # 이쪽 명부에 회사를 처음 세우는 등록은 옮기지 않는다 — '담당자 한 명 더'가 아니라
+    # 새 회사 등록이고, 저쪽 명단과 잇는 일은 명부 사이 복사가 맡는다.
+    if before is None and len(_company_rows(s, _PARTNER_KINDS[self_kind], company)) <= 1:
+        return out
+    for kind in _CONTACT_TWIN_KINDS.get(self_kind, ()):
+        Model = _PARTNER_KINDS[kind]
+        rows = _company_rows(s, Model, company)
+        if not rows:
+            continue
+        mate = _find_contact_twin(rows, before) if before else None
+        if row is None:                      # 지우기
+            if mate is None:
+                continue
+            if len(rows) <= 1:
+                out[kind] = "kept"
+                continue
+            if kind == "vendors":
+                if _vendor_block_reason(s, mate):
+                    out[kind] = "kept"
+                    continue
+                _delete_vendor_row(s, mate)
+            else:
+                heir = next(r for r in rows if r.id != mate.id)
+                _rehome_maker_refs(s, mate.id, heir.id)
+                s.delete(mate)
+            out[kind] = "deleted"
+            continue
+        if mate is None:                     # 더하기 — 또는 고쳤는데 저쪽에 그 사람이 없을 때
+            mate = _find_contact_twin(rows, _contact_snap(row))
+            if mate is not None and before is None:
+                continue                     # 저쪽에 이미 있는 사람 — 저쪽 값을 덮지 않는다
+        if mate is None:
+            s.add(_new_contact_like(Model, rows[0], row))
+            out[kind] = "added"
+        else:
+            _copy_contact(mate, row)
+            out[kind] = "updated"
+    return out
+
+
 def _company_rows(session, Model, name: str) -> list:
     """같은 회사명(대소문자·앞뒤 공백 무시)으로 등록된 레코드 전체."""
     key = (name or "").strip().lower()
@@ -811,8 +914,9 @@ def create_vendor(body: VendorCreate):
                    logo=body.logo or "")
         s.add(v)
         _apply_multi(v, body.emails, body.phones, body.regions, body.addresses)
+        synced = _sync_contact_twins(s, "vendors", None, v)
         s.commit()
-        return {"ok": True, "id": v.id}
+        return {"ok": True, "id": v.id, "synced": synced}
     finally:
         s.close()
 
@@ -842,6 +946,7 @@ def update_vendor(row_id: int, body: VendorCreate):
         v = s.query(Vendor).filter_by(id=row_id).first()
         if not v:
             raise HTTPException(status_code=404, detail="Vendor를 찾을 수 없습니다.")
+        before = _contact_snap(v)
         v.name = body.name.strip()
         v.contact = body.contact or ""
         v.duty = body.duty or ""
@@ -862,8 +967,9 @@ def update_vendor(row_id: int, body: VendorCreate):
         if body.logo is not None:
             v.logo = body.logo
         _apply_multi(v, body.emails, body.phones, body.regions, body.addresses)
+        synced = _sync_contact_twins(s, "vendors", before, v)
         s.commit()
-        return {"ok": True, "id": v.id}
+        return {"ok": True, "id": v.id, "synced": synced}
     finally:
         s.close()
 
@@ -896,9 +1002,10 @@ def delete_vendor(row_id: int):
         if blocked:
             raise HTTPException(status_code=400,
                 detail=f"이 공급사에 연결된 {blocked}이(가) 있어 삭제할 수 없습니다. 거래 기록이 있는 공급사는 삭제 대신 보관하세요.")
+        synced = _sync_contact_twins(s, "vendors", _contact_snap(v), None)
         _delete_vendor_row(s, v)
         s.commit()
-        return {"ok": True}
+        return {"ok": True, "synced": synced}
     finally:
         s.close()
 
@@ -1104,8 +1211,9 @@ def create_maker(body: MakerCreate):
         if body.agencies:
             s.flush()
             _apply_maker_agencies(s, m.name, body.agencies)
+        synced = _sync_contact_twins(s, "makers", None, m)
         s.commit()
-        return {"ok": True, "id": m.id}
+        return {"ok": True, "id": m.id, "synced": synced}
     finally:
         s.close()
 
@@ -1117,6 +1225,7 @@ def update_maker(row_id: int, body: MakerCreate):
         m = s.query(Maker).filter_by(id=row_id).first()
         if not m:
             raise HTTPException(status_code=404, detail="Maker를 찾을 수 없습니다.")
+        before = _contact_snap(m)
         m.name = body.name.strip()
         m.contact = body.contact or ""
         m.duty = body.duty or ""
@@ -1138,8 +1247,9 @@ def update_maker(row_id: int, body: MakerCreate):
         # 줄에만 붙는다) 다른 줄을 고치는 순간 명단이 통째로 비어 버린다.
         # 고치는 자리는 🏭 Maker 회사 정보 창이다.
         _apply_multi(m, body.emails, body.phones, body.regions, body.addresses)
+        synced = _sync_contact_twins(s, "makers", before, m)
         s.commit()
-        return {"ok": True, "id": m.id}
+        return {"ok": True, "id": m.id, "synced": synced}
     finally:
         s.close()
 
@@ -1161,10 +1271,11 @@ def delete_maker(row_id: int):
         if not m:
             raise HTTPException(status_code=404, detail="Maker를 찾을 수 없습니다.")
         heir = next((r for r in _company_rows(s, Maker, m.name) if r.id != m.id), None)
+        synced = _sync_contact_twins(s, "makers", _contact_snap(m), None)
         _rehome_maker_refs(s, m.id, heir.id if heir else None)
         s.delete(m)
         s.commit()
-        return {"ok": True}
+        return {"ok": True, "synced": synced}
     finally:
         s.close()
 
