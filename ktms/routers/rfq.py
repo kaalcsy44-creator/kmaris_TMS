@@ -670,7 +670,10 @@ def update_rfq_stage_note(rfq_id: int, body: StageNoteUpdate):
         if not (0 <= body.index < len(log)):
             raise HTTPException(status_code=400, detail="잘못된 기록 인덱스입니다.")
         old = log[body.index]
+        # 화면이 모르는 꼬리표(예: 견적 불가 줄의 vrfq_id)는 그대로 둔다 — 덮으면 2단계에서
+        # 그 줄을 다시 찾을 실이 끊긴다.
         log[body.index] = {
+            **{k: v for k, v in (old or {}).items() if k == "vrfq_id"},
             "text": text,
             "datetime": (body.datetime or "").strip() or old.get("datetime") or _kst_iso(datetime.utcnow()),
             "party": (body.party or "").strip(),

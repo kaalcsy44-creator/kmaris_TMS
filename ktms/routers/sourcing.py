@@ -557,11 +557,100 @@ def vendor_rfq_toggle_decline(
                     "star": False,
                     "pic": (user.get("username") if user else "") or "",
                     "at": _kst_iso(datetime.utcnow()),
+                    # 이 줄이 어느 Vendor RFQ 의 통보인지 — 2단계에서 사유를 다시 열어 고칠 때
+                    # 같은 벤더에 보낸 RFQ 가 둘이어도 제 줄을 찾게 한다.
+                    "vrfq_id": vr.id,
                 })
                 notes[key] = log
                 rfq.stage_notes = notes
         s.commit()
         return {"ok": True, "declined": declined, "status": vr.status}
+    finally:
+        s.close()
+
+
+_DECLINE_TEXT = "견적 불가 통보"
+
+
+def _decline_note_index(log: list, vr, vendor_name: str) -> int:
+    """3단계 활동기록에서 이 Vendor RFQ 의 견적 불가 통보 줄(가장 최근 것). 없으면 -1.
+
+    표시할 때 vrfq_id 를 붙여 두지만, 그 전에 남긴 줄에는 없어 벤더 이름 + 문구로도 찾는다."""
+    for i in range(len(log) - 1, -1, -1):
+        e = log[i] or {}
+        if e.get("vrfq_id") == vr.id:
+            return i
+    for i in range(len(log) - 1, -1, -1):
+        e = log[i] or {}
+        if (e.get("vrfq_id") in (None, "") and str(e.get("text", "")).startswith(_DECLINE_TEXT)
+                and (e.get("party") or "").strip().lower() == vendor_name.strip().lower()):
+            return i
+    return -1
+
+
+def _split_decline_text(text: str) -> str:
+    rest = (text or "")[len(_DECLINE_TEXT):]
+    return rest[3:].strip() if rest.startswith(" — ") else rest.strip()
+
+
+@app.get("/api/admin/vendor-rfq/{vrfq_id}/decline", dependencies=[Depends(require_token)])
+def vendor_rfq_decline_get(vrfq_id: int):
+    """견적 불가 통보의 일시·사유 — 2단계 'No quote ✓' 창이 보여 준다(값은 3단계 활동기록에 산다)."""
+    s = get_session()
+    try:
+        vr = s.query(VendorRFQ).filter_by(id=vrfq_id).first()
+        if not vr:
+            raise HTTPException(status_code=404, detail="Vendor RFQ를 찾을 수 없습니다.")
+        rfq = s.query(RFQ).filter_by(id=vr.rfq_id).first() if vr.rfq_id else None
+        vendor = s.query(Vendor).filter_by(id=vr.vendor_id).first() if vr.vendor_id else None
+        log = list(((getattr(rfq, "stage_notes", None) or {}) if rfq else {}).get("3", []))
+        i = _decline_note_index(log, vr, (vendor.name if vendor else "") or "")
+        e = log[i] if i >= 0 else {}
+        return {"found": i >= 0, "datetime": e.get("datetime", ""),
+                "reason": _split_decline_text(e.get("text", "")) if i >= 0 else "",
+                "pic": e.get("pic", "")}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/vendor-rfq/{vrfq_id}/decline", dependencies=[Depends(require_token)])
+def vendor_rfq_decline_update(vrfq_id: int, body: VendorRfqDeclineBody,
+                              user: dict = Depends(get_current_user)):
+    """견적 불가 통보의 일시·사유를 고친다 — 3단계 활동기록의 **그 줄**을 고친다(새 줄을 쌓지
+    않는다). 줄이 없으면(지워졌거나 옛 기록) 한 줄 새로 남긴다."""
+    s = get_session()
+    try:
+        vr = s.query(VendorRFQ).filter_by(id=vrfq_id).first()
+        if not vr:
+            raise HTTPException(status_code=404, detail="Vendor RFQ를 찾을 수 없습니다.")
+        rfq = s.query(RFQ).filter_by(id=vr.rfq_id).first() if vr.rfq_id else None
+        if rfq is None:
+            raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+        vendor = s.query(Vendor).filter_by(id=vr.vendor_id).first() if vr.vendor_id else None
+        vname = (vendor.name if vendor else "") or ""
+        reason = (body.reason or "").strip()
+        notes = dict(getattr(rfq, "stage_notes", None) or {})
+        log = list(notes.get("3", []))
+        i = _decline_note_index(log, vr, vname)
+        old = dict(log[i]) if i >= 0 else {
+            "party": vname, "person": (vendor.contact if vendor else "") or "",
+            "channel": "", "direction": "in", "star": False,
+            "pic": (user.get("username") if user else "") or "",
+            "at": _kst_iso(datetime.utcnow()),
+        }
+        old.update({
+            "text": _DECLINE_TEXT + (f" — {reason}" if reason else ""),
+            "datetime": (body.datetime or "").strip() or old.get("datetime") or _kst_iso(datetime.utcnow()),
+            "vrfq_id": vr.id,
+        })
+        if i >= 0:
+            log[i] = old
+        else:
+            log.append(old)
+        notes["3"] = log
+        rfq.stage_notes = notes
+        s.commit()
+        return {"ok": True, "datetime": old["datetime"], "reason": reason}
     finally:
         s.close()
 

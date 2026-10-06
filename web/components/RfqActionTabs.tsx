@@ -32,6 +32,8 @@ import {
   updateVendorRfq,
   deleteVendorRfq,
   toggleVendorRfqDecline,
+  fetchVendorRfqDecline,
+  updateVendorRfqDecline,
   registerMakerAsVendor,
   fetchVendorQuoteDetail,
   updateVendorQuote,
@@ -640,17 +642,12 @@ function EmbeddedVendorRfq({
             <button
               type="button"
               className={`btn sm${selected.status === "견적 불가" ? " primary" : ""}`}
-              title="Mark this vendor as declined to quote (struck through in the project Vendor field)"
-              onClick={async () => {
-                // 표시 → 해제는 바로 토글. 신규 표시는 일시·사유를 받아 로그에 남긴다.
-                if (selected.status === "견적 불가") {
-                  await toggleVendorRfqDecline(selected.id);
-                  load();
-                  onChanged();
-                } else {
-                  setDeclining(true);
-                }
-              }}
+              title={selected.status === "견적 불가"
+                ? "See or edit the no-quote reason — or unmark it"
+                : "Mark this vendor as declined to quote (struck through in the project Vendor field)"}
+              // 이미 표시된 건도 창을 연다 — 누르자마자 풀리면 사유를 보러 온 손짓이 표시를
+              // 지우고, 다시 표시하면 3단계 기록에 같은 줄이 또 쌓였다.
+              onClick={() => setDeclining(true)}
             >
               {selected.status === "견적 불가" ? "No quote ✓" : "No quote"}
             </button>
@@ -707,9 +704,20 @@ function EmbeddedVendorRfq({
       {declining ? (
         <NoQuoteDialog
           vendor={selected.vendor || ""}
+          vrfqId={selected.status === "견적 불가" ? selected.id : null}
           onCancel={() => setDeclining(false)}
           onConfirm={async (datetime, reason) => {
-            await toggleVendorRfqDecline(selected.id, { datetime, reason });
+            if (selected.status === "견적 불가") {
+              await updateVendorRfqDecline(selected.id, { datetime, reason });
+            } else {
+              await toggleVendorRfqDecline(selected.id, { datetime, reason });
+            }
+            setDeclining(false);
+            load();
+            onChanged();
+          }}
+          onUnmark={async () => {
+            await toggleVendorRfqDecline(selected.id);
             setDeclining(false);
             load();
             onChanged();
@@ -721,23 +729,48 @@ function EmbeddedVendorRfq({
 }
 
 // '견적 불가(No quote)' 통보 — 일시·사유를 받아 활동로그(3단계)에 자동 기록한다.
+// 이미 표시된 건(vrfqId)이면 그 기록을 불러와 보여 주고, 고치거나 표시를 풀 수 있다.
 function NoQuoteDialog({
   vendor,
+  vrfqId,
   onConfirm,
   onCancel,
+  onUnmark,
 }: {
   vendor: string;
+  /** 이미 견적 불가로 표시된 Vendor RFQ — 주면 저장된 일시·사유를 불러온다. */
+  vrfqId: number | null;
   onConfirm: (datetime: string, reason: string) => void | Promise<void>;
   onCancel: () => void;
+  onUnmark: () => void | Promise<void>;
 }) {
+  const marked = vrfqId !== null;
   const [datetime, setDatetime] = useState(() => nowLocalInput());
   const [reason, setReason] = useState("");
+  const [loading, setLoading] = useState(marked);
   const [busy, setBusy] = useState(false);
-  async function confirm() {
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (vrfqId === null) return;
+    let alive = true;
+    fetchVendorRfqDecline(vrfqId)
+      .then((d) => {
+        if (!alive) return;
+        if (d.datetime) setDatetime(d.datetime.slice(0, 16));
+        setReason(d.reason || "");
+      })
+      .catch(() => undefined)
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [vrfqId]);
+  async function run(fn: () => void | Promise<void>) {
     setBusy(true);
-    try { await onConfirm(datetime, reason.trim()); }
+    setErr("");
+    try { await fn(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Save failed"); }
     finally { setBusy(false); }
   }
+  const confirm = () => run(() => onConfirm(datetime, reason.trim()));
   return (
     <Modal title={`No quote — ${vendor || "Vendor"}`} onClose={onCancel} form>
       <div className="form-field">
@@ -753,16 +786,31 @@ function NoQuoteDialog({
         <textarea
           rows={3}
           value={reason}
-          placeholder="e.g. Out of stock / Discontinued / Not our product line"
+          placeholder={loading ? "Loading…" : "e.g. Out of stock / Discontinued / Not our product line"}
           onChange={(e) => setReason(e.target.value)}
+          disabled={loading}
           autoFocus
         />
       </div>
+      {marked ? (
+        <span className="hint-inline">
+          Saved in the stage 3 activity log — saving here edits that entry instead of adding a new one.
+        </span>
+      ) : null}
       <div className="form-actions">
-        <button type="button" className="btn primary" disabled={busy} onClick={confirm}>
-          {busy ? "…" : "Mark no quote"}
+        <button type="button" className="btn primary" disabled={busy || loading} onClick={confirm}>
+          {busy ? "…" : marked ? "Save" : "Mark no quote"}
         </button>
-        <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+        <button type="button" className="btn" onClick={onCancel}>{marked ? "Close" : "Cancel"}</button>
+        {/* 표시 풀기는 이 창 안에서만 — 버튼 하나로 바로 풀리던 것이 사고의 원인이었다. */}
+        {marked ? (
+          <button type="button" className="btn danger" disabled={busy || loading}
+                  onClick={() => run(onUnmark)}
+                  title="The vendor is quoting after all — remove the no-quote mark">
+            Unmark no quote
+          </button>
+        ) : null}
+        {err ? <span className="action-err">{err}</span> : null}
       </div>
     </Modal>
   );

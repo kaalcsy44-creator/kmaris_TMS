@@ -2433,6 +2433,19 @@ export function toggleVendorRfqDecline(
   return post(`/api/admin/vendor-rfq/${vrfqId}/toggle-decline`, body ?? {});
 }
 
+/** 견적 불가 통보의 일시·사유(값은 3단계 활동기록의 그 줄에 산다). */
+export type VendorRfqDecline = { found: boolean; datetime: string; reason: string; pic: string };
+export function fetchVendorRfqDecline(vrfqId: number): Promise<VendorRfqDecline> {
+  return get<VendorRfqDecline>(`/api/admin/vendor-rfq/${vrfqId}/decline`);
+}
+/** 견적 불가 사유·일시 고치기 — 활동기록의 그 줄을 고친다(새 줄을 쌓지 않는다). */
+export function updateVendorRfqDecline(
+  vrfqId: number,
+  body: { datetime?: string; reason?: string }
+): Promise<{ ok: boolean; datetime: string; reason: string }> {
+  return put(`/api/admin/vendor-rfq/${vrfqId}/decline`, body);
+}
+
 // ── 라인 소싱 보드 · 라인별 채택(2·3단계) ────────────────────────────────────
 
 /** 이 딜의 품목 줄 × 물어본 곳 현황표. 2단계(어디까지 나갔나)와 3단계(어디서 살까)가
