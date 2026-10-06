@@ -84,6 +84,17 @@ _NOTE_W = 0.5
 _MIN_SCORE = 6.0       # 이보다 약한 근거는 추천하지 않는다(빈칸이 헛다리보다 낫다)
 
 _KIND_VERB = {"bought": "Supplied", "quoted": "Quoted", "asked": "Asked for"}
+# 이 딜 품목의 제조사 그 자체(거래선 명부의 그 지사든 메이커 명부의 그 회사든).
+# 정품은 만든 곳이 가장 확실히 알아, 분류 이력(18)·대리점(14)보다 세게 둔다.
+_W_MAKER_SELF = 30.0
+
+
+def _self_maker(company_name, deal_makers: dict) -> str | None:
+    """이 회사 이름이 딜 제조사와 같은 브랜드면 그 제조사 표기를 돌려준다."""
+    mk = _maker_key(company_name)
+    if not mk or _generic_maker(mk):
+        return None
+    return next((deal_makers[d] for d in deal_makers if _maker_same(d, mk)), None)
 
 
 def _maker_key(name) -> str:
@@ -487,6 +498,15 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
         e = exp.get(v.id)
         score, reasons = 0.0, []
 
+        # 0) 이 회사가 곧 이 딜 품목의 제조사다(MacGregor 건의 'MacGregor Korea Ltd.').
+        #    지금까지 거래선은 '무엇을 다루나·누구 것을 대 주나'로만 겨뤄, 만든 곳 자신의
+        #    지사가 정작 추천에 서지 못했다. 정품은 만든 곳이 가장 확실히 안다.
+        self_label = _self_maker(v.name, deal_makers)
+        if self_label:
+            score += _W_MAKER_SELF
+            reasons.append({"kind": "maker", "tag": self_label, "self": True,
+                            "text": f"{self_label} itself — the maker of these items"})
+
         # 1) 같은 품번을 다뤄 본 적이 있다.
         hits = []
         if e:
@@ -677,7 +697,11 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
         head["logo"] = head["logo"] or r["logo"]
         seen = {x["text"] for x in head["reasons"]}
         head["reasons"] += [x for x in r["reasons"] if x["text"] not in seen]
-    top = list(merged.values())[:limit]
+    ranked = list(merged.values())
+    top = ranked[:limit]
+    # 딜 품목의 제조사 자신(거래선 명부의 그 지사·메이커 명부의 그 회사)은 순위와 상관없이
+    # 세운다 — 분류 태그를 넓게 단 대리점 여섯 곳에 밀려 정작 만든 곳이 안 보였다.
+    top += [r for r in ranked[limit:] if any(x.get("self") for x in r["reasons"])]
     # 세기 표시는 절대 기준이다 — 1등 대비 상대값으로 매기면 약한 후보 하나뿐일 때
     # 그 하나가 ●●● 로 보인다. 값의 뜻: 산 적 있음 45, 같은 분류 거래 18, 브랜드 한 곳 14.
     for r in top:
@@ -697,7 +721,6 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
 #
 # 거래선 명부에 같은 이름이 서 있는 제조사는 세우지 않는다: 그 회사는 거래선 카드로 이미
 # 겨뤘고, 보내는 자리도 그 거래선 줄이다(메이커 직거래도 결국 거래선으로 심긴다).
-_W_MAKER_SELF = 30.0    # 이 딜 품목의 제조사 그 자체 — 정품은 만든 곳이 가장 확실히 안다
 
 
 def _suggest_makers(session, cats, want, makers, deal_makers, query_w, display,
@@ -710,12 +733,11 @@ def _suggest_makers(session, cats, want, makers, deal_makers, query_w, display,
         if not ck or ck in vendor_companies or ck in asked:
             continue
         score, reasons = 0.0, []
-        mk = _maker_key(m.name)
-        label = next((deal_makers[d] for d in deal_makers if _maker_same(d, mk)), None)
+        label = _self_maker(m.name, deal_makers)
         if label:
             score += _W_MAKER_SELF
-            reasons.append({"kind": "maker", "tag": label,
-                            "text": f"Makes {label} — the maker of these items"})
+            reasons.append({"kind": "maker", "tag": label, "self": True,
+                            "text": f"{label} itself — the maker of these items"})
         # 만든다고 적어 둔 분류(회사 단위 — 담당자 줄 어디에 적혀 있어도 된다).
         _nm, mk_cats = makers.get(m.id, ("", set()))
         dec = []
