@@ -3531,7 +3531,7 @@ function VendorRfqAction({
         <VendorSuggest
           rfqId={rfqId}
           value={vendorId}
-          onPick={(v) => pickContacts([v.id])}
+          onPick={(v) => pickContacts(v.contact_ids?.length ? v.contact_ids : [v.id])}
         />
       ) : null}
 

@@ -9160,6 +9160,16 @@ table.mini .num {
 .vsug-card.on .vsug-pick {
   color: #1d7a4c;
 }
+/* 같은 회사 담당자가 여럿이면 카드 한 장에 모아 이름만 적는다 — 고르면 전원이 수신처로 선다. */
+.vsug-people {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  color: var(--muted);
+}
 .vsug-why {
   display: flex;
   flex-wrap: wrap;

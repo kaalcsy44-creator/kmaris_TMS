@@ -2139,7 +2139,11 @@ export type VendorSuggestReason = {
 export type VendorSuggestion = {
   id: number;
   name: string;
+  contact?: string;
   email: string;
+  // 같은 회사의 담당자 레코드 전부(첫 값 = 대표 id). 카드 한 장 = 회사 하나.
+  contact_ids?: number[];
+  contacts?: { id: number; contact: string; email: string }[];
   logo?: string;
   specialization?: string;
   score: number;

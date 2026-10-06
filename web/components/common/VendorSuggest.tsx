@@ -76,11 +76,16 @@ export default function VendorSuggest({
         <ul className="vsug-list">
           {vendors.map((v) => {
             const logo = v.logo || logoFor(v.name);
+            const ids = v.contact_ids?.length ? v.contact_ids : [v.id];
+            const on = value !== "" && ids.includes(value);
+            const people = (v.contacts ?? [])
+              .map((c) => c.contact || c.email)
+              .filter(Boolean);
             return (
               <li key={v.id}>
                 <button
                   type="button"
-                  className={"vsug-card" + (v.id === value ? " on" : "")}
+                  className={"vsug-card" + (on ? " on" : "")}
                   onClick={() => onPick(v)}
                   title={v.specialization || ""}
                 >
@@ -94,8 +99,13 @@ export default function VendorSuggest({
                     <span className={"vsug-dots " + (v.strength || "low")} title={`Match ${v.score}`}>
                       {DOTS[v.strength || "low"]}
                     </span>
-                    <span className="vsug-pick">{v.id === value ? "Selected" : "Select"}</span>
+                    <span className="vsug-pick">{on ? "Selected" : "Select"}</span>
                   </span>
+                  {people.length > 1 ? (
+                    <span className="vsug-people" title={people.join(", ")}>
+                      {people.length} contacts · {people.join(", ")}
+                    </span>
+                  ) : null}
                   <span className="vsug-why">
                     {v.reasons.map((r, i) => (
                       <span key={i} className={"vsug-reason " + r.kind}>{r.text}</span>

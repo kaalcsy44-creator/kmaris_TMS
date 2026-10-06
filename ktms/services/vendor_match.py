@@ -370,6 +370,11 @@ def _maker_index(session) -> dict[int, tuple[str, set[int]]]:
     return out
 
 
+def _company_key(name) -> str:
+    """같은 회사인지 가릴 이름 키 — 대소문자·공백·문장부호 차이는 무시한다."""
+    return re.sub(r"[^0-9a-z가-힣]+", "", (name or "").lower())
+
+
 def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
                     title: str = "") -> dict:
     """딜 품목(1단계 Item list) -> 추천 벤더 목록과 그 근거."""
@@ -401,6 +406,11 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
 
     excluded = {int(x) for x in exclude_ids}
     all_vendors = session.query(Vendor).order_by(Vendor.name).all()
+    # 거래선은 레코드 하나가 담당자 한 명이다 — 같은 회사가 담당자 수만큼 줄지어 선다.
+    # 추천은 "어느 회사에 물을까"이므로 회사(이름) 단위로 묶고, 이미 이 딜에서 그 회사의
+    # 누군가에게 물었으면 다른 담당자도 뺀다.
+    company_of = {v.id: _company_key(v.name) for v in all_vendors}
+    asked = {company_of[i] for i in excluded if company_of.get(i)}
     makers = _maker_index(session)
     # 알려진 제조사 이름 — 명부(makers)와 품목 마스터의 maker 칸. 딜 제목에서 이름을
     # 찾아낼 때 쓴다. 키 -> 화면에 보일 원래 표기.
@@ -452,7 +462,7 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
     fresh = (date.today() - timedelta(days=365)).isoformat()
     out = []
     for v in all_vendors:
-        if v.id in excluded:
+        if v.id in excluded or company_of.get(v.id) in asked:
             continue
         e = exp.get(v.id)
         score, reasons = 0.0, []
@@ -613,7 +623,7 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
         if last >= fresh:
             score += 5.0     # 최근에도 거래가 이어지는 곳을 앞에 둔다.
         out.append({
-            "id": v.id, "name": v.name, "email": v.email or "",
+            "id": v.id, "name": v.name, "contact": v.contact or "", "email": v.email or "",
             "logo": getattr(v, "logo", None) or "",
             "specialization": v.specialization or "",
             "score": round(score, 1),
@@ -623,7 +633,25 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
         })
 
     out.sort(key=lambda r: (-r["score"], -r["deals"], r["name"]))
-    top = out[:limit]
+    # 같은 회사의 담당자 레코드를 한 장으로 접는다. 대표는 점수가 가장 높은 레코드,
+    # 근거는 담당자별로 갈라 쌓인 이력·태그를 합친다(문구가 같으면 한 번만).
+    merged: dict[str, dict] = {}
+    for r in out:
+        key = company_of.get(r["id"]) or f"#{r['id']}"
+        head = merged.get(key)
+        if head is None:
+            r["contact_ids"] = [r["id"]]
+            r["contacts"] = [{"id": r["id"], "contact": r["contact"], "email": r["email"]}]
+            merged[key] = r
+            continue
+        head["contact_ids"].append(r["id"])
+        head["contacts"].append({"id": r["id"], "contact": r["contact"], "email": r["email"]})
+        head["deals"] = max(head["deals"], r["deals"])
+        head["last_date"] = max(head["last_date"], r["last_date"])
+        head["logo"] = head["logo"] or r["logo"]
+        seen = {x["text"] for x in head["reasons"]}
+        head["reasons"] += [x for x in r["reasons"] if x["text"] not in seen]
+    top = list(merged.values())[:limit]
     # 세기 표시는 절대 기준이다 — 1등 대비 상대값으로 매기면 약한 후보 하나뿐일 때
     # 그 하나가 ●●● 로 보인다. 값의 뜻: 산 적 있음 45, 같은 분류 거래 18, 브랜드 한 곳 14.
     for r in top:
