@@ -99,6 +99,11 @@ def _maker_same(a: str, b: str) -> bool:
         return False
     if a == b:
         return True
+    # 첫 낱말(브랜드)이 같아야 한다. 낱말 포함만 보면 품목 마스터 maker 칸에 잘못 적힌
+    # 'VALVE' 하나가 'PK VALVE'·'ACE VALVE'… 이름 끝이 VALVE 인 모든 제조사와 같은 회사가
+    # 되어, 그 대리점들이 "Agent for ○○ VALVE" 를 열 줄씩 달고 1등에 섰다.
+    if a.split()[0] != b.split()[0]:
+        return False
     sa, sb = set(a.split()), set(b.split())
     return sa <= sb or sb <= sa
 
@@ -113,9 +118,24 @@ def _makers_in_text(text, known: dict) -> set[str]:
     out = set()
     for k in known:
         head = k.split()[0] if k else ""
-        if len(head) >= 4 and head in words:
+        if len(head) >= 4 and head in words and not _generic_maker(k):
             out.add(k)
     return out
+
+
+# 품명에 흔히 쓰이는 말 — 이것만으로 된 '제조사 이름'(품목 마스터 maker 칸에 'VALVE'·
+# 'Control' 처럼 잘못 적힌 값)은 제조사로 보지 않는다. 품명 'BALL VALVE' 에서 제조사
+# 'valve' 를 찾아내면 그 뒤의 모든 근거가 헛돈다.
+_GENERIC_WORDS = {
+    "valve", "control", "pump", "motor", "engine", "gear", "bearing", "seal", "filter",
+    "hydraulic", "electric", "electronic", "marine", "korea", "machinery", "industrie",
+    "industry", "engineering", "service", "trading", "parts", "spares", "gasket", "pipe",
+    "fitting", "cable", "boiler", "compressor", "cooler", "heater", "crane", "winch",
+}
+
+
+def _generic_maker(key: str) -> bool:
+    return bool(key) and all(w in _GENERIC_WORDS for w in key.split())
 
 
 def _stem(word: str) -> str:
@@ -482,9 +502,10 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
         for kind, when, label in hits[:_PART_MAX]:
             score += _W_PART[kind]
             tail = f" ({when[:7]})" if when else ""
-            reasons.append({"kind": "part", "text": f"{_KIND_VERB[kind]} {label[:40]}{tail}"})
+            reasons.append({"kind": "part", "tag": label[:40],
+                            "text": f"{_KIND_VERB[kind]} {label[:40]}{tail}"})
         if len(hits) > _PART_MAX:
-            reasons.append({"kind": "part",
+            reasons.append({"kind": "part", "tag": f"+{len(hits) - _PART_MAX} items",
                             "text": f"+{len(hits) - _PART_MAX} more matching item(s)"})
 
         # 2) 같은 분류에서 거래한 적이 있다(잎이 맞으면 온전히, 상위만 맞으면 절반).
@@ -500,7 +521,8 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
             score += w
             name = cats[cid].name if cid in cats else ""
             near = "related to " if indirect else ""
-            reasons.append({"kind": "category", "text": f"{n} deal(s) in {near}{name}"})
+            reasons.append({"kind": "category", "tag": name,
+                            "text": f"{n} deal(s) in {near}{name}"})
 
         # 2-a) 같은 제조사의 물건을 다뤄 본 적이 있다(품번은 달라도).
         mk_hits = []
@@ -518,7 +540,7 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
             score += w
             tail = f" ({when[:7]})" if when else ""
             times = f" ×{n}" if n > 1 else ""
-            reasons.append({"kind": "maker",
+            reasons.append({"kind": "maker", "tag": label,
                             "text": f"{_KIND_VERB[kind]} {label} items{times}{tail}"})
 
         # 3) 그 분류를 취급한다고 밝혀 둔 곳. 거래 이력이 있으면 그쪽이 이미 세었으므로
@@ -549,7 +571,7 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
             score += w
             counted_dec.add(cid)
             near = "related to " if indirect else ""
-            reasons.append({"kind": "declared",
+            reasons.append({"kind": "declared", "tag": cats[cid].name,
                             "text": f"Lists {near}{cats[cid].name} as their category"})
 
         # 3-a) 그것을 만드는 제조사의 대리점이다.
@@ -576,7 +598,8 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
                 if mkk not in direct_ag:
                     direct_ag.add(mkk)
                     score += _W_AGENT_DIRECT
-                    reasons.append({"kind": "agent", "text": f"Agent for {mk_name}"})
+                    reasons.append({"kind": "agent", "tag": mk_name,
+                                    "text": f"Agent for {mk_name}"})
                 continue
             for cid in mk_cats:
                 # 태그·이력이 이미 센 분류는 다시 세지 않는다(태그 쪽과 같은 규칙).
@@ -596,7 +619,7 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
                 break
             score += w
             near = "related to " if indirect else ""
-            reasons.append({"kind": "agent",
+            reasons.append({"kind": "agent", "tag": cats[cid].name,
                             "text": f"Agent for {mk_name} — makes {near}{cats[cid].name}"})
 
         # 4) 취급품목·회사소개 글귀가 품목 낱말과 겹친다.
@@ -615,7 +638,7 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
             top_words = matched[:3]
             words = ", ".join(display.get(t, t) for *_, t in top_words)
             where = "Specialization" if any(tw.get(t) == _SPEC_W for *_, t in top_words) else "Profile"
-            reasons.append({"kind": "spec", "text": f"{where}: {words}"})
+            reasons.append({"kind": "spec", "tag": words, "text": f"{where}: {words}"})
 
         if score < _MIN_SCORE or not reasons:
             continue
@@ -623,6 +646,7 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
         if last >= fresh:
             score += 5.0     # 최근에도 거래가 이어지는 곳을 앞에 둔다.
         out.append({
+            "party": "vendor",
             "id": v.id, "name": v.name, "contact": v.contact or "", "email": v.email or "",
             "logo": getattr(v, "logo", None) or "",
             "specialization": v.specialization or "",
@@ -632,12 +656,14 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
             "reasons": reasons,
         })
 
+    out += _suggest_makers(session, cats, want, makers, deal_makers, query_w, display,
+                           vendor_companies=set(company_of.values()), asked=asked)
     out.sort(key=lambda r: (-r["score"], -r["deals"], r["name"]))
     # 같은 회사의 담당자 레코드를 한 장으로 접는다. 대표는 점수가 가장 높은 레코드,
     # 근거는 담당자별로 갈라 쌓인 이력·태그를 합친다(문구가 같으면 한 번만).
     merged: dict[str, dict] = {}
     for r in out:
-        key = company_of.get(r["id"]) or f"#{r['id']}"
+        key = r["party"] + ":" + (_company_key(r["name"]) or f"#{r['id']}")
         head = merged.get(key)
         if head is None:
             r["contact_ids"] = [r["id"]]
@@ -663,3 +689,70 @@ def suggest_vendors(session, items, *, limit: int = 6, exclude_ids=(),
         "items": len(lines),
         "already_sent": len(excluded),
     }
+
+
+# 제조사 직접 문의 후보. 거래선 명부에 없는 제조사(대리점이 없거나 단종품이라 직접 물어야
+# 하는 곳)도 추천에 세운다 — 2단계에는 Maker 로 보내는 길이 이미 있는데, 추천은 거래선
+# 명부만 보아 그 길을 아무도 가리키지 않았다.
+#
+# 거래선 명부에 같은 이름이 서 있는 제조사는 세우지 않는다: 그 회사는 거래선 카드로 이미
+# 겨뤘고, 보내는 자리도 그 거래선 줄이다(메이커 직거래도 결국 거래선으로 심긴다).
+_W_MAKER_SELF = 30.0    # 이 딜 품목의 제조사 그 자체 — 정품은 만든 곳이 가장 확실히 안다
+
+
+def _suggest_makers(session, cats, want, makers, deal_makers, query_w, display,
+                    *, vendor_companies: set, asked: set) -> list[dict]:
+    rows = session.query(Maker).order_by(Maker.name).all()
+    per_tokens, idf = _text_index(rows)
+    out = []
+    for m in rows:
+        ck = _company_key(m.name)
+        if not ck or ck in vendor_companies or ck in asked:
+            continue
+        score, reasons = 0.0, []
+        mk = _maker_key(m.name)
+        label = next((deal_makers[d] for d in deal_makers if _maker_same(d, mk)), None)
+        if label:
+            score += _W_MAKER_SELF
+            reasons.append({"kind": "maker", "tag": label,
+                            "text": f"Makes {label} — the maker of these items"})
+        # 만든다고 적어 둔 분류(회사 단위 — 담당자 줄 어디에 적혀 있어도 된다).
+        _nm, mk_cats = makers.get(m.id, ("", set()))
+        dec = []
+        for cid in mk_cats:
+            if cid not in cats:
+                continue
+            if cid in want:
+                dec.append((_W_DECLARED, cid, False))
+            elif any(c in want for c in _chain(cats, cid)):
+                dec.append((_W_DECLARED * 0.5, cid, True))
+        dec.sort(key=lambda d: -d[0])
+        for w, cid, indirect in dec[:_DECLARED_MAX]:
+            score += w
+            near = "related to " if indirect else ""
+            reasons.append({"kind": "declared", "tag": cats[cid].name,
+                            "text": f"Makes {near}{cats[cid].name}"})
+        tw = per_tokens.get(m.id) or {}
+        matched = []
+        text_score = 0.0
+        for tk, qw in query_w.items():
+            if tk in tw and tk in idf:
+                gain = _TEXT_UNIT * tw[tk] * idf[tk] * qw
+                text_score += gain
+                matched.append((gain, len(tk), tk))
+        if matched:
+            score += min(text_score, _TEXT_CAP)
+            matched.sort(reverse=True)
+            words = ", ".join(display.get(tk, tk) for *_, tk in matched[:3])
+            reasons.append({"kind": "spec", "tag": words, "text": f"Makes: {words}"})
+        if score < _MIN_SCORE or not reasons:
+            continue
+        out.append({
+            "party": "maker",
+            "id": m.id, "name": m.name, "contact": m.contact or "", "email": m.email or "",
+            "logo": getattr(m, "logo", None) or "",
+            "specialization": m.specialization or "",
+            "score": round(score, 1), "deals": 0, "last_date": "",
+            "reasons": reasons,
+        })
+    return out

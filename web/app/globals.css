@@ -9216,6 +9216,24 @@ table.mini .num {
   border: 1px dashed #ddd5f5;
   padding: 1px 6px;
 }
+/* 근거가 다섯을 넘으면 나머지는 숫자로만 — 마우스를 올리면 문장이 뜬다. */
+.vsug-reason.vsug-more {
+  background: transparent;
+  border: 1px solid #dfe5ee;
+  color: var(--muted);
+  padding: 1px 6px;
+}
+/* 메이커 명부에서 온 후보(직접 문의) — 거래선 카드와 한 목록에 서므로 이름 옆에서 가른다. */
+.vsug-party {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: #fff4e5;
+  color: #9a5b12;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+}
 
 /* 명함 스캔 패널 — Customer/Vendor 등록 폼 맨 위. 붙여넣기·파일선택으로 자동 입력. */
 .bc-scan {

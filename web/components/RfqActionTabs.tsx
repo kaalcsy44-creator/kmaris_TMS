@@ -3586,15 +3586,28 @@ function VendorRfqAction({
       <DetailTabBar tab={tab} onTab={setTab} />
       {tab === "edit" ? (
       <>
-      {/* 벤더를 고르기 전에 "이 품목을 다루는 곳"을 먼저 짚어 준다(근거는 카드에 적힌다).
-          메이커에 직접 묻는 자리에서는 뜻이 없어 내리고, 대신 아래 안내가 선다. */}
-      {party === "vendor" ? (
+      {/* 고르기 전에 "이 품목을 다루는 곳"을 먼저 짚어 준다(연관 낱말은 카드에 적힌다).
+          거래선과 메이커가 한 목록에서 겨룬다 — 어느 쪽 카드를 고르든 아래 칸이 따라간다. */}
+      {(
         <VendorSuggest
           rfqId={rfqId}
           value={vendorId}
-          onPick={(v) => pickContacts(v.contact_ids?.length ? v.contact_ids : [v.id])}
+          makerValue={makerId}
+          onPick={(v) => {
+            const ids = v.contact_ids?.length ? v.contact_ids : [v.id];
+            // 메이커 카드면 아래를 Maker 로 돌려 그 회사 담당자를 고른다(직접 문의).
+            if (v.party === "maker") {
+              setParty("maker");
+              pickMakerContacts(ids);
+            } else {
+              setParty("vendor");
+              setMakerId("");
+              setMakerContactIds([]);
+              pickContacts(ids);
+            }
+          }}
         />
-      ) : null}
+      )}
 
       {/* 물어보는 곳이 늘 거래선인 것은 아니다 — 대리점이 없는 브랜드나 단종품은
           제조사에 직접 묻는다. 두 명부는 서로를 대신하지 못해 고르는 자리를 나눈다. */}

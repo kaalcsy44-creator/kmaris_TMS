@@ -2133,10 +2133,14 @@ export type VendorSuggestReason = {
   /** part=같은 품번을 다뤄 봤다 · category=같은 분류에서 거래했다 ·
    *  declared=그 분류를 취급한다고 밝혀 뒀다 · agent=그것을 만드는 제조사의 대리점이다 ·
    *  spec=취급품목·회사소개 글귀가 겹친다. 색이 곧 근거의 세기다(globals.css). */
-  kind: "part" | "category" | "declared" | "agent" | "spec";
+  kind: "part" | "category" | "maker" | "declared" | "agent" | "spec";
+  /** 카드에 보일 짧은 연관 낱말(품번·분류·제조사…). 문장은 text — 마우스를 올리면 뜬다. */
+  tag?: string;
   text: string;
 };
 export type VendorSuggestion = {
+  /** 거래선 명부의 회사인가, 메이커 명부의 회사(직접 문의)인가. id·contact_ids 는 그 명부의 것. */
+  party?: "vendor" | "maker";
   id: number;
   name: string;
   contact?: string;
