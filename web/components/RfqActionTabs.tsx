@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchVendors,
   fetchRfqDetail,
@@ -3226,8 +3226,18 @@ function VendorRfqAction({
   // 메이커에 직접 묻는다. 그때 수신처는 거래선 명부가 아니라 메이커 명부에서 고른다.
   const [party, setParty] = useState<"vendor" | "maker">("vendor");
   const [makerId, setMakerId] = useState<number | "">("");
+  // 고른 메이커 담당자들(레코드 id) — 거래선과 같은 규약이다. 첫 사람이 대표(makerId).
+  const [makerContactIds, setMakerContactIds] = useState<number[]>([]);
   const makers = useMakerOptions();
   const maker = makerId === "" ? null : makers.find((m) => m.id === makerId) ?? null;
+  // 메이커 명부도 레코드 1건 = 담당자 1명이라, 거래선과 같은 두 칸(회사 → 담당자)에 싣는다.
+  const makerOpts = useMemo<VendorOption[]>(
+    () => makers.map((m) => ({
+      id: m.id, name: m.name, contact: m.contact, logo: m.logo || undefined,
+      email: (m.emails?.[0] || m.email || "").trim(),
+    })),
+    [makers]
+  );
   const [to, setTo] = useState("");   // Recipient email(벤더 선택 시 자동 채움, 편집 가능)
   const [lang, setLang] = useState<"en" | "ko">("en");
   const [notes, setNotes] = useState("");
@@ -3378,18 +3388,20 @@ function VendorRfqAction({
     setContactIds([]);
     setVendorId("");
     setMakerId("");
+    setMakerContactIds([]);
     setTo("");
     setPreviews([]);
   }
 
-  // 메이커 선택 — 여기서는 명부만 고른다(거래선으로 심는 것은 실제로 필요해지는 순간).
-  function pickMaker(id: number | "") {
-    setMakerId(id);
+  // 메이커 담당자 선택 — 여기서는 명부만 고른다(거래선으로 심는 것은 실제로 필요해지는
+  // 순간). 여럿을 고르면 그 주소들이 받는 사람에 함께 실린다(거래선과 같다).
+  function pickMakerContacts(ids: number[]) {
+    setMakerContactIds(ids);
+    setMakerId(ids[0] ?? "");
     setVendorId("");          // 앞서 심어 둔 거래선이 있으면 다시 해석한다
     setContactIds([]);
     setPreviews([]);
-    const m = id === "" ? null : makers.find((x) => x.id === id) ?? null;
-    setTo((m?.emails?.[0] || m?.email || "").trim());
+    setTo(vendorContactEmails(makerOpts, ids));
   }
 
   /** 발신에 쓸 거래선 id. 메이커를 골랐으면 그 회사를 거래선 명부에도 세우고(멱등)
@@ -3512,6 +3524,7 @@ function VendorRfqAction({
       setPreviews([]);
       pickContacts([]);
       setMakerId("");
+      setMakerContactIds([]);
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Send failed");
@@ -3561,27 +3574,14 @@ function VendorRfqAction({
 
       <div className="form-grid">
         {party === "maker" ? (
-          /* 메이커는 회사 한 곳 = 한 줄이라 담당자 칸이 없다. 받는 사람은 명부에 적힌
-             주소가 기본이고, 아래 Recipient email 에서 그대로 고쳐 쓴다. */
-          <div className="form-field">
-            <label>Maker</label>
-            <VendorSelect
-              value={makerId}
-              options={makers.map((m) => ({
-                id: m.id,
-                name: m.name,
-                logo: m.logo || undefined,
-                label: m.country ? (
-                  <>
-                    {m.name}
-                    <span className="vcon-sub"> · {m.country}</span>
-                  </>
-                ) : undefined,
-              }))}
-              onChange={pickMaker}
-              placeholder="Select a maker…"
-            />
-          </div>
+          /* 메이커도 회사로 한 번, 담당자는 그 안에서 따로(여럿 가능) 고른다 — 명부가
+             거래선과 같이 담당자 한 명이 한 줄이다. */
+          <VendorContactFields
+            label="Maker"
+            vendors={makerOpts}
+            value={makerContactIds}
+            onChange={pickMakerContacts}
+          />
         ) : (
           /* 벤더는 회사로 한 번, 담당자는 그 안에서 따로(여럿 가능) 고른다. */
           <VendorContactFields vendors={vendors} value={contactIds} onChange={pickContacts} />
@@ -3607,7 +3607,7 @@ function VendorRfqAction({
             onChange={(e) => setTo(e.target.value)}
             list={party === "maker" && maker ? "vrfq-maker-emails" : undefined}
           />
-          {/* 메이커는 담당자 칸이 없어 주소가 여럿이면 여기서 고른다(기술문의 창구·본사). */}
+          {/* 한 담당자에게 주소가 여럿이면 여기서 고른다(기술문의 창구·본사). */}
           {party === "maker" && maker ? (
             <datalist id="vrfq-maker-emails">
               {(maker.emails || []).map((a) => (

@@ -1550,11 +1550,21 @@ def maker_as_vendor(row_id: int):
         v = (s.query(Vendor).filter_by(maker_id=m.id).order_by(Vendor.id).first())
         created = False
         if v is None:
-            # 이름이 같은 거래선이 이미 있으면 그 줄을 쓴다(담당자가 여럿이면 첫 줄).
+            # 이름이 같은 거래선이 이미 있으면 그 회사의 **같은 사람** 줄을 쓴다 — 2단계에서
+            # 메이커 담당자를 골라 보내므로, 받은 견적·P/O 도 그 사람 앞으로 서야 한다.
+            # 저쪽에 그 사람이 없으면 담당자 한 줄을 더 세운다(담당자 동기화와 같은 규칙).
+            # 이름 없는 대표 줄이면 사람을 가릴 수 없어 예전처럼 그 회사의 첫 줄을 쓴다.
             key = _norm_company(m.name)
-            v = next((x for x in s.query(Vendor).order_by(Vendor.id).all()
-                      if _norm_company(x.name) == key), None)
-            if v is not None:
+            same = [x for x in s.query(Vendor).order_by(Vendor.id).all()
+                    if _norm_company(x.name) == key]
+            if same:
+                v = _find_contact_twin(same, _contact_snap(m))
+                if v is None and (m.contact or "").strip():
+                    v = _new_contact_like(Vendor, same[0], m)
+                    s.add(v)
+                    created = True
+                if v is None:
+                    v = same[0]
                 v.maker_id = m.id
         if v is None:
             v = Vendor(

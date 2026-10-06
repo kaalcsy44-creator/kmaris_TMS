@@ -104,12 +104,15 @@ export default function VendorContactFields({
   value,
   onChange,
   disabled = false,
+  label = "Vendor",
 }: {
   vendors: VendorOption[];
   /** 고른 담당자 레코드 id. 첫 번째가 대표(저장되는 vendor_id). */
   value: number[];
   onChange: (ids: number[]) => void;
   disabled?: boolean;
+  /** 회사 칸 이름 — 메이커에 직접 물을 때도 같은 두 칸(회사 → 담당자)을 쓴다. */
+  label?: string;
 }) {
   const companies = useMemo(() => groupVendorContacts(vendors), [vendors]);
   const company = useMemo(
@@ -168,12 +171,13 @@ export default function VendorContactFields({
   return (
     <>
       <div className="form-field">
-        <label>Vendor</label>
+        <label>{label}</label>
         <VendorSelect
           value={company ? company.repId : ""}
           options={companyOptions}
           onChange={pickCompany}
           disabled={disabled}
+          placeholder={`Select a ${label.toLowerCase()}…`}
         />
       </div>
       <div className="form-field">
@@ -183,6 +187,7 @@ export default function VendorContactFields({
           value={value}
           onToggle={toggleContact}
           disabled={disabled}
+          companyLabel={label.toLowerCase()}
         />
       </div>
     </>
@@ -195,11 +200,13 @@ function ContactSelect({
   value,
   onToggle,
   disabled,
+  companyLabel,
 }: {
   company: Company | null;
   value: number[];
   onToggle: (id: number) => void;
   disabled: boolean;
+  companyLabel: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -230,7 +237,7 @@ function ContactSelect({
         <span className="vsel-label">
           {picked.length === 0 ? (
             <span className="vsel-placeholder">
-              {company ? "Select contact…" : "Select a vendor first"}
+              {company ? "Select contact…" : `Select a ${companyLabel} first`}
             </span>
           ) : (
             <span className="vsel-name">
