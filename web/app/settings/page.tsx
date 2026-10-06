@@ -1976,9 +1976,12 @@ function CompanyInfoModal<
   const canAddContact = can("settings", "create");
   const canDeleteContact = can("settings", "delete");
   // 지운 사람을 빼고, 고친 사람은 고친 값으로 — 창 안의 모든 숫자·문구가 이것을 센다.
+  // 새로 만든 줄은 rows 가 다시 불러와지면(메이커 창은 목록이 새로 고쳐질 때 rows 도 새로
+  // 받는다) 거기에도 선다 — 같은 id 를 두 번 세우지 않는다. 고친 값은 어느 쪽에 있든 얹는다.
+  const rowIds = new Set(rows.map((r) => r.id));
   const contacts = [
     ...rows.filter((r) => !gone.has(r.id)).map((r) => edits[r.id] ?? r),
-    ...added.filter((r) => !gone.has(r.id)),
+    ...added.filter((r) => !gone.has(r.id) && !rowIds.has(r.id)).map((r) => edits[r.id] ?? r),
   ];
   // 새 줄인가 — id 가 아직 없다(만들어지면 서버가 준다).
   const addingNew = !!draft && draft.row.id === 0;
