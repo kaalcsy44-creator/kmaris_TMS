@@ -630,6 +630,16 @@ export default function ComposeEmailModal({
               >
                 Preview
               </button>
+              {/* 새 탭으로 열어 쓰던 메일을 잃지 않게 한다. */}
+              <a
+                className="compose-tpl-edit"
+                href="/settings?tab=email&type=marketing_intro"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Edit the saved templates in Settings (opens a new tab)"
+              >
+                Edit template ↗
+              </a>
             </span>
           </div>
 
@@ -750,7 +760,10 @@ export default function ComposeEmailModal({
                 )}
               </div>
               <div className="compose-hint">
-                This is the signature saved under Settings → Email Templates → Signature.
+                This is the signature saved under{" "}
+                <a href="/settings?tab=email&type=__signature" target="_blank" rel="noopener noreferrer">
+                  Settings → Email Templates → Signature ↗
+                </a>.
                 Editing it here applies to this send only, and sends the edited plain text
                 instead of the table signature.
               </div>

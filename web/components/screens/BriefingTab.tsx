@@ -459,7 +459,7 @@ export default function BriefingTab() {
           {/* 등록 안 된 상대의 메일은 저장조차 되지 않는다 — 카드가 조용한 이유가
               "일이 없어서"가 아닐 수 있다는 걸 여기서 말해 준다. */}
           {status && status.unknown > 0 ? (
-            <Link className="brief-warn" href="/settings?tab=mail">
+            <Link className="brief-warn" href="/activity?view=mail&queue=unknown">
               {status.unknown} unregistered
             </Link>
           ) : null}

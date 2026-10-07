@@ -23,8 +23,10 @@ import UnknownAddressPanel from "@/components/common/UnknownAddressPanel";
 //   Not deal     — 딜이 있을 수 없어 내려 둔 대화(회사 소개·인사·자동회신).
 //   Unregistered — 상대가 등록되지 않아 **한 통도 담기지 않은** 주소(admin 전용).
 // 셋을 한 화면에 둔 이유: 같은 물음("이 메일은 어디로 가나")의 단계만 다른데, 갈라
-// 놓으면 메일함 한 번 비우려고 두 메뉴를 오가야 한다. 연결 설정(계정·매일 실행·폴더
-// 오류)만 Settings › Mailbox 에 남는다 — 그건 작업이 아니라 설정이다.
+// 놓으면 메일함 한 번 비우려고 두 메뉴를 오가야 한다. 연결 상태(계정·매일 실행·폴더
+// 오류)도 여기 있다 — 머리줄의 "last sync" 를 누르면 펼쳐진다(admin). 예전엔 Settings
+// › Mailbox 에 따로 있었는데, "왜 안 들어오나"는 바로 이 함을 보다가 드는 물음이라
+// 설정 화면까지 갔다 오게 할 까닭이 없었다.
 // Unregistered 는 회사 메일함 전체의 상대 주소가 드러나는 자리라 admin 에게만 연다.
 //
 // 아래는 그중 첫 함(미분류)의 이야기다.
@@ -40,11 +42,14 @@ export type MailQueue = "unmatched" | "filed" | "unknown";
 export default function UnmatchedMailPanel({
   projects,
   initialQueue = "unmatched",
+  initialConn = false,
 }: {
   /** 배정 대상 목록(최근 딜이 위). 번호만으로는 고르기 어려워 고객·프로젝트명·선박까지 함께 넘긴다. */
   projects: ProjectPickOption[];
   /** 처음 열 함 — 주소(?queue=unknown)로 들어온 링크가 곧장 그 함을 편다. */
   initialQueue?: MailQueue;
+  /** 연결 상태를 펼친 채로 연다 — 옛 Settings › Mailbox 링크(?conn=1)가 여기로 온다. */
+  initialConn?: boolean;
 }) {
   const [groups, setGroups] = useState<UnmatchedMailGroup[] | null>(null);
   const [status, setStatus] = useState<MailStatus | null>(null);
@@ -61,6 +66,8 @@ export default function UnmatchedMailPanel({
   const showFiled = queue === "filed";
   const [filedCount, setFiledCount] = useState(0);
   const admin = isAdmin();
+  // 연결 상태 펼침(admin 전용) — 매일 할 일이 아니라 접어 두고, 필요할 때만 연다.
+  const [showConn, setShowConn] = useState(initialConn);
 
   const load = useCallback(async () => {
     try {
@@ -197,6 +204,17 @@ export default function UnmatchedMailPanel({
             <span className="hint-inline">
               The mailbox is not connected — set IMAP_USER · IMAP_PASSWORD on the server.
             </span>
+          ) : admin ? (
+            <button
+              type="button"
+              className={`hint-inline umail-conn-toggle${showConn ? " on" : ""}`}
+              title="Show the mailbox connection — daily run, last runs, folder errors"
+              onClick={() => setShowConn((v) => !v)}
+            >
+              {status?.account}
+              {lastSync(status) ? ` · last sync ${lastSync(status)}` : ""}
+              <span className="umail-caret">{showConn ? "▾" : "▸"}</span>
+            </button>
           ) : (
             <span className="hint-inline">
               {status?.account}
@@ -244,11 +262,19 @@ export default function UnmatchedMailPanel({
           >
             ✨ Auto-match
           </button>
-          <button className="btn sm" disabled={busy || status?.configured === false} onClick={sync}>
-            {busy ? "Fetching…" : "↻ Sync"}
+          {/* 아침 자동 실행이 돌고 있으면 누르게 두지 않는다 — 눌러도 거절만 당한다. */}
+          <button
+            className="btn sm"
+            disabled={busy || status?.configured === false || !!status?.auto.running_since}
+            onClick={sync}
+          >
+            {busy || status?.auto.running_since ? "Fetching…" : "↻ Sync"}
           </button>
         </div>
       </div>
+      {admin && status && (showConn || !status.configured) ? (
+        <MailboxConnection status={status} onRefresh={load} />
+      ) : null}
       {err ? <div className="action-err">{err}</div> : null}
       {note ? <div className="action-ok">{note}</div> : null}
       {syncErrors(status).map((e) => (
@@ -367,6 +393,93 @@ export default function UnmatchedMailPanel({
           </tbody>
         </table>
       )}
+    </div>
+  );
+}
+
+/* 메일함 연결 상태 — 어느 계정을 언제 읽는지, 마지막 자동 실행·수동 Sync 가 무엇을
+   했는지. 폴더 오류는 펼치지 않아도 머리줄 아래 늘 보인다(여기선 되풀이하지 않는다). */
+function MailboxConnection({ status, onRefresh }: { status: MailStatus; onRefresh: () => void }) {
+  const auto = status.auto;
+  const last = auto.last_result || {};
+  const resultParts = (r: Record<string, number | string>) =>
+    Object.entries(r || {})
+      .filter(([k, v]) => k !== "at" && k !== "error" && k !== "ok" && v)
+      .map(([k, v]) => `${k} ${v}`);
+  const lastParts = resultParts(last);
+  const manual = status.manual || { last_at: "", last_result: {} };
+  const manualParts = resultParts(manual.last_result);
+
+  return (
+    <div className="umail-conn">
+      {!status.configured ? (
+        <p className="hint-inline" style={{ display: "block", marginBottom: 8 }}>
+          The mailbox is not connected. Set <b>IMAP_USER</b> and <b>IMAP_PASSWORD</b> on the
+          server (they fall back to SMTP_USER / SMTP_PASSWORD), then press Sync.
+        </p>
+      ) : null}
+      <table className="mini wide kv-table">
+        <tbody>
+          <tr>
+            <th>Account</th>
+            <td>{status.account || "—"} <span className="muted">@ {status.host}</span></td>
+          </tr>
+          <tr>
+            <th>Stored mail</th>
+            <td>{status.total} kept · {status.unmatched} unmatched · {status.unknown} unregistered counterparts</td>
+          </tr>
+          <tr>
+            <th>Daily run</th>
+            <td>
+              {auto.enabled ? (
+                <>
+                  every day at <b>{auto.at}</b> KST
+                  {auto.next_run ? <span className="muted"> · next {auto.next_run}</span> : null}
+                </>
+              ) : (
+                <span className="muted">off (MAIL_AUTO_SYNC=0)</span>
+              )}
+            </td>
+          </tr>
+          {/* 아침 자동 실행과 사람이 누른 Sync 를 한 줄에 섞지 않는다 — 섞으면 Sync 를
+              눌러도 값이 그대로라 아무 일도 안 일어난 것처럼 보인다. */}
+          <tr>
+            <th>Last daily run</th>
+            <td>
+              {auto.running_since ? (
+                <>
+                  <b>running now — started {auto.running_since}</b>{" "}
+                  <button type="button" className="as-link" onClick={onRefresh}>Refresh</button>
+                </>
+              ) : auto.last_run_at ? (
+                <>
+                  {auto.last_run_at}
+                  {lastParts.length ? <span className="muted"> · {lastParts.join(" · ")}</span> : null}
+                  {last.error ? <div className="action-err">{String(last.error)}</div> : null}
+                </>
+              ) : (
+                <span className="muted">has not run yet</span>
+              )}
+            </td>
+          </tr>
+          <tr>
+            <th>Last manual sync</th>
+            <td>
+              {manual.last_at ? (
+                <>
+                  {manual.last_at}
+                  {manualParts.length ? <span className="muted"> · {manualParts.join(" · ")}</span> : null}
+                  {/* 수동 Sync 는 카드 요약을 만들지 않는다 — 브리핑 요약이 비어 있을 때
+                      "동기화는 됐는데 요약이 없구나"를 여기서 알 수 있어야 한다. */}
+                  <span className="muted"> · digests are written by the daily run</span>
+                </>
+              ) : (
+                <span className="muted">not pressed yet</span>
+              )}
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }

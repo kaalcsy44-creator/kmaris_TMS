@@ -1694,6 +1694,7 @@ function VendorRfqDetailModal({
             downloadName={(f) => `${d.kmaris_rfq_no || "VendorRFQ"}_${d.vendor || "vendor"}.${f}`}
             onPreview={(lang) => previewVendorRfqEmail(d.id, lang)}
             onSend={(p) => sendVendorRfqEmail({ ...p, vrfqId: d.id })}
+            templateType="vendor_rfq"
             rfqId={d.rfq_id}
             docNo={d.kmaris_rfq_no}
             sentAt={d.sent_at || d.sent_date}

@@ -157,7 +157,7 @@ export default function ActivityScreen() {
   const [custF, setCustF] = useState<string[]>([]);
   const [vendF, setVendF] = useState<string[]>([]);
   // 탭: 딜별(카드) / 일자별(피드) / 메일 정리함. 대시보드의 "N unmatched" 와
-  // Settings › Mailbox 의 "N unregistered" 링크가 ?view=mail(&queue=…)로 넘어오므로
+  // 브리핑의 "N unregistered" 링크가 ?view=mail(&queue=…)로 넘어오므로
   // 초기값을 주소에서 받는다.
   const [view, setView] = useState<"deal" | "date" | "mail">(
     () => (params.get("view") === "mail" ? "mail" : "deal"),
@@ -536,7 +536,7 @@ export default function ActivityScreen() {
       )}
 
       {view === "mail" ? (
-        <UnmatchedMailPanel projects={mailProjects} initialQueue={mailQueue} />
+        <UnmatchedMailPanel projects={mailProjects} initialQueue={mailQueue} initialConn={params.get("conn") === "1"} />
       ) : null}
 
       {view === "deal" ? (

@@ -55,6 +55,7 @@ export default function DocSendPanel({
   docNo,
   sentAt,
   onSent,
+  templateType,
 }: {
   title?: string;
   formats: DocFormat[]; // 지원 포맷(다운로드·첨부 선택지)
@@ -86,6 +87,9 @@ export default function DocSendPanel({
   /** 문서에 찍힌 발송 시각. 메일 본문 기록이 없을 때 "보내긴 했다"는 사실만이라도 알린다. */
   sentAt?: string;
   onSent?: () => void;
+  /** 이 메일 초안이 나오는 Settings › Email Templates 의 종류(예: vendor_rfq). 주면
+   *  Message 머리줄에 템플릿 편집 링크가 선다 — 템플릿이 없는 문서에는 주지 않는다. */
+  templateType?: string;
 }) {
   const emailEnabled = !!onPreview && !!onSend;
   // 단계 화면의 읽기모드를 이 패널도 따른다 — 읽기 중에는 초안을 눈으로만 확인하고,
@@ -521,6 +525,19 @@ export default function DocSendPanel({
                 >
                   Preview
                 </button>
+                {/* 초안을 매번 같은 곳에서 고치게 되면 템플릿을 고칠 때다. 새 탭으로 열어
+                    쓰던 메일을 잃지 않게 한다. */}
+                {templateType ? (
+                  <a
+                    className="compose-tpl-edit"
+                    href={`/settings?tab=email&type=${encodeURIComponent(templateType)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Edit the template this draft is generated from (opens Settings in a new tab)"
+                  >
+                    Edit template ↗
+                  </a>
+                ) : null}
               </span>
             </div>
 
@@ -642,7 +659,10 @@ export default function DocSendPanel({
                   )}
                 </div>
                 <div className="compose-hint">
-                  This is the signature saved under Settings → Email Templates → Signature.
+                  This is the signature saved under{" "}
+                  <a href="/settings?tab=email&type=__signature" target="_blank" rel="noopener noreferrer">
+                    Settings → Email Templates → Signature ↗
+                  </a>.
                   Editing it here applies to this send only, and sends the edited plain text
                   instead of the table signature.
                 </div>

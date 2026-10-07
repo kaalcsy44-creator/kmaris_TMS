@@ -65,10 +65,7 @@ import {
   fetchEmailSignature,
   saveEmailSignature,
   previewEmailSignature,
-  fetchMailStatus,
-  syncMail,
 } from "@/lib/api";
-import type { MailStatus } from "@/lib/types";
 import type { SettingsMaker } from "@/lib/types";
 import type {
   PermissionsConfig,
@@ -134,7 +131,7 @@ import { HeadTh, useHeadMenu, type HeadCol } from "@/components/common/tableHead
 // 나눈 것이다. ?tab= 링크는 옛 이름으로 들어와도 새 탭으로 보낸다(TAB_ALIAS).
 type Tab =
   | "company" | "users"
-  | "partners" | "vessels" | "consultants" | "email" | "mail" | "account";
+  | "partners" | "vessels" | "consultants" | "email" | "account";
 
 /** 옛 ?tab= 값 → 지금 탭. 밖에 나가 있는 링크·북마크가 죽지 않게. */
 const TAB_ALIAS: Record<string, Tab> = {
@@ -186,7 +183,7 @@ export default function SettingsPage() {
 
 function Settings({ onFill }: { onFill: (v: boolean) => void }) {
   const admin = isAdmin();
-  // 다른 화면에서 특정 탭으로 곧장 보내는 링크(?tab=mail 등)를 받는다.
+  // 다른 화면에서 특정 탭으로 곧장 보내는 링크(?tab=email&type=… 등)를 받는다.
   const params = useSearchParams();
   // 마스터 데이터(고객사·Vendor·선박·품목) 관리 = "settings" 권한. admin 은 항상 허용.
   // 회사/사용자/권한 설정은 admin 전용으로 유지한다.
@@ -194,13 +191,20 @@ function Settings({ onFill }: { onFill: (v: boolean) => void }) {
   const [tab, setTab] = useState<Tab>(() => {
     const raw = params.get("tab") || "";
     const asked = (TAB_ALIAS[raw] ?? raw) as Tab;
-    // 링크로 들어온 탭이라도 권한이 없으면 기본 탭으로 — Mailbox 는 admin 전용이다.
-    if (asked === "mail" && admin) return asked;
+    // 링크로 들어온 탭이라도 권한이 없으면 기본 탭으로.
     if (asked === "partners" && (admin || canMaster)) return asked;
+    if (asked === "email" && (admin || canMaster)) return asked;
     return admin ? "company" : canMaster ? "partners" : "account";
   });
 
   useEffect(() => { onFill(FILL_TABS.has(tab)); }, [tab, onFill]);
+
+  // 메일함 연결 상태는 Activity › Mail 로 옮겼다(받은 메일을 정리하는 바로 그 자리에서
+  // "왜 안 들어오나"를 보게). 밖에 나가 있는 ?tab=mail 링크는 그리로 보낸다.
+  const legacyMail = params.get("tab") === "mail";
+  useEffect(() => {
+    if (legacyMail) window.location.replace("/activity?view=mail&conn=1");
+  }, [legacyMail]);
 
   // 마스터 데이터 권한도 없는 사용자(예: 권한 없는 viewer)는 본인 비밀번호 변경만.
   if (!admin && !canMaster) {
@@ -225,7 +229,6 @@ function Settings({ onFill }: { onFill: (v: boolean) => void }) {
         { key: "vessels", label: "Vessels" },
         { key: "consultants", label: "Consultant" },
         { key: "email", label: "Email Templates" },
-        { key: "mail", label: "Mailbox" },
       ]
     : [
         { key: "partners", label: "Partners" },
@@ -253,8 +256,7 @@ function Settings({ onFill }: { onFill: (v: boolean) => void }) {
       {tab === "partners" && <PartnersTab />}
       {tab === "vessels" && <VesselsTab />}
       {tab === "consultants" && <ConsultantsTab />}
-      {tab === "email" && <EmailTemplatesTab />}
-      {admin && tab === "mail" && <MailboxTab />}
+      {tab === "email" && <EmailTemplatesTab initialType={params.get("type") || undefined} />}
       {tab === "account" && (
         <div className="panel">
           <MyPasswordChange />
@@ -6360,8 +6362,9 @@ function SignatureEditor() {
   );
 }
 
-function EmailTemplatesTab() {
-  const [docType, setDocType] = useState("vendor_rfq");
+function EmailTemplatesTab({ initialType }: { initialType?: string }) {
+  // 발송 창의 "Edit template ↗" 링크가 ?type= 로 그 종류(또는 서명)를 곧장 연다.
+  const [docType, setDocType] = useState(initialType || "vendor_rfq");
   const [data, setData] = useState<EmailTemplatesData | null>(null);
   const [scope, setScope] = useState<"user" | "company">("user");
   const [lang, setLang] = useState<"en" | "ko">("en");
@@ -6783,189 +6786,3 @@ function EmailTemplatesTab() {
   );
 }
 
-/* ── Mailbox — 회사 메일함 연동 상태 ────────────────────────────────────────
-   여기는 **설정**만 본다: 어느 계정을 어떤 주기로 읽고 있는지, 마지막 실행이 무엇을
-   했는지, 폴더에 오류가 있는지. 지금 당장 받아 보고 싶을 때 쓰는 Sync 도 함께.
-
-   처리할 것 — 딜을 못 정한 메일(unmatched), 등록되지 않은 상대(unregistered) — 는
-   여기 있지 않고 Activity › Mail 에 함께 있다. 둘은 같은 물음("이 메일은 어디로
-   가나")의 단계만 다른 일감이라 한 자리에 있어야 하고, 그 일은 설정이 아니라 매일
-   하는 작업이라 admin 전용 화면에 가둘 것도 아니다(미등록 상대 함만 admin 전용).
-   그래서 이 표는 그리로 가는 문패 두 개를 달아 둔다. */
-function MailboxTab() {
-  const [status, setStatus] = useState<MailStatus | null>(null);
-  const [busy, setBusy] = useState("");
-  const [note, setNote] = useState("");
-  const [err, setErr] = useState("");
-
-  const load = useCallback(async () => {
-    try {
-      setStatus(await fetchMailStatus());
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not load mailbox status");
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // 수동 Sync — 자동 실행이 하루 한 번이라, 지금 당장 받아 보고 싶을 때 쓴다.
-  async function syncNow() {
-    setBusy("sync");
-    setErr("");
-    setNote("");
-    try {
-      const r = await syncMail();
-      const parts = [`Scanned ${r.scanned}`];
-      if (r.stored) parts.push(`kept ${r.stored}`);
-      if (r.dup) parts.push(`${r.dup} already stored`);
-      if (r.skipped) parts.push(`${r.skipped} from unregistered parties`);
-      if (r.auto_matched) parts.push(`auto-matched ${r.auto_matched}`);
-      if (r.pending) parts.push(`${r.pending} older mails still unread`);
-      setNote(parts.join(" · "));
-      await load();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Sync failed");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  if (!status) return <div className="state">{err || "Loading…"}</div>;
-
-  const auto = status.auto;
-  const last = auto.last_result || {};
-  const resultParts = (r: Record<string, number | string>) =>
-    Object.entries(r || {})
-      .filter(([k, v]) => k !== "at" && k !== "error" && k !== "ok" && v)
-      .map(([k, v]) => `${k} ${v}`);
-  const lastParts = resultParts(last);
-  const manual = status.manual || { last_at: "", last_result: {} };
-  const manualParts = resultParts(manual.last_result);
-  // 폴더별 마지막 오류 — 여기 말고는 "왜 안 들어오나"를 볼 자리가 없다.
-  const syncErrors = (status.folders ?? [])
-    .filter((f) => f.last_error)
-    .map((f) => `${f.folder}: ${f.last_error}`);
-
-  return (
-    <div className="panel">
-      <h3 className="form-title">Mailbox connection</h3>
-      {!status.configured ? (
-        <p className="hint-inline" style={{ display: "block", marginBottom: 10 }}>
-          The mailbox is not connected. Set <b>IMAP_USER</b> and <b>IMAP_PASSWORD</b> on the
-          server (they fall back to SMTP_USER / SMTP_PASSWORD), then press Sync.
-        </p>
-      ) : null}
-      <table className="mini wide kv-table">
-        <tbody>
-          <tr>
-            <th>Account</th>
-            <td>{status.account || "—"} <span className="muted">@ {status.host}</span></td>
-          </tr>
-          <tr>
-            <th>Stored mail</th>
-            <td>
-              {status.total} kept
-              {status.unmatched > 0 ? (
-                <> · <a href="/activity?view=mail">{status.unmatched} unmatched</a></>
-              ) : null}
-            </td>
-          </tr>
-          {/* 담기지 **않은** 메일의 상대. 처리는 Activity › Mail 에서 하고, 여기서는
-              "얼마나 버려지고 있나"만 알려 주고 그리로 보낸다 — 이 표는 설정이지 일감이
-              아니다. 0 이면 줄 자체를 내지 않는다(할 일이 없으면 문패도 필요 없다). */}
-          {status.unknown > 0 ? (
-            <tr>
-              <th>Not stored</th>
-              <td>
-                <a href="/activity?view=mail&queue=unknown">
-                  {status.unknown} unregistered counterparts
-                </a>
-                <span className="muted"> · their mail is discarded until you register, attach, or dismiss them</span>
-              </td>
-            </tr>
-          ) : null}
-          <tr>
-            <th>Daily run</th>
-            <td>
-              {auto.enabled ? (
-                <>
-                  every day at <b>{auto.at}</b> KST
-                  {auto.next_run ? <span className="muted"> · next {auto.next_run}</span> : null}
-                </>
-              ) : (
-                <span className="muted">off (MAIL_AUTO_SYNC=0)</span>
-              )}
-            </td>
-          </tr>
-          {/* 아침 자동 실행과 사람이 누른 Sync 를 한 줄에 섞지 않는다 — 예전에는 이
-              줄이 자동 실행만 가리켜, Sync 를 눌러도 값이 그대로라 아무 일도 안 일어난
-              것처럼 보였다. */}
-          <tr>
-            <th>Last daily run</th>
-            <td>
-              {auto.running_since ? (
-                <b>running now — started {auto.running_since}</b>
-              ) : auto.last_run_at ? (
-                <>
-                  {auto.last_run_at}
-                  {lastParts.length ? <span className="muted"> · {lastParts.join(" · ")}</span> : null}
-                  {last.error ? <div className="action-err">{String(last.error)}</div> : null}
-                </>
-              ) : (
-                <span className="muted">has not run yet</span>
-              )}
-            </td>
-          </tr>
-          <tr>
-            <th>Last manual sync</th>
-            <td>
-              {manual.last_at ? (
-                <>
-                  {manual.last_at}
-                  {manualParts.length ? (
-                    <span className="muted"> · {manualParts.join(" · ")}</span>
-                  ) : null}
-                  {/* 수동 Sync 는 카드 요약을 만들지 않는다 — 브리핑 요약이 비어 있을 때
-                      여기를 보고 "동기화는 됐는데 요약이 없구나"를 알 수 있어야 한다. */}
-                  <span className="muted"> · digests are written by the daily run</span>
-                </>
-              ) : (
-                <span className="muted">not pressed yet</span>
-              )}
-            </td>
-          </tr>
-          {syncErrors.length ? (
-            <tr>
-              <th>Folder errors</th>
-              <td>
-                {syncErrors.map((e) => (
-                  <div key={e} className="action-err">{e}</div>
-                ))}
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
-      <div className="form-actions">
-        {/* 이미 돌고 있으면 누르게 두지 않는다 — 눌러도 거절만 당한다. */}
-        <button
-          className="btn"
-          onClick={syncNow}
-          disabled={!!busy || !status.configured || !!auto.running_since}
-        >
-          {busy === "sync" || auto.running_since ? "Syncing…" : "↻ Sync now"}
-        </button>
-        {auto.running_since ? (
-          <button className="btn" onClick={load} disabled={!!busy}>
-            Refresh status
-          </button>
-        ) : null}
-        <a className="btn" href="/activity?view=mail">Open Mail workspace →</a>
-        {note ? <span className="action-ok">{note}</span> : null}
-        {err ? <span className="action-err">{err}</span> : null}
-      </div>
-    </div>
-  );
-}
