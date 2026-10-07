@@ -14549,6 +14549,9 @@ td.uaddr-c-end .btn.sm + .btn.sm { margin-left: 6px; }
    눈에 먼저 들어오지 않게 옅게 둔다(누르면 그 대화가 함에서 내려간다). */
 .umail-notdeal { margin-left: 6px; color: #6b7c93; }
 .umail-notdeal:hover { color: #b45309; border-color: #e0b070; }
+/* 배정 칸은 줄마다 되풀이되어 본문보다 한 단계 작게 둔다 — 버튼·딜 이름 모두 1px 씩. */
+.umail-c-assign .btn.sm { height: 26px; padding: 0 11px; font-size: 11px; }
+.umail-c-assign .pjpick-btn { font-size: 11.5px; }
 /* 상대가 여럿이면 세로로 쌓는다. 이름 하나는 접지 않고 한 줄로 두되, 위 폭을 넘는
    드문 이름만 끝을 줄인다(전체 이름은 마우스를 올리면 보인다). */
 .umail-parties { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
