@@ -160,6 +160,8 @@ _MIGRATIONS = {
         # 메일함에서 찾아낸 답장(email_messages.id)과, 그 분류를 기계가 했는지.
         "reply_email_id": "INTEGER",
         "reply_auto": "BOOLEAN DEFAULT FALSE",
+        # 메일함의 발신 메일에서 등록한 홍보 활동의 원본(email_messages.id).
+        "sent_email_id": "INTEGER",
     },
     "makers": {
         # 담당자 — 메이커도 거래선과 같이 레코드 1건 = 담당자 1명이 됐다.

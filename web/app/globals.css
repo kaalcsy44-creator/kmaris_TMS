@@ -14552,6 +14552,11 @@ td.uaddr-c-end .btn.sm + .btn.sm { margin-left: 6px; }
    눈에 먼저 들어오지 않게 옅게 둔다(누르면 그 대화가 함에서 내려간다). */
 .umail-notdeal { margin-left: 6px; color: #6b7c93; }
 .umail-notdeal:hover { color: #b45309; border-color: #e0b070; }
+/* 홍보 등록 — KTMS 밖에서 보낸 회사 소개 메일을 마케팅 발송 이력으로. */
+.umail-promo { margin-left: 6px; color: #7c3aed; }
+.umail-promo:hover { color: #6d28d9; border-color: #c4b5fd; }
+.umail-promo-check { margin: 0 8px 0 2px; vertical-align: middle; }
+.umail-promo-all { display: inline-flex; align-items: center; gap: 6px; font-weight: inherit; cursor: pointer; }
 /* 배정 칸은 줄마다 되풀이되어 본문보다 한 단계 작게 둔다 — 버튼·딜 이름 모두 1px 씩. */
 .umail-c-assign .btn.sm { height: 26px; padding: 0 11px; font-size: 11px; }
 .umail-c-assign .pjpick-btn { font-size: 11.5px; }

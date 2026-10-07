@@ -2648,6 +2648,20 @@ export type UnmatchedMailGroup = {
   ids: number[];
   messages: MailMessage[];
   suggest: MailSuggest | null;
+  has_out?: boolean;            // 우리가 보낸 메일이 있는 대화(홍보 등록 가능)
+};
+// 홍보 후보 — KTMS 밖에서 보낸 회사 소개 메일로 보이는 대화. ids 는 후보 메일만.
+export type PromoCandidateGroup = UnmatchedMailGroup & {
+  recipients: string[];         // 바깥 수신자(이 대화의 후보 메일 전부)
+  why: ("subject" | "attachment" | "body")[];  // 후보로 본 근거
+};
+export type MailPromoLogResult = {
+  ok: boolean;
+  created: number;              // 새로 만든 마케팅 활동(수신자 한 명당 한 줄)
+  skipped: number;              // 같은 주소·같은 날 활동이 이미 있어 건너뛴 수
+  mails: number;                // 발송으로 본 메일 수
+  replies: number;              // 등록 직후 찾아 붙인 답장 수
+  unmatched: number;
 };
 // 자동 배정 결과 — 근거별 건수. thread=같은 대화, docno=문서번호, subject=같은 제목.
 export type MailAutoMatchResult = {

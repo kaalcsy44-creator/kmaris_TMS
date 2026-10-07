@@ -165,6 +165,7 @@ export default function ActivityScreen() {
   const mailQueue: MailQueue =
     params.get("queue") === "unknown" ? "unknown"
       : params.get("queue") === "filed" ? "filed"
+      : params.get("queue") === "promo" ? "promo"
       : "unmatched";
 
   // 일자별 탭에서 보고 있는 주(월요일 ISO). 한 번에 한 주만 그리고, 좌우 화살표로 옮긴다.

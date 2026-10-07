@@ -3249,6 +3249,7 @@ def _marketing_row(m: MarketingActivity, cust_names: dict, user_names: dict) -> 
         # 그 분류를 기계가 했는지(사람이 확인하면 False 가 된다).
         "reply_email_id": getattr(m, "reply_email_id", None) or 0,
         "reply_auto": bool(getattr(m, "reply_auto", False)),
+        "sent_email_id": getattr(m, "sent_email_id", None) or 0,
         "owner_id": m.owner_id or 0,
         "owner": user_names.get(m.owner_id, "") if m.owner_id else "",
     }

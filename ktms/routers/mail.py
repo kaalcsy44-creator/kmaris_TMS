@@ -29,7 +29,7 @@ from _core import (
     require_token,
 )
 from services.mail_summary import ROLLUP_KEY as _ROLLUP_KEY, build_project_rollup, ensure_summaries
-from services import mail_auto, mail_sync, marketing_reply
+from services import mail_auto, mail_sync, marketing_reply, promo_capture
 
 # 한 번의 동기화 뒤 자동으로 요약할 메일 수 상한(프로젝트에 붙은 것 우선).
 _AUTO_SUMMARY_LIMIT = 30
@@ -745,6 +745,55 @@ def _group_key(m: EmailMessage) -> str:
     return mail_sync.subject_key(m.subject or "") or (m.thread_key or f"id:{m.id}")
 
 
+def _conversation_groups(s, msgs: list[EmailMessage], suggest: bool = True) -> list[dict]:
+    """메일을 대화(제목) 단위로 묶어 화면 줄로 만든다 — 최근 대화가 위.
+    suggest=False 면 추천 딜을 찾지 않는다(홍보 후보처럼 딜과 무관한 목록)."""
+    names = _party_names(s)
+    hints = mail_sync.suggest_projects(s, msgs) if suggest else {}
+    groups: dict[str, list[EmailMessage]] = {}
+    for m in msgs:
+        groups.setdefault(_group_key(m), []).append(m)
+
+    out = []
+    for key, items in groups.items():
+        items.sort(key=lambda x: (x.sent_at or "", x.id))
+        last = items[-1]
+        # 대화 안에서 가장 많이 지목된 딜을 그 대화의 추천으로 삼는다(동수면 최신 메일 것).
+        votes: dict[int, int] = {}
+        for i in items:
+            hit = hints.get(i.id)
+            if hit:
+                votes[hit["rfq_id"]] = votes.get(hit["rfq_id"], 0) + 1
+        pick = None
+        if votes:
+            best = max(votes, key=lambda r: (votes[r], r == (hints.get(last.id) or {}).get("rfq_id")))
+            why = next(h["why"] for h in (hints[i.id] for i in items if i.id in hints)
+                       if h["rfq_id"] == best)
+            pick = {"rfq_id": best, "why": why}
+        parties, seen = [], set()
+        for i in reversed(items):
+            p = _party_name(s, i, names)
+            if p and p not in seen:
+                seen.add(p)
+                parties.append(p)
+        out.append({
+            "key": key,
+            "subject": mail_sync.normalize_subject(last.subject or "") or "(제목 없음)",
+            "parties": parties[:3],
+            "party_kind": "customer" if last.customer_id else ("vendor" if last.vendor_id else ""),
+            "first_at": items[0].sent_at or "",
+            "last_at": last.sent_at or "",
+            "count": len(items),
+            "ids": [i.id for i in items],
+            "messages": [_msg_out(s, i, names, brief=True) for i in items],
+            "suggest": pick,
+            # 우리가 보낸 메일이 있는 대화 — 그래야 홍보 발송으로 등록(Promo)할 수 있다.
+            "has_out": any(i.direction == "out" for i in items),
+        })
+    out.sort(key=lambda g: g["last_at"], reverse=True)
+    return out
+
+
 @app.get("/api/admin/mail/unmatched", dependencies=[Depends(require_token)])
 def unmatched_mail(limit: int = 200, filed: int = 0):
     """어느 딜에도 붙지 못한 메일 — 대화 단위로 묶어 돌려준다.
@@ -762,51 +811,13 @@ def unmatched_mail(limit: int = 200, filed: int = 0):
                 if filed else _unmatched(base))
         msgs = (base.order_by(EmailMessage.sent_at.desc())
                 .limit(max(1, min(limit, 500))).all())
-        names = _party_names(s)
-        hints = mail_sync.suggest_projects(s, msgs)
-        groups: dict[str, list[EmailMessage]] = {}
-        for m in msgs:
-            groups.setdefault(_group_key(m), []).append(m)
-
-        out = []
-        for key, items in groups.items():
-            items.sort(key=lambda x: (x.sent_at or "", x.id))
-            last = items[-1]
-            # 대화 안에서 가장 많이 지목된 딜을 그 대화의 추천으로 삼는다(동수면 최신 메일 것).
-            votes: dict[int, int] = {}
-            for i in items:
-                hit = hints.get(i.id)
-                if hit:
-                    votes[hit["rfq_id"]] = votes.get(hit["rfq_id"], 0) + 1
-            suggest = None
-            if votes:
-                best = max(votes, key=lambda r: (votes[r], r == (hints.get(last.id) or {}).get("rfq_id")))
-                why = next(h["why"] for h in (hints[i.id] for i in items if i.id in hints)
-                           if h["rfq_id"] == best)
-                suggest = {"rfq_id": best, "why": why}
-            parties, seen = [], set()
-            for i in reversed(items):
-                p = _party_name(s, i, names)
-                if p and p not in seen:
-                    seen.add(p)
-                    parties.append(p)
-            out.append({
-                "key": key,
-                "subject": mail_sync.normalize_subject(last.subject or "") or "(제목 없음)",
-                "parties": parties[:3],
-                "party_kind": "customer" if last.customer_id else ("vendor" if last.vendor_id else ""),
-                "first_at": items[0].sent_at or "",
-                "last_at": last.sent_at or "",
-                "count": len(items),
-                "ids": [i.id for i in items],
-                "messages": [_msg_out(s, i, names, brief=True) for i in items],
-                "suggest": suggest,
-            })
-        out.sort(key=lambda g: g["last_at"], reverse=True)
+        out = _conversation_groups(s, msgs)
         filed_count = (s.query(EmailMessage.id)
                        .filter(EmailMessage.rfq_id.is_(None),
                                EmailMessage.not_deal.is_(True)).count())
-        return {"count": len(msgs), "groups": out, "filed": filed_count}
+        # 홍보 후보 수 — 함 줄의 'Promo candidates (n)' 에 쓴다.
+        promo = len(promo_capture.candidates(s))
+        return {"count": len(msgs), "groups": out, "filed": filed_count, "promo": promo}
     finally:
         s.close()
 
@@ -841,6 +852,86 @@ def mark_not_deal(body: MailNotDeal):
                 t.not_deal = bool(body.value)
         s.commit()
         return {"ok": True, "updated": len(targets), "unmatched": _unmatched_count(s)}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/mail/promo-candidates", dependencies=[Depends(require_token)])
+def promo_candidates():
+    """KTMS 밖에서 보낸 홍보 메일로 보이는데 아직 마케팅 표에 없는 것 — 대화 단위로.
+
+    판별은 services/promo_capture.py 가 한다(우리가 보낸 첫 메일 · 딜 없음 · 바깥
+    수신자 · 제목/첨부/본문 앞머리의 회사 소개 표시). 붙이지는 않는다 — 사람이 Log 를
+    눌러야 마케팅 표에 오른다. 줄마다 왜 후보인지(why)와 받는 사람을 함께 준다."""
+    s = get_session()
+    try:
+        cands = {c["id"]: c for c in promo_capture.candidates(s)}
+        msgs = (s.query(EmailMessage).filter(EmailMessage.id.in_(list(cands))).all()
+                if cands else [])
+        groups = _conversation_groups(s, msgs, suggest=False)
+        for g in groups:
+            seen: list[str] = []
+            whys: list[str] = []
+            for i in g["ids"]:
+                for a in cands[i]["recipients"]:
+                    if a not in seen:
+                        seen.append(a)
+                if cands[i]["why"] not in whys:
+                    whys.append(cands[i]["why"])
+            g["recipients"] = seen
+            g["why"] = whys
+        return {"count": len(cands), "groups": groups}
+    finally:
+        s.close()
+
+
+class MailPromoLog(BaseModel):
+    ids: list[int] = []         # 화면이 묶어 보낸 대화 전체(받은 답장이 섞여도 된다)
+
+
+@app.post("/api/admin/mail/promo", dependencies=[Depends(require_token)])
+def log_mail_as_promo(body: MailPromoLog, user: dict = Depends(get_current_user)):
+    """고른 대화의 발신 메일을 홍보 발송으로 마케팅 표에 올린다(수신자 한 명당 한 줄).
+
+    등록한 대화는 미분류 함에서 내린다. 그 뒤 담긴 메일에서 답장을 바로 한 번 찾는다 —
+    이미 와 있는 답장이 내일 아침 자동 실행까지 '답 없음'으로 보이지 않게."""
+    s = get_session()
+    try:
+        if not body.ids:
+            raise HTTPException(status_code=400, detail="대상 메일이 없습니다.")
+        r = promo_capture.log_as_promo(s, body.ids, user.get("id"))
+        if not r["mails"]:
+            raise HTTPException(
+                status_code=400,
+                detail="No mail we sent to an outside address in this conversation — nothing to log as promo.")
+        s.commit()
+        replies = None
+        if r["created"]:
+            try:
+                replies = marketing_reply.detect_replies(s, mark_no_reply=False)
+                s.commit()
+            except Exception as exc:        # 답장 찾기가 실패해도 등록은 이미 끝났다
+                s.rollback()
+                print(f"[mail] promo reply detect failed: {exc}", file=sys.stderr)
+        return {"ok": True, **r, "replies": (replies or {}).get("linked", 0),
+                "unmatched": _unmatched_count(s)}
+    finally:
+        s.close()
+
+
+class MailPromoDismiss(BaseModel):
+    ids: list[int] = []
+    value: bool = True          # False = 다시 후보로
+
+
+@app.put("/api/admin/mail/promo-dismiss", dependencies=[Depends(require_token)])
+def dismiss_promo_candidate(body: MailPromoDismiss):
+    """홍보가 아니라고 내린다 — 다시 후보로 세우지 않는다. 메일 자체는 그대로 둔다."""
+    s = get_session()
+    try:
+        n = promo_capture.dismiss(s, body.ids, body.value)
+        s.commit()
+        return {"ok": True, "updated": n}
     finally:
         s.close()
 

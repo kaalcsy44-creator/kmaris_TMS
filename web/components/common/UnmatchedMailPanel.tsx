@@ -4,12 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import {
   assignMail,
   autoMatchMail,
+  dismissPromoCandidate,
   fetchMailStatus,
+  fetchPromoCandidates,
   fetchUnmatchedMail,
+  logMailAsPromo,
   markMailNotDeal,
   syncMail,
 } from "@/lib/api";
-import type { MailMessage, MailStatus, UnmatchedMailGroup } from "@/lib/types";
+import type { MailMessage, MailStatus, PromoCandidateGroup, UnmatchedMailGroup } from "@/lib/types";
 import { hm, md } from "@/lib/activity";
 import { isAdmin } from "@/lib/auth";
 import ProjectPicker, { type ProjectPickOption } from "@/components/common/ProjectPicker";
@@ -18,9 +21,12 @@ import UnknownAddressPanel from "@/components/common/UnknownAddressPanel";
 
 // 메일 정리함 — 메일함에서 가져왔지만 아직 딜에 자리 잡지 못한 것들.
 //
-// 함은 셋이고, 하나의 깔때기를 앞에서부터 뒤로 나눈 것이다.
+// 함은 넷이고, 하나의 깔때기를 앞에서부터 뒤로 나눈 것이다.
 //   Unmatched    — 담겼는데 어느 딜인지 못 정한 대화(기본).
 //   Not deal     — 딜이 있을 수 없어 내려 둔 대화(회사 소개·인사·자동회신).
+//   Promo        — KTMS 밖(메일 프로그램)에서 보낸 회사 소개 메일로 보이는 대화.
+//                  Log 를 누르면 마케팅 발송 이력에 오르고 답장 감지가 붙는다.
+//                  서버는 후보만 세운다 — 마케팅 표에 올리는 것은 사람이다.
 //   Unregistered — 상대가 등록되지 않아 **한 통도 담기지 않은** 주소(admin 전용).
 // 셋을 한 화면에 둔 이유: 같은 물음("이 메일은 어디로 가나")의 단계만 다른데, 갈라
 // 놓으면 메일함 한 번 비우려고 두 메뉴를 오가야 한다. 연결 상태(계정·매일 실행·폴더
@@ -37,7 +43,7 @@ import UnknownAddressPanel from "@/components/common/UnknownAddressPanel";
 // 붙이고, 근거가 모자란 대화에는 추천 딜만 달아 둔다(붙이지는 않는다) — 추측으로
 // 붙은 이력은 비어 있는 것보다 나쁘기 때문이다. 확정은 사람이 한 번 누른다.
 // 화면 문구는 나머지 화면과 같이 영문으로 쓴다(주석만 국문).
-export type MailQueue = "unmatched" | "filed" | "unknown";
+export type MailQueue = "unmatched" | "filed" | "promo" | "unknown";
 
 export default function UnmatchedMailPanel({
   projects,
@@ -51,7 +57,8 @@ export default function UnmatchedMailPanel({
   /** 연결 상태를 펼친 채로 연다 — 옛 Settings › Mailbox 링크(?conn=1)가 여기로 온다. */
   initialConn?: boolean;
 }) {
-  const [groups, setGroups] = useState<UnmatchedMailGroup[] | null>(null);
+  // promo 함일 때는 PromoCandidateGroup(받는 사람·근거가 더 붙은 모양)이 담긴다.
+  const [groups, setGroups] = useState<(UnmatchedMailGroup | PromoCandidateGroup)[] | null>(null);
   const [status, setStatus] = useState<MailStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -64,19 +71,32 @@ export default function UnmatchedMailPanel({
   // 'unknown' 은 담기지도 않는 메일이 어디로 사라지는지 보이게 하려고 둔다.
   const [queue, setQueue] = useState<MailQueue>(initialQueue);
   const showFiled = queue === "filed";
+  const showPromo = queue === "promo";
   const [filedCount, setFiledCount] = useState(0);
+  const [promoCount, setPromoCount] = useState(0);
+  // 홍보 후보 함에서 체크해 둔 대화 — 한 번에 등록한다.
+  const [promoSel, setPromoSel] = useState<Record<string, boolean>>({});
   const admin = isAdmin();
   // 연결 상태 펼침(admin 전용) — 매일 할 일이 아니라 접어 두고, 필요할 때만 연다.
   const [showConn, setShowConn] = useState(initialConn);
 
   const load = useCallback(async () => {
     try {
+      if (showPromo) {
+        const [list, st] = await Promise.all([fetchPromoCandidates(), fetchMailStatus()]);
+        setGroups(list.groups);
+        setPromoCount(list.count);
+        setPromoSel({});
+        setStatus(st);
+        return;
+      }
       const [list, st] = await Promise.all([
         fetchUnmatchedMail(300, showFiled),
         fetchMailStatus(),
       ]);
       setGroups(list.groups);
       setFiledCount(list.filed);
+      setPromoCount(list.promo ?? 0);
       setStatus(st);
       setPicked((prev) => {
         const next = { ...prev };
@@ -88,7 +108,7 @@ export default function UnmatchedMailPanel({
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not load unmatched mail.");
     }
-  }, [showFiled]);
+  }, [showFiled, showPromo]);
 
   useEffect(() => {
     load();
@@ -178,6 +198,47 @@ export default function UnmatchedMailPanel({
     }
   }
 
+  // 대화의 발신 메일을 홍보 발송으로 마케팅 표에 올린다 — 받는 사람 한 명당 한 줄.
+  // 등록한 대화는 서버가 미분류 함에서 내린다(홍보는 딜이 아니다).
+  async function logPromo(ids: number[]) {
+    if (!ids.length) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await logMailAsPromo(ids);
+      setNote(
+        `Logged ${r.created} promo send${r.created === 1 ? "" : "s"} to Marketing`
+        + ` (from ${r.mails} mail${r.mails === 1 ? "" : "s"})`
+        + (r.skipped ? ` · ${r.skipped} already in Marketing` : "")
+        + (r.replies ? ` · ${r.replies} replies found` : "")
+        + "."
+      );
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not log as promo");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // 홍보가 아니라고 내린다 — 다음부터 후보로 세우지 않는다(메일은 그대로).
+  async function dismissPromo(g: UnmatchedMailGroup) {
+    setBusy(true);
+    setErr("");
+    try {
+      await dismissPromoCandidate(g.ids, true);
+      setNote("Marked as not a promo — it will not be suggested again.");
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not dismiss");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const selectedPromoIds = (groups ?? [])
+    .filter((g) => promoSel[g.key])
+    .flatMap((g) => g.ids);
   const total = groups?.reduce((n, g) => n + g.count, 0) ?? 0;
   const unknownCount = status?.unknown ?? 0;
 
@@ -189,6 +250,11 @@ export default function UnmatchedMailPanel({
             <>
               unregistered counterparts · {unknownCount}
               <span className="umail-total"> · none of their mail is stored</span>
+            </>
+          ) : showPromo ? (
+            <>
+              promo candidates · {promoCount}
+              <span className="umail-total"> · intro mails sent outside KTMS, not yet in Marketing</span>
             </>
           ) : (
             <>
@@ -242,6 +308,17 @@ export default function UnmatchedMailPanel({
                 Not deal-related ({filedCount})
               </button>
             ) : null}
+            {/* KTMS 밖에서 보낸 홍보 메일 — 후보가 있거나 이 함을 보고 있을 때만. */}
+            {promoCount > 0 || showPromo ? (
+              <button
+                className={`btn sm${showPromo ? " primary" : ""}`}
+                disabled={busy}
+                title="Intro mails we sent outside KTMS (mail client) — log them into the Marketing send history"
+                onClick={() => setQueue("promo")}
+              >
+                Promo candidates ({promoCount})
+              </button>
+            ) : null}
             {/* 회사 메일함 전체의 상대 주소가 드러나는 자리 — admin 에게만 연다. */}
             {admin ? (
               <button
@@ -254,6 +331,16 @@ export default function UnmatchedMailPanel({
               </button>
             ) : null}
           </div>
+          {showPromo ? (
+            <button
+              className="btn sm primary"
+              disabled={busy || !selectedPromoIds.length}
+              title="Log every checked conversation into the Marketing send history"
+              onClick={() => logPromo(selectedPromoIds)}
+            >
+              Log selected ({Object.values(promoSel).filter(Boolean).length})
+            </button>
+          ) : null}
           <button
             className="btn sm"
             disabled={busy || !groups?.length || queue !== "unmatched"}
@@ -289,7 +376,9 @@ export default function UnmatchedMailPanel({
         <div className="state">Loading…</div>
       ) : groups.length === 0 ? (
         <p className="mail-empty">
-          {showFiled
+          {showPromo
+            ? "No promo candidates — every intro mail we sent is already in Marketing."
+            : showFiled
             ? "Nothing filed as not deal-related."
             : "No unmatched mail — every mail we fetched is filed under a deal."}
         </p>
@@ -300,7 +389,20 @@ export default function UnmatchedMailPanel({
               <th className="umail-c-when">When</th>
               <th className="umail-c-party">Counterpart</th>
               <th>Conversation</th>
-              <th className="umail-c-assign">Assign to project</th>
+              <th className="umail-c-assign">
+                {showPromo ? (
+                  <label className="umail-promo-all">
+                    <input
+                      type="checkbox"
+                      checked={groups.length > 0 && groups.every((g) => promoSel[g.key])}
+                      onChange={(e) =>
+                        setPromoSel(Object.fromEntries(groups.map((g) => [g.key, e.target.checked])))
+                      }
+                    />
+                    Log as promo
+                  </label>
+                ) : "Assign to project"}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -351,10 +453,22 @@ export default function UnmatchedMailPanel({
                   )}
                 </td>
                 <td className="umail-c-assign">
-                  {showFiled ? (
-                    <button className="btn sm" disabled={busy} onClick={() => notDeal(g, false)}>
-                      ↩ Put back
-                    </button>
+                  {showPromo ? (
+                    <PromoActions
+                      g={g as PromoCandidateGroup}
+                      busy={busy}
+                      checked={!!promoSel[g.key]}
+                      onCheck={(v) => setPromoSel((p) => ({ ...p, [g.key]: v }))}
+                      onLog={() => logPromo(g.ids)}
+                      onDismiss={() => dismissPromo(g)}
+                    />
+                  ) : showFiled ? (
+                    <>
+                      <button className="btn sm" disabled={busy} onClick={() => notDeal(g, false)}>
+                        ↩ Put back
+                      </button>
+                      {g.has_out ? <PromoButton busy={busy} onClick={() => logPromo(g.ids)} /> : null}
+                    </>
                   ) : (
                     <>
                       <ProjectPicker
@@ -381,6 +495,8 @@ export default function UnmatchedMailPanel({
                       >
                         Not a deal
                       </button>
+                      {/* 우리가 보낸 회사 소개 메일 — 딜이 아니라 홍보 발송 이력으로 보낸다. */}
+                      {g.has_out ? <PromoButton busy={busy} onClick={() => logPromo(g.ids)} /> : null}
                       {/* 추천은 골라만 두고 붙이지 않는다 — 왜 그 딜인지 근거를 함께 보여 준다. */}
                       {g.suggest && picked[g.key] === g.suggest.rfq_id ? (
                         <div className="umail-why" title={g.suggest.why}>Suggested · {g.suggest.why}</div>
@@ -394,6 +510,65 @@ export default function UnmatchedMailPanel({
         </table>
       )}
     </div>
+  );
+}
+
+function PromoButton({ busy, onClick }: { busy: boolean; onClick: () => void }) {
+  return (
+    <button
+      className="btn sm umail-promo"
+      disabled={busy}
+      title="This is an intro mail we sent — log it into the Marketing send history (one row per recipient) and take it off this list"
+      onClick={onClick}
+    >
+      Promo
+    </button>
+  );
+}
+
+// 후보로 본 근거 — 사람이 "왜 이게 홍보냐"를 바로 확인할 수 있게.
+const PROMO_WHY: Record<string, string> = {
+  subject: "intro subject",
+  attachment: "catalogue attached",
+  body: "intro wording",
+};
+
+function PromoActions({
+  g, busy, checked, onCheck, onLog, onDismiss,
+}: {
+  g: PromoCandidateGroup;
+  busy: boolean;
+  checked: boolean;
+  onCheck: (v: boolean) => void;
+  onLog: () => void;
+  onDismiss: () => void;
+}) {
+  const to = g.recipients || [];
+  return (
+    <>
+      <input
+        type="checkbox"
+        className="umail-promo-check"
+        checked={checked}
+        disabled={busy}
+        onChange={(e) => onCheck(e.target.checked)}
+      />
+      <button className="btn sm primary" disabled={busy} onClick={onLog}>
+        Log
+      </button>
+      <button
+        className="btn sm umail-notdeal"
+        disabled={busy}
+        title="Not a promo — do not suggest it again"
+        onClick={onDismiss}
+      >
+        Not promo
+      </button>
+      <div className="umail-why" title={to.join(", ")}>
+        {(g.why || []).map((w) => PROMO_WHY[w] || w).join(" · ")}
+        {to.length ? ` · to ${to.slice(0, 2).join(", ")}${to.length > 2 ? ` +${to.length - 2}` : ""}` : ""}
+      </div>
+    </>
   );
 }
 

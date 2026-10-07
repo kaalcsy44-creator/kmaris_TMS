@@ -92,6 +92,8 @@ import type {
   MailSyncResult,
   MailAutoMatchResult,
   UnmatchedMailGroup,
+  PromoCandidateGroup,
+  MailPromoLogResult,
   ProjectMail,
   LineBoard,
   AwardedItems,
@@ -2700,8 +2702,23 @@ export function refreshMailDigests(
 export function fetchUnmatchedMail(
   limit = 200,
   filed = false
-): Promise<{ count: number; groups: UnmatchedMailGroup[]; filed: number }> {
+): Promise<{ count: number; groups: UnmatchedMailGroup[]; filed: number; promo: number }> {
   return get(`/api/admin/mail/unmatched?limit=${limit}${filed ? "&filed=1" : ""}`);
+}
+// KTMS 밖에서 보낸 홍보 메일로 보이는 대화(제안만 — 등록은 logMailAsPromo).
+export function fetchPromoCandidates(): Promise<{ count: number; groups: PromoCandidateGroup[] }> {
+  return get("/api/admin/mail/promo-candidates");
+}
+// 고른 대화의 발신 메일을 홍보 발송으로 마케팅 표에 올린다(수신자 한 명당 한 줄).
+export function logMailAsPromo(ids: number[]): Promise<MailPromoLogResult> {
+  return post<MailPromoLogResult>("/api/admin/mail/promo", { ids });
+}
+// 홍보가 아니라고 내린다(value=false 면 다시 후보로).
+export function dismissPromoCandidate(
+  ids: number[],
+  value = true
+): Promise<{ ok: boolean; updated: number }> {
+  return put("/api/admin/mail/promo-dismiss", { ids, value });
 }
 // 이 대화는 어느 딜에도 속하지 않는다(회사 소개·인사·자동회신) — 미분류 함에서 내린다.
 // value=false 로 되돌린다. 지우는 게 아니라 표시만 바꾸는 것이다.

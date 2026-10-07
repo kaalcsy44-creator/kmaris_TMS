@@ -876,6 +876,10 @@ class MarketingActivity(Base):
     # 이 분류를 기계가 했는가(services/marketing_reply.py). 사람이 한 번 저장하면
     # False 가 되고, 그 뒤로 자동 감지는 이 행의 분류를 덮지 않는다.
     reply_auto       = Column(Boolean, default=False)
+    # 이 활동이 메일함의 어느 발신 메일에서 왔는가(email_messages.id). KTMS 밖(메일
+    # 프로그램)에서 보낸 홍보 메일을 Mail 화면에서 "Promo"로 등록한 행만 채워진다 —
+    # 같은 메일을 두 번 등록하지 않는 기준이자, 원문으로 되짚어 가는 길이다.
+    sent_email_id    = Column(Integer, ForeignKey("email_messages.id"), nullable=True)
     owner_id         = Column(Integer, ForeignKey("users.id"), nullable=True)  # 담당자(PIC)
     created_at       = Column(DateTime, default=datetime.utcnow)
 
