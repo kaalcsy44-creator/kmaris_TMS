@@ -641,6 +641,94 @@ def _vendor_deal_counts(s) -> tuple[dict, dict]:
     return asked, answered
 
 
+def _company_project_rows(s, rfq_ids, extra) -> list[dict]:
+    """프로젝트(RFQ) 목록 한 장 — Company info 창의 배지를 눌렀을 때 펼치는 표.
+
+    배지는 개수만 말한다. "그 한 건이 무엇이었나"를 보려고 프로젝트 화면을 뒤지게 하지
+    말고, 번호·제목·고객·선박·단계를 여기서 바로 읽게 한다. extra(rfq) 는 벤더/고객
+    쪽이 덧붙이는 결과 칸(회신 여부 / 성사 여부)이다. 최신 문의가 위로 온다."""
+    if not rfq_ids:
+        return []
+    # 단계는 _pipeline_stage(단일 진실원)로 센다 — 딜마다 자식 표를 읽어 무겁지만, 펼칠 때만
+    # 부르고 집계 캐시(쓰기 세대 무효화)를 태워 같은 회사를 다시 열면 DB 를 건드리지 않는다.
+    rfqs = s.query(RFQ).filter(RFQ.id.in_(list(rfq_ids))).all()
+    pno = _core._project_no_map(s)
+    cust = {c.id: c.name for c in s.query(Customer.id, Customer.name)
+            .filter(Customer.id.in_({r.customer_id for r in rfqs if r.customer_id}))}
+    ves = {v.id: v.name for v in s.query(Vessel.id, Vessel.name)
+           .filter(Vessel.id.in_({r.vessel_id for r in rfqs if r.vessel_id}))}
+    out = []
+    for r in rfqs:
+        stage = _core._pipeline_stage(s, r.id)
+        steps = _core.steps_for(r.work_type)
+        out.append({
+            "rfq_id": r.id,
+            "project_no": pno.get(r.id, ""),
+            "customer_rfq_no": r.customer_rfq_no or "",
+            "title": r.project_title or "",
+            "customer": cust.get(r.customer_id, ""),
+            "vessel": ves.get(r.vessel_id, ""),
+            "date": r.date or (r.received_at or "")[:10],
+            "stage": stage,
+            "stage_label": steps[stage - 1] if 1 <= stage <= len(steps) else "",
+            "lost": _enum_val(r.status) == "실주",
+            **extra(r),
+        })
+    out.sort(key=lambda d: (d["date"] or "", d["rfq_id"]), reverse=True)
+    return out
+
+
+@app.get("/api/admin/settings/vendors/projects", dependencies=[Depends(require_token)])
+@_core.cached_aggregate()
+def settings_vendor_projects(name: str):
+    """이 벤더 회사(같은 이름의 담당자 전부)에게 물은 프로젝트와 회신 여부."""
+    s = get_session()
+    try:
+        key = (name or "").strip().lower()
+        vids = [v.id for v in s.query(Vendor.id, Vendor.name).all()
+                if (v.name or "").strip().lower() == key]
+        if not vids:
+            return {"rows": []}
+        vrfqs = s.query(VendorRFQ.id, VendorRFQ.rfq_id, VendorRFQ.sent_date).filter(
+            VendorRFQ.vendor_id.in_(vids)).all()
+        quoted = {r[0] for r in s.query(VendorQuote.vendor_rfq_id)
+                  .filter(VendorQuote.vendor_rfq_id.in_([v.id for v in vrfqs])).all()} if vrfqs else set()
+        # 한 프로젝트에 RFQ 가 여러 번 나갔으면 하나라도 답이 왔으면 회신, 보낸 날은 처음 것.
+        answered: set = set()
+        sent: dict[int, str] = {}
+        for vid, rid, sd in vrfqs:
+            if not rid:
+                continue
+            if vid in quoted:
+                answered.add(rid)
+            if sd and (rid not in sent or sd < sent[rid]):
+                sent[rid] = sd
+            sent.setdefault(rid, "")
+        return {"rows": _company_project_rows(
+            s, set(sent), lambda r: {"answered": r.id in answered, "sent": sent.get(r.id, "")})}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/settings/customers/projects", dependencies=[Depends(require_token)])
+@_core.cached_aggregate()
+def settings_customer_projects(name: str):
+    """이 고객 회사가 준 문의(RFQ)와 그 결과 — 성사(오더 등록)/실주/진행 중."""
+    s = get_session()
+    try:
+        key = (name or "").strip().lower()
+        cids = [c.id for c in s.query(Customer.id, Customer.name).all()
+                if (c.name or "").strip().lower() == key]
+        if not cids:
+            return {"rows": []}
+        rids = {r[0] for r in s.query(RFQ.id).filter(RFQ.customer_id.in_(cids)).all()}
+        # 성사 기준은 배지(_customer_deal_counts)와 같다 — orders 행이 그 RFQ 를 가리키는가.
+        ordered = {r[0] for r in s.query(Order.rfq_id).filter(Order.rfq_id.in_(rids)).all()} if rids else set()
+        return {"rows": _company_project_rows(s, rids, lambda r: {"won": r.id in ordered})}
+    finally:
+        s.close()
+
+
 # 배지로 세울 분류의 깊이 — 중분류까지다. 소분류(3단계)까지 태그하면 벤더 하나가
 # 스무 개를 달게 되어 배지가 이름을 덮고, 정작 "이 회사는 무엇을 하는가"가 안 읽힌다.
 # 소분류의 실적은 그 중분류로 접어 올린다(아래 _up_to_level2).

@@ -115,6 +115,7 @@ import { MakerBadges, MakerTagPicker, useMakerOptions } from "@/components/commo
 import { AgencyBadges, AgencyTagPicker } from "@/components/common/AgencyPicker";
 import { WebsiteScanPanel } from "@/components/common/WebsiteScanPanel";
 import VendorTagSuggestions from "@/components/common/VendorTagSuggestions";
+import CompanyProjects from "@/components/common/CompanyProjects";
 import type { VendorTagSuggestion } from "@/lib/types";
 import RegionCombo from "@/components/common/RegionPicker";
 // 목록의 상대처는 다른 화면과 같은 모양(로고 + 이름)으로 — 같은 회사를 두 표기로 읽지 않도록.
@@ -1313,6 +1314,7 @@ function CustomersTab() {
         // 회사가 바뀌면 창 안의 값도 새로 잡혀야 한다(안의 상태는 첫 렌더에 굳는다).
         key={company.groups[company.index]?.[0]?.name ?? company.index}
         rows={company.groups[company.index] ?? []}
+        projects="customers"
         stats={["Inquiries → Orders", (
           <CustomerWinBadge
             inquiries={sumBy(company.groups[company.index] ?? [], (r) => r.inquiries)}
@@ -1846,6 +1848,7 @@ function CompanyInfoModal<
   onClose,
   onSaved,
   stats,
+  projects,
   prev,
   next,
   onSaveContact,
@@ -1871,6 +1874,8 @@ function CompanyInfoModal<
   onSaved: (name?: string) => void;
   /** 이 회사와의 거래 요약(문의·수주 / 프로젝트·회신) — 표에 선 배지를 그대로 들여온다. */
   stats?: [string, ReactNode];
+  /** 배지를 눌러 그 프로젝트들을 펼쳐 볼 명부. 안 주면 배지는 그냥 글자다. */
+  projects?: "vendors" | "customers";
   /** 표의 앞뒤 회사로 건너뛰기. 이름을 함께 받아 어디로 가는지 미리 보인다. */
   prev?: CompanyNav;
   next?: CompanyNav;
@@ -1933,6 +1938,7 @@ function CompanyInfoModal<
   // (고객사 창이면 저쪽이 거래선이어도 담당자는 잇지 않는다).
   const contactTwins = scan ? twinKinds.filter((k) => k === "vendors" || k === "makers") : [];
   const [syncTwins, setSyncTwins] = useState(true);
+  const [projOpen, setProjOpen] = useState(false);
   const [catIds, setCatIds] = useState<number[]>(() => [...(tags?.initial ?? [])]);
   const [makerIds, setMakerIds] = useState<number[]>(() => [...(makerTags?.initial ?? [])]);
   const [agencyNames, setAgencyNames] = useState<string[]>(() => [...(agencies?.initial ?? [])]);
@@ -2193,7 +2199,16 @@ function CompanyInfoModal<
       ...(agencies ? [["Agency",
                        agencyNames.length ? <AgencyBadges names={agencyNames} /> : null,
                       ] as [string, React.ReactNode]] : []),
-      ...(stats ? [stats] : []),
+      // 배지는 개수만 말한다 — 눌러서 그 프로젝트들을 아래에 펼친다(창을 하나 더 띄우면
+      // 이전/다음 회사로 넘겨 보던 흐름을 잃는다).
+      ...(stats ? [[stats[0], projects ? (
+        <button type="button" className="co-proj-toggle" aria-expanded={projOpen}
+                onClick={() => setProjOpen((v) => !v)}
+                title={projOpen ? "Hide projects" : "Show projects"}>
+          {stats[1]}
+          <span className="co-proj-caret" aria-hidden>{projOpen ? "▴" : "▾"}</span>
+        </button>
+      ) : stats[1]] as [string, React.ReactNode]] : []),
       // 이 회사가 다른 명부에도 서 있다 — 고칠 때 저쪽까지 닿는다는 것을 읽는
       // 화면에서 먼저 알린다(고치기로 들어간 다음에 알면 늦다).
       ...(twinKinds.length
@@ -2235,6 +2250,7 @@ function CompanyInfoModal<
               </div>
             ))}
           </dl>
+          {projects && projOpen ? <CompanyProjects kind={projects} name={origName} /> : null}
           {/* 담당자 명단 — 위 값들이 회사 단위인 데 반해 이쪽은 사람마다 다른 값이라,
               같은 표에 섞지 않고 아래에 따로 세운다. 고치는 자리는 바깥 목록이다. */}
           <div className="co-contacts">
@@ -2937,6 +2953,7 @@ function VendorsTab() {
       <CompanyInfoModal
         key={company.groups[company.index]?.[0]?.name ?? company.index}
         rows={company.groups[company.index] ?? []}
+        projects="vendors"
         stats={["Projects → Quoted back", (
           <VendorReplyBadge
             total={company.groups[company.index]?.[0]?.co_deals ?? 0}

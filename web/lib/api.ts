@@ -1527,6 +1527,31 @@ export function fetchVendorCategorySuggestions(): Promise<{ rows: VendorCategory
     "/api/admin/settings/vendors/category-suggestions"
   );
 }
+/** Company info 창의 프로젝트 이력 한 줄 — 배지(개수)를 눌러 펼친 표. */
+export type CompanyProject = {
+  rfq_id: number;
+  project_no: string;
+  customer_rfq_no: string;
+  title: string;
+  customer: string;
+  vessel: string;
+  date: string;
+  stage: number;
+  stage_label: string;
+  lost: boolean;
+  /** 벤더 쪽 — 견적이 돌아왔나, 처음 보낸 날. */
+  answered?: boolean;
+  sent?: string;
+  /** 고객 쪽 — 오더로 이어졌나. */
+  won?: boolean;
+};
+export function fetchCompanyProjects(
+  kind: "vendors" | "customers", name: string,
+): Promise<{ rows: CompanyProject[] }> {
+  return get<{ rows: CompanyProject[] }>(
+    `/api/admin/settings/${kind}/projects?name=${encodeURIComponent(name)}`
+  );
+}
 /** 홈페이지를 읽어 낸 태그 후보 — 쓰지는 않았고, 고르는 것은 사람이 한다. */
 export type PartnerScan = {
   name: string;
