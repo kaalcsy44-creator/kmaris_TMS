@@ -364,6 +364,8 @@ export function MakerPickBadge({
   const hit = useMakerByName()(name || "");
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  // 키보드로 고르는 자리(↑↓ 로 옮기고 Enter 로 고른다). 검색어가 바뀌면 첫 줄로.
+  const [act, setAct] = useState(0);
   const [busy, setBusy] = useState(false);
   const [pos, setPos] = useState<MenuPos | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -442,6 +444,7 @@ export function MakerPickBadge({
         aria-expanded={open}
         onClick={() => {
           setQ("");
+          setAct(0);
           setOpen((o) => !o);
         }}
       >
@@ -461,15 +464,34 @@ export function MakerPickBadge({
                 autoFocus
                 value={q}
                 placeholder="🔍 Search makers…"
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setAct(0);
+                }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && list.length === 1) pick(list[0].name);
+                  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                    e.preventDefault();
+                    if (!list.length) return;
+                    const step = e.key === "ArrowDown" ? 1 : -1;
+                    const next = (act + step + list.length) % list.length;
+                    setAct(next);
+                    menuRef.current
+                      ?.querySelector<HTMLElement>(`[data-idx="${next}"]`)
+                      ?.scrollIntoView({ block: "nearest" });
+                  } else if (e.key === "Enter") {
+                    e.preventDefault();
+                    const m = list[Math.min(act, list.length - 1)];
+                    if (m) pick(m.name);
+                  }
                 }}
               />
               <ul className="mk-menu-list">
-                {list.map((m) => (
+                {list.map((m, i) => (
                   <li key={m.id}>
-                    <button type="button" className="mk-opt" onClick={() => pick(m.name)}>
+                    <button type="button" data-idx={i}
+                            className={`mk-opt${i === act ? " act" : ""}`}
+                            onMouseEnter={() => setAct(i)}
+                            onClick={() => pick(m.name)}>
                       {m.logo ? <img className="mk-opt-logo" src={m.logo} alt="" /> : <span className="mk-opt-logo mk-opt-logo--none" aria-hidden />}
                       <span className="mk-opt-name">{m.name}</span>
                       {m.country ? <span className="mk-opt-sub">{m.country}</span> : null}

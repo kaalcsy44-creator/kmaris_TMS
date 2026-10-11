@@ -5059,7 +5059,7 @@ table.mini.items-edit .mk-cell-in {
   border-radius: 5px;
   cursor: pointer;
 }
-.mk-opt:hover { background: #eef3fb; }
+.mk-opt:hover, .mk-opt.act { background: #eef3fb; }
 .mk-opt.on { background: #e1ebfb; }
 .mk-opt--clear { color: #8a96a8; }
 .mk-opt-logo {
