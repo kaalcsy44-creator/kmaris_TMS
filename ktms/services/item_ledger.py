@@ -150,6 +150,8 @@ def rebuild_price_history(session) -> int:
     vrfq_by_id = {v.id: v for v in session.query(VendorRFQ).all()}
 
     rows: list[dict] = []
+    # 마스터가 아직 없는 품목의 첫 등장 줄(키 → 줄). 아래에서 마스터를 세운다.
+    unmatched: dict[str, dict] = {}
 
     def emit(price_type, source_type, source_id, idx, line, price_field, *,
              currency, fx_rate=None, date=None, rfq_id=None,
@@ -168,8 +170,12 @@ def rebuild_price_history(session) -> int:
         # 저장할 값 그대로 키를 만든다(자르기 전 원문으로 만들면 저장된 행과 어긋난다).
         desc = fit_desc(line.get("description"))
         pn = fit_part(pn)
+        key = match_key(pn, desc)
+        if key and key not in master and key not in unmatched:
+            unmatched[key] = line
         rows.append({
-            "item_id": master.get(match_key(pn, desc)),
+            "item_id": master.get(key),
+            "_key": key,
             "price_type": price_type,
             "source_type": source_type,
             "source_id": source_id,
@@ -252,6 +258,27 @@ def rebuild_price_history(session) -> int:
                  rfq_id=(o.rfq_id if o else None),
                  customer_id=(o.customer_id if o else None),
                  vessel_id=(o.vessel_id if o else None))
+
+    # 값이 붙은 문서(견적·발주·인보이스)에 나온 품목은 분류가 없어도 마스터에 세운다.
+    # 예전에는 줄에 분류를 골라 둔 경우에만 마스터가 생겨서, 분류 없이 저장한 최근 견적의
+    # 품목이 Parts 목록에 아예 나타나지 않았다. 분류는 나중에 Item Category 에서 붙인다.
+    # 가격 없는 RFQ 줄은 세우지 않는다 — 거래 이력이 없는 마스터는 purge-unused 가 지우는
+    # 대상이라, 세웠다 지웠다를 되풀이하게 된다.
+    for key, line in unmatched.items():
+        m = ItemMaster(
+            part_no=fit_part((line.get("part_no") or "").strip()),
+            description=fit_desc((line.get("description") or "").strip()),
+            maker=(line.get("maker") or ""),
+            unit=(line.get("unit") or "PCS"),
+            item_type=guess_item_type(line.get("part_no"), line.get("description")),
+        )
+        session.add(m)
+        session.flush()
+        master[key] = m.id
+    for r in rows:
+        k = r.pop("_key")
+        if r["item_id"] is None and k:
+            r["item_id"] = master.get(k)
 
     # 전체 교체(파생 테이블이라 delete+insert 가 가장 단순하고 일관적).
     session.query(ItemPriceHistory).delete()

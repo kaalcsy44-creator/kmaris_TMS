@@ -2255,9 +2255,23 @@ def settings_items():
             # 이 줄과 식별키가 같은 다른 줄들 — 있으면 위 거래 기록은 그들과 공유한 것이다.
             row["twin_ids"] = [x for x in mates if x != i.id]
             out.append(row)
+        # 기본 순서: 최근 딜의 품목이 위로(딜 번호의 수신일·일련번호 내림차순). 딜이 없는
+        # 품목은 맨 아래. 같은 딜 안에서는 위 쿼리 순서(품번 → id)를 그대로 둔다 — 정렬이
+        # 안정적이라 한 줄을 고쳐도 자리가 흔들리지 않는다.
+        out.sort(key=_recent_deal_key, reverse=True)
         return out
     finally:
         s.close()
+
+
+def _recent_deal_key(row: dict) -> tuple[str, int]:
+    """'P-024(260622)' → ('260622', 24). 딜이 없으면 ('', 0) — 내림차순에서 맨 아래."""
+    n = row.get("project_no") or ""
+    if not n:
+        return ("", 0)
+    date = n[n.find("(") + 1:-1] if "(" in n else ""
+    m = _re.search(r"-(\d+)", n)
+    return (date, int(m.group(1)) if m else 0)
 
 
 def _names(by_id: dict[int, str], *id_lists) -> list[str]:
