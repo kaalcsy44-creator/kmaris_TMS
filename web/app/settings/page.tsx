@@ -111,7 +111,7 @@ import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
 import { invalidateMasterCategories } from "@/components/common/CategoryCell";
 import { CategoryBadges, CategoryTagPicker, useVendorCategoryOptions } from "@/components/common/CategoryTags";
-import { MakerBadges, MakerNameBadge, MakerTagPicker, useMakerOptions } from "@/components/common/MakerCell";
+import { MakerBadges, MakerPickBadge, MakerTagPicker, useMakerOptions } from "@/components/common/MakerCell";
 import { AgencyBadges, AgencyTagPicker } from "@/components/common/AgencyPicker";
 import { WebsiteScanPanel } from "@/components/common/WebsiteScanPanel";
 import VendorTagSuggestions from "@/components/common/VendorTagSuggestions";
@@ -3641,6 +3641,8 @@ function priceSortText(p: { unit_price: number; currency: string } | null): stri
 
 export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
   const isService = kind === "service";
+  // Maker 칸에서 바로 고친 뒤 목록을 다시 불러온다.
+  const [reloadKey, setReloadKey] = useState(0);
   // 고객·공급사·구매가·판매가·마진은 가격 이력에서 온 읽기전용 파생값이라 편집 폼엔 없다.
   const trade: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?][] = [
     ["vendor", "Vendor", (r) => r.vendor || <span className="dash">—</span>, "ms-party"],
@@ -3732,8 +3734,21 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
             vessel,
             ["description", "Description", undefined, "ms-desc"],
             ["part_no", "Part No."],
-            // 명부에 있는 제조사면 거래선 화면과 같은 로고 배지로, 없으면 적힌 글자 그대로.
-            ["maker", "Maker", (r) => <MakerNameBadge name={r.maker} empty={<span className="dash">—</span>} />],
+            // 명부에 있는 제조사면 거래선 화면과 같은 로고 배지로, 없으면 적힌 글자 옆 ▾ 로
+            // 명부에서 바로 골라 붙인다(편집 창을 열지 않고 그 품목에 저장).
+            ["maker", "Maker", (r) => (
+              <MakerPickBadge
+                name={r.maker}
+                empty={<span className="dash">—</span>}
+                onPick={async (maker) => {
+                  const { id, ...body } = r;
+                  void id;
+                  await updateSettingsItem(r.id, { ...body, maker });
+                  invalidateMasterCategories();
+                  setReloadKey((k) => k + 1);
+                }}
+              />
+            )],
             ["origin", "Origin"],
             ["unit", "Unit"],
             ["hs_code", "HS Code"],
@@ -3745,6 +3760,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
       // 적은 열(분류·상대처·제조사·원산지·단위·프로젝트)은 고르는 목록으로, 품명·품번처럼
       // 행마다 다른 열과 금액 열은 정렬만 — 목록으로 만들면 행 수만큼 긴 메뉴가 된다.
       headCols={itemHeadCols}
+      reloadKey={reloadKey}
       printCols={itemPrintCols(kind)}
       tableClass="ms-table--items"
       fields={isService

@@ -346,6 +346,153 @@ export function MakerNameBadge({ name, empty = null }: { name?: string | null; e
   );
 }
 
+/** 목록 셀용 — 명부와 맞으면 로고 배지, 아니면 적힌 글자 옆 ▾ 토글로 명부에서 바로 골라 붙인다.
+ *
+ *  편집 창을 열지 않고 고치게 하는 자리다: "Mt.H"·"HYUNDAI Heavy Industries Co., Ltd." 처럼
+ *  표기가 흔들린 이름을 명부의 회사로 맞추는 일은 행마다 한 번씩, 많이 일어난다.
+ *  고르면 onPick 이 저장까지 맡는다(그동안 토글은 잠긴다). */
+export function MakerPickBadge({
+  name,
+  onPick,
+  empty = null,
+}: {
+  name?: string | null;
+  onPick: (name: string) => Promise<unknown>;
+  empty?: React.ReactNode;
+}) {
+  const makers = useMakerCompanies();
+  const hit = useMakerByName()(name || "");
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [pos, setPos] = useState<MenuPos | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  function reposition() {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    const openUp = spaceBelow < 300 && r.top > spaceBelow;
+    setPos({
+      left: Math.max(8, Math.min(r.left, window.innerWidth - 268)),
+      width: 260,
+      top: openUp ? undefined : r.bottom + 3,
+      bottom: openUp ? window.innerHeight - r.top + 3 : undefined,
+    });
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    reposition();
+    function onDown(e: MouseEvent) {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    function onShift(e: Event) {
+      if (menuRef.current && e.target instanceof Node && menuRef.current.contains(e.target)) return;
+      reposition();
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onShift, true);
+    window.addEventListener("resize", onShift);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onShift, true);
+      window.removeEventListener("resize", onShift);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  if (hit) return <MakerNameBadge name={name} />;
+
+  // 적힌 이름이 있으면 그 글자로 좁혀 연다 — "Mt.H" 를 열면 MT.H 계열이 먼저 보인다.
+  const nq = norm(q);
+  const list = nq
+    ? makers.filter((m) => norm(m.name || "").includes(nq) || norm(m.specialization || "").includes(nq))
+    : makers;
+
+  async function pick(v: string) {
+    setOpen(false);
+    setBusy(true);
+    try {
+      await onPick(v);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="mk-pick" onClick={(e) => e.stopPropagation()}>
+      <span className="mk-pick-txt">{name || empty}</span>
+      <button
+        ref={btnRef}
+        type="button"
+        className="mk-pick-toggle"
+        disabled={busy}
+        title="Pick a registered maker"
+        aria-label="Pick a registered maker"
+        aria-expanded={open}
+        onClick={() => {
+          setQ("");
+          setOpen((o) => !o);
+        }}
+      >
+        {busy ? "…" : "▾"}
+      </button>
+      {open && pos && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="mk-menu"
+              role="listbox"
+              onClick={(e) => e.stopPropagation()}
+              style={{ position: "fixed", left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom }}
+            >
+              <input
+                className="cat-menu-search"
+                autoFocus
+                value={q}
+                placeholder="🔍 Search makers…"
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && list.length === 1) pick(list[0].name);
+                }}
+              />
+              <ul className="mk-menu-list">
+                {list.map((m) => (
+                  <li key={m.id}>
+                    <button type="button" className="mk-opt" onClick={() => pick(m.name)}>
+                      {m.logo ? <img className="mk-opt-logo" src={m.logo} alt="" /> : <span className="mk-opt-logo mk-opt-logo--none" aria-hidden />}
+                      <span className="mk-opt-name">{m.name}</span>
+                      {m.country ? <span className="mk-opt-sub">{m.country}</span> : null}
+                    </button>
+                  </li>
+                ))}
+                {list.length === 0 ? (
+                  <li className="mk-menu-empty">
+                    {makers.length ? "No registered maker matches." : "No maker registered yet."}
+                  </li>
+                ) : null}
+              </ul>
+              {name ? (
+                <div className="mk-menu-foot">Replaces “{name}” on this item.</div>
+              ) : null}
+            </div>,
+            document.body
+          )
+        : null}
+    </span>
+  );
+}
+
 /** 편집용 — 고른 배지(×로 뺀다) + 명부에서 하나씩 더하는 칸. */
 export function MakerTagPicker({
   value,
