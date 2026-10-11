@@ -2355,6 +2355,32 @@ def update_item(row_id: int, body: ItemMasterSave):
         s.close()
 
 
+class ItemTypeBulk(BaseModel):
+    ids: list[int]
+    item_type: str
+
+
+@app.post("/api/admin/settings/items/set-type", dependencies=[Depends(require_token)])
+def set_items_type(body: ItemTypeBulk):
+    """고른 품목들을 Parts↔Service 로 한꺼번에 옮긴다(item_type 만 바꾼다).
+
+    분류를 붙이면 구분이 분류를 따라가지만(_assign_one_category), 분류가 없거나 낱말
+    추측(guess_item_type)이 틀린 품목 — '비자 발급비용'·'Freight Change Cost' 처럼 — 은
+    Parts 에 남는다. 그것을 목록에서 골라 바로 옮기는 길이다."""
+    kind = _item_type(body.item_type)
+    s = get_session()
+    try:
+        n = 0
+        for item in s.query(ItemMaster).filter(ItemMaster.id.in_(body.ids or [0])).all():
+            if (item.item_type or "part") != kind:
+                item.item_type = kind
+                n += 1
+        s.commit()
+        return {"ok": True, "updated": n}
+    finally:
+        s.close()
+
+
 @app.delete("/api/admin/settings/items/{row_id}", dependencies=[Depends(require_token)])
 def delete_item(row_id: int):
     s = get_session()

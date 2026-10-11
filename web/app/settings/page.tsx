@@ -12,6 +12,7 @@ import {
   changeMyPassword,
   deleteSettingsCustomer,
   deleteSettingsItem,
+  setSettingsItemsType,
   deleteSettingsUser,
   deleteSettingsVendor,
   deleteSettingsVessel,
@@ -3714,6 +3715,28 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
       // 마스터는 한 벌이고 탭은 그중 한쪽만 본다 — 목록을 받아 이 탭의 구분만 남긴다.
       load={() => fetchSettingsItems().then((rows) => rows.filter((r) =>
         (r.item_type || "part") === kind && (!pricedOnly || !!r.buy || !!r.sell)))}
+      // 줄을 골라 Parts↔Service 로 옮긴다 — 낱말 추측이 틀려 용역이 Parts 에 들어온 경우.
+      bulk={{
+        keyOf: (r) => String(r.id),
+        actions: (keys, done) => {
+          const target: ItemKind = isService ? "part" : "service";
+          return (
+            <button
+              className="btn sm"
+              onClick={async () => {
+                try {
+                  const r = await setSettingsItemsType(keys.map(Number), target);
+                  done(`${r.updated} moved to ${ITEM_KIND_LABEL[target]}`);
+                } catch (e) {
+                  done(e instanceof Error ? e.message : "Move failed", true);
+                }
+              }}
+            >
+              → Move to {ITEM_KIND_LABEL[target]}
+            </button>
+          );
+        },
+      }}
       toolbarExtra={
         <label className="ms-toggle" title="Show only items with a purchase or sales price. Turn off to include items that were only enquired.">
           <input type="checkbox" checked={pricedOnly} onChange={(e) => togglePriced(e.target.checked)} />
@@ -5269,6 +5292,7 @@ function MasterSection<T extends { id: number }>({
   onRowOpen,
   transfer,
   toolbarExtra,
+  bulk,
 }: {
   title: string;
   empty: T;
@@ -5383,6 +5407,12 @@ function MasterSection<T extends { id: number }>({
   };
   /** 도구줄 검색칸 앞에 세우는 그 표만의 단추(예: 품목표의 Priced only). */
   toolbarExtra?: ReactNode;
+  /** 줄 단위로 골라 한꺼번에 하는 일(transfer 가 없는 표용). 주면 줄마다 체크칸이 서고,
+   *  고른 것이 있으면 아래 막대에 actions 가 선다. done() = 선택을 비우고 목록을 다시 부른다. */
+  bulk?: {
+    keyOf: (row: T) => string;
+    actions: (keys: string[], done: (msg?: string, isErr?: boolean) => void) => ReactNode;
+  };
 }) {
   const NEW_ID = -1; // editId 센티넬: 신규 등록 편집기
   const [rows, setRows] = useState<T[]>([]);
@@ -5620,11 +5650,13 @@ function MasterSection<T extends { id: number }>({
 
   // 지금 화면에 서 있는 회사들 — 전체선택과 '몇 개 골랐나'가 보는 목록이다.
   // 묶음이 있는 표는 회사 줄이 곧 회사이고, 아닌 표(메이커)는 줄 하나가 회사다.
-  const pickKeys = !transfer
+  // 줄 하나를 고르는 열쇠 — 거래선 명부는 회사 이름, 그 밖의 표(bulk)는 제가 정한 값.
+  const selKey: ((row: T) => string) | null = transfer ? transfer.nameOf : bulk ? bulk.keyOf : null;
+  const pickKeys = !selKey
     ? []
     : group
     ? groups.map((g) => g.key)
-    : Array.from(new Set(filtered.map((r) => transfer.nameOf(r)).filter(Boolean)));
+    : Array.from(new Set(filtered.map((r) => selKey(r)).filter(Boolean)));
   const allPicked = pickKeys.length > 0 && pickKeys.every((k) => picked.has(k));
   const somePicked = pickKeys.some((k) => picked.has(k));
 
@@ -5767,10 +5799,10 @@ Every contact of ${names.length === 1 ? "this company" : "these companies"} is r
   // 2열로 자른 한쪽), 아니면 넘겨받은 그룹만 그린다.
   function table(list: { key: string; rows: T[] }[] | null, only?: T[]) {
     return (
-      <table className={`mini wide ms-table${transfer ? " ms-table--sel" : ""}${tableClass ? ` ${tableClass}` : ""}`}>
+      <table className={`mini wide ms-table${selKey ? " ms-table--sel" : ""}${tableClass ? ` ${tableClass}` : ""}`}>
         <thead>
           <tr>
-            {transfer ? (
+            {selKey ? (
               <th className="ms-selcol">
                 <label className="row-check-hit">
                   <input
@@ -5868,11 +5900,11 @@ Every contact of ${names.length === 1 ? "this company" : "these companies"} is r
       <tr
         key={row.id}
         className={`${sub ? "ms-sub" : ""}${row.id === editId ? " sel" : ""}${
-          transfer && !group && picked.has(transfer.nameOf(row)) ? " ms-picked" : ""
+          selKey && !group && picked.has(selKey(row)) ? " ms-picked" : ""
         }`}
         onClick={() => (onRowOpen ? onRowOpen(row, () => openEdit(row)) : openEdit(row))}
       >
-        {transfer ? (
+        {selKey ? (
           <td className="ms-selcol" onClick={(e) => e.stopPropagation()}>
             {/* 묶음이 있는 표에서 이 줄은 담당자다 — 고르는 것은 회사(위 줄)라 여기는
                 자리만 지킨다. 묶음이 없는 표(메이커)는 줄 하나가 곧 회사다. */}
@@ -5881,9 +5913,9 @@ Every contact of ${names.length === 1 ? "this company" : "these companies"} is r
                 <input
                   type="checkbox"
                   className="row-check"
-                  aria-label={`Select ${transfer.nameOf(row)}`}
-                  checked={picked.has(transfer.nameOf(row))}
-                  onChange={() => togglePick(transfer.nameOf(row))}
+                  aria-label={`Select ${selKey(row)}`}
+                  checked={picked.has(selKey(row))}
+                  onChange={() => togglePick(selKey(row))}
                 />
               </label>
             )}
@@ -6077,6 +6109,31 @@ Every contact of ${names.length === 1 ? "this company" : "these companies"} is r
               <button
                 className="btn sm"
                 disabled={tbusy}
+                onClick={() => { setPicked(new Set()); setTmsg(""); }}
+              >
+                Clear
+              </button>
+            </>
+          ) : null}
+          {tmsg ? <span className={terr ? "action-err" : "action-ok"}>{tmsg}</span> : null}
+        </div>
+      ) : null}
+
+      {/* bulk 표의 선택 막대 — 무엇을 할지는 표가 정한다(품목표: Parts↔Service 옮기기). */}
+      {bulk && !transfer && (picked.size > 0 || tmsg) ? (
+        <div className="ms-pick-bar">
+          {picked.size > 0 ? (
+            <>
+              <span className="ms-pick-count">{picked.size} selected</span>
+              {bulk.actions([...picked], (msg, isErr) => {
+                setPicked(new Set());
+                setTmsg(msg || "");
+                setTerr(!!isErr);
+                refresh();
+                onSaved?.();
+              })}
+              <button
+                className="btn sm"
                 onClick={() => { setPicked(new Set()); setTmsg(""); }}
               >
                 Clear

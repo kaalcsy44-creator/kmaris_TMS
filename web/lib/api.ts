@@ -1672,6 +1672,10 @@ export function updateSettingsItem(id: number, body: Omit<SettingsItem, "id">): 
 export function deleteSettingsItem(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/settings/items/${id}`);
 }
+/** 고른 품목들을 Parts↔Service 로 옮긴다. */
+export function setSettingsItemsType(ids: number[], item_type: "part" | "service"): Promise<{ ok: boolean; updated: number }> {
+  return post(`/api/admin/settings/items/set-type`, { ids, item_type });
+}
 
 // ── 이메일 템플릿(담당자별 초안) ──────────────────────────────────────────────
 export type EmailTplRow = {
