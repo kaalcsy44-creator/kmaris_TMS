@@ -2212,7 +2212,9 @@ def settings_items():
                 twins.setdefault(k, []).append(i.id)
 
         out = []
-        for i in s.query(ItemMaster).order_by(ItemMaster.part_no).all():
+        # 품번이 빈 품목이 대부분이라 품번만으로는 순서가 정해지지 않는다 — 그러면 DB 가
+        # 내키는 대로 내놓아, 한 줄을 고칠 때마다 목록이 뒤섞였다. id 를 두 번째 키로 못 박는다.
+        for i in s.query(ItemMaster).order_by(ItemMaster.part_no, ItemMaster.id).all():
             mates = twins.get(match_key(i.part_no, i.description) or "", [i.id])
             # 기록이 실제로 붙은 줄 — 없으면 제 id 로 두어 빈 값을 그대로 쓴다.
             src = next((x for x in mates if x in summary or x in parties), i.id)

@@ -346,7 +346,8 @@ export function MakerNameBadge({ name, empty = null }: { name?: string | null; e
   );
 }
 
-/** 목록 셀용 — 명부와 맞으면 로고 배지, 아니면 적힌 글자 옆 ▾ 토글로 명부에서 바로 골라 붙인다.
+/** 목록 셀용 — 명부와 맞으면 로고 배지, 아니면 적힌 글자. 어느 쪽이든 옆 ▾ 토글로 명부에서
+ *  바로 골라 붙이거나 바꾼다.
  *
  *  편집 창을 열지 않고 고치게 하는 자리다: "Mt.H"·"HYUNDAI Heavy Industries Co., Ltd." 처럼
  *  표기가 흔들린 이름을 명부의 회사로 맞추는 일은 행마다 한 번씩, 많이 일어난다.
@@ -413,8 +414,6 @@ export function MakerPickBadge({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  if (hit) return <MakerNameBadge name={name} />;
-
   // 적힌 이름이 있으면 그 글자로 좁혀 연다 — "Mt.H" 를 열면 MT.H 계열이 먼저 보인다.
   const nq = norm(q);
   const list = nq
@@ -433,7 +432,8 @@ export function MakerPickBadge({
 
   return (
     <span className="mk-pick" onClick={(e) => e.stopPropagation()}>
-      <span className="mk-pick-txt">{name || empty}</span>
+      {/* 이미 명부와 맞아 배지로 선 칸도 ▾ 는 남긴다 — 잘못 고른 것을 되돌릴 길이다. */}
+      <span className="mk-pick-txt">{hit ? <MakerNameBadge name={name} /> : name || empty}</span>
       <button
         ref={btnRef}
         type="button"
@@ -489,7 +489,7 @@ export function MakerPickBadge({
                 {list.map((m, i) => (
                   <li key={m.id}>
                     <button type="button" data-idx={i}
-                            className={`mk-opt${i === act ? " act" : ""}`}
+                            className={`mk-opt${i === act ? " act" : ""}${hit?.id === m.id ? " on" : ""}`}
                             onMouseEnter={() => setAct(i)}
                             onClick={() => pick(m.name)}>
                       {m.logo ? <img className="mk-opt-logo" src={m.logo} alt="" /> : <span className="mk-opt-logo mk-opt-logo--none" aria-hidden />}
