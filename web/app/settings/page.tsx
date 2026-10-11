@@ -3643,6 +3643,22 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
   const isService = kind === "service";
   // Maker 칸에서 바로 고친 뒤 목록을 다시 불러온다.
   const [reloadKey, setReloadKey] = useState(0);
+  // 값이 붙은 품목만 볼지. 가격 없는 품목(문의만 있었던 것)도 수요·못 판 이유의 기록이라
+  // 지우지 않고 남기되, 평소엔 가격 이력을 보러 오는 화면이라 기본은 가린다.
+  const [pricedOnly, setPricedOnly] = useState(() => {
+    try {
+      return window.localStorage.getItem("ktms.items.pricedOnly") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  function togglePriced(v: boolean) {
+    setPricedOnly(v);
+    try {
+      window.localStorage.setItem("ktms.items.pricedOnly", v ? "1" : "0");
+    } catch {}
+    setReloadKey((k) => k + 1);
+  }
   // 고객·공급사·구매가·판매가·마진은 가격 이력에서 온 읽기전용 파생값이라 편집 폼엔 없다.
   const trade: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?][] = [
     ["vendor", "Vendor", (r) => r.vendor || <span className="dash">—</span>, "ms-party"],
@@ -3696,7 +3712,14 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
       title={ITEM_KIND_LABEL[kind]}
       empty={{ id: 0, part_no: "", description: "", maker: "", origin: "", unit: isService ? "EA" : "PCS", hs_code: "", std_price: 0, item_type: kind, category_id: null, category_path: "", customer: "", vendor: "", vendor_quote_at: "", quoted_at: "", buy: null, sell: null, margin_pct: null, margin_cross: false }}
       // 마스터는 한 벌이고 탭은 그중 한쪽만 본다 — 목록을 받아 이 탭의 구분만 남긴다.
-      load={() => fetchSettingsItems().then((rows) => rows.filter((r) => (r.item_type || "part") === kind))}
+      load={() => fetchSettingsItems().then((rows) => rows.filter((r) =>
+        (r.item_type || "part") === kind && (!pricedOnly || !!r.buy || !!r.sell)))}
+      toolbarExtra={
+        <label className="ms-toggle" title="Show only items with a purchase or sales price. Turn off to include items that were only enquired.">
+          <input type="checkbox" checked={pricedOnly} onChange={(e) => togglePriced(e.target.checked)} />
+          Priced only
+        </label>
+      }
       // 마스터의 분류가 곧 품목표 Category 셀의 값이므로, 저장·삭제 후 공유 캐시를 비운다.
       create={async (b) => {
         const r = await createSettingsItem(b);
@@ -5245,6 +5268,7 @@ function MasterSection<T extends { id: number }>({
   scrollBody = false,
   onRowOpen,
   transfer,
+  toolbarExtra,
 }: {
   title: string;
   empty: T;
@@ -5357,6 +5381,8 @@ function MasterSection<T extends { id: number }>({
     /** 보내고 난 뒤 — 양쪽 명부의 캐시(로고·메이커 목록)를 함께 씻어 낸다. */
     onDone?: () => void;
   };
+  /** 도구줄 검색칸 앞에 세우는 그 표만의 단추(예: 품목표의 Priced only). */
+  toolbarExtra?: ReactNode;
 }) {
   const NEW_ID = -1; // editId 센티넬: 신규 등록 편집기
   const [rows, setRows] = useState<T[]>([]);
@@ -5967,6 +5993,7 @@ Every contact of ${names.length === 1 ? "this company" : "these companies"} is r
         ) : countText ? (
           <span className="ms-count">{countText(filtered.length, rows.length)}</span>
         ) : null}
+        {toolbarExtra}
         <input
           className="ms-search"
           placeholder="🔍 Search…"

@@ -18788,3 +18788,22 @@ select.compose-tpl-version {
 }
 .mk-pick-toggle:hover:not(:disabled) { background: #eef3fb; color: var(--navy); }
 .mk-pick-toggle:disabled { opacity: 0.5; cursor: default; }
+
+/* 마스터 표 도구줄의 켜고 끄는 단추(품목표 Priced only 등). */
+.ms-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #d7e2ee;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.ms-toggle input { margin: 0; cursor: pointer; }
