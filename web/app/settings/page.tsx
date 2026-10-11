@@ -3713,17 +3713,18 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
       }}
       // 앞쪽은 "누구에게 판 무엇인가"(고객·설명), 뒤쪽은 거래 조건(공급사·구매가·
       // 판매가·마진) 순이고, 딜의 결말(Deal)은 그 조건을 읽은 다음에 보는 값이라
-      // 마진 오른쪽 맨 끝에 둔다. 용역 탭은 품번·제조사·원산지·HS 코드를 걷어낸다(전부 빈칸이라).
+      // 마진 오른쪽에 둔다. 분류(Category)는 경로가 길어 앞쪽 칸을 밀어내므로 맨 끝에.
+      // 용역 탭은 품번·제조사·원산지·HS 코드를 걷어낸다(전부 빈칸이라).
       columns={isService
         ? [
             project,
             ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
             vessel,
             ["description", "Service", undefined, "ms-desc"],
-            category,
             ["unit", "Unit"],
             ...trade,
             deal,
+            category,
           ]
         : [
             project,
@@ -3731,13 +3732,13 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
             vessel,
             ["description", "Description", undefined, "ms-desc"],
             ["part_no", "Part No."],
-            category,
             ["maker", "Maker"],
             ["origin", "Origin"],
             ["unit", "Unit"],
             ["hs_code", "HS Code"],
             ...trade,
             deal,
+            category,
           ]}
       // 머리 칸을 누르면 그 열로 정렬하거나 값을 골라 거를 수 있다. 값의 가짓수가
       // 적은 열(분류·상대처·제조사·원산지·단위·프로젝트)은 고르는 목록으로, 품명·품번처럼
