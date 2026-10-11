@@ -111,7 +111,7 @@ import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
 import { invalidateMasterCategories } from "@/components/common/CategoryCell";
 import { CategoryBadges, CategoryTagPicker, useVendorCategoryOptions } from "@/components/common/CategoryTags";
-import { MakerBadges, MakerTagPicker, useMakerOptions } from "@/components/common/MakerCell";
+import { MakerBadges, MakerNameBadge, MakerTagPicker, useMakerOptions } from "@/components/common/MakerCell";
 import { AgencyBadges, AgencyTagPicker } from "@/components/common/AgencyPicker";
 import { WebsiteScanPanel } from "@/components/common/WebsiteScanPanel";
 import VendorTagSuggestions from "@/components/common/VendorTagSuggestions";
@@ -3732,7 +3732,8 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
             vessel,
             ["description", "Description", undefined, "ms-desc"],
             ["part_no", "Part No."],
-            ["maker", "Maker"],
+            // 명부에 있는 제조사면 거래선 화면과 같은 로고 배지로, 없으면 적힌 글자 그대로.
+            ["maker", "Maker", (r) => <MakerNameBadge name={r.maker} empty={<span className="dash">—</span>} />],
             ["origin", "Origin"],
             ["unit", "Unit"],
             ["hs_code", "HS Code"],

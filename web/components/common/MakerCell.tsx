@@ -331,6 +331,21 @@ export function MakerBadges({
   );
 }
 
+/** 읽기용 — 글자로 적힌 제조사 이름이 명부의 회사와 맞으면 로고 배지로, 아니면 글자 그대로. */
+export function MakerNameBadge({ name, empty = null }: { name?: string | null; empty?: React.ReactNode }) {
+  const m = useMakerByName()(name || "");
+  if (!name) return <>{empty}</>;
+  if (!m) return <>{name}</>;
+  return (
+    <span className="mk-tags">
+      <span className="mk-tag" title={name}>
+        {m.logo ? <img className="mk-tag-logo" src={m.logo} alt="" /> : null}
+        {m.name}
+      </span>
+    </span>
+  );
+}
+
 /** 편집용 — 고른 배지(×로 뺀다) + 명부에서 하나씩 더하는 칸. */
 export function MakerTagPicker({
   value,
