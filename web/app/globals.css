@@ -6807,8 +6807,12 @@ input[type="month"] { font-family: inherit; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.combobox-menu li:hover {
+.combobox-menu li:hover,
+.combobox-menu li.active {
   background: #eef4fb;
+}
+.combobox-menu li.on.active {
+  background: #d3e3f6;
 }
 .combobox-menu li.on {
   background: #e1ecf9;
