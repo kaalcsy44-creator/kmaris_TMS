@@ -1546,9 +1546,10 @@ def make_purchase_order_xlsx(
     right = Alignment(horizontal="right", vertical="center")
 
     # PDF 품목표와 같은 열 구성(Origin 열 없음 — 미리보기와 동일).
-    HEADERS = ["No.", "Part No.", "Description", "Maker", "Qty", "Unit",
-               "Unit Price", "Amount", "Lead Time / Remark"]
-    WIDTHS = [5, 15, 29, 15, 7, 8, 14, 14, 16]
+    # Maker 열 없음(제조사는 Description 안에) — 납기(Lead Time)와 비고(Remark)는 따로 선다.
+    HEADERS = ["No.", "Part No.", "Description", "Qty", "Unit",
+               "Unit Price", "Amount", "Lead Time", "Remark"]
+    WIDTHS = [5, 15, 33, 7, 8, 14, 14, 12, 15]
     NCOL = len(HEADERS)
     for ci, w in enumerate(WIDTHS, start=1):
         ws.column_dimensions[get_column_letter(ci)].width = w
@@ -1690,34 +1691,35 @@ def make_purchase_order_xlsx(
     ws.row_dimensions[HROW].height = 24
 
     def write_item(r: int, it: Dict[str, Any], zebra: bool) -> None:
-        lead_remark = chr(10).join(x for x in (str(it.get("lead_time", "") or "").strip(),
-                                               str(it.get("remark", "") or "").strip()) if x)
-        vals = [it["item_no"], it["part_no"], it["description"], it.get("maker", ""),
+        lead = str(it.get("lead_time", "") or "").strip()
+        remark = str(it.get("remark", "") or "").strip()
+        vals = [it["item_no"], it["part_no"], it["description"],
                 _num(it["qty"]), it.get("unit", ""), _num(it["unit_price"]),
-                _num(it["amount"]), lead_remark]
+                _num(it["amount"]), lead, remark]
         for ci, val in enumerate(vals, start=1):
             cell = put(r, ci, val)
             cell.border = bdr
             cell.font = normal
             if zebra:
                 cell.fill = alt
-            if ci in (5, 7, 8):                     # Qty · Unit Price · Amount
+            if ci in (4, 6, 7):                     # Qty · Unit Price · Amount
                 cell.alignment = right
-                cell.number_format = numfmt(val, money=ci != 5)
-            elif ci in (1, 6):                      # No. · Unit
+                cell.number_format = numfmt(val, money=ci != 4)
+            elif ci in (1, 5):                      # No. · Unit
                 cell.alignment = center
             else:
                 cell.alignment = left_top
         desc = str(it.get("description", "") or "")
-        dl = sum(max(1, -(-len(x) // 29)) for x in desc.split("\n")) if desc else 1
-        rl = sum(max(1, -(-len(x) // 16)) for x in lead_remark.split("\n")) if lead_remark else 1
-        ws.row_dimensions[r].height = 13 * max(dl, rl, 1) + 5
+        dl = sum(max(1, -(-len(x) // 33)) for x in desc.split("\n")) if desc else 1
+        ll = sum(max(1, -(-len(x) // 12)) for x in lead.split("\n")) if lead else 1
+        rl = sum(max(1, -(-len(x) // 15)) for x in remark.split("\n")) if remark else 1
+        ws.row_dimensions[r].height = 13 * max(dl, ll, rl, 1) + 5
 
     def write_total_row(r: int, label: str, amount) -> None:
         for ci in range(1, NCOL + 1):
             put(r, ci, "", fill=lightblue).border = bdr
         put(r, 3, label, fill=lightblue, font=boldsm, align=left)
-        put(r, 8, amount, fill=lightblue, font=boldsm, align=right, fmt=numfmt(total))
+        put(r, 7, amount, fill=lightblue, font=boldsm, align=right, fmt=numfmt(total))
         ws.row_dimensions[r].height = 16
 
     def write_option_title(r: int, label: str) -> None:
@@ -1747,7 +1749,7 @@ def make_purchase_order_xlsx(
             continue
         if entry["kind"] == "total":
             write_total_row(r, entry["label"],
-                            f"=SUM(H{blk_first}:H{r - 1})" if r > blk_first else 0)
+                            f"=SUM(G{blk_first}:G{r - 1})" if r > blk_first else 0)
             sub_rows.append(r)
             blk_first = r + 1
             continue
@@ -1760,9 +1762,9 @@ def make_purchase_order_xlsx(
     trow = last + 1
     if has_options:
         write_total_row(trow, "Total",
-                        ("=" + "+".join(f"H{x}" for x in sub_rows)) if sub_rows else 0)
+                        ("=" + "+".join(f"G{x}" for x in sub_rows)) if sub_rows else 0)
     else:
-        write_total_row(trow, "Total", (f"=SUM(H{first}:H{last})" if last >= first else 0))
+        write_total_row(trow, "Total", (f"=SUM(G{first}:G{last})" if last >= first else 0))
 
     # ── 합계 문장(우측 정렬) ────────────────────────────────────────────
     r = trow + 1

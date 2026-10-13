@@ -1461,6 +1461,7 @@ def _item_view(it: dict) -> dict:
         "unit_price": unit,
         "amount": amount,
         "remark": it.get("remark") or "",
+        "lead_time": it.get("lead_time") or "",
         # 입력 단계에서 고른 품목 분류(선택). 편집기에서 다시 보여주기 위해 그대로 실어 보낸다.
         "category_id": it.get("category_id"),
         # 용역이 닿은 계통(선택) — 마찬가지로 왕복시킨다.
@@ -2293,6 +2294,8 @@ class PoWorkItem(BaseModel):
     unit_price: float | None = 0
     amount: float | None = None
     remark: str | None = ""
+    # 납기 — 발주서 품목표의 Lead Time 열(Remark 왼쪽).
+    lead_time: str | None = ""
     # 품목 분류(선택) — 입력 단계에서 고르면 저장 시 품목 마스터 분류로 반영된다.
     category_id: int | None = None
     # 용역이 닿은 선박 계통(선택). 같은 'Repair & Overhaul' 이라도 이번엔 주기관, 다음엔

@@ -494,6 +494,8 @@ export type PoWorkItem = {
   unit_price: number | null;
   amount: number | null;
   remark?: string;
+  /** 납기 — 발주서(6단계) 품목표의 Lead time 열. */
+  lead_time?: string;
   /** 품목 분류(선택). 저장 시 품목 마스터 분류로 반영된다. */
   category_id?: number | null;
   /** 용역이 닿은 선박 계통(선택). 건마다 달라 품목 마스터로는 올리지 않고 라인에만 남는다. */

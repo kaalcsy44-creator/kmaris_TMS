@@ -2640,8 +2640,9 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
     story += [info, Spacer(1, 4 * mm)]
 
     # ── 품목표 ─────────────────────────────────────────────────────────
-    headers = ["No.", "Part No.", "Description", "Maker", "Qty", "Unit", "Unit Price", "Amount", "Lead Time / Remark"]
-    widths = [8, 24, 44, 26, 12, 14, 22, 22, 18]
+    # Maker 열은 두지 않는다(제조사는 Description 안에 적는다). 납기와 비고는 따로 선다.
+    headers = ["No.", "Part No.", "Description", "Qty", "Unit", "Unit Price", "Amount", "Lead Time", "Remark"]
+    widths = [8, 24, 44, 12, 14, 22, 22, 18, 26]
     rows = [[_p(h, s["th"]) for h in headers]]
     # 옵션(대안)이 있으면 옵션 제목행으로 끊고 옵션마다 Subtotal 을 붙인다(총계는 그 아래).
     plan = item_row_plan(data.get("items", []))
@@ -2661,36 +2662,35 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
             total_rows.append(r)
             rows.append([
                 _p("", s["tiny"]), _p("", s["tiny"]), _p(f"<b>{entry['label']}</b>", s["tiny"]),
-                _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
-                _p(f"<b>{_qnum(entry['amount'], dec)}</b>", s["tiny"]), _p("", s["tiny"]),
+                _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+                _p(f"<b>{_qnum(entry['amount'], dec)}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
             ])
             continue
 
         it = entry["item"]
         item_rows.append(r)
-        lead_remark = f"{it.get('lead_time', '')}\n{it.get('remark', '')}".strip()
         rows.append([
             _p(str(it["item_no"]), s["tiny"]),
             _p(it["part_no"], s["tiny"]),
             _p(it["description"], s["tiny"]),
-            _p(it.get("maker", ""), s["tiny"]),
             _p(_qnum(it["qty"]), s["tiny"]),
             _p(it.get("unit", ""), s["tiny"]),
             _p(_qnum(it["unit_price"], dec), s["tiny"]),
             _p(_qnum(it["amount"], dec), s["tiny"]),
-            _p(lead_remark, s["tiny"]),
+            _p(it.get("lead_time", "") or "", s["tiny"]),
+            _p(it.get("remark", "") or "", s["tiny"]),
         ])
     total_rows.append(len(rows))
     rows.append([
         _p("", s["tiny"]), _p("", s["tiny"]), _p("<b>Total</b>", s["tiny"]),
-        _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
-        _p(f"<b>{_qnum(total, dec)}</b>", s["tiny"]), _p("", s["tiny"]),
+        _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+        _p(f"<b>{_qnum(total, dec)}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
     ])
     items_table = Table(rows, colWidths=[w * mm for w in widths], repeatRows=1)
     tcmds = [
         ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("GRID", (0, 0), (-1, -1), 0.35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (4, 1), (7, -1), "RIGHT"), ("ALIGN", (0, 1), (0, -1), "CENTER"),
+        ("ALIGN", (3, 1), (6, -1), "RIGHT"), ("ALIGN", (0, 1), (0, -1), "CENTER"),
         ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]

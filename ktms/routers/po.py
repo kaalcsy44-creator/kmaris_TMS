@@ -475,6 +475,7 @@ def create_order(body: OrderCreate):
                 "unit_price": unit_price,
                 "amount": it.amount if it.amount is not None else qty * unit_price,
                 "remark": (it.remark or "").strip(),
+                "lead_time": (getattr(it, "lead_time", "") or "").strip(),   # 납기(발주서 Lead Time 열)
                 "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
                 "applied_to": it.applied_to,   # 용역이 닿은 계통(선택)
                 # 옵션 표시행 표식 — 견적에서 나눠 둔 옵션이 이 문서에서도 그대로 서게 한다.
@@ -556,6 +557,7 @@ def update_order(order_id: int, body: OrderUpdate):
                     "unit_price": unit_price,
                     "amount": it.amount if it.amount is not None else qty * unit_price,
                     "remark": (it.remark or "").strip(),
+                    "lead_time": (getattr(it, "lead_time", "") or "").strip(),   # 납기(발주서 Lead Time 열)
                     "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
                     "applied_to": it.applied_to,   # 용역이 닿은 계통(선택)
                     # 옵션 표시행 표식 — 견적에서 나눠 둔 옵션이 이 문서에서도 그대로 서게 한다.
@@ -644,6 +646,7 @@ def create_purchase_order(body: PurchaseOrderCreate):
                 "unit_price": unit_price,
                 "amount": it.amount if it.amount is not None else qty * unit_price,
                 "remark": (it.remark or "").strip(),
+                "lead_time": (getattr(it, "lead_time", "") or "").strip(),   # 납기(발주서 Lead Time 열)
                 "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
                 "applied_to": it.applied_to,   # 용역이 닿은 계통(선택)
                 # 옵션 표시행 표식 — 견적에서 나눠 둔 옵션이 이 문서에서도 그대로 서게 한다.
@@ -768,6 +771,7 @@ def update_purchase_order(po_id: int, body: PurchaseOrderUpdate):
                     "unit_price": unit_price,
                     "amount": it.amount if it.amount is not None else qty * unit_price,
                     "remark": (it.remark or "").strip(),
+                    "lead_time": (getattr(it, "lead_time", "") or "").strip(),   # 납기(발주서 Lead Time 열)
                     "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
                     "applied_to": it.applied_to,   # 용역이 닿은 계통(선택)
                     # 옵션 표시행 표식 — 견적에서 나눠 둔 옵션이 이 문서에서도 그대로 서게 한다.

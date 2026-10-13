@@ -1357,6 +1357,7 @@ function VendorPoDetailModal({
             projectTitle={d.project_title}
           />
           <ItemEditor
+            vendorPo
             title="3. Order items"
             items={items}
             onChange={setItems}
@@ -1968,6 +1969,7 @@ function VendorPoCreate({
       ) : null}
 
       <ItemEditor
+        vendorPo
         title="3. Order items"
         items={items}
         onChange={setItems}
@@ -2239,6 +2241,7 @@ function ItemEditor({
   title = "Item list",
   decimals: decimalsProp = null,
   onDecimals,
+  vendorPo = false,
 }: {
   items: PoWorkItem[];
   onChange: (items: PoWorkItem[]) => void;
@@ -2250,7 +2253,11 @@ function ItemEditor({
   headerActions?: React.ReactNode;
   // 품목표 제목 — 발주서 폼은 문서 양식의 절 이름("3. Order items")을 쓴다.
   title?: string;
+  /** 6단계 발주서 — 발행 문서와 같은 열: Maker 없음, Remark 왼쪽에 Lead time. */
+  vendorPo?: boolean;
 }) {
+  const showMaker = !vendorPo;
+  const showLead = vendorPo;
   const decimals: number = decimalsProp ?? 0;
   // 분류는 별도 setter — patch() 의 숫자 파싱 분기를 타지 않는다.
   function patchCategory(i: number, id: number | null) {
@@ -2318,28 +2325,41 @@ function ItemEditor({
     { key: "description", label: "Description", phone: true },
     { key: "type", label: "Type" },
     { key: "serial_no", label: "Serial No." },
-    { key: "maker", label: "Maker" },
+    ...(showMaker ? [{ key: "maker", label: "Maker" }] : []),
     { key: "qty", label: "Qty", className: "num", phone: true },
     { key: "unit", label: "Unit" },
     { key: "unit_price", label: `Unit price (${cur})`, className: "num", phone: true },
     { key: "amount", label: `Amount (${cur})`, className: "num" },
+    ...(showLead ? [{ key: "lead_time", label: "Lead time" }] : []),
     { key: "remark", label: "Remark" },
     // 품목 분류(선택) — 고르면 저장 시 품목 마스터 분류로 반영된다. 맨 끝에 두어
     // 합계행(컬럼당 1셀) 구성에만 한 칸 추가하면 된다.
     { key: "category", label: "Category" },
   ];
-  const grid = useItemGrid("po-items", cols, { phoneHideFoot: true });
+  // 열 구성이 달라 저장된 폭·순서·숨김을 따로 둔다.
+  const grid = useItemGrid(vendorPo ? "vendor-po-items" : "po-items", cols, { phoneHideFoot: true });
   // 옵션 제목행 <td colSpan> 이 덮을 칸 수 — 숨긴 컬럼을 빼고 센다.
   const visibleColSpan = grid.cols.filter((c) => c.fixed || !grid.layout.hidden.has(c.key)).length;
   // fields 순서 = 아래 keys.cell(i, 0..9) 열 번호. 여기 Amount 는 계산 컬럼이 아니라 직접 입력이라
   // fields 에 포함하고 재계산(normalizeRow)도 두지 않는다 — patch() 도 다시 계산하지 않는다.
+  const fields: (keyof PoWorkItem)[] = [
+    "part_no", "description", "type", "serial_no", ...(showMaker ? ["maker" as const] : []),
+    "qty", "unit", "unit_price", "amount", ...(showLead ? ["lead_time" as const] : []), "remark",
+  ];
+  const fieldHeaders: Partial<Record<keyof PoWorkItem, string>> = {
+    part_no: "Part No.", description: "Description", type: "Type", serial_no: "Serial No.",
+    maker: "Maker", qty: "Qty", unit: "Unit", unit_price: `Unit price (${cur})`,
+    amount: `Amount (${cur})`, lead_time: "Lead time", remark: "Remark",
+  };
+  // 키보드 이동 열 번호 = fields 안의 순서(열 구성이 바뀌어도 칸과 어긋나지 않게).
+  const fc = (k: keyof PoWorkItem) => fields.indexOf(k);
   const keys = useItemGridKeys<PoWorkItem>({
     items,
     onChange,
-    fields: ["part_no", "description", "type", "serial_no", "maker", "qty", "unit", "unit_price", "amount", "remark"],
+    fields,
     numeric: ["qty", "unit_price", "amount"],
     blank: blankItem,
-    headers: ["Part No.", "Description", "Type", "Serial No.", "Maker", "Qty", "Unit", `Unit price (${cur})`, `Amount (${cur})`, "Remark"],
+    headers: fields.map((f) => fieldHeaders[f] || String(f)),
     sel,
   });
 
@@ -2385,11 +2405,12 @@ function ItemEditor({
               <ItemTh grid={grid} k="description">Description</ItemTh>
               <ItemTh grid={grid} k="type">Type</ItemTh>
               <ItemTh grid={grid} k="serial_no">Serial No.</ItemTh>
-              <ItemTh grid={grid} k="maker">Maker</ItemTh>
+              {showMaker ? <ItemTh grid={grid} k="maker">Maker</ItemTh> : null}
               <ItemTh grid={grid} k="qty" className="num">Qty</ItemTh>
               <ItemTh grid={grid} k="unit">Unit</ItemTh>
               <ItemTh grid={grid} k="unit_price" className="num">Unit price ({cur})</ItemTh>
               <ItemTh grid={grid} k="amount" className="num">Amount ({cur})</ItemTh>
+              {showLead ? <ItemTh grid={grid} k="lead_time">Lead time</ItemTh> : null}
               <ItemTh grid={grid} k="remark">Remark</ItemTh>
               <ItemTh grid={grid} k="category">Category</ItemTh>
             </tr>
@@ -2410,13 +2431,14 @@ function ItemEditor({
                     <td />{/* 4 description */}
                     <td />{/* 5 type */}
                     <td />{/* 6 serial_no */}
-                    <td />{/* 7 maker */}
+                    {showMaker ? <td /> : null}{/* 7 maker */}
                     <td />{/* 8 qty */}
                     <td />{/* 9 unit */}
                     <td className="total-label">{entry.label}</td>{/* 10 unit_price */}
                     <td className="num total-value">{/* 11 amount */}
                       <DualCurrencyAmount value={sub} currency={currency} />
                     </td>
+                    {showLead ? <td /> : null}{/* lead_time */}
                     <td />{/* 12 remark */}
                     <td />{/* 13 category */}
                   </tr>
@@ -2456,23 +2478,25 @@ function ItemEditor({
                 <td>
                   <textarea {...keys.cell(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} />
                 </td>
+                {showMaker ? (
                 <td>
-                  <textarea {...keys.cell(i, 4)} className="wrapcell" rows={1} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} />
+                  <textarea {...keys.cell(i, fc("maker"))} className="wrapcell" rows={1} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} />
                 </td>
+                ) : null}
                 <td>
                   <AmountInput
-                    {...keys.cell(i, 5)}
+                    {...keys.cell(i, fc("qty"))}
                     className="num"
                     value={it.qty}
                     onChange={(e) => patch(i, "qty", e.target.value)}
                   />
                 </td>
                 <td>
-                  <input {...keys.cell(i, 6)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} />
+                  <input {...keys.cell(i, fc("unit"))} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} />
                 </td>
                 <td>
                   <AmountInput
-                    {...keys.cell(i, 7)}
+                    {...keys.cell(i, fc("unit_price"))}
                     className="num"
                     value={it.unit_price}
                     decimals={decimals}
@@ -2481,15 +2505,20 @@ function ItemEditor({
                 </td>
                 <td>
                   <AmountInput
-                    {...keys.cell(i, 8)}
+                    {...keys.cell(i, fc("amount"))}
                     className="num"
                     value={it.amount}
                     decimals={decimals}
                     onChange={(e) => patch(i, "amount", e.target.value)}
                   />
                 </td>
+                {showLead ? (
                 <td>
-                  <textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} />
+                  <textarea {...keys.cell(i, fc("lead_time"))} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} />
+                </td>
+                ) : null}
+                <td>
+                  <textarea {...keys.cell(i, fc("remark"))} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} />
                 </td>
                 <td>
                   <CategoryCell
@@ -2514,7 +2543,7 @@ function ItemEditor({
               <td></td>{/* 4 description */}
               <td></td>{/* 5 type */}
               <td></td>{/* 6 serial_no */}
-              <td></td>{/* 7 maker */}
+              {showMaker ? <td></td> : null}{/* 7 maker */}
               <td></td>{/* 8 qty */}
               <td></td>{/* 9 unit */}
               <td className="total-label">Total</td>{/* 10 unit_price */}
@@ -2522,6 +2551,7 @@ function ItemEditor({
                 <DualCurrencyAmount value={total} currency={currency} />
                 <span className="fx-note">{fxRateText()}</span>
               </td>
+              {showLead ? <td></td> : null}{/* lead_time */}
               <td></td>{/* 12 remark */}
               <td></td>{/* 13 category */}
             </tr>
@@ -2550,6 +2580,7 @@ function poItemsFromVendorQuote(vq: VendorQuoteForImport): PoWorkItem[] {
       unit_price: cost,
       amount: qty * cost,
       remark: it.remark ?? "",
+      lead_time: (it as { lead_time?: string }).lead_time ?? "",
     };
   });
 }
@@ -2637,6 +2668,7 @@ function normalizeItem(it: Partial<PoWorkItem>): PoWorkItem {
     unit_price: unitPrice,
     amount: it.amount ?? qty * Number(unitPrice ?? 0),
     remark: it.remark ?? "",
+    lead_time: it.lead_time ?? "",
     category_id: it.category_id ?? null,
     // 제외 표식은 저장·재열람에서 살아남아야 한다(그래야 표에서 되살릴 수 있다).
     ...(it.excluded ? { excluded: true as const } : {}),
