@@ -5,6 +5,8 @@ import { amountInputValue, parseAmountInput } from "@/components/common/itemTabl
 
 type Props = Omit<InputHTMLAttributes<HTMLInputElement>, "value"> & {
   value: number | string | null | undefined;
+  /** 칸을 벗어났을 때 보일 소수 자릿수(엑셀 셀 서식). 없으면 있는 그대로. */
+  decimals?: number | null;
 };
 
 function sameAmount(draft: string, value: Props["value"]): boolean {
@@ -20,9 +22,9 @@ function sameAmount(draft: string, value: Props["value"]): boolean {
  * 123 으로 읽혀 점이 지워졌다(소수점을 처음부터 칠 수 없었다). 입력하는 동안은 친 글자를 그대로
  * 두고, 칸을 벗어나면 서식을 입힌다. 바깥에서 값이 바뀌면(붙여넣기·Ctrl+D·재계산) 그 값을 따른다.
  */
-export default function AmountInput({ value, onChange, onBlur, ...rest }: Props) {
+export default function AmountInput({ value, decimals, onChange, onBlur, ...rest }: Props) {
   const [draft, setDraft] = useState<string | null>(null);
-  const shown = draft !== null && sameAmount(draft, value) ? draft : amountInputValue(value);
+  const shown = draft !== null && sameAmount(draft, value) ? draft : amountInputValue(value, decimals);
   return (
     <input
       inputMode="decimal"

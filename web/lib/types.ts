@@ -855,6 +855,8 @@ export type QuotationTerms = {
   requested_date?: string;
   /** 고객 견적의 원가 교차환율 — 원가 통화가 USD·KRW 밖일 때 1 cur = usd USD. */
   cost_fx?: { cur: string; usd: number; mode?: string };
+  /** 오더·발주 품목표 금액의 소수 자릿수(엑셀 0 / 0.0 / 0.00). 없으면 자동(그대로). */
+  decimals?: number | null;
 };
 
 // Customer Quotation 작성 시 공급사 견적에서 cost 불러오기용

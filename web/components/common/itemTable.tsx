@@ -384,11 +384,21 @@ export function parseAmountInput(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function amountInputValue(value: number | string | null | undefined): string {
+/** decimals 를 주면 엑셀 셀 서식(0.00)처럼 그 자릿수로 고정해 보여 준다. */
+export function amountInputValue(value: number | string | null | undefined, decimals?: number | null): string {
   if (value === null || value === undefined || value === "") return "";
   const parsed = typeof value === "number" ? value : Number(String(value).replace(/,/g, ""));
   if (!Number.isFinite(parsed)) return "";
+  if (decimals != null && decimals >= 0)
+    return parsed.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
   return parsed.toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
+
+/** 엑셀 ROUND 와 같은 반올림(0.5 는 0에서 먼 쪽). 부동소수 오차(1.005)를 EPSILON 으로 보정. */
+export function roundTo(value: number, decimals: number): number {
+  const f = Math.pow(10, decimals);
+  const r = Math.round((Math.abs(value) + Number.EPSILON) * f) / f;
+  return value < 0 ? -r : r;
 }
 
 // Excel ROUNDUP(value, digits) 과 동일 — 0에서 먼 쪽으로 올림.

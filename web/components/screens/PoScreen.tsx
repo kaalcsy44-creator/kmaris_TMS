@@ -61,6 +61,7 @@ import {
   OptionTitleRow,
   itemRowClass,
   parseAmountInput,
+  roundTo,
   StageTotal,
   useRowSelection,
   MoveRowsButtons,
@@ -400,7 +401,7 @@ function OrderDetailModal({
       return;
     }
     setCurrency(q.currency || currency);
-    setItems(q.items.length ? quoteItemsForOrder(q) : [blankItem()]);
+    setItems(q.items.length ? quoteItemsForOrder(q, terms.decimals) : [blankItem()]);
     setOcrMsg(`Loaded ${q.items.length} item(s) from quotation ${q.qtn_no}${discountNote(q)}.`);
   }
 
@@ -686,6 +687,8 @@ function OrderDetailModal({
             items={items}
             onChange={setItems}
             currency={currency}
+            decimals={terms.decimals ?? null}
+            onDecimals={(d) => setTerms((t) => ({ ...t, decimals: d }))}
             headerActions={
               canWriteNow ? (
                 <button
@@ -1288,6 +1291,8 @@ function VendorPoDetailModal({
             items={items}
             onChange={setItems}
             currency={currency}
+            decimals={terms.decimals ?? null}
+            onDecimals={(d) => setTerms((t) => ({ ...t, decimals: d }))}
             headerActions={
               canWriteNow ? (
                 <LoadVendorQuoteControl
@@ -1540,7 +1545,7 @@ function CustomerPoNewForm({
       return;
     }
     setCurrency(linkedQuote.currency || currency);
-    setItems(linkedQuote.items.length ? quoteItemsForOrder(linkedQuote) : [blankItem()]);
+    setItems(linkedQuote.items.length ? quoteItemsForOrder(linkedQuote, terms.decimals) : [blankItem()]);
     setOcrMsg(`Loaded ${linkedQuote.items.length} item(s) from quotation ${linkedQuote.qtn_no}${discountNote(linkedQuote)}.`);
     setErr(null);
   }
@@ -1681,6 +1686,8 @@ function CustomerPoNewForm({
         items={items}
         onChange={setItems}
         currency={currency}
+        decimals={terms.decimals ?? null}
+        onDecimals={(d) => setTerms((t) => ({ ...t, decimals: d }))}
         headerActions={
           linkedRfqId != null ? (
             <button
@@ -1895,6 +1902,8 @@ function VendorPoCreate({
         items={items}
         onChange={setItems}
         currency={currency}
+        decimals={terms.decimals ?? null}
+        onDecimals={(d) => setTerms((t) => ({ ...t, decimals: d }))}
         headerActions={
           order ? (
             <LoadVendorQuoteControl
@@ -2158,10 +2167,15 @@ function ItemEditor({
   currency = "USD",
   headerActions,
   title = "Item list",
+  decimals = null,
+  onDecimals,
 }: {
   items: PoWorkItem[];
   onChange: (items: PoWorkItem[]) => void;
   currency?: string;
+  /** 금액 소수 자릿수(엑셀 0 / 0.0 / 0.00). null = 자동(입력한 그대로). */
+  decimals?: number | null;
+  onDecimals?: (d: number | null) => void;
   // 품목표 헤더의 "+ Add" 옆에 넣을 보조 액션(예: "Load order items").
   headerActions?: React.ReactNode;
   // 품목표 제목 — 발주서 폼은 문서 양식의 절 이름("3. Order items")을 쓴다.
@@ -2182,11 +2196,21 @@ function ItemEditor({
         // 옵션 구분행은 제목(description)만 있는 줄이라 수량·금액을 받지 않는다.
         if (isOptionRow(it)) return key === "description" ? { ...it, description: value } : it;
         if (key === "qty" || key === "unit_price" || key === "amount") {
-          return { ...it, [key]: parseAmountInput(value) };
+          const n = parseAmountInput(value);
+          // 자릿수를 정해 두었으면 금액은 그 자리로 반올림해 저장한다(수량은 그대로).
+          const r = n != null && decimals != null && key !== "qty" ? roundTo(n, decimals) : n;
+          return { ...it, [key]: r };
         }
         return { ...it, [key]: value };
       })
     );
+  }
+  // 자릿수를 고르면 지금 있는 단가·금액을 모두 그 자리로 반올림한다. 금액은 반올림한 단가 × 수량을
+  // 다시 반올림 — 엑셀에서 =ROUND(단가,n)*수량 으로 잡은 것과 같은 숫자가 되게.
+  function changeDecimals(d: number | null) {
+    onDecimals?.(d);
+    if (d == null) return;
+    onChange(items.map((it) => roundPoItem(it, d)));
   }
   // 합계·행번호는 "문서에서 제외"한 행을 뺀 값 — 발행 P/O(PDF)와 같은 숫자가 되게.
   // 옵션(대안)이 있으면 옵션마다 Subtotal 이 서고, 이 합계는 그것들을 모두 더한 값이다.
@@ -2246,6 +2270,20 @@ function ItemEditor({
         <ExcludedCountNote items={items} />
         <div className="items-head-actions">
           {headerActions}
+          {onDecimals ? (
+            <select
+              className="btn sm items-head-decimals"
+              value={decimals == null ? "" : String(decimals)}
+              title="Round unit prices and amounts to this many decimal places (like Excel 0 / 0.0 / 0.00)"
+              onChange={(e) => changeDecimals(e.target.value === "" ? null : Number(e.target.value))}
+            >
+              <option value="">Decimals: auto</option>
+              <option value="0">0</option>
+              <option value="1">0.0</option>
+              <option value="2">0.00</option>
+              <option value="3">0.000</option>
+            </select>
+          ) : null}
           <ItemColsButton grid={grid} />
           <ItemGridHint />
           <CopyRowsButton grid={keys} sel={sel} />
@@ -2370,6 +2408,7 @@ function ItemEditor({
                     {...keys.cell(i, 7)}
                     className="num"
                     value={it.unit_price}
+                    decimals={decimals}
                     onChange={(e) => patch(i, "unit_price", e.target.value)}
                   />
                 </td>
@@ -2378,6 +2417,7 @@ function ItemEditor({
                     {...keys.cell(i, 8)}
                     className="num"
                     value={it.amount}
+                    decimals={decimals}
                     onChange={(e) => patch(i, "amount", e.target.value)}
                   />
                 </td>
@@ -2542,17 +2582,32 @@ function normalizeItem(it: Partial<PoWorkItem>): PoWorkItem {
  * 단가는 KRW 정수·그 외 소수 둘째 자리로 반올림 — 줄마다 반올림하므로 합계가 견적 최종가와
  * 몇 원/센트 다를 수 있다.
  */
-function quoteItemsForOrder(q: { items: PoWorkItem[]; discount_pct?: number; currency?: string }): PoWorkItem[] {
+function quoteItemsForOrder(
+  q: { items: PoWorkItem[]; discount_pct?: number; currency?: string },
+  decimals?: number | null
+): PoWorkItem[] {
   const rows = q.items.map(normalizeItem);
   const d = Number(q.discount_pct || 0);
-  if (!d) return rows;
-  const step = (q.currency || "").toUpperCase() === "KRW" ? 1 : 100;
+  // 자릿수를 정해 두었으면 그 자리, 아니면 KRW 정수·그 외 소수 둘째 자리.
+  const digits = decimals ?? ((q.currency || "").toUpperCase() === "KRW" ? 0 : 2);
+  if (!d) return decimals == null ? rows : rows.map((it) => roundPoItem(it, digits));
   return rows.map((it) => {
     const up = Number(it.unit_price ?? 0);
     if (!up) return it;
-    const unit_price = Math.round(up * (1 - d / 100) * step) / step;
-    return { ...it, unit_price, amount: Math.round(Number(it.qty || 1) * unit_price * step) / step };
+    return roundPoItem({ ...it, unit_price: up * (1 - d / 100) }, digits);
   });
+}
+
+/** 단가를 n 자리로 반올림하고 금액 = 반올림 단가 × 수량(다시 n 자리). 단가가 없으면 금액만 반올림. */
+function roundPoItem(it: PoWorkItem, n: number): PoWorkItem {
+  if (isOptionRow(it)) return it;
+  const up = it.unit_price == null ? null : Number(it.unit_price);
+  if (up == null || !Number.isFinite(up) || up === 0) {
+    const amt = it.amount == null ? it.amount : roundTo(Number(it.amount), n);
+    return { ...it, amount: amt };
+  }
+  const unit_price = roundTo(up, n);
+  return { ...it, unit_price, amount: roundTo(Number(it.qty || 1) * unit_price, n) };
 }
 
 function discountNote(q: { discount_pct?: number }): string {
