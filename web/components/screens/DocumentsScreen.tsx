@@ -1,6 +1,7 @@
 "use client";
 
 import AmountInput from "@/components/common/AmountInput";
+import DecimalsSelect, { decimalsOf } from "@/components/common/DecimalsSelect";
 import { useEffect, useId, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -54,6 +55,7 @@ import {
   ItemSelectHeaderCell,
   itemRowClass,
   parseAmountInput,
+  roundTo,
   useRowSelection,
   MoveRowsButtons,
 } from "@/components/common/itemTable";
@@ -1303,6 +1305,8 @@ function ProformaInvoiceTab({
         packing={false}
         currency={currency}
         tableId="pi-items"
+        decimals={decimalsOf(terms.decimals)}
+        onDecimals={(d) => setTerms((t) => ({ ...t, decimals: d == null ? "" : String(d) }))}
         headerActions={
           <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
             {data.order.id ? "Load order items" : "Load quote items"}
@@ -1496,6 +1500,8 @@ function ServiceProformaInvoiceTab({
         packing={false}
         currency={currency}
         tableId="svc-pi-items"
+        decimals={decimalsOf(terms.decimals)}
+        onDecimals={(d) => setTerms((t) => ({ ...t, decimals: d == null ? "" : String(d) }))}
         headerActions={
           <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
             {data.order.id ? "Load order items" : "Load quote items"}
@@ -1694,6 +1700,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         packing={false}
         currency={currency}
         tableId="ci-items"
+        decimals={decimalsOf(terms.decimals)}
+        onDecimals={(d) => setTerms((t) => ({ ...t, decimals: d == null ? "" : String(d) }))}
         headerActions={
           <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
             Load order items
@@ -2669,10 +2677,15 @@ function ItemEditor({
   headerActions,
   footerRows,
   packingTotals,
+  decimals = null,
+  onDecimals,
 }: {
   items: DocumentWorkItem[];
   setItems: (items: DocumentWorkItem[]) => void;
   packing: boolean;
+  /** 금액 소수 자릿수(엑셀 0 / 0.0 / 0.00). null = 자동(입력한 그대로). 금액 문서 전용. */
+  decimals?: number | null;
+  onDecimals?: (d: number | null) => void;
   currency?: string;
   tableId: string;
   // 품목표 헤더의 "+ Add" 옆에 넣을 보조 액션(예: "Load order items").
@@ -2690,14 +2703,29 @@ function ItemEditor({
   // 품목 컬럼(Unit Price=라벨, Amount=값)에 정렬해 표 안에 넣는다.
   footerRows?: { label: React.ReactNode; value: React.ReactNode; grand?: boolean }[];
 }) {
+  // 자릿수를 정해 두었으면 단가·금액을 그 자리로 반올림(금액 = 반올림 단가 × 수량을 다시 반올림).
+  const rnd = (n: number) => (decimals == null ? n : roundTo(n, decimals));
   function patch(i: number, key: keyof DocumentWorkItem, value: string) {
     const next = [...items];
     const item = { ...next[i], [key]: ["qty", "unit_price", "amount"].includes(String(key)) ? parseAmountInput(value) || 0 : value };
+    if (!packing && (key === "unit_price" || key === "amount")) item[key] = rnd(num(item[key]));
     if (!packing && (key === "qty" || key === "unit_price")) {
-      item.amount = num(item.qty) * num(item.unit_price);
+      item.amount = rnd(num(item.qty) * num(item.unit_price));
     }
     next[i] = item;
     setItems(next);
+  }
+  function changeDecimals(d: number | null) {
+    onDecimals?.(d);
+    if (d == null) return;
+    setItems(
+      items.map((it) => {
+        const up = num(it.unit_price);
+        if (!up) return { ...it, amount: roundTo(num(it.amount), d) };
+        const unit_price = roundTo(up, d);
+        return { ...it, unit_price, amount: roundTo(num(it.qty) * unit_price, d) };
+      })
+    );
   }
   // 합계·행 번호는 "문서에 실리는 행"(제외하지 않은 행)만 기준으로 삼아 발행 문서와 일치시킨다.
   const shown = includedRows(items);
@@ -2771,7 +2799,8 @@ function ItemEditor({
         if (changed.includes(k) && (next[k] === null || next[k] === undefined)) next[k] = 0;
       }
       if (!packing && (changed.includes("qty") || changed.includes("unit_price"))) {
-        next.amount = num(next.qty) * num(next.unit_price);
+        if (changed.includes("unit_price")) next.unit_price = rnd(num(next.unit_price));
+        next.amount = rnd(num(next.qty) * num(next.unit_price));
       }
       return next;
     },
@@ -2784,6 +2813,7 @@ function ItemEditor({
         <ExcludedCountNote items={items} />
         <div className="items-head-actions">
           {headerActions}
+          {!packing && onDecimals ? <DecimalsSelect value={decimals} onChange={changeDecimals} /> : null}
           <ItemColsButton grid={grid} />
           <ItemGridHint />
           <CopyRowsButton grid={keys} sel={sel} />
@@ -2852,8 +2882,8 @@ function ItemEditor({
                   </>
                 ) : (
                   <>
-                    <td><AmountInput {...keys.cell(i, 5)} className="num" value={item.unit_price} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
-                    <td><AmountInput {...keys.cell(i, 6)} className="num" value={item.amount} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
+                    <td><AmountInput {...keys.cell(i, 5)} className="num" value={item.unit_price} decimals={decimals} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
+                    <td><AmountInput {...keys.cell(i, 6)} className="num" value={item.amount} decimals={decimals} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
                   </>
                 )}
                 <td><textarea {...keys.cell(i, packing ? 11 : 7)} className="wrapcell" rows={1} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>

@@ -1,6 +1,7 @@
 "use client";
 
 import AmountInput from "@/components/common/AmountInput";
+import DecimalsSelect from "@/components/common/DecimalsSelect";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
@@ -2270,20 +2271,7 @@ function ItemEditor({
         <ExcludedCountNote items={items} />
         <div className="items-head-actions">
           {headerActions}
-          {onDecimals ? (
-            <select
-              className="btn sm items-head-decimals"
-              value={decimals == null ? "" : String(decimals)}
-              title="Round unit prices and amounts to this many decimal places (like Excel 0 / 0.0 / 0.00)"
-              onChange={(e) => changeDecimals(e.target.value === "" ? null : Number(e.target.value))}
-            >
-              <option value="">Decimals: auto</option>
-              <option value="0">0</option>
-              <option value="1">0.0</option>
-              <option value="2">0.00</option>
-              <option value="3">0.000</option>
-            </select>
-          ) : null}
+          {onDecimals ? <DecimalsSelect value={decimals} onChange={changeDecimals} /> : null}
           <ItemColsButton grid={grid} />
           <ItemGridHint />
           <CopyRowsButton grid={keys} sel={sel} />
