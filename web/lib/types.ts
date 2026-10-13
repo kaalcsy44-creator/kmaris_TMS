@@ -397,6 +397,10 @@ export type VendorOption = {
   contact?: string;
   phone?: string;
   address?: string;
+  /** 다중값(첫 값=대표) — 발주서 Tel·Email·Address 선택지. */
+  emails?: string[];
+  phones?: string[];
+  addresses?: string[];
   logo?: string;
   /** 이 거래선이 곧 그 제조사일 때의 메이커 id(메이커 직거래). 보통은 null. */
   maker_id?: number | null;
@@ -853,6 +857,14 @@ export type QuotationTerms = {
   vendor_quote_no?: string;
   /** 납기요청일 — 발주서 "Requested Delivery / Service Date"(YYYY-MM-DD). */
   requested_date?: string;
+  /** 발주서 Supplier 칸 — 벤더 마스터 값 대신 이 발주서에 찍을 담당자·연락처·주소(비면 마스터). */
+  supplier_contact?: string;
+  supplier_phone?: string;
+  supplier_email?: string;
+  supplier_address?: string;
+  /** 발주서 IMO No.·Engine Type — 비면 선박 마스터 값. */
+  vessel_imo?: string;
+  engine_type?: string;
   /** 고객 견적의 원가 교차환율 — 원가 통화가 USD·KRW 밖일 때 1 cur = usd USD. */
   cost_fx?: { cur: string; usd: number; mode?: string };
   /** 오더·발주 품목표 금액의 소수 자릿수(엑셀 0 / 0.0 / 0.00). 없으면 자동(그대로). */
@@ -2258,6 +2270,9 @@ export type PurchaseOrderDetail = {
   vendor_id: number;
   vendor: string;
   vendor_email: string;
+  /** 선박 마스터 값 — 발주서 IMO No.·Engine Type 기본값. */
+  vessel_imo?: string;
+  vessel_engine_type?: string;
   date: string;
   sent_date: string;
   status: string;

@@ -1188,6 +1188,10 @@ def vendor_options(s) -> list[dict]:
              "contact": v.contact or "",
              "phone": v.contact_phone or "",
              "address": v.address or "",
+             # 다중값(첫 값=대표) — 발주서 Supplier 칸의 Tel·Email·Address 를 이 중에서 고른다.
+             "emails": _multi_out(getattr(v, "emails", None), v.email),
+             "phones": _multi_out(getattr(v, "phones", None), v.contact_phone),
+             "addresses": _multi_out(getattr(v, "addresses", None), v.address),
              "logo": getattr(v, "logo", None) or "",
              # 메이커 직거래로 심어진 줄이면 그 메이커 id — 목록에서 왜 제조사 이름이
              # 거래선 자리에 서 있는지 화면이 한 마디로 밝힐 수 있게 함께 내린다.

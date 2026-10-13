@@ -131,18 +131,33 @@ def build_po_payload(
     """Vendor 발주서(Purchase Order) PDF payload. Supplier 박스에 Vendor 정보가 들어간다.
 
     발주서 양식의 "1. Order information" 에 프로젝트명이 들어가므로 딜에서 받아 싣는다
-    (Vendor RFQ 도 같은 payload 를 쓰지만 그 문서엔 이 칸이 없어 기본값은 빈 문자열)."""
+    (Vendor RFQ 도 같은 payload 를 쓰지만 그 문서엔 이 칸이 없어 기본값은 빈 문자열).
+
+    발주서 편집 화면에서 고르거나 직접 적은 공급자 담당자·연락처·주소, 선박 IMO·엔진
+    형식은 terms 에 실려 온다 — 적힌 값이 있으면 마스터 값 대신 그 값을 찍는다."""
+    terms = terms or {}
+    party = _vendor_party_dict(vendor)
+    for key, field in (("supplier_contact", "contact"), ("supplier_phone", "phone"),
+                       ("supplier_email", "email"), ("supplier_address", "address")):
+        val = str(terms.get(key) or "").strip()
+        if val:
+            party[field] = val
+    vessel_d = _vessel_dict(vessel)
+    for key, field in (("vessel_imo", "imo"), ("engine_type", "engine_type")):
+        val = str(terms.get(key) or "").strip()
+        if val:
+            vessel_d[field] = val
     return {
         "doc_no": po_no,
         "date": date,
         "currency": currency,
         "vat_rate": 0.0,
         "project_title": project_title or "",
-        "customer": _vendor_party_dict(vendor),  # rendered as 'Supplier / Seller'
-        "vessel": _vessel_dict(vessel),
+        "customer": party,  # rendered as 'Supplier / Seller'
+        "vessel": vessel_d,
         # 발행 자릿수(terms.decimals → 견적 round_digits → 0)로 품목을 반올림해 싣는다.
         "items": round_doc_items(items, print_decimals({"terms": terms})),
-        "terms": terms or {},
+        "terms": terms,
         "shipping": {},
     }
 

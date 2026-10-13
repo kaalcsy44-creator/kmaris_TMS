@@ -1012,8 +1012,10 @@ function VendorPoPdfPreviewButton({
 // 문서 머리(발주번호 · 발주일자 · 견적번호) → 1. 발주 정보 → 2. 공급자 정보.
 // 아래에 6단계의 품목표(3. 발주 품목)와 Terms & Conditions 가 이어진다.
 //
-// 선박·프로젝트는 딜에서 정해지고, 공급자 담당자·연락처·주소는 벤더 마스터가 원본이라
-// 여기선 읽기전용으로 비춘다 — 발주서에 무엇이 찍히는지는 보이되 사본이 생기지 않도록.
+// 선박명·프로젝트는 딜에서 정해져 읽기전용. 발행 문서의 나머지 칸은 모두 여기서 고친다 —
+// 공급자 담당자·Tel·Email·주소는 같은 회사로 등록된 담당자 레코드들의 값 중에서 고르거나
+// 직접 적고(terms.supplier_*), IMO·엔진 형식은 선박 마스터 값을 기본으로 덮어쓸 수 있다.
+// 비워 두면 문서는 마스터 값을 찍는다(pdf_svc.build_po_payload).
 function PoDocFields({
   vendorId,
   onVendorId,
@@ -1026,6 +1028,8 @@ function PoDocFields({
   terms,
   onTerms,
   vessel,
+  vesselImo,
+  vesselEngineType,
   projectTitle,
 }: {
   vendorId: number | "";
@@ -1040,10 +1044,56 @@ function PoDocFields({
   terms: QuotationTerms;
   onTerms: (t: QuotationTerms) => void;
   vessel?: string;
+  vesselImo?: string;
+  vesselEngineType?: string;
   projectTitle?: string;
 }) {
   const vendor = vendorChoices.find((v) => v.id === vendorId);
   const set = (patch: Partial<QuotationTerms>) => onTerms({ ...terms, ...patch });
+
+  // 같은 회사 = 같은 이름의 벤더 레코드(레코드 1건 = 담당자 1명). 그 담당자들의
+  // 이름·전화·메일·주소가 선택지다. 고른 담당자 것이 맨 앞에 선다.
+  const companyKey = (vendor?.name || "").trim().toLowerCase();
+  const siblings = vendor
+    ? [vendor, ...vendorChoices.filter((v) => v.id !== vendor.id && (v.name || "").trim().toLowerCase() === companyKey)]
+    : [];
+  const uniq = (vals: (string | undefined)[]) => {
+    const seen = new Set<string>();
+    return vals.filter((v): v is string => {
+      const k = (v || "").trim().toLowerCase();
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  };
+  const contact = terms.supplier_contact || vendor?.contact || "";
+  const phone = terms.supplier_phone || vendor?.phone || "";
+  const email = terms.supplier_email || vendor?.email || "";
+  const address = terms.supplier_address || vendor?.address || "";
+  // 지금 담당자 이름과 맞는 레코드(없으면 고른 벤더) — 그 사람 연락처를 목록 맨 앞에.
+  const picked = siblings.find((v) => (v.contact || "").trim() === contact.trim()) || vendor;
+  const ordered = picked ? [picked, ...siblings.filter((v) => v.id !== picked.id)] : siblings;
+  const contactOpts = uniq(ordered.map((v) => v.contact));
+  const phoneOpts = uniq(ordered.flatMap((v) => (v.phones?.length ? v.phones : [v.phone])));
+  const emailOpts = uniq(ordered.flatMap((v) => (v.emails?.length ? v.emails : [v.email])));
+  const addressOpts = uniq(ordered.flatMap((v) => (v.addresses?.length ? v.addresses : [v.address])));
+
+  const partyOf = (v?: VendorOption): Partial<QuotationTerms> => ({
+    supplier_contact: v?.contact || "",
+    supplier_phone: v?.phone || "",
+    supplier_email: v?.email || "",
+    supplier_address: v?.address || "",
+  });
+  // 공급자를 바꾸면 담당자 칸도 새 공급자의 대표값으로 갈아 끼운다(앞 공급자 값이 남지 않게).
+  const changeVendor = (id: number | "") => {
+    onVendorId(id);
+    onTerms({ ...terms, ...partyOf(vendorChoices.find((v) => v.id === id)) });
+  };
+  // 등록된 담당자 이름을 고르면 그 사람의 대표 Tel·Email·주소를 함께 채운다.
+  const changeContact = (name: string) => {
+    const rec = siblings.find((v) => (v.contact || "").trim() === name.trim());
+    set(rec && name.trim() ? partyOf(rec) : { supplier_contact: name });
+  };
 
   return (
     <>
@@ -1086,6 +1136,22 @@ function PoDocFields({
           <input value={vessel || ""} readOnly placeholder="—" />
         </div>
         <div className="form-field">
+          <label>IMO No.</label>
+          <input
+            value={terms.vessel_imo || vesselImo || ""}
+            onChange={(e) => set({ vessel_imo: e.target.value })}
+            placeholder="—"
+          />
+        </div>
+        <div className="form-field">
+          <label>Engine type</label>
+          <input
+            value={terms.engine_type || vesselEngineType || ""}
+            onChange={(e) => set({ engine_type: e.target.value })}
+            placeholder="—"
+          />
+        </div>
+        <div className="form-field">
           <label>Currency</label>
           <CurrencyToggle value={currency} onChange={onCurrency} />
         </div>
@@ -1099,23 +1165,23 @@ function PoDocFields({
       <div className="form-grid">
         <div className="form-field">
           <label>Supplier</label>
-          <VendorSelect value={vendorId} options={vendorChoices} onChange={onVendorId} />
+          <VendorSelect value={vendorId} options={vendorChoices} onChange={changeVendor} />
         </div>
         <div className="form-field">
           <label>Contact</label>
-          <input value={vendor?.contact || ""} readOnly placeholder="—" />
+          <ComboBox value={contact} onChange={changeContact} options={contactOpts} placeholder="—" />
         </div>
         <div className="form-field">
           <label>Tel.</label>
-          <input value={vendor?.phone || ""} readOnly placeholder="—" />
+          <ComboBox value={phone} onChange={(v) => set({ supplier_phone: v })} options={phoneOpts} placeholder="—" />
         </div>
         <div className="form-field">
           <label>Email</label>
-          <input value={vendor?.email || ""} readOnly placeholder="—" />
+          <ComboBox value={email} onChange={(v) => set({ supplier_email: v })} options={emailOpts} placeholder="—" />
         </div>
         <div className="form-field form-field--full">
           <label>Address</label>
-          <input value={vendor?.address || ""} readOnly placeholder="—" />
+          <ComboBox value={address} onChange={(v) => set({ supplier_address: v })} options={addressOpts} placeholder="—" />
         </div>
         <div className="form-field form-field--full">
           <label>Delivery place</label>
@@ -1127,7 +1193,7 @@ function PoDocFields({
         </div>
       </div>
       <span className="hint-inline">
-        Contact · Tel. · Email · Address come from the supplier record — change them in Settings › Partners.
+        Contact · Tel. · Email · Address: pick from this supplier&apos;s saved contacts or type in — kept on this P/O only.
       </span>
     </>
   );
@@ -1286,6 +1352,8 @@ function VendorPoDetailModal({
             terms={terms}
             onTerms={setTerms}
             vessel={d.vessel}
+            vesselImo={d.vessel_imo}
+            vesselEngineType={d.vessel_engine_type}
             projectTitle={d.project_title}
           />
           <ItemEditor

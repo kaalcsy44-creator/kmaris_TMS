@@ -695,16 +695,22 @@ def vendor_po_detail(po_id: int):
         vendor = s.query(Vendor).filter_by(id=po.vendor_id).first()
         rfq = _rfq_for_order(s, order) if order else None
         qtn = s.query(Quotation).filter_by(id=order.quotation_id).first() if order and order.quotation_id else None
+        vessel = _order_vessel(s, order) if order else None
         return {
             "id": po.id,
             "po_no": po.po_no or "",
+            # 선박 마스터 값 — 발주서의 IMO No.·Engine Type 칸 기본값(terms 로 덮어쓸 수 있다).
+            "vessel_imo": (vessel.imo if vessel else "") or "",
+            "vessel_engine_type": (vessel.engine_type if vessel else "") or "",
             "order_id": po.order_id,
             "assignee_id": (rfq.created_by or 0) if rfq else 0,
             "customer_po_no": (order.po_no if order else "") or "",
             **_base_meta(s, rfq, order),   # 공통 기본정보
             "vendor_id": po.vendor_id or 0,
             "vendor": vendor.name if vendor else "—",
-            "vendor_email": po.sent_to_email or (vendor.email if vendor else "") or "",
+            # 발송 전이면 발주서에 고른 공급자 Email → 벤더 대표 메일 순.
+            "vendor_email": po.sent_to_email or ((getattr(po, "terms", None) or {}).get("supplier_email") or "").strip()
+                            or (vendor.email if vendor else "") or "",
             "date": po.date or "",
             "sent_date": po.sent_date or "",
             "status": po.status or "",
