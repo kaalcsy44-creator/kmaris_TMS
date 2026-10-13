@@ -17,7 +17,7 @@ from services.kmaris_docs import (
     normalize_items, calc_totals, _num, DOC_TITLES, doc_parties,
     packing_totals, consignee_mark_lines, _dim_parts, _invoice_shipping_rows,
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
-    pi_decimals, doc_decimals, pi_charges, pi_doc_date, is_service_doc, service_info_rows,
+    pi_decimals, doc_decimals, print_decimals, pi_charges, pi_doc_date, is_service_doc, service_info_rows,
     SERVICE_PI_DECIMALS, cn_view, cn_contact_line, CN_MIN_ITEM_ROWS,
     is_option_row, item_row_plan,
 )
@@ -358,6 +358,11 @@ _SIGN_ASSET = ("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signat
 _STAMP_ASSET = ("Company stamp_K-Maris Energy & Solutions.jpg", "stamp.png", "stamp.jpg", "seal.png")
 
 
+def _fixed_num_format(decimals: int) -> str:
+    """발행 자릿수 그대로의 숫자 서식(#,##0 / #,##0.00 …)."""
+    return "#,##0" + ("." + "0" * decimals if decimals else "")
+
+
 def _invoice_money_format(currency: str, decimals: int | None = None) -> str:
     """금액 서식 — 0 은 '-' 로 찍히는 회계 서식(참조 양식과 같다).
     decimals 를 주면 통화 규칙 대신 그 자리수로 찍는다(서비스 송장=정수, 화면에서 고른 자릿수)."""
@@ -503,8 +508,7 @@ def _service_pi_items_and_total(form: "_FormSheet", data: Dict[str, Any], r: int
     용역엔 품번·HS 코드가 없어 그 두 칸이 빠지고 Unit 이 선다. 합계는 TOTAL 한 줄."""
     items = normalize_items(data.get("items", []))
     # 용역 금액은 원 단위로 떨어진다(출장비·기술료) — 참조 양식대로 소수 자리를 쓰지 않는다.
-    _d = doc_decimals(data)
-    num_fmt = _invoice_money_format(currency, SERVICE_PI_DECIMALS if _d is None else _d)
+    num_fmt = _invoice_money_format(currency, print_decimals(data))
 
     r = form.item_header(r, [("No.", 1, 1), ("Description", 2, 4), ("Qty", 5, 5),
                              ("Unit", 6, 6), ("Unit Price", 7, 7), (f"Amount ({currency})", 8, 8)])
@@ -939,7 +943,7 @@ def make_document_xlsx(
     totals = calc_totals(
         data.get("items", []), _num(data.get("vat_rate", 0)), _num(data.get("discount_pct", 0))
     )
-    num_fmt = "#,##0.00" if currency == "USD" else "#,##0"
+    num_fmt = _fixed_num_format(print_decimals(data))
 
     wb = Workbook()
     ws = wb.active
@@ -1082,7 +1086,7 @@ def make_quotation_costing_xlsx(
     terms = data.get("terms", {}) or {}
     currency = (data.get("currency") or "USD").upper()
     raw_items = data.get("items", []) or []
-    num_fmt = "#,##0.00" if currency == "USD" else "#,##0"
+    num_fmt = _fixed_num_format(print_decimals(data))
 
     wb = Workbook()
     ws = wb.active
@@ -1572,8 +1576,12 @@ def make_purchase_order_xlsx(
                 if fill:
                     ws.cell(rr, cc).fill = fill
 
-    def numfmt(value):
-        """PDF _qnum 과 같은 표기 — 정수면 소수 생략, 아니면 두 자리."""
+    po_dec = print_decimals(data)
+
+    def numfmt(value, money: bool = True):
+        """PDF 와 같은 표기 — 금액은 발행 자릿수로 고정, 수량은 정수면 소수 생략."""
+        if money:
+            return _fixed_num_format(po_dec)
         try:
             return "#,##0" if float(value) == int(float(value)) else "#,##0.00"
         except (TypeError, ValueError):
@@ -1682,7 +1690,7 @@ def make_purchase_order_xlsx(
                 cell.fill = alt
             if ci in (5, 7, 8):                     # Qty · Unit Price · Amount
                 cell.alignment = right
-                cell.number_format = numfmt(val)
+                cell.number_format = numfmt(val, money=ci != 5)
             elif ci in (1, 6):                      # No. · Unit
                 cell.alignment = center
             else:
@@ -1746,7 +1754,7 @@ def make_purchase_order_xlsx(
     # ── 합계 문장(우측 정렬) ────────────────────────────────────────────
     r = trow + 1
     merge(r, 1, r, NCOL)
-    put(r, 1, f"Total: {_money(total, currency)}", font=bold, align=right)
+    put(r, 1, f"Total: {_money(total, currency, po_dec)}", font=bold, align=right)
     ws.row_dimensions[r].height = 18
 
     def section_bar(row, title):

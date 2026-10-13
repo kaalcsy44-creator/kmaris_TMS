@@ -2168,13 +2168,13 @@ function ItemEditor({
   currency = "USD",
   headerActions,
   title = "Item list",
-  decimals = null,
+  decimals: decimalsProp = null,
   onDecimals,
 }: {
   items: PoWorkItem[];
   onChange: (items: PoWorkItem[]) => void;
   currency?: string;
-  /** 금액 소수 자릿수(엑셀 0 / 0.0 / 0.00). null = 자동(입력한 그대로). */
+  /** 금액 소수 자릿수(엑셀 0 / 0.0 / 0.00). 안 고르면 0 — 발행 문서 기본과 같다. */
   decimals?: number | null;
   onDecimals?: (d: number | null) => void;
   // 품목표 헤더의 "+ Add" 옆에 넣을 보조 액션(예: "Load order items").
@@ -2182,6 +2182,7 @@ function ItemEditor({
   // 품목표 제목 — 발주서 폼은 문서 양식의 절 이름("3. Order items")을 쓴다.
   title?: string;
 }) {
+  const decimals: number = decimalsProp ?? 0;
   // 분류는 별도 setter — patch() 의 숫자 파싱 분기를 타지 않는다.
   function patchCategory(i: number, id: number | null) {
     onChange(items.map((it, idx) => (idx === i ? { ...it, category_id: id } : it)));
@@ -2576,7 +2577,7 @@ function normalizeItem(it: Partial<PoWorkItem>): PoWorkItem {
 /**
  * 고객 견적 → 오더 품목. 견적에 총액 할인(discount_pct)이 있으면 그 할인가가 최종가이므로
  * 각 단가에 같은 비율을 먹여 불러온다(예전엔 할인 전 단가가 그대로 들어와 오더가 견적보다 컸다).
- * 단가는 KRW 정수·그 외 소수 둘째 자리로 반올림 — 줄마다 반올림하므로 합계가 견적 최종가와
+ * 단가는 고른 자릿수(기본 0)로 반올림 — 줄마다 반올림하므로 합계가 견적 최종가와
  * 몇 원/센트 다를 수 있다.
  */
 function quoteItemsForOrder(
@@ -2585,9 +2586,9 @@ function quoteItemsForOrder(
 ): PoWorkItem[] {
   const rows = q.items.map(normalizeItem);
   const d = Number(q.discount_pct || 0);
-  // 자릿수를 정해 두었으면 그 자리, 아니면 KRW 정수·그 외 소수 둘째 자리.
-  const digits = decimals ?? ((q.currency || "").toUpperCase() === "KRW" ? 0 : 2);
-  if (!d) return decimals == null ? rows : rows.map((it) => roundPoItem(it, digits));
+  // 자릿수를 정해 두었으면 그 자리, 아니면 0(정수) — 발행 문서 기본과 같다.
+  const digits = decimals ?? 0;
+  if (!d) return rows.map((it) => roundPoItem(it, digits));
   return rows.map((it) => {
     const up = Number(it.unit_price ?? 0);
     if (!up) return it;

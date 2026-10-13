@@ -2677,13 +2677,13 @@ function ItemEditor({
   headerActions,
   footerRows,
   packingTotals,
-  decimals = null,
+  decimals: decimalsProp = null,
   onDecimals,
 }: {
   items: DocumentWorkItem[];
   setItems: (items: DocumentWorkItem[]) => void;
   packing: boolean;
-  /** 금액 소수 자릿수(엑셀 0 / 0.0 / 0.00). null = 자동(입력한 그대로). 금액 문서 전용. */
+  /** 금액 소수 자릿수(엑셀 0 / 0.0 / 0.00). 안 고르면 0 — 발행 문서 기본과 같다. 금액 문서 전용. */
   decimals?: number | null;
   onDecimals?: (d: number | null) => void;
   currency?: string;
@@ -2703,7 +2703,8 @@ function ItemEditor({
   // 품목 컬럼(Unit Price=라벨, Amount=값)에 정렬해 표 안에 넣는다.
   footerRows?: { label: React.ReactNode; value: React.ReactNode; grand?: boolean }[];
 }) {
-  // 자릿수를 정해 두었으면 단가·금액을 그 자리로 반올림(금액 = 반올림 단가 × 수량을 다시 반올림).
+  // 단가·금액을 발행 자릿수로 반올림(금액 = 반올림 단가 × 수량을 다시 반올림). 안 고르면 0 자리.
+  const decimals: number = decimalsProp ?? 0;
   const rnd = (n: number) => (decimals == null ? n : roundTo(n, decimals));
   function patch(i: number, key: keyof DocumentWorkItem, value: string) {
     const next = [...items];

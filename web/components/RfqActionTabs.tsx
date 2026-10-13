@@ -1,6 +1,7 @@
 "use client";
 
 import AmountInput from "@/components/common/AmountInput";
+import DecimalsSelect from "@/components/common/DecimalsSelect";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchVendors,
@@ -109,6 +110,7 @@ import { withDefaultTerms, TERM_TEXT_KEYS } from "@/lib/terms";
 import { sortByDocNo } from "@/lib/sort";
 import {
   amountInputValue,
+  roundTo,
   convertCurrency,
   DeleteSelectedButton,
   deleteSelectedRows,
@@ -3032,6 +3034,8 @@ function CustomerQuoteDetailModal({
             roundDigits={roundDigits}
             rate={effRate}
             fx={fxAll}
+            decimals={terms.decimals ?? null}
+            onDecimals={(d) => setTerms((t) => ({ ...t, decimals: d }))}
             headerActions={
               <>
                 <UndoRedoButtons hist={hist} />
@@ -5265,6 +5269,8 @@ function CustomerQuoteAction({
         roundDigits={roundDigits}
         rate={effRate}
         fx={fxAll}
+        decimals={terms.decimals ?? null}
+        onDecimals={(d) => setTerms((t) => ({ ...t, decimals: d }))}
         headerActions={
           <>
             {/* 받은 견적을 골라 싣는다 — 여러 장을 고르면 한 품목표로 합쳐 담는다. */}
@@ -5384,9 +5390,15 @@ function CustomerQuoteItemEditor({
   rate = USD_KRW_RATE,
   fx,
   headerActions,
+  decimals = null,
+  onDecimals,
 }: {
   items: CustomerQuoteItem[];
   onChange: (items: CustomerQuoteItem[]) => void;
+  /** 금액 소수 자릿수(엑셀 0 / 0.0 / 0.00) — 견적서 PDF·Excel 과 같은 자리. 안 고르면 단가 올림
+   *  자릿수(양수일 때만), 그 밖은 0. */
+  decimals?: number | null;
+  onDecimals?: (d: number | null) => void;
   currency?: string;
   costCurrency?: string;
   roundDigits?: number;
@@ -5397,6 +5409,28 @@ function CustomerQuoteItemEditor({
   headerActions?: React.ReactNode;
 }) {
   const conv: Fx = fx ?? rate;
+  // 발행 자릿수 — 서버 print_decimals 와 같은 규칙(terms.decimals → 양수 round_digits → 0).
+  const dec: number = decimals ?? Math.min(Math.max(roundDigits ?? 0, 0), 3);
+  const roundRow = (it: CustomerQuoteItem, d: number): CustomerQuoteItem => {
+    if (isOptionRow(it)) return it;
+    const up = Number(it.unit_price || 0);
+    if (!up) return it.amount == null ? it : { ...it, amount: roundTo(Number(it.amount || 0), d) };
+    const unit_price = roundTo(up, d);
+    return { ...it, unit_price, amount: roundTo(unit_price * Number(it.qty || 1), d) };
+  };
+  function changeDecimals(d: number | null) {
+    onDecimals?.(d);
+    if (d == null) return;
+    onChange(items.map((it) => roundRow(it, d)));
+  }
+  // 반올림 안 된 단가·금액이 들어오면(불러오기·직접 입력) 값 자체를 발행 자릿수로 맞춘다 —
+  // 견적서 PDF 는 그 자리로 찍히므로 화면 합계가 문서와 달라지지 않게.
+  useEffect(() => {
+    const next = items.map((it) => roundRow(it, dec));
+    if (next.some((it, i) => Number(it.unit_price || 0) !== Number(items[i].unit_price || 0) || Number(it.amount || 0) !== Number(items[i].amount || 0)))
+      onChange(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, dec]);
   function patch(i: number, key: keyof CustomerQuoteItem, value: string) {
     onChange(
       items.map((it, idx) => {
@@ -5695,6 +5729,7 @@ function CustomerQuoteItemEditor({
         <div className="sub-h">Item list</div>
         <div className="items-head-actions">
           {headerActions}
+          {onDecimals ? <DecimalsSelect value={dec} onChange={changeDecimals} /> : null}
           {/* 상세 서브행 일괄 펼침 — 개별 행 캐럿(▸)과 별도. */}
           <button
             type="button"
@@ -5825,8 +5860,8 @@ function CustomerQuoteItemEditor({
                   value={it.margin_pct}
                   onChange={(e) => patch(i, "margin_pct", e.target.value)}
                 /></td>
-                <td><AmountInput {...keys.cell(i, 6)} className="num" value={it.unit_price} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
-                <td className="num">{amountInputValue(it.amount)}</td>
+                <td><AmountInput {...keys.cell(i, 6)} className="num" value={it.unit_price} decimals={dec} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
+                <td className="num">{amountInputValue(it.amount, dec)}</td>
                 {/* 납기 — 공급사 견적에서 그대로 넘어오고 견적서 품목표에도 인쇄되는 값. */}
                 <td><textarea {...keys.cell(i, 7)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
                 {/* 견적서 품목표의 Remark 칸에 그대로 찍히는 값. */}

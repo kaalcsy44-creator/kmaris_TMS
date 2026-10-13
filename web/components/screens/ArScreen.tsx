@@ -44,6 +44,7 @@ import {
   isRowExcluded,
   amountInputValue,
   parseAmountInput,
+  roundTo,
   itemRowClass,
   MoveRowsButtons,
 } from "@/components/common/itemTable";
@@ -1552,14 +1553,14 @@ function ArAddForm({
         if (idx !== i) return it;
         const numeric = key === "qty" || key === "unit_price";
         const next = { ...it, [key]: numeric ? parseAmountInput(value) ?? 0 : value };
-        if (numeric) next.amount = num(next.qty) * num(next.unit_price);
+        if (numeric) Object.assign(next, roundBillItem(next));
         return next;
       });
       return { ...f, items };
     });
   }
   const addItem = () => setForm((f) => ({ ...f, items: [...f.items, { ...emptyTaxItem }] }));
-  const setItems = (items: TaxInvoiceItem[]) => setForm((f) => ({ ...f, items }));
+  const setItems = (items: TaxInvoiceItem[]) => setForm((f) => ({ ...f, items: items.map(roundBillItem) }));
   // Load CI / PI / P/O — 선택 오더의 품목을 표에 그대로 다시 채운다(현재 편집 내용 대체).
   // 상거래 문서에서 제외한 행은 제외 상태 그대로 들어온다 — 청구서에서 되살리려면 Restore.
   const loadItems = ciItems.length ? ciItems : piItems.length ? piItems : poItems;
@@ -1846,6 +1847,12 @@ function ArAddForm({
 }
 
 /** TAX INVOICE(대금청구서) 미리보기 버튼 — 현재 편집값으로 PDF 렌더 후 iframe 모달 표시. */
+/** 청구서(대금청구서)는 정수로 발행된다 — 화면도 단가·금액을 같은 자리(0)로 맞춰 미리보기와 숫자를 일치시킨다. */
+function roundBillItem(it: TaxInvoiceItem): TaxInvoiceItem {
+  const unit_price = roundTo(num(it.unit_price), 0);
+  return { ...it, unit_price, amount: roundTo(num(it.qty) * unit_price, 0) };
+}
+
 function TaxPreviewButton({ orderId, form }: { orderId: number | null; form: ArForm }) {
   const [url, setUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

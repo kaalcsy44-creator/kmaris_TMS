@@ -117,12 +117,13 @@ def make_doc_no(doc_type: str, sequence: int = 1, company_prefix: str = "KMS") -
     return f"{company_prefix}-{prefix}-{year}-{sequence:04d}"
 
 
-def _money(value: Any, currency: str = "USD") -> str:
+def _money(value: Any, currency: str = "USD", dec: int = 0) -> str:
+    """'USD 4,300' — 발행 문서 기본은 정수(dec=0). 문서에서 자릿수를 골랐으면 그 값을 넘긴다."""
     try:
-        q = Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        return f"{currency} {q:,.2f}"
+        q = Decimal(str(value)).quantize(Decimal(1).scaleb(-dec), rounding=ROUND_HALF_UP)
+        return f"{currency} {q:,.{dec}f}"
     except Exception:
-        return f"{currency} 0.00"
+        return f"{currency} {0:.{dec}f}"
 
 
 def _num(value: Any) -> float:
@@ -984,13 +985,23 @@ def round_doc_items(items: List[Dict[str, Any]], decimals: int | None) -> List[D
     return out
 
 
-def pi_decimals(currency: str, data: Dict[str, Any] | None = None) -> int:
-    """송장 금액 소수 자리 — 화면에서 고른 자릿수가 있으면 그것, 없으면 소수 단위가 없는
-    통화(원·엔)만 정수로 찍는다."""
+def print_decimals(data: Dict[str, Any] | None) -> int:
+    """발행 문서 금액 소수 자리 — 화면에서 고른 자릿수(terms.decimals)가 있으면 그것.
+    없으면 견적서는 단가 올림 자릿수(round_digits, 양수일 때만), 그 밖은 0(정수) 이 기본이다.
+    문서 payload 의 품목도 같은 자리로 반올림해 싣는다(pdf_svc) — 찍힌 숫자끼리 합이 맞게."""
     d = doc_decimals(data)
     if d is not None:
         return d
-    return 0 if (currency or "").upper() in {"KRW", "JPY"} else 2
+    try:
+        rd = int((data or {}).get("round_digits") or 0)
+    except (TypeError, ValueError):
+        rd = 0
+    return min(max(rd, 0), 3)
+
+
+def pi_decimals(currency: str, data: Dict[str, Any] | None = None) -> int:
+    """송장 금액 소수 자리 — print_decimals 와 같다(기본 0). currency 는 예전 호출부 호환용."""
+    return print_decimals(data)
 
 
 def pi_charges(data: Dict[str, Any]) -> Dict[str, float]:
@@ -1243,8 +1254,7 @@ def _make_service_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, 
     shipping = data.get("shipping", {}) or {}
     _, buyer = doc_parties(data)
     money = pi_charges(data)
-    dec = doc_decimals(data)
-    dec = SERVICE_PI_DECIMALS if dec is None else dec
+    dec = print_decimals(data)
 
     def amount(value: Any) -> str:
         v = _num(value)
@@ -1589,8 +1599,8 @@ def cn_view(data: Dict[str, Any]) -> Dict[str, Any]:
         if str(data.get(key) or "").strip():
             rate_rows.append((label, str(data[key]).strip()))
     if cur != inv_cur:
-        rate_rows.append(("Original Amount", f"{cur} {_num(data.get('amount')):,.2f}"))
-    dec = 0 if inv_cur == "KRW" else 2
+        rate_rows.append(("Original Amount", f"{cur} {_num(data.get('amount')):,.{print_decimals(data)}f}"))
+    dec = print_decimals(data)
     rate_rows.append(("Credit Amount", f"{inv_cur} {total:,.{dec}f}"))
     if _num(data.get("vat_amount")):
         rate_rows.append(("of which VAT", f"{inv_cur} {_num(data['vat_amount']):,.{dec}f}"))
@@ -2044,12 +2054,15 @@ def quotation_discount(total: float, discount_pct: Any) -> tuple:
     return disc, total - disc
 
 
-def _qnum(value: Any) -> str:
-    """견적서 금액 표기 — 천단위 구분, 정수면 소수 생략(첨부 양식과 동일)."""
+def _qnum(value: Any, dec: int | None = None) -> str:
+    """견적서 금액 표기 — 천단위 구분. dec 를 주면 그 자리로 고정(금액 칸),
+    안 주면 정수면 소수 생략·아니면 두 자리(수량 칸)."""
     try:
         q = Decimal(str(value or 0))
     except Exception:
         return "0"
+    if dec is not None:
+        return f"{q.quantize(Decimal(1).scaleb(-dec), rounding=ROUND_HALF_UP):,.{dec}f}"
     if q == q.to_integral_value():
         return f"{int(q):,}"
     return f"{q:,.2f}"
@@ -2116,6 +2129,7 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     items = normalize_items(data.get("items", []))
     currency = (data.get("currency") or "USD").upper()
     total = sum(_num(it.get("amount", 0)) for it in items)
+    dec = print_decimals(data)
 
     page_width = 190 * mm
     buffer = io.BytesIO()
@@ -2217,7 +2231,7 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
             rows.append([
                 _p(f"<b>{entry['label']}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
                 _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
-                _p(f"<b>{_qnum(entry['amount'])}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+                _p(f"<b>{_qnum(entry['amount'], dec)}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
             ])
             continue
         it = entry["item"]
@@ -2228,8 +2242,8 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
             _p(it["description"], s["tiny"]),
             _p(_qnum(it["qty"]), s["tiny"]),
             _p(it.get("unit", ""), s["tiny"]),
-            _p(_qnum(it["unit_price"]), s["tiny"]),
-            _p(_qnum(it["amount"]), s["tiny"]),
+            _p(_qnum(it["unit_price"], dec), s["tiny"]),
+            _p(_qnum(it["amount"], dec), s["tiny"]),
             _p(it.get("lead_time", ""), s["tiny"]),
             _p(it.get("remark", ""), s["tiny"]),
         ])
@@ -2242,15 +2256,15 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     rows.append([
         _p("<b>Total</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
         _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
-        _p(f"<b>{_qnum(total)}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
+        _p(f"<b>{_qnum(total, dec)}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
     ])
     # 할인(4단계 Summary 의 Discount %) — Total 밑에 할인액과 최종금액을 붙인다.
     discount_pct = _num(data.get("discount_pct", 0))
     disc_rows: List[int] = []
     if discount_pct:
         disc, final = quotation_discount(total, discount_pct)
-        for label, amt in ((f"Discount ({discount_pct:g}%)", f"-{_qnum(disc)}"),
-                           ("Final Total", _qnum(final))):
+        for label, amt in ((f"Discount ({discount_pct:g}%)", f"-{_qnum(disc, dec)}"),
+                           ("Final Total", _qnum(final, dec))):
             disc_rows.append(len(rows))
             rows.append([
                 _p(f"<b>{label}</b>", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
@@ -2534,6 +2548,7 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
     items = normalize_items(data.get("items", []))
     currency = (data.get("currency") or "USD").upper()
     total = sum(_num(it.get("amount", 0)) for it in items)
+    dec = print_decimals(data)
 
     page_width = 190 * mm
     buffer = io.BytesIO()
@@ -2647,7 +2662,7 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
             rows.append([
                 _p("", s["tiny"]), _p("", s["tiny"]), _p(f"<b>{entry['label']}</b>", s["tiny"]),
                 _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
-                _p(f"<b>{_qnum(entry['amount'])}</b>", s["tiny"]), _p("", s["tiny"]),
+                _p(f"<b>{_qnum(entry['amount'], dec)}</b>", s["tiny"]), _p("", s["tiny"]),
             ])
             continue
 
@@ -2661,15 +2676,15 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
             _p(it.get("maker", ""), s["tiny"]),
             _p(_qnum(it["qty"]), s["tiny"]),
             _p(it.get("unit", ""), s["tiny"]),
-            _p(_qnum(it["unit_price"]), s["tiny"]),
-            _p(_qnum(it["amount"]), s["tiny"]),
+            _p(_qnum(it["unit_price"], dec), s["tiny"]),
+            _p(_qnum(it["amount"], dec), s["tiny"]),
             _p(lead_remark, s["tiny"]),
         ])
     total_rows.append(len(rows))
     rows.append([
         _p("", s["tiny"]), _p("", s["tiny"]), _p("<b>Total</b>", s["tiny"]),
         _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]), _p("", s["tiny"]),
-        _p(f"<b>{_qnum(total)}</b>", s["tiny"]), _p("", s["tiny"]),
+        _p(f"<b>{_qnum(total, dec)}</b>", s["tiny"]), _p("", s["tiny"]),
     ])
     items_table = Table(rows, colWidths=[w * mm for w in widths], repeatRows=1)
     tcmds = [
@@ -2693,7 +2708,7 @@ def _make_purchase_order_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> b
             tcmds.append(("BACKGROUND", (0, r), (-1, r), colors.HexColor("#FAFBFC")))
     items_table.setStyle(TableStyle(tcmds))
     story += [items_table, Spacer(1, 2 * mm)]
-    story.append(_p(f"<b>Total: {_money(total, currency)}</b>", s["right"]))
+    story.append(_p(f"<b>Total: {_money(total, currency, dec)}</b>", s["right"]))
     story.append(Spacer(1, 5 * mm))
 
     # ── Terms & Conditions ────────────────────────────────────────────
