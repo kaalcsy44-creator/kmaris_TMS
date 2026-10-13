@@ -2043,6 +2043,7 @@ function VendorQuoteDetailModal({
   const [d, setD] = useState<VendorQuoteDetail | null>(null);
   const [no, setNo] = useState("");
   const [receivedAt, setReceivedAt] = useState("");
+  const [validUntil, setValidUntil] = useState("");
   const [currency, setCurrency] = useState(DEFAULT_COST_CURRENCY);
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
@@ -2072,6 +2073,7 @@ function VendorQuoteDetailModal({
         setD(data);
         setNo(data.vendor_quote_no || "");
         setReceivedAt(data.received_at || "");
+        setValidUntil(data.valid_until || "");
         setCurrency(data.currency || DEFAULT_COST_CURRENCY);
         setNotes(data.notes || "");
         setItems((data.items || []).map(normalizeVendorQuoteItem));
@@ -2090,7 +2092,7 @@ function VendorQuoteDetailModal({
   // 되돌리기 이력 — 품목표(행 추가·삭제·붙여넣기·Auto-fill 포함).
   const hist = useEditHistory({ items }, (v) => setItems(v.items), readyKey);
   const { dirty, markClean } = useDirty(
-    { no, receivedAt, currency, notes, items, terms, fxRate, ocrFiles },
+    { no, receivedAt, validUntil, currency, notes, items, terms, fxRate, ocrFiles },
     readyKey
   );
   // Cancel = 편집을 버리고 저장본으로. 단계 화면(inline)에서는 창이 그대로라 다시 읽는다 —
@@ -2196,6 +2198,7 @@ function VendorQuoteDetailModal({
       await updateVendorQuote(id, {
         vendor_quote_no: no.trim(),
         received_at: receivedAt,
+        valid_until: validUntil,
         currency,
         notes,
         items: cleanVendorQuoteItems(items),
@@ -2294,6 +2297,10 @@ function VendorQuoteDetailModal({
             <div className="form-field">
               <label>Quote received at</label>
               <input type="datetime-local" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
+            </div>
+            <div className="form-field">
+              <label>Valid until</label>
+              <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
             </div>
             <div className="form-field">
               <label>Currency</label>
@@ -3886,6 +3893,7 @@ function VendorQuoteAction({
   const [vrfqId, setVrfqId] = useState<number | "">("");
   const [no, setNo] = useState("");
   const [receivedAt, setReceivedAt] = useState(nowLocalDt());
+  const [validUntil, setValidUntil] = useState("");
   const [currency, setCurrency] = useState(DEFAULT_COST_CURRENCY);
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
@@ -4028,7 +4036,8 @@ function VendorQuoteAction({
         notes,
         terms,
         ocrFiles,
-        fxRate
+        fxRate,
+        validUntil
       );
       setMsg(
         `Registered — ${r.vendor_quote_no}` +
@@ -4044,6 +4053,7 @@ function VendorQuoteAction({
       setFxMode("auto");
       setVrfqId("");
       setReceivedAt(nowLocalDt());
+      setValidUntil("");
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Registration failed");
@@ -4121,6 +4131,10 @@ function VendorQuoteAction({
                 value={receivedAt}
                 onChange={(e) => setReceivedAt(e.target.value)}
               />
+            </div>
+            <div className="form-field">
+              <label>Valid until</label>
+              <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
             </div>
             <div className="form-field">
               <label>Currency</label>

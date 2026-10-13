@@ -4012,6 +4012,7 @@ class VendorQuoteCreate(BaseModel):
     currency: str = "USD"
     received_date: str | None = None
     received_at: str | None = None     # 견적 수신 일시 "YYYY-MM-DDTHH:MM"(비우면 현재)
+    valid_until: str | None = None     # 견적 유효기간 "YYYY-MM-DD"
     notes: str = ""
     items: list[dict] | None = None
     terms: dict | None = None
@@ -4035,6 +4036,7 @@ class VendorQuoteUpdate(BaseModel):
     vendor_quote_no: str | None = None
     received_date: str | None = None
     received_at: str | None = None
+    valid_until: str | None = None     # "" 을 보내면 지운다
     currency: str | None = None
     notes: str | None = None
     items: list[dict] | None = None

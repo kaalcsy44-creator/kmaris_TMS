@@ -961,6 +961,7 @@ def create_vendor_quote(rfq_id: int, body: VendorQuoteCreate):
             vendor_quote_no=body.vendor_quote_no.strip(),
             received_date=received_at[:10],
             received_at=received_at,
+            valid_until=(body.valid_until or "").strip()[:10] or None,
             currency=body.currency or "USD",
             items=items,
             terms=body.terms or {},
@@ -1008,6 +1009,7 @@ def rfq_vendor_quotes(rfq_id: int):
                 "vendor": vendor_names.get(vrfq.vendor_id, "—") if vrfq else "—",
                 "received_date": q.received_date or "",
                 "received_at": getattr(q, "received_at", None) or "",
+                "valid_until": getattr(q, "valid_until", None) or "",
                 "currency": getattr(q, "currency", None) or "USD",
                 "items": q.items or [],
                 "terms": getattr(q, "terms", None) or {},
@@ -1039,6 +1041,7 @@ def vendor_quote_detail(vq_id: int):
             "vendor": vendor.name if vendor else "—",
             "received_date": q.received_date or "",
             "received_at": q.received_at or "",
+            "valid_until": q.valid_until or "",
             "notes": q.notes or "",
             "currency": getattr(q, "currency", None) or "USD",
             "fx_rate": getattr(q, "fx_rate", None),
@@ -1077,6 +1080,8 @@ def update_vendor_quote(vq_id: int, body: VendorQuoteUpdate):
             q.received_date = body.received_at.strip()[:10]
         elif body.received_date is not None:
             q.received_date = body.received_date.strip()
+        if body.valid_until is not None:
+            q.valid_until = body.valid_until.strip()[:10] or None
         stamp = {"matches": [], "unmatched": []}
         if body.items is not None:
             vr = s.query(VendorRFQ).filter_by(id=q.vendor_rfq_id).first()

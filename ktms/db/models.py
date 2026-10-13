@@ -500,6 +500,7 @@ class VendorQuote(Base):
     vendor_quote_no = Column(String(100))   # 수신된 Vendor 고유 견적번호
     received_date   = Column(String(10))
     received_at     = Column(String(16))    # 견적 수신 일시 "YYYY-MM-DDTHH:MM"
+    valid_until     = Column(String(10))    # 벤더 견적 유효기간 "YYYY-MM-DD"
     currency      = Column(String(10), default="USD")  # 견적 통화(USD/KRW)
     fx_rate       = Column(Float)                       # 적용 환율(1 USD = ? KRW). 매매기준율/직접입력
     items         = Column(JSON, default=list)

@@ -111,6 +111,7 @@ _MIGRATIONS = {
     "vendor_quotes": {
         "vendor_quote_no": "VARCHAR(100)",
         "received_at": "VARCHAR(16)",
+        "valid_until": "VARCHAR(10)",
         "currency": "VARCHAR(10) DEFAULT 'USD'",
         "terms": "JSON",
         "source_files": "JSON",

@@ -2196,6 +2196,7 @@ export type VendorQuoteDetail = {
   vendor: string;
   received_date: string;
   received_at: string;
+  valid_until?: string; // 견적 유효기간 "YYYY-MM-DD"
   notes: string;
   currency: string;
   fx_rate?: number | null; // 적용 환율(1 USD = ? KRW). 매매기준율/직접입력

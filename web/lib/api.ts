@@ -2281,7 +2281,8 @@ export function createVendorQuote(
   notes?: string,
   terms?: QuotationTerms,
   sourceFiles?: RfqSourceFile[],
-  fxRate?: number | null
+  fxRate?: number | null,
+  validUntil?: string
 ): Promise<{ ok: boolean; vendor_quote_no: string } & StampResult> {
   return post<{ ok: boolean; vendor_quote_no: string } & StampResult>(`/api/admin/rfq/${rfqId}/vendor-quote`, {
     vendor_rfq_id: vendorRfqId,
@@ -2294,6 +2295,7 @@ export function createVendorQuote(
     terms,
     source_files: sourceFiles,
     fx_rate: fxRate,
+    valid_until: validUntil,
   }).then((r) => {
     dropVendorQuoteCaches();
     return r;
@@ -2519,6 +2521,7 @@ export function updateVendorQuote(
     vendor_quote_no?: string;
     received_date?: string;
     received_at?: string;
+    valid_until?: string;
     currency?: string;
     notes?: string;
     items?: VendorQuoteItem[];
