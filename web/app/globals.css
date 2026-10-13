@@ -9591,6 +9591,18 @@ table.mini .num {
 /* 페이지용 개요는 화면 폭을 채우는 문서라 자체 여백을 갖는데, 팝업 안에서는
    팝업이 이미 여백을 갖고 있어 위쪽만 덜어낸다. */
 .proj-ov.embedded { padding-top: 4px; }
+/* 거래 상대 줄(Customer·Vendor·Trade)은 팝업 개요를 내려 읽는 동안에도 머리에 남긴다.
+   스크롤 상자는 .pl-modal-ov 이고 .proj-ov 는 overflow 가 없어 sticky 가 그 상자에 붙는다.
+   불투명 배경 + 아래 선으로 밑을 지나가는 타임라인·메일 글자를 가린다. */
+.proj-ov.embedded .proj-ov-meta {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin-top: -4px;
+  padding: 6px 0 8px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+}
 .pl-modal-ov-foot {
   display: flex;
   justify-content: flex-end;
