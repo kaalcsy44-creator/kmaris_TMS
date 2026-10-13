@@ -158,6 +158,9 @@ app.add_middleware(
     allow_origin_regex=r"https://.*\.vercel\.app",
     allow_methods=["*"],
     allow_headers=["*"],
+    # 다운로드 파일명(문서번호)을 프런트 스크립트가 읽을 수 있게 — 없으면 브라우저가 숨겨서
+    # 화면의 고정 이름("Proforma Invoice")으로 저장됐다.
+    expose_headers=["Content-Disposition"],
 )
 
 
@@ -2750,10 +2753,19 @@ def _missing_items(order_items: list[dict], doc_items: list[dict]) -> list[dict]
 
 
 def _doc_file_response(data: bytes, filename: str, media_type: str) -> Response:
+    """발행 문서 응답 — 파일명은 문서번호(EHZM-26-0059-PI.pdf).
+
+    파일명에 못 쓰는 글자(슬래시·역슬래시·: * ? " < > |)는 '-' 로 바꾼다. 헤더는 latin-1 만 실을 수
+    있어 filename 에는 ASCII 로 바꾼 이름을, filename* 에는 UTF-8 원래 이름을 함께 싣는다(한글 번호 대비).
+    프런트가 이 헤더를 읽으려면 CORS expose_headers 에 Content-Disposition 이 있어야 한다."""
+    from urllib.parse import quote
+    safe = re.sub(r'[\\/:*?"<>|\r\n]+', "-", (filename or "document").strip()) or "document"
+    ascii_name = safe.encode("ascii", "ignore").decode() or "document"
     return Response(
         content=data,
         media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition":
+                 f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(safe)}"},
     )
 
 

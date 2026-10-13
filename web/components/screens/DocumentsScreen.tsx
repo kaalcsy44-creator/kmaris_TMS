@@ -1,6 +1,7 @@
 "use client";
 
 import AmountInput from "@/components/common/AmountInput";
+import { filenameFromDisposition } from "@/lib/download";
 import DecimalsSelect, { decimalsOf } from "@/components/common/DecimalsSelect";
 import { useEffect, useId, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
@@ -3070,9 +3071,7 @@ function DownloadButton({
     });
     if (!res.ok) throw new Error("download failed");
     const blob = await res.blob();
-    const disposition = res.headers.get("content-disposition") || "";
-    const match = disposition.match(/filename="([^"]+)"/);
-    const filename = match?.[1] || `${kind.replace("/", "_")}`;
+    const filename = filenameFromDisposition(res, kind.replace("/", "_"));
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -3105,6 +3104,8 @@ function DocPreviewButton({
   xlsxKind?: "pi/xlsx" | "ci/xlsx" | "sm/xlsx" | "pl/xlsx";
 }) {
   const [url, setUrl] = useState<string | null>(null);
+  // 저장 파일명 = 서버가 붙인 문서번호(Invoice No. 등). 못 받으면 filename(고정 이름).
+  const [saveName, setSaveName] = useState(filename);
   const [busy, setBusy] = useState(false);
   const resize = useResizable({ storageKey: "ktms:doc-preview-size", minW: 360, minH: 280 });
 
@@ -3115,6 +3116,7 @@ function DocPreviewButton({
         headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
       });
       if (!res.ok) throw new Error("preview failed");
+      setSaveName(filenameFromDisposition(res, filename));
       setUrl(URL.createObjectURL(await res.blob()));
     } catch (e) {
       alert(e instanceof Error ? e.message : "미리보기를 열 수 없습니다.");
@@ -3132,7 +3134,7 @@ function DocPreviewButton({
     if (!url) return;
     const a = document.createElement("a");
     a.href = url;
-    a.download = filename;
+    a.download = saveName;
     a.click();
   }
 
@@ -3144,12 +3146,10 @@ function DocPreviewButton({
       });
       if (!res.ok) throw new Error("Excel download failed");
       const blob = await res.blob();
-      const disposition = res.headers.get("content-disposition") || "";
-      const match = disposition.match(/filename="([^"]+)"/);
       const excelUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = excelUrl;
-      a.download = match?.[1] || filename.replace(/\.pdf$/i, ".xlsx");
+      a.download = filenameFromDisposition(res, saveName.replace(/\.pdf$/i, ".xlsx"));
       a.click();
       URL.revokeObjectURL(excelUrl);
     } catch (e) {

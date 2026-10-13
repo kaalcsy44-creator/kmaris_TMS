@@ -359,7 +359,7 @@ def proforma_invoice_pdf(order_id: int):
         if not order or not pi:
             raise HTTPException(status_code=404, detail="Proforma Invoice가 없습니다.")
         pdf = generate_pdf("proforma_invoice", _pi_payload(s, order, pi))
-        return _doc_file_response(pdf, f"{pi.pi_no}_PI.pdf", "application/pdf")
+        return _doc_file_response(pdf, f"{pi.pi_no}.pdf", "application/pdf")
     finally:
         s.close()
 
@@ -376,7 +376,7 @@ def proforma_invoice_xlsx(order_id: int):
             raise HTTPException(status_code=404, detail="Proforma Invoice가 없습니다.")
         xlsx = generate_pi_xlsx(_pi_payload(s, order, pi))
         return _doc_file_response(
-            xlsx, f"{pi.pi_no}_ProformaInvoice.xlsx",
+            xlsx, f"{pi.pi_no}.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     finally:
@@ -473,7 +473,7 @@ def project_proforma_invoice_pdf(rfq_id: int):
     try:
         pi, payload = _project_pi_or_404(s, rfq_id)
         return _doc_file_response(generate_pdf("proforma_invoice", payload),
-                                  f"{pi.pi_no}_PI.pdf", "application/pdf")
+                                  f"{pi.pi_no}.pdf", "application/pdf")
     finally:
         s.close()
 
@@ -484,7 +484,7 @@ def project_proforma_invoice_xlsx(rfq_id: int):
     try:
         pi, payload = _project_pi_or_404(s, rfq_id)
         return _doc_file_response(
-            generate_pi_xlsx(payload), f"{pi.pi_no}_ProformaInvoice.xlsx",
+            generate_pi_xlsx(payload), f"{pi.pi_no}.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     finally:
@@ -540,7 +540,7 @@ def commercial_invoice_pdf(order_id: int):
             export_ref=_project_no_for_order(s, order),
         )
         pdf = generate_pdf("commercial_invoice", payload)
-        return _doc_file_response(pdf, f"{ci.ci_no}_CI.pdf", "application/pdf")
+        return _doc_file_response(pdf, f"{ci.ci_no}.pdf", "application/pdf")
     finally:
         s.close()
 
@@ -565,7 +565,7 @@ def shipping_mark_pdf(order_id: int):
             export_ref=_project_no_for_order(s, order),
         )
         pdf = generate_pdf("shipping_mark", payload)
-        return _doc_file_response(pdf, f"{ci.ci_no}_SM.pdf", "application/pdf")
+        return _doc_file_response(pdf, f"{ci.ci_no}_ShippingMark.pdf", "application/pdf")
     finally:
         s.close()
 
@@ -591,7 +591,7 @@ def shipping_mark_xlsx(order_id: int):
         )
         xlsx = make_document_xlsx("shipping_mark", payload)
         return _doc_file_response(
-            xlsx, f"{ci.ci_no}_SM.xlsx",
+            xlsx, f"{ci.ci_no}_ShippingMark.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     finally:
@@ -624,7 +624,7 @@ def commercial_invoice_xlsx(order_id: int):
         xlsx = generate_ci_xlsx(payload)
         return _doc_file_response(
             xlsx,
-            f"{ci.ci_no}_CommercialInvoice.xlsx",
+            f"{ci.ci_no}.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     finally:
@@ -766,7 +766,7 @@ def packing_list_pdf(order_id: int):
         payload = _packing_list_payload(s, order, ci, pl)
         pdf = generate_pdf("packing_list", payload)
         # 번호는 화면이 자동으로 정해 보내지만(P/O 번호-PL), 그 전에 저장된 건은 비어 있을 수 있다.
-        return _doc_file_response(pdf, f"{pl.pl_no or order.po_no or 'PACKING_LIST'}_PL.pdf", "application/pdf")
+        return _doc_file_response(pdf, f"{pl.pl_no or order.po_no or 'PACKING_LIST'}.pdf", "application/pdf")
     finally:
         s.close()
 
@@ -786,7 +786,7 @@ def packing_list_xlsx(order_id: int):
         xlsx = generate_pl_xlsx(payload)
         return _doc_file_response(
             xlsx,
-            f"{pl.pl_no or order.po_no or 'PACKING_LIST'}_PackingList.xlsx",
+            f"{pl.pl_no or order.po_no or 'PACKING_LIST'}.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     finally:
@@ -876,7 +876,7 @@ def shipping_advice_pdf(order_id: int):
             export_ref=_project_no_for_order(s, order),
         )
         pdf = generate_pdf("shipping_advice", payload)
-        return _doc_file_response(pdf, f"{sa.sa_no}_SA.pdf", "application/pdf")
+        return _doc_file_response(pdf, f"{sa.sa_no}.pdf", "application/pdf")
     finally:
         s.close()
 
@@ -921,7 +921,7 @@ def send_shipping_advice(order_id: int, body: ShippingAdviceSend):
             cust.name if cust else "Customer", sa.sa_no,
             _tracking_url("order", order.tracking_token),
         )
-        ok = send_email(body.to, subject, mail_body, [(f"{sa.sa_no}_SA.pdf", pdf)])
+        ok = send_email(body.to, subject, mail_body, [(f"{sa.sa_no}.pdf", pdf)])
         if ok:
             sa.sent_date = date.today().isoformat()
             s.commit()
@@ -1001,7 +1001,7 @@ def tax_invoice_xlsx(order_id: int):
         xlsx = generate_tax_xlsx(payload)
         return _doc_file_response(
             xlsx,
-            f"{tax.tax_no}_tax_invoice.xlsx",
+            f"{tax.tax_no or 'TAX_INVOICE'}.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     finally:
@@ -1045,7 +1045,7 @@ def tax_invoice_pdf(order_id: int, body: TaxInvoicePdfReq):
         if body.bill_to_phone:
             cust["phone"] = body.bill_to_phone
         pdf = generate_pdf("tax_invoice", payload)
-        return _doc_file_response(pdf, f"{doc_no or 'TAX'}_TAX_INVOICE.pdf", "application/pdf")
+        return _doc_file_response(pdf, f"{doc_no or 'TAX_INVOICE'}.pdf", "application/pdf")
     finally:
         s.close()
 

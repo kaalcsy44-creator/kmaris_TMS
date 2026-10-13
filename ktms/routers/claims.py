@@ -527,7 +527,7 @@ def credit_note_pdf(cn_id: int):
             raise HTTPException(status_code=404, detail="크레딧 노트를 찾을 수 없습니다.")
         payload, name = _cn_payload(s, cn)
         return _doc_file_response(generate_pdf("credit_note", payload),
-                                  f"{name}_CREDIT_NOTE.pdf", "application/pdf")
+                                  f"{name}.pdf", "application/pdf")
     finally:
         s.close()
 
@@ -542,7 +542,7 @@ def credit_note_xlsx(cn_id: int):
             raise HTTPException(status_code=404, detail="크레딧 노트를 찾을 수 없습니다.")
         payload, name = _cn_payload(s, cn)
         return _doc_file_response(
-            generate_cn_xlsx(payload), f"{name}_CREDIT_NOTE.xlsx",
+            generate_cn_xlsx(payload), f"{name}.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     finally:
         s.close()

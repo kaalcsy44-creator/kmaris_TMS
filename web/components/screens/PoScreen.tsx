@@ -1,6 +1,7 @@
 "use client";
 
 import AmountInput from "@/components/common/AmountInput";
+import { filenameFromDisposition } from "@/lib/download";
 import DecimalsSelect from "@/components/common/DecimalsSelect";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -922,6 +923,7 @@ function VendorPoPdfPreviewButton({
   disabled?: boolean;
 }) {
   const [url, setUrl] = useState<string | null>(null);
+  const [saveName, setSaveName] = useState(filename);   // 서버가 붙인 발주서 번호 이름
   const [busy, setBusy] = useState(false);
   const resize = useResizable({ storageKey: "ktms:doc-preview-size", minW: 360, minH: 280 });
 
@@ -932,6 +934,7 @@ function VendorPoPdfPreviewButton({
         headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
       });
       if (!res.ok) throw new Error("preview failed");
+      setSaveName(filenameFromDisposition(res, filename));
       setUrl(URL.createObjectURL(await res.blob()));
     } catch (e) {
       alert(e instanceof Error ? e.message : "미리보기를 열 수 없습니다.");
@@ -949,7 +952,7 @@ function VendorPoPdfPreviewButton({
     if (!url) return;
     const a = document.createElement("a");
     a.href = url;
-    a.download = filename;
+    a.download = saveName;
     a.click();
   }
 
@@ -961,12 +964,10 @@ function VendorPoPdfPreviewButton({
       });
       if (!res.ok) throw new Error("Excel download failed");
       const blob = await res.blob();
-      const disposition = res.headers.get("content-disposition") || "";
-      const match = disposition.match(/filename="([^"]+)"/);
       const xlsxUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = xlsxUrl;
-      a.download = match?.[1] || filename.replace(/\.pdf$/i, ".xlsx");
+      a.download = filenameFromDisposition(res, saveName.replace(/\.pdf$/i, ".xlsx"));
       a.click();
       URL.revokeObjectURL(xlsxUrl);
     } catch (e) {

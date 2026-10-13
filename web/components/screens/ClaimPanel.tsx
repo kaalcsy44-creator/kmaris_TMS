@@ -748,7 +748,7 @@ function CreditNotePreview({ cn, onClose }: { cn: CreditNoteRow; onClose: () => 
     setBusy(true);
     setErr(null);
     try {
-      saveBlob(await fetchCreditNoteXlsx(cn.id), `${name}_CREDIT_NOTE.xlsx`);
+      saveBlob(await fetchCreditNoteXlsx(cn.id), `${name}.xlsx`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Excel download failed");
     } finally {
@@ -760,7 +760,7 @@ function CreditNotePreview({ cn, onClose }: { cn: CreditNoteRow; onClose: () => 
     if (!url) return;
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${name}_CREDIT_NOTE.pdf`;
+    a.download = `${name}.pdf`;
     a.click();
   }
 

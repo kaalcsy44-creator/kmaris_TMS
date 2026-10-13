@@ -824,7 +824,7 @@ def vendor_po_preview(po_id: int, body: VendorPoPreview,
             "body": _vendor_po_email_body(po, vendor, order, vessel, "", lang,
                                           _project_no_for_order(s, order), inline_signature=False),
             "signature": resolve_signature(s, user.get("id"), lang),
-            "pdf_filename": f"{po.po_no}_PurchaseOrder.pdf",
+            "pdf_filename": f"{po.po_no}.pdf",
             "smtp_configured": bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD")),
         }
     finally:
@@ -855,7 +855,7 @@ def vendor_po_pdf(po_id: int):
         return Response(
             content=pdf,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{po.po_no}_PurchaseOrder.pdf"'},
+            headers={"Content-Disposition": f'attachment; filename="{po.po_no}.pdf"'},
         )
     finally:
         s.close()
@@ -885,7 +885,7 @@ def vendor_po_xlsx(po_id: int):
         return Response(
             content=xlsx,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="{po.po_no}_PurchaseOrder.xlsx"'},
+            headers={"Content-Disposition": f'attachment; filename="{po.po_no}.xlsx"'},
         )
     finally:
         s.close()
@@ -932,9 +932,9 @@ def vendor_po_send(
                 project_title=_order_project_title(s, order),
             )
             if format == "xlsx":
-                generated = (f"{po.po_no}_PurchaseOrder.xlsx", make_document_xlsx("purchase_order", payload))
+                generated = (f"{po.po_no}.xlsx", make_document_xlsx("purchase_order", payload))
             else:
-                generated = (f"{po.po_no}_PurchaseOrder.pdf", generate_po_pdf(payload))
+                generated = (f"{po.po_no}.pdf", generate_po_pdf(payload))
         # 저장된 표 서명(HTML)을 손대지 않고 그대로 쓰는 발송이면 HTML 파트에 그 표를
         # 붙인다. 서명을 화면에서 고쳤다면 None 이 돌아와 고친 평문이 그대로 나간다.
         mail_text, mail_html = compose_parts(
