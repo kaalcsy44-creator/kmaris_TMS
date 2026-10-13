@@ -1,5 +1,6 @@
 "use client";
 
+import AmountInput from "@/components/common/AmountInput";
 import { useEffect, useId, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -1311,9 +1312,9 @@ function ProformaInvoiceTab({
         // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT.
         footerRows={[
           { label: "Subtotal", value: <DualCurrencyAmount value={subtotal} currency={currency} /> },
-          { label: "Freight", value: <input className="foot-charge-input" value={amountInputValue(freight)} onChange={(e) => setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
-          { label: "Packing", value: <input className="foot-charge-input" value={amountInputValue(packing)} onChange={(e) => setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
-          { label: "Insurance", value: <input className="foot-charge-input" value={amountInputValue(insurance)} onChange={(e) => setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
+          { label: "Freight", value: <AmountInput className="foot-charge-input" value={freight} onChange={(e) => setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
+          { label: "Packing", value: <AmountInput className="foot-charge-input" value={packing} onChange={(e) => setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
+          { label: "Insurance", value: <AmountInput className="foot-charge-input" value={insurance} onChange={(e) => setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
           { label: `VAT (${num(vatRate)}%)`, value: <DualCurrencyAmount value={vatAmount} currency={currency} /> },
           { label: "Total invoice value", grand: true, value: <><DualCurrencyAmount value={totalInvoiceValue} currency={currency} /><span className="fx-note">{fxRateText()}</span></> },
         ]}
@@ -1702,9 +1703,9 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT.
         footerRows={[
           { label: "Subtotal", value: <DualCurrencyAmount value={subtotal} currency={currency} /> },
-          { label: "Freight", value: <input className="foot-charge-input" value={amountInputValue(freight)} onChange={(e) => setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
-          { label: "Packing", value: <input className="foot-charge-input" value={amountInputValue(packing)} onChange={(e) => setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
-          { label: "Insurance", value: <input className="foot-charge-input" value={amountInputValue(insurance)} onChange={(e) => setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
+          { label: "Freight", value: <AmountInput className="foot-charge-input" value={freight} onChange={(e) => setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
+          { label: "Packing", value: <AmountInput className="foot-charge-input" value={packing} onChange={(e) => setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
+          { label: "Insurance", value: <AmountInput className="foot-charge-input" value={insurance} onChange={(e) => setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
           { label: `VAT (${num(vatRate)}%)`, value: <DualCurrencyAmount value={vatAmount} currency={currency} /> },
           { label: "Total invoice value", grand: true, value: <><DualCurrencyAmount value={totalInvoiceValue} currency={currency} /><span className="fx-note">{fxRateText()}</span></> },
         ]}
@@ -2838,7 +2839,7 @@ function ItemEditor({
                 <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={item.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={item.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 2)} className="wrapcell" rows={1} value={item.maker || ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
-                <td><input {...keys.cell(i, 3)} className="num" value={amountInputValue(item.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                <td><AmountInput {...keys.cell(i, 3)} className="num" value={item.qty} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
                 <td><input {...keys.cell(i, 4)} list={unitListId} value={item.unit || "PCS"} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
                 {packing ? (
                   <>
@@ -2851,8 +2852,8 @@ function ItemEditor({
                   </>
                 ) : (
                   <>
-                    <td><input {...keys.cell(i, 5)} className="num" value={amountInputValue(item.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
-                    <td><input {...keys.cell(i, 6)} className="num" value={amountInputValue(item.amount)} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
+                    <td><AmountInput {...keys.cell(i, 5)} className="num" value={item.unit_price} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
+                    <td><AmountInput {...keys.cell(i, 6)} className="num" value={item.amount} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
                   </>
                 )}
                 <td><textarea {...keys.cell(i, packing ? 11 : 7)} className="wrapcell" rows={1} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>

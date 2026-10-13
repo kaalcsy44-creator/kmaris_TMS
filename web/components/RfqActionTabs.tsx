@@ -1,5 +1,6 @@
 "use client";
 
+import AmountInput from "@/components/common/AmountInput";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchVendors,
@@ -1889,7 +1890,7 @@ function VendorRfqItemEditor({
                   <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={it.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
                   <td><textarea {...keys.cell(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patch(i, "type", e.target.value)} /></td>
                   <td><textarea {...keys.cell(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} /></td>
-                  <td><input {...keys.cell(i, 4)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                  <td><AmountInput {...keys.cell(i, 4)} className="num" value={it.qty} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
                   <td><input {...keys.cell(i, 5)} value={it.unit || ""} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
                   <td><textarea {...keys.cell(i, 6)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
                 </tr>
@@ -3772,7 +3773,7 @@ function VendorRfqAction({
                       <td><textarea {...itemKeys.cell(i, 1)} className="desc" rows={1} value={it.description || ""} onChange={(e) => patchItem(i, "description", e.target.value)} /></td>
                       <td><textarea {...itemKeys.cell(i, 2)} className="wrapcell" rows={1} value={it.type ?? ""} onChange={(e) => patchItem(i, "type", e.target.value)} /></td>
                       <td><textarea {...itemKeys.cell(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patchItem(i, "serial_no", e.target.value)} /></td>
-                      <td><input {...itemKeys.cell(i, 4)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patchItem(i, "qty", e.target.value)} /></td>
+                      <td><AmountInput {...itemKeys.cell(i, 4)} className="num" value={it.qty} onChange={(e) => patchItem(i, "qty", e.target.value)} /></td>
                       <td><input {...itemKeys.cell(i, 5)} value={it.unit || ""} onChange={(e) => patchItem(i, "unit", e.target.value)} /></td>
                       <td><textarea {...itemKeys.cell(i, 6)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patchItem(i, "remark", e.target.value)} /></td>
                     </tr>
@@ -4464,9 +4465,9 @@ function VendorQuoteItemEditor({
                 <td><textarea {...keys.cell(i, 3)} className="wrapcell" rows={1} value={it.serial_no ?? ""} onChange={(e) => patch(i, "serial_no", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 4)} className="wrapcell" rows={1} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 5)} className="wrapcell" rows={1} value={it.origin ?? ""} onChange={(e) => patch(i, "origin", e.target.value)} /></td>
-                <td><input {...keys.cell(i, 6)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                <td><AmountInput {...keys.cell(i, 6)} className="num" value={it.qty} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
                 <td><input {...keys.cell(i, 7)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
-                <td><input {...keys.cell(i, 8)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
+                <td><AmountInput {...keys.cell(i, 8)} className="num" value={it.cost_price} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
                 <td className="num">{amountInputValue(Number(it.cost_price || 0) * Number(it.qty || 1))}</td>
                 <td><textarea {...keys.cell(i, 9)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 10)} className="wrapcell" rows={1} value={it.remark ?? ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
@@ -5798,19 +5799,19 @@ function CustomerQuoteItemEditor({
                 </td>
                 <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>
-                <td><input {...keys.cell(i, 2)} className="num" value={amountInputValue(it.qty)} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                <td><AmountInput {...keys.cell(i, 2)} className="num" value={it.qty} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
                 <td><input {...keys.cell(i, 3)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
-                <td><input {...keys.cell(i, 4)} className="num" value={amountInputValue(it.cost_price)} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
+                <td><AmountInput {...keys.cell(i, 4)} className="num" value={it.cost_price} onChange={(e) => patch(i, "cost_price", e.target.value)} /></td>
                 <td className="num">{amountInputValue(Number(it.cost_price || 0) * Number(it.qty || 1))}</td>
                 {/* 100% 이상은 단가를 낼 수 없는 값이라(원가 그대로 계산됨) 칸을 빨갛게 표시한다. */}
-                <td><input
+                <td><AmountInput
                   {...keys.cell(i, 5)}
                   className={"num" + (isUnreachableMargin(it.margin_pct) ? " num-bad" : "")}
                   title={isUnreachableMargin(it.margin_pct) ? marginRangeError(Number(it.margin_pct || 0)) ?? "" : undefined}
-                  value={amountInputValue(it.margin_pct)}
+                  value={it.margin_pct}
                   onChange={(e) => patch(i, "margin_pct", e.target.value)}
                 /></td>
-                <td><input {...keys.cell(i, 6)} className="num" value={amountInputValue(it.unit_price)} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
+                <td><AmountInput {...keys.cell(i, 6)} className="num" value={it.unit_price} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
                 <td className="num">{amountInputValue(it.amount)}</td>
                 {/* 납기 — 공급사 견적에서 그대로 넘어오고 견적서 품목표에도 인쇄되는 값. */}
                 <td><textarea {...keys.cell(i, 7)} className="wrapcell" rows={1} value={it.lead_time ?? ""} onChange={(e) => patch(i, "lead_time", e.target.value)} /></td>

@@ -1,5 +1,6 @@
 "use client";
 
+import AmountInput from "@/components/common/AmountInput";
 import { useEffect, useMemo, useState } from "react";
 import {
   createArRecord,
@@ -1025,8 +1026,8 @@ function ApAddForm({
                   </td>
                   <td><textarea className="desc" rows={1} value={it.description} onChange={(e) => setItem(i, "description", e.target.value)} /></td>
                   <td><textarea className="wrapcell" rows={1} value={it.part_no} onChange={(e) => setItem(i, "part_no", e.target.value)} /></td>
-                  <td><input className="num" inputMode="decimal" value={amountInputValue(it.qty)} onChange={(e) => setItem(i, "qty", e.target.value)} /></td>
-                  <td><input className="num" inputMode="decimal" value={amountInputValue(it.unit_price)} onChange={(e) => setItem(i, "unit_price", e.target.value)} /></td>
+                  <td><AmountInput className="num" inputMode="decimal" value={it.qty} onChange={(e) => setItem(i, "qty", e.target.value)} /></td>
+                  <td><AmountInput className="num" inputMode="decimal" value={it.unit_price} onChange={(e) => setItem(i, "unit_price", e.target.value)} /></td>
                   <td className="num">{it.amount.toLocaleString()}</td>
                 </tr>
               ))}
@@ -1043,9 +1044,9 @@ function ApAddForm({
                   <td /><td /><td /><td /><td />
                   <td className="total-label">{label}</td>
                   <td className="num total-value">
-                    <input
+                    <AmountInput
                       className="foot-charge-input"
-                      value={amountInputValue(form.charges[key])}
+                      value={form.charges[key]}
                       onChange={(e) => setCharge(key, String(parseAmountInput(e.target.value) ?? ""))}
                     />
                   </td>
@@ -1770,8 +1771,8 @@ function ArAddForm({
                   </td>
                   <td><textarea className="desc" rows={1} value={it.description} onChange={(e) => setItem(i, "description", e.target.value)} /></td>
                   <td><textarea className="wrapcell" rows={1} value={it.part_no} onChange={(e) => setItem(i, "part_no", e.target.value)} /></td>
-                  <td><input className="num" inputMode="decimal" value={amountInputValue(it.qty)} onChange={(e) => setItem(i, "qty", e.target.value)} /></td>
-                  <td><input className="num" inputMode="decimal" value={amountInputValue(it.unit_price)} onChange={(e) => setItem(i, "unit_price", e.target.value)} /></td>
+                  <td><AmountInput className="num" inputMode="decimal" value={it.qty} onChange={(e) => setItem(i, "qty", e.target.value)} /></td>
+                  <td><AmountInput className="num" inputMode="decimal" value={it.unit_price} onChange={(e) => setItem(i, "unit_price", e.target.value)} /></td>
                   <td className="num">{it.amount.toLocaleString()}</td>
                 </tr>
               ))}
@@ -1789,9 +1790,9 @@ function ArAddForm({
                   <td /><td /><td /><td /><td />
                   <td className="total-label">{label}</td>
                   <td className="num total-value">
-                    <input
+                    <AmountInput
                       className="foot-charge-input"
-                      value={amountInputValue(form.charges[key])}
+                      value={form.charges[key]}
                       onChange={(e) => setCharge(key, String(parseAmountInput(e.target.value) ?? ""))}
                     />
                   </td>
@@ -1944,10 +1945,10 @@ function MoneyField({
   return (
     <label className="form-field">
       <span>{label}</span>
-      <input
+      <AmountInput
         className="num"
         inputMode="decimal"
-        value={amountInputValue(value)}
+        value={value}
         onChange={(e) => onChange(e.target.value.replace(/,/g, ""))}
       />
     </label>

@@ -1,5 +1,6 @@
 "use client";
 
+import AmountInput from "@/components/common/AmountInput";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
@@ -2354,10 +2355,10 @@ function ItemEditor({
                   <textarea {...keys.cell(i, 4)} className="wrapcell" rows={1} value={it.maker ?? ""} onChange={(e) => patch(i, "maker", e.target.value)} />
                 </td>
                 <td>
-                  <input
+                  <AmountInput
                     {...keys.cell(i, 5)}
                     className="num"
-                    value={amountInputValue(it.qty)}
+                    value={it.qty}
                     onChange={(e) => patch(i, "qty", e.target.value)}
                   />
                 </td>
@@ -2365,18 +2366,18 @@ function ItemEditor({
                   <input {...keys.cell(i, 6)} value={it.unit} onChange={(e) => patch(i, "unit", e.target.value)} />
                 </td>
                 <td>
-                  <input
+                  <AmountInput
                     {...keys.cell(i, 7)}
                     className="num"
-                    value={amountInputValue(it.unit_price)}
+                    value={it.unit_price}
                     onChange={(e) => patch(i, "unit_price", e.target.value)}
                   />
                 </td>
                 <td>
-                  <input
+                  <AmountInput
                     {...keys.cell(i, 8)}
                     className="num"
-                    value={amountInputValue(it.amount)}
+                    value={it.amount}
                     onChange={(e) => patch(i, "amount", e.target.value)}
                   />
                 </td>

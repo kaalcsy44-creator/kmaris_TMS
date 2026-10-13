@@ -1,5 +1,6 @@
 "use client";
 
+import AmountInput from "@/components/common/AmountInput";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -568,7 +569,7 @@ function OverviewTab() {
           {/* 기준일을 라벨에 박아 둔다 — 첫 구간이 이번 달 1일부터라 '오늘 잔고'를 넣으면
               이번 달에 이미 오간 돈이 두 번 세어진다. */}
           Opening balance ({sym(currency).trim()}) <span className="muted">as of {openingAsOf}</span>
-          <input inputMode="decimal" value={amountInputValue(openingInput)} onChange={(e) => setOpeningInput(e.target.value.replace(/,/g, ""))} style={{ width: 140 }} />
+          <AmountInput inputMode="decimal" value={openingInput} onChange={(e) => setOpeningInput(e.target.value.replace(/,/g, ""))} style={{ width: 140 }} />
         </label>
         <label className="check-chip" style={{ cursor: "pointer" }}>
           <input type="checkbox" checked={includePo} onChange={(e) => setIncludePo(e.target.checked)} /> Include vendor PO outflow (est.)
@@ -1487,9 +1488,9 @@ function IncomeForm({
         </label>
         <label className="form-field">
           <span>Amount</span>
-          <input
+          <AmountInput
             inputMode="decimal"
-            value={amountInputValue(form.amount ?? 0)}
+            value={form.amount ?? 0}
             onChange={(e) => set("amount", parseAmountInput(e.target.value) ?? 0)}
           />
         </label>
@@ -2267,10 +2268,10 @@ function PayableFxField({
           </button>
         ) : null}
       </span>
-      <input
+      <AmountInput
         className="num"
         inputMode="decimal"
-        value={amountInputValue(rate)}
+        value={rate}
         onChange={(e) => { setTouched(true); set("fx_rate", parseAmountInput(e.target.value) ?? 0); }}
       />
       <span className="hint-inline">
@@ -2649,10 +2650,10 @@ function PayableForm({
             저장은 총액(amount)과 그 안의 부가세(vat_amount)로, 공급가액은 그 차액이다. */}
         <label className="form-field">
           <span>Supply value</span>
-          <input
+          <AmountInput
             className="num"
             inputMode="decimal"
-            value={amountInputValue(supply)}
+            value={supply}
             onChange={(e) => {
               const s = parseAmountInput(e.target.value) ?? 0;
               // 세율을 골라 둔 상태면 공급가액이 바뀔 때 부가세도 그 비율로 따라간다.
@@ -2693,10 +2694,10 @@ function PayableForm({
               {VAT_CHOICES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </span>
-          <input
+          <AmountInput
             className="num"
             inputMode="decimal"
-            value={amountInputValue(vat)}
+            value={vat}
             title={vatChoice === "custom" ? "" : "Set the rate to Custom to type a VAT amount that is not a plain percentage."}
             onChange={(e) => {
               // 금액을 직접 고치면 세율 선택도 Custom 으로 넘어간다(값이 덮어써지지 않게).
@@ -2708,7 +2709,7 @@ function PayableForm({
         </div>
         <label className="form-field">
           <span>Total (paid)</span>
-          <input className="num fin-total-ro" value={amountInputValue(form.amount)} readOnly tabIndex={-1} />
+          <AmountInput className="num fin-total-ro" value={form.amount} readOnly tabIndex={-1} />
         </label>
         <label className="form-field">
           <span>Currency</span>
