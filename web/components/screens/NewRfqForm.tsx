@@ -17,6 +17,7 @@ import {
 import type { CustomerOption, SettingsVessel, SettingsConsultant, RfqSourceFile } from "@/lib/types";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import Modal from "@/components/common/Modal";
+import { imageFromClipboard } from "@/lib/imagePaste";
 import { useEditGate } from "@/lib/viewMode";
 import CustomerName from "@/components/common/CustomerName";
 import CustomerSelect from "@/components/common/CustomerSelect";
@@ -323,19 +324,11 @@ export default function NewRfqForm({
   // 캡쳐본 붙여넣기(Ctrl+V) → 이미지면 바로 OCR (편집 권한 없으면 무시)
   function handlePaste(e: React.ClipboardEvent) {
     if (!canEditThis) return;
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const it of Array.from(items)) {
-      if (it.type.startsWith("image/")) {
-        const blob = it.getAsFile();
-        if (blob) {
-          e.preventDefault();
-          setShowOcr(true);
-          uploadOcr(blob);
-        }
-        return;
-      }
-    }
+    const blob = imageFromClipboard(e);
+    if (!blob) return;
+    e.preventDefault();
+    setShowOcr(true);
+    uploadOcr(blob);
   }
 
   // 복수 파일을 순차 분석해 아이템을 누적. 고객/선박/번호/담당자 등 헤더 정보는

@@ -61,8 +61,12 @@ export function downscaleImageFile(file: File, max = 1600): Promise<File> {
   });
 }
 
-/** 클립보드 이벤트에서 첫 이미지 파일을 꺼낸다(캡쳐 붙여넣기용). 없으면 null. */
+/** 클립보드 이벤트에서 첫 이미지 파일을 꺼낸다(캡쳐 붙여넣기용). 없으면 null.
+ *  엑셀·워드에서 셀/글을 복사하면 텍스트와 함께 "그 범위를 찍은 그림"도 실린다 — 텍스트가
+ *  있으면 캡쳐가 아니라 값 붙여넣기이므로 이미지로 보지 않는다(안 그러면 OCR 이 표를 덮어쓴다). */
 export function imageFromClipboard(e: React.ClipboardEvent): File | null {
+  if (e.defaultPrevented) return null;
+  if (e.clipboardData?.getData("text/plain").trim()) return null;
   const items = e.clipboardData?.items;
   if (!items) return null;
   for (const it of Array.from(items)) {

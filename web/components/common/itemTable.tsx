@@ -766,6 +766,8 @@ export function useItemGridKeys<T extends object>({
     const col = Number(el.dataset.gridCol);
     if (!Number.isFinite(row) || !Number.isFinite(col)) return;
     e.preventDefault();
+    // 표가 처리한 붙여넣기는 바깥(폼의 "캡쳐 붙여넣기 → OCR")까지 올라가지 않게 한다.
+    e.stopPropagation();
     applyBlock(row, col, block);
   }
 
