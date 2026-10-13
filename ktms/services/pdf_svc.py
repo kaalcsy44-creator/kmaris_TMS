@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from services.kmaris_docs import make_pdf, make_tax_invoice_xlsx  # type: ignore
+from services.kmaris_docs import make_pdf, make_tax_invoice_xlsx, round_doc_items, doc_decimals  # type: ignore
 from services.doc_xlsx import (  # type: ignore
     make_commercial_invoice_xlsx, make_credit_note_xlsx, make_packing_list_xlsx,
     make_proforma_invoice_xlsx,
@@ -93,7 +93,8 @@ def build_payload(
         "messrs": messrs,
         "customer": _customer_dict(customer),
         "vessel": _vessel_dict(vessel),
-        "items": items,
+        # 화면에서 금액 소수 자릿수를 골랐으면(terms.decimals) 그 자리로 반올림해 싣는다.
+        "items": round_doc_items(items, doc_decimals({"terms": terms})),
         "terms": terms or {},
         "shipping": {
             **(shipping or {}),
@@ -139,7 +140,8 @@ def build_po_payload(
         "project_title": project_title or "",
         "customer": _vendor_party_dict(vendor),  # rendered as 'Supplier / Seller'
         "vessel": _vessel_dict(vessel),
-        "items": items,
+        # 화면에서 금액 소수 자릿수를 골랐으면(terms.decimals) 그 자리로 반올림해 싣는다.
+        "items": round_doc_items(items, doc_decimals({"terms": terms})),
         "terms": terms or {},
         "shipping": {},
     }

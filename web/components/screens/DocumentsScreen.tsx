@@ -2715,18 +2715,26 @@ function ItemEditor({
     next[i] = item;
     setItems(next);
   }
+  const roundRow = (it: DocumentWorkItem, d: number): DocumentWorkItem => {
+    const up = num(it.unit_price);
+    if (!up) return { ...it, amount: roundTo(num(it.amount), d) };
+    const unit_price = roundTo(up, d);
+    return { ...it, unit_price, amount: roundTo(num(it.qty) * unit_price, d) };
+  };
   function changeDecimals(d: number | null) {
     onDecimals?.(d);
     if (d == null) return;
-    setItems(
-      items.map((it) => {
-        const up = num(it.unit_price);
-        if (!up) return { ...it, amount: roundTo(num(it.amount), d) };
-        const unit_price = roundTo(up, d);
-        return { ...it, unit_price, amount: roundTo(num(it.qty) * unit_price, d) };
-      })
-    );
+    setItems(items.map((it) => roundRow(it, d)));
   }
+  // 자릿수를 정해 둔 표에 반올림 안 된 값이 들어오면(Load order items·저장본 다시 열기) 값 자체를
+  // 맞춘다 — 칸은 자릿수 서식으로 4,300 이라 보이는데 저장값은 4,300.03 이라 PDF 가 달랐다.
+  useEffect(() => {
+    if (packing || decimals == null) return;
+    const next = items.map((it) => roundRow(it, decimals));
+    if (next.some((it, i) => num(it.unit_price) !== num(items[i].unit_price) || num(it.amount) !== num(items[i].amount)))
+      setItems(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, decimals, packing]);
   // 합계·행 번호는 "문서에 실리는 행"(제외하지 않은 행)만 기준으로 삼아 발행 문서와 일치시킨다.
   const shown = includedRows(items);
   const seqNos = includedSeqNos(items);

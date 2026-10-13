@@ -2213,6 +2213,15 @@ function ItemEditor({
     if (d == null) return;
     onChange(items.map((it) => roundPoItem(it, d)));
   }
+  // 자릿수를 정해 둔 표에 반올림 안 된 값이 들어오면(불러오기·저장본 다시 열기) 값 자체를 맞춘다 —
+  // 칸은 자릿수 서식으로 보이는데 저장값이 다르면 발행 문서 숫자가 화면과 달라진다.
+  useEffect(() => {
+    if (decimals == null) return;
+    const next = items.map((it) => roundPoItem(it, decimals));
+    if (next.some((it, i) => Number(it.unit_price ?? 0) !== Number(items[i].unit_price ?? 0) || Number(it.amount ?? 0) !== Number(items[i].amount ?? 0)))
+      onChange(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, decimals]);
   // 합계·행번호는 "문서에서 제외"한 행을 뺀 값 — 발행 P/O(PDF)와 같은 숫자가 되게.
   // 옵션(대안)이 있으면 옵션마다 Subtotal 이 서고, 이 합계는 그것들을 모두 더한 값이다.
   const total = countedItems(includedRows(items)).reduce((sum, it) => sum + Number(it.amount || 0), 0);

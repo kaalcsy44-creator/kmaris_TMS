@@ -879,7 +879,7 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
     currency = (data.get("currency") or "USD").upper()
     consignee, buyer = doc_parties(data)
     money = pi_charges(data)
-    dec = pi_decimals(currency)
+    dec = pi_decimals(currency, data)
 
     def amount(value: Any) -> str:
         v = _num(value)
@@ -948,8 +948,48 @@ def _dim_parts(text: Any) -> List[str]:
     return parts if len(parts) == 3 else ["", "", ""]
 
 
-def pi_decimals(currency: str) -> int:
-    """송장 금액 소수 자리 — 소수 단위가 없는 통화(원·엔)만 정수로 찍는다."""
+def doc_decimals(data: Dict[str, Any] | None) -> int | None:
+    """화면 품목표에서 고른 금액 소수 자릿수(terms.decimals, 0~3). 고르지 않았으면 None."""
+    raw = ((data or {}).get("terms") or {}).get("decimals")
+    try:
+        d = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    return d if 0 <= d <= 3 else None
+
+
+def round_doc_items(items: List[Dict[str, Any]], decimals: int | None) -> List[Dict[str, Any]]:
+    """자릿수를 골랐으면 단가를 그 자리로 반올림하고 금액 = 반올림 단가 × 수량(다시 반올림).
+    화면(DecimalsSelect)과 같은 규칙 — 저장본이 반올림 전 값이어도 문서는 화면과 같은 숫자가 된다."""
+    if decimals is None:
+        return items
+    q = Decimal(1).scaleb(-decimals)
+
+    def rnd(v: Any) -> float:
+        return float(Decimal(str(_num(v))).quantize(q, rounding=ROUND_HALF_UP))
+
+    out = []
+    for it in items or []:
+        if not isinstance(it, dict) or is_option_row(it):
+            out.append(it)
+            continue
+        up = _num(it.get("unit_price"))
+        row = dict(it)
+        if up:
+            row["unit_price"] = rnd(up)
+            row["amount"] = rnd(_num(it.get("qty") or 0) * row["unit_price"])
+        elif it.get("amount") not in (None, ""):
+            row["amount"] = rnd(it.get("amount"))
+        out.append(row)
+    return out
+
+
+def pi_decimals(currency: str, data: Dict[str, Any] | None = None) -> int:
+    """송장 금액 소수 자리 — 화면에서 고른 자릿수가 있으면 그것, 없으면 소수 단위가 없는
+    통화(원·엔)만 정수로 찍는다."""
+    d = doc_decimals(data)
+    if d is not None:
+        return d
     return 0 if (currency or "").upper() in {"KRW", "JPY"} else 2
 
 
@@ -1203,7 +1243,8 @@ def _make_service_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, 
     shipping = data.get("shipping", {}) or {}
     _, buyer = doc_parties(data)
     money = pi_charges(data)
-    dec = SERVICE_PI_DECIMALS
+    dec = doc_decimals(data)
+    dec = SERVICE_PI_DECIMALS if dec is None else dec
 
     def amount(value: Any) -> str:
         v = _num(value)
@@ -1274,7 +1315,7 @@ def _make_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) ->
     currency = (data.get("currency") or "USD").upper()
     _, buyer = doc_parties(data)
     money = pi_charges(data)
-    dec = pi_decimals(currency)
+    dec = pi_decimals(currency, data)
 
     def amount(value: Any) -> str:
         """0 은 참조 양식처럼 '-' 로 — 부대비용이 없는 줄을 0.00 으로 채우지 않는다."""
