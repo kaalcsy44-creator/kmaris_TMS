@@ -176,7 +176,9 @@ def _anthropic_client():
     """
     import anthropic
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "") or _secret_from_toml("ANTHROPIC_API_KEY")
+    # 대시보드에 붙여 넣을 때 딸려 온 줄바꿈·공백을 걷어 낸다. 끝에 "\n" 하나만 붙어도
+    # httpx 가 헤더 값을 거부해 요청이 나가기도 전에 "Connection error." 로 끝난다.
+    api_key = (os.environ.get("ANTHROPIC_API_KEY", "") or _secret_from_toml("ANTHROPIC_API_KEY")).strip()
     if not api_key:
         raise ValueError(
             "ANTHROPIC_API_KEY가 설정되지 않았습니다. 환경변수 또는 ktms/secrets.toml을 확인하세요."
@@ -262,6 +264,16 @@ def _api_error_message(exc: Exception) -> str:
     """
     text = str(exc)
     low = text.lower()
+    if type(exc).__name__ in ("APIConnectionError", "APITimeoutError"):
+        # SDK 는 진짜 원인을 __cause__ 에 숨기고 "Connection error." 한 줄만 남긴다.
+        # 원인 문구에는 API 키가 그대로 들어 있을 수 있어(헤더 값 오류) 종류만 붙인다.
+        cause = exc.__cause__
+        name = type(cause).__name__ if cause else ""
+        if name == "LocalProtocolError":
+            return ("ANTHROPIC_API_KEY 값에 공백·줄바꿈 같은 잘못된 문자가 섞여 있습니다. "
+                    "키를 다시 붙여 넣으세요.")
+        return (f"AI 서버에 연결하지 못했습니다({name or type(exc).__name__}). "
+                "잠시 뒤 다시 시도하세요.")
     if "credit balance" in low or "insufficient" in low:
         return ("Anthropic API 크레딧이 부족합니다. 콘솔(Plans & Billing)에서 충전한 뒤 "
                 "다시 시도하세요.")
