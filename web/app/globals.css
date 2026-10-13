@@ -16716,10 +16716,10 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .form-fieldset.vm-read table.mini {
   width: 100% !important;
 }
-.form-fieldset.vm-read table.mini thead th,
-.form-fieldset.vm-read table.mini tbody td,
-.form-fieldset.vm-read table.mini tfoot td,
-.form-fieldset.vm-read table.mini [data-ig-span] {
+/* :not(#vm-read-x) 는 구체성 올리기용(id 1개) — 저장된 컬럼 폭 규칙(.ig-<id> tbody
+   td:not(.ig-foot):not(.ig-option-cell):nth-child(n))이 본문 칸에서 이 규칙을 이겨, 읽기
+   화면에도 편집 폭(Qty 168px 등)이 그대로 박혀 Remark·Category 가 눌려 있었다. */
+.form-fieldset.vm-read table.mini :is(thead th, tbody td, tfoot td, [data-ig-span]):not(#vm-read-x) {
   width: auto !important;
   min-width: 0 !important;
   max-width: none !important;
@@ -16741,6 +16741,19 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   /* hidden 이 아니라 auto — field-sizing:content 를 지원하지 않는 브라우저에서
      rows=1 짜리 칸이 되어 긴 설명이 잘려 버리면, "보이는 게 전부" 라는 약속이 깨진다. */
   overflow: auto !important;
+}
+/* 숫자 칸 input 은 size=20 기본폭(≈160px)을 그대로 들고 와 "1" 하나에도 열을 넓게 잡는다 —
+   값 길이에 맞춰 접고, 칸 안에서 오른쪽 정렬해 자릿수로 읽히게 한다. textarea 는 칸 폭을 채운다. */
+.form-fieldset.vm-read table.mini td input {
+  field-sizing: content;
+  width: auto !important;
+  max-width: 100% !important;
+}
+.form-fieldset.vm-read table.mini td textarea {
+  width: 100% !important;
+}
+.form-fieldset.vm-read table.mini td:has(> input.num) {
+  text-align: right;
 }
 /* 고정열(왼쪽에 붙는 ×·No.)은 가로 스크롤이 없으면 할 일이 없다 — 경계 그림자만 남는다. */
 .form-fieldset.vm-read table.mini th,
