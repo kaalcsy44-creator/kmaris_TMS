@@ -50,6 +50,7 @@ from _core import (
     send_email,
     default_from,
     USD_KRW_RATE,
+    usd_krw_rate,
 )
 from services.fx import get_rates
 from services.mail_compose import build_attachments, compose_body, compose_parts
@@ -398,7 +399,7 @@ def _quotation_payload(s, qtn):
         attn=attn,
         messrs=messrs,
         cost_currency=(qtn.cost_currency or qtn.currency or "USD"),
-        fx_rate=(getattr(qtn, "fx_rate", None) or USD_KRW_RATE),
+        fx_rate=(getattr(qtn, "fx_rate", None) or usd_krw_rate()),
         round_digits=getattr(qtn, "round_digits", None),
     )
 

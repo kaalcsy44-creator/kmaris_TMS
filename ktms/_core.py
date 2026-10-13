@@ -93,7 +93,36 @@ app = FastAPI(title="KTMS Admin API", docs_url=None, redoc_url=None)
 
 _ALLOWED_ORIGINS = {"http://localhost:3000", "http://127.0.0.1:3000"}
 _ALLOWED_ORIGIN_RE = re.compile(r"https://.*\.vercel\.app$")
+# 고시 조회가 전혀 안 될 때의 마지막 보루. 계산은 usd_krw_rate()(오늘자 매매기준율)를 쓴다 —
+# 예전엔 이 고정값이 곧 환율이라, 5단계 이후 화면·대시보드·재무가 실제 시세와 200원 가까이 어긋났다.
 USD_KRW_RATE = 1543.41
+_TODAY_FX: dict = {"day": "", "rate": None, "date_used": "", "retry_at": 0.0, "last_good": None}
+
+
+def usd_krw_rate() -> float:
+    """오늘(KST) USD 매매기준율(수출입은행). 하루 한 번 조회해 메모한다.
+
+    주말·공휴일·오전 고시 전이면 fx.get_rates 가 직전 영업일 고시를 돌려준다. 조회가 실패하면
+    10분 뒤에 다시 묻고, 그동안은 마지막 성공값 → 고정값(USD_KRW_RATE) 순으로 쓴다
+    (집계 API 가 줄마다 이 함수를 부르므로, 실패를 매번 다시 묻지 않는 것이 중요하다)."""
+    import time
+    today = (datetime.utcnow() + timedelta(hours=9)).date().isoformat()
+    st = _TODAY_FX
+    if st["day"] == today and st["rate"]:
+        return st["rate"]
+    if time.time() < st["retry_at"]:
+        return st["last_good"] or USD_KRW_RATE
+    try:
+        from services.fx import get_rates
+        row, used, _err = get_rates(today, "USD")
+    except Exception:
+        row, used = None, ""
+    if row and row.get("base"):
+        st.update(day=today, rate=round(float(row["base"]), 4), date_used=used, last_good=round(float(row["base"]), 4))
+        return st["rate"]
+    st["retry_at"] = time.time() + 600
+    return st["last_good"] or USD_KRW_RATE
+
 # 지금 도는 것이 어느 판인지 바깥에서 볼 수 있는 유일한 자리다. 화면에만 기능이
 # 올라가고 API 는 예전 판으로 남아 있던 적이 있는데(2026-09-18, Scan website 가
 # "Not Found" 만 내놓았다), 이 값이 9월 2일에 멈춰 있어서 무엇이 도는지 확인할 길이
@@ -117,9 +146,9 @@ def _dual_money(value, currency: str = "USD") -> str:
         amount = 0.0
     cur = (currency or "USD").upper()
     if cur == "KRW":
-        return f"KRW {amount:,.0f} USD {amount / USD_KRW_RATE:,.0f}"
+        return f"KRW {amount:,.0f} USD {amount / usd_krw_rate():,.0f}"
     if cur == "USD":
-        return f"USD {amount:,.0f} KRW {round(amount * USD_KRW_RATE):,}"
+        return f"USD {amount:,.0f} KRW {round(amount * usd_krw_rate()):,}"
     return f"{cur} {amount:,.0f}"
 
 
@@ -701,7 +730,7 @@ def cheapest_vendor_quote(quotes) -> tuple[float | None, str]:
         cur = (getattr(q, "currency", None) or "USD").upper()
         total = _items_cost_total(getattr(q, "items", None))
         if total:
-            priced.append(((total / USD_KRW_RATE) if cur == "KRW" else total, total, cur))
+            priced.append(((total / usd_krw_rate()) if cur == "KRW" else total, total, cur))
     if not priced:
         return None, ""
     usd, raw, cur = min(priced, key=lambda t: t[0])
@@ -3375,7 +3404,7 @@ def day_base_rate(day: str, cur: str) -> tuple[float, str]:
         return _DAY_RATE_CACHE[key]
     row, used, _err = get_rates(day, cur)
     out = ((float(row["base"]) / float(row.get("unit") or 1), used) if row and row.get("base")
-           else (USD_KRW_RATE if cur == "USD" else 1.0, ""))
+           else (usd_krw_rate() if cur == "USD" else 1.0, ""))
     _DAY_RATE_CACHE[key] = out
     return out
 
@@ -4394,6 +4423,7 @@ class QuotationSendReq(BaseModel):
 
 # Public surface consumed by routers/*.py (split from this file).
 __all__ = [
+    "usd_krw_rate",
     "APPayment",
     "APRecord",
     "APSave",

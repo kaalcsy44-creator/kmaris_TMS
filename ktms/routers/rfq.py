@@ -30,7 +30,7 @@ from _core import (
     VendorRFQ,
     Vessel,
     WorkType,
-    USD_KRW_RATE,
+    usd_krw_rate,
     _apply_owner_filter,
     assign_line_ids,
     line_id_of,
@@ -142,9 +142,9 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None,
                 for _q in qtns:
                     _qc = (getattr(_q, "currency", None) or "USD").upper()
                     _qt = _quotation_total(_q.items or [], getattr(_q, "discount_pct", 0) or 0)
-                    _cust_usd_sum += (_qt / USD_KRW_RATE) if _qc == "KRW" else _qt
+                    _cust_usd_sum += (_qt / usd_krw_rate()) if _qc == "KRW" else _qt
                 customer_amount = (
-                    _dual_money(_cust_usd_sum * USD_KRW_RATE, "KRW")
+                    _dual_money(_cust_usd_sum * usd_krw_rate(), "KRW")
                     if _c_disp == "KRW"
                     else _dual_money(_cust_usd_sum, "USD")
                 )

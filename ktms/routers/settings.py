@@ -54,7 +54,7 @@ from _core import (
     User,
     UserRole,
     UserSave,
-    USD_KRW_RATE,
+    usd_krw_rate,
     Vendor,
     VendorCreate,
     Vessel,
@@ -2509,7 +2509,7 @@ def _to_usd(price: float, cur: str | None, fx_rate: float | None) -> float:
     """KRW→USD 는 그 딜에 저장된 fx_rate(1 USD=? KRW) 우선, 없으면 앱 공통 환율."""
     if (cur or "USD") != "KRW":
         return price
-    rate = fx_rate if (fx_rate and fx_rate > 0) else USD_KRW_RATE
+    rate = fx_rate if (fx_rate and fx_rate > 0) else usd_krw_rate()
     return price / rate
 
 

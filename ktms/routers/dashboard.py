@@ -21,7 +21,7 @@ from _core import (
     RFQ,
     RFQStatus,
     RFQ_STEPS,
-    USD_KRW_RATE,
+    usd_krw_rate,
     User,
     Vendor,
     VendorQuote,
@@ -101,7 +101,7 @@ def _vendor_quote_lines(vqs, qtns, vendor_of) -> list[dict]:
         total = _items_cost_total(getattr(vq, "items", None))
         if not total:
             continue   # 값이 안 적힌 견적은 견줄 수가 없다(가장 싼 것을 고를 때도 뺀다)
-        priced.append((vq, cur, total, (total / USD_KRW_RATE) if cur == "KRW" else total))
+        priced.append((vq, cur, total, (total / usd_krw_rate()) if cur == "KRW" else total))
     if len(priced) < 2:
         return []
 
@@ -130,10 +130,10 @@ def _vendor_quote_lines(vqs, qtns, vendor_of) -> list[dict]:
             for q in qs:
                 qc = (getattr(q, "currency", None) or "USD").upper()
                 t = _quotation_total(q.items or [], getattr(q, "discount_pct", 0) or 0)
-                s_usd += (t / USD_KRW_RATE) if qc == "KRW" else t
+                s_usd += (t / usd_krw_rate()) if qc == "KRW" else t
             m_usd = s_usd - usd
-            line["sales"] = _dual_money(s_usd * USD_KRW_RATE if s_cur == "KRW" else s_usd, s_cur)
-            line["margin"] = _dual_money(m_usd * USD_KRW_RATE if s_cur == "KRW" else m_usd, s_cur)
+            line["sales"] = _dual_money(s_usd * usd_krw_rate() if s_cur == "KRW" else s_usd, s_cur)
+            line["margin"] = _dual_money(m_usd * usd_krw_rate() if s_cur == "KRW" else m_usd, s_cur)
             line["margin_pct"] = round(m_usd / s_usd * 100, 1) if s_usd else None
         lines.append(line)
     return lines
@@ -229,7 +229,7 @@ def _item_quote_lines(base_items, vrfqs, vqs, qtns, vendor_of) -> dict | None:
 
     deal_fx = next((r for r in (_fx(q) for q in (qtns or [])) if r), None) \
         or next((r for r in (_fx(q) for q in (vqs or [])) if r), None) \
-        or float(USD_KRW_RATE)
+        or usd_krw_rate()
 
     def krw_per(cur: str, day: str, usd_krw: float) -> float | None:
         cur = (cur or "USD").upper()
@@ -408,7 +408,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             if v > 0:
                 cur = (a.currency or "USD").upper()
                 extra_ar[a.order_id] = extra_ar.get(a.order_id, 0.0) + (
-                    v / USD_KRW_RATE if cur == "KRW" else v)
+                    v / usd_krw_rate() if cur == "KRW" else v)
 
         q = s.query(RFQ).order_by(RFQ.id.desc())
         if customer_id:
@@ -520,10 +520,10 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 for _q in qtns:
                     _qc = (getattr(_q, "currency", None) or "USD").upper()
                     _qt = _quotation_total(_q.items or [], getattr(_q, "discount_pct", 0) or 0)
-                    _customer_usd_sum += (_qt / USD_KRW_RATE) if _qc == "KRW" else _qt
+                    _customer_usd_sum += (_qt / usd_krw_rate()) if _qc == "KRW" else _qt
                 customer_usd = _customer_usd_sum
                 customer_amount = (
-                    _dual_money(_customer_usd_sum * USD_KRW_RATE, "KRW")
+                    _dual_money(_customer_usd_sum * usd_krw_rate(), "KRW")
                     if _c_disp == "KRW"
                     else _dual_money(_customer_usd_sum, "USD")
                 )
@@ -560,9 +560,9 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 for oo in orders_all:
                     t = _total_amount(oo.items or [])
                     oc = (getattr(oo, "currency", None) or "USD").upper()
-                    total_usd += (t / USD_KRW_RATE) if oc == "KRW" else t
+                    total_usd += (t / usd_krw_rate()) if oc == "KRW" else t
                 order_amount = (
-                    _dual_money(total_usd * USD_KRW_RATE, "KRW")
+                    _dual_money(total_usd * usd_krw_rate(), "KRW")
                     if disp_cur == "KRW"
                     else _dual_money(total_usd, "USD")
                 )
@@ -590,12 +590,12 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                     _po_nos.append(oo.po_no)
                 _oc = (getattr(oo, "currency", None) or "USD").upper()
                 _st = _total_amount(oo.items or [])
-                _sales_usd += (_st / USD_KRW_RATE) if _oc == "KRW" else _st
+                _sales_usd += (_st / usd_krw_rate()) if _oc == "KRW" else _st
                 for _vp in s.query(PurchaseOrder).filter_by(order_id=oo.id).all():
                     _has_po = True
                     _pt = _total_amount(_vp.items or []) or _items_cost_total(_vp.items or [])
                     _pc = (getattr(_vp, "currency", None) or _oc or "USD").upper()
-                    _purchase_usd += (_pt / USD_KRW_RATE) if _pc == "KRW" else _pt
+                    _purchase_usd += (_pt / usd_krw_rate()) if _pc == "KRW" else _pt
                     if not _purchase_cur:
                         _purchase_cur = _pc
 
@@ -603,7 +603,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 else ((qtn.currency or "USD").upper() if qtn else "USD")
 
             def _money_disp(usd: float) -> str:
-                return _dual_money(usd * USD_KRW_RATE, "KRW") if _disp == "KRW" else _dual_money(usd, "USD")
+                return _dual_money(usd * usd_krw_rate(), "KRW") if _disp == "KRW" else _dual_money(usd, "USD")
 
             # 매출: 오더 있으면 오더 합산, 없으면 고객 견적. 매입: 발주서 있으면 합산
             # (발주는 실제 매입이라 여러 건이면 더하는 게 맞다), 없으면 가장 싼 벤더 견적.
@@ -611,7 +611,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             # 적으면 숫자는 맞는데 통화가 거짓이 된다.
             sales_total = _money_disp(_sales_usd) if orders_all else customer_amount
             purchase_total = (
-                (_dual_money(_purchase_usd * USD_KRW_RATE, "KRW") if _purchase_cur == "KRW"
+                (_dual_money(_purchase_usd * usd_krw_rate(), "KRW") if _purchase_cur == "KRW"
                  else _dual_money(_purchase_usd, "USD"))
                 if _has_po else vendor_amount
             )
@@ -977,7 +977,7 @@ def dashboard():
         # 매출은 판매 통화, 원가는 원가 통화 기준으로 각각 USD 환산한 뒤 합산해야 한다.
         # (이전엔 원가에도 판매 통화 환율을 적용해 마진이 -800%/-8만% 로 튀던 버그를 수정.)
         def _to_usd(amount: float, cur: str) -> float:
-            return (amount / USD_KRW_RATE) if _cur2(cur) == "KRW" else amount
+            return (amount / usd_krw_rate()) if _cur2(cur) == "KRW" else amount
 
         margin_basis = won_quotes or sent_quotes
         _rev = _cost = 0.0
@@ -1457,13 +1457,13 @@ def statistics(months: int = 12):
             for q in qtns_by_rfq.get(r.id, []):
                 qc = (getattr(q, "currency", None) or "USD").upper()
                 qt = _quotation_total(q.items or [], getattr(q, "discount_pct", 0) or 0)
-                cust_usd += (qt / USD_KRW_RATE) if qc == "KRW" else qt
+                cust_usd += (qt / usd_krw_rate()) if qc == "KRW" else qt
             # 벤더 견적 합(USD)
             vend_usd = 0.0
             _vqs = vqs_by_rfq.get(r.id, [])
             for vq in _vqs:
                 vc = (getattr(vq, "currency", None) or "USD").upper()
-                vend_usd += (_items_cost_total(vq.items or []) / USD_KRW_RATE) if vc == "KRW" \
+                vend_usd += (_items_cost_total(vq.items or []) / usd_krw_rate()) if vc == "KRW" \
                     else _items_cost_total(vq.items or [])
             # 오더/발주(있으면 견적 대신 확정치 사용)
             prj_orders = orders_by_rfq.get(r.id, [])
@@ -1473,12 +1473,12 @@ def statistics(months: int = 12):
             for oo in prj_orders:
                 oc = (getattr(oo, "currency", None) or "USD").upper()
                 st = _total_amount(oo.items or [])
-                order_sales_usd += (st / USD_KRW_RATE) if oc == "KRW" else st
+                order_sales_usd += (st / usd_krw_rate()) if oc == "KRW" else st
                 for vp in pos_by_order.get(oo.id, []):
                     has_po = True
                     pt = _total_amount(vp.items or []) or _items_cost_total(vp.items or [])
                     pc = (getattr(vp, "currency", None) or oc or "USD").upper()
-                    po_purchase_usd += (pt / USD_KRW_RATE) if pc == "KRW" else pt
+                    po_purchase_usd += (pt / usd_krw_rate()) if pc == "KRW" else pt
 
             sales_usd = order_sales_usd if prj_orders else cust_usd
             purchase_usd = po_purchase_usd if has_po else vend_usd
@@ -1533,7 +1533,7 @@ def statistics(months: int = 12):
             "rfq_detail": [rfq_detail[mo] for mo in month_labels],
             "funnel": funnel,
             "project_margin": project_margin,
-            "usd_krw_rate": USD_KRW_RATE,
+            "usd_krw_rate": usd_krw_rate(),
             # KRW 환산에 실제로 쓴 환율 — 고시를 못 받아 고정환율로 내려갔는지까지 밝힌다.
             "fx": {"rate": round(fx_rate, 4), "date": fx_date,
                    "source": "exim" if fx_date else "fixed"},

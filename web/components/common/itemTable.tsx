@@ -5,7 +5,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cellText, parseClipboardGrid, tsvCell } from "./itemClipboard";
 import { isOptionRow, type OptionRowLike } from "../../lib/quoteOptions";
 
-export const USD_KRW_RATE = 1543.41;
+/** 화면 전체가 쓰는 USD↔KRW 기본 환율. 앱이 뜰 때 오늘자 매매기준율로 바뀐다(lib/todayFx.ts).
+ *  1543.41 은 조회가 전혀 안 될 때의 마지막 보루일 뿐이다 — 예전엔 이 고정값이 곧 환율이라
+ *  5단계 이후 화면이 실제 시세와 200원 가까이 어긋났다. ES 모듈 live binding 이라 가져다 쓰는 쪽은
+ *  읽는 시점의 값을 본다(값을 복사해 두지 말 것). */
+export const USD_KRW_FALLBACK = 1543.41;
+export let USD_KRW_RATE = USD_KRW_FALLBACK;
+export function setUsdKrwRate(rate: number) {
+  if (Number.isFinite(rate) && rate > 0) USD_KRW_RATE = rate;
+}
 
 // ── 품목표 다중 선택(체크박스) ─────────────────────────────────────────────
 // 각 편집기에서 행을 체크박스로 선택 → 헤더 "Delete" 로 일괄 삭제한다.

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import AuthGate from "./AuthGate";
 import TopNav from "./TopNav";
 import { can, isAdmin } from "@/lib/auth";
+import { useTodayFxReady } from "@/lib/todayFx";
 import type { PermModule } from "@/lib/auth";
 
 // active 키 → 권한 모듈(동일). 가드 대상 메뉴 목록.
@@ -81,12 +82,15 @@ function ShellInner({
   const settingsOk =
     mod === "settings" ? isAdmin() || can("settings", "view") : true;
   const allowed = !guarded || (can(mod, "view") && settingsOk);
+  // 오늘자 환율이 기본 환율로 올라간 뒤에 화면을 띄운다(하루 첫 진입에만 잠깐 기다린다).
+  const fxReady = useTodayFxReady();
 
   useEffect(() => {
     if (!allowed) router.replace(firstAllowed());
   }, [allowed, router]);
 
   if (!allowed) return <div className="state">Redirecting…</div>;
+  if (!fxReady) return <div className="state">Loading…</div>;
 
   return (
     <div className="shell">

@@ -33,6 +33,7 @@ from _core import (
     Order,
     PurchaseOrder,
     USD_KRW_RATE,
+    usd_krw_rate,
     User,
     Vendor,
     _ap_record_rows,
@@ -57,7 +58,7 @@ from services.fx import get_deal_base_rate, get_rates
 
 def _to_krw(amount: float, currency: str) -> float:
     """단일 헤드라인 집계용 KRW 환산(USD만 환산, 그 외 원값)."""
-    return amount * USD_KRW_RATE if (currency or "").upper() == "USD" else amount
+    return amount * usd_krw_rate() if (currency or "").upper() == "USD" else amount
 
 
 # ('YYYY-MM-DD 조회일', 통화) → (환율, 실제 고시일). 프로세스 메모리 캐시.
@@ -89,7 +90,7 @@ def _month_end_rate(ym: str, cur: str) -> tuple[float, str]:
         out = (float(row["base"]) / float(row.get("unit") or 1), used)
     else:
         # 폴백은 USD 고정환율뿐 — 그 밖의 통화는 환산하지 않는다(_to_krw 와 같은 규약).
-        out = (USD_KRW_RATE if cur == "USD" else 1.0, "")
+        out = (usd_krw_rate() if cur == "USD" else 1.0, "")
     _MONTH_RATE_CACHE[key] = out
     return out
 
@@ -1433,7 +1434,7 @@ def finance_closing(start: str = "", end: str = "", year: int = 0):
                 "input_vat": [round(x) for x in monthly_input_vat],
             },
             "fx": _fx_note(fx_seen),
-            "usd_krw": USD_KRW_RATE,
+            "usd_krw": usd_krw_rate(),
         }
     finally:
         s.close()
@@ -1506,7 +1507,7 @@ def finance_consulting():
         consultants = {c.id: c for c in s.query(Consultant).all()}
         rfqs = [r for r in s.query(RFQ).all() if getattr(r, "consultant_id", None)]
         if not rfqs:
-            return {"rows": [], "usd_krw": USD_KRW_RATE}
+            return {"rows": [], "usd_krw": usd_krw_rate()}
         rfq_ids = {r.id for r in rfqs}
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
         qtn_rfq = {q.id: q.rfq_id for q in s.query(Quotation).all()}
@@ -1613,7 +1614,7 @@ def finance_consulting():
                 "registered": _sum_by_currency([(p.amount or 0.0, p.currency) for p in paid_rows]),
                 "registered_count": len(paid_rows),
             })
-        return {"rows": rows, "usd_krw": USD_KRW_RATE}
+        return {"rows": rows, "usd_krw": usd_krw_rate()}
     finally:
         s.close()
 
@@ -1982,7 +1983,7 @@ def finance_profit(year: int = 0, detail: str = ""):
                 for key, months in detail.items()
             },
             "fx": _fx_note(fx_seen),
-            "usd_krw": USD_KRW_RATE,
+            "usd_krw": usd_krw_rate(),
         }
     finally:
         s.close()
