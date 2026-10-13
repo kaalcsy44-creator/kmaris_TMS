@@ -1588,15 +1588,28 @@ def make_purchase_order_xlsx(
             return "#,##0"
 
     # ── 레터헤드(로고 · 회사정보 · 슬로건 + 파란 구분선) ────────────────
-    logo = _find_asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg")
-    if logo:
+    def add_image_fit(path, anchor, w, h):
+        """(w, h) 상자 안에 원본 비율 그대로 넣는다 — 크기를 그대로 박으면 로고·서명이 눌린다."""
         try:
             from openpyxl.drawing.image import Image as XLImage
-            img = XLImage(logo)
-            img.width, img.height = 96, 58
-            ws.add_image(img, "A1")
+            img = XLImage(path)
+            try:
+                from PIL import Image as PILImage
+                with PILImage.open(path) as src:
+                    sw, sh = src.size
+                scale = min(w / sw, h / sh)
+                w, h = int(sw * scale), int(sh * scale)
+            except Exception:
+                pass
+            img.width, img.height = w, h
+            ws.add_image(img, anchor)
         except Exception:
             pass
+
+    logo = _find_asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg")
+    if logo:
+        # 로고 상자 = A·B 열 폭 × 1~3행 높이(58pt ≈ 77px).
+        add_image_fit(logo, "A1", 130, 74)
     GRAYTX = "404040"
     addr = company.get("address_en") or company.get("address") or ""
     bits = []
@@ -1800,22 +1813,21 @@ def make_purchase_order_xlsx(
     # ── 서명 ───────────────────────────────────────────────────────────
     merge(r, 1, r, NCOL)
     put(r, 1, "For and on behalf of K-MARIS Energy & Solutions Co., Ltd.", font=normal, align=left)
+    # 서명은 PDF 처럼 이름 줄 바로 위(A열부터)에 선다 — 예전엔 C열에 붙어 이름과 떨어져 보였다.
     sign = _find_asset(*_SIGN_ASSET)
     if sign:
-        try:
-            from openpyxl.drawing.image import Image as XLImage
-            img = XLImage(sign)
-            img.width, img.height = 140, 48
-            ws.add_image(img, f"C{r + 1}")
-        except Exception:
-            pass
+        add_image_fit(sign, f"A{r + 1}", 150, 56)
     for i in range(1, 4):
         ws.row_dimensions[r + i].height = 16
     r += 4
-    merge(r, 1, r, 2)
-    put(r, 1, "________________________", font=normal, align=left)
+    # 이름 줄은 A열(폭 5) 한 칸에 두면 글자가 세로로 접힌다 — 서명선과 함께 A~C 를 합친다.
+    one_line = Alignment(horizontal="left", vertical="center", wrap_text=False)
+    merge(r, 1, r, 3)
+    put(r, 1, "________________________", font=normal, align=one_line)
     r += 1
-    put(r, 1, "Sam Cho, Managing Director", font=bold, align=left)
+    merge(r, 1, r, 3)
+    put(r, 1, "Sam Cho, Managing Director", font=bold, align=one_line)
+    ws.row_dimensions[r].height = 18
     r += 1
     merge(r, 1, r, NCOL)
     put(r, 1, "K-MARIS Energy & Solutions | Seoul, Korea | www.k-maris.com",
