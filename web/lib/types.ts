@@ -579,6 +579,7 @@ export type PoWorkOptions = {
     status: string;
     currency: string;
     amount: number;
+    discount_pct?: number; // 견적 총액 할인율(%) — 오더로 불러올 때 단가에 반영
     vendor_quote_no: string; // 이 견적이 링크한 벤더 견적번호(미링크면 "")
     items: PoWorkItem[];
   }[];

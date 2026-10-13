@@ -400,8 +400,8 @@ function OrderDetailModal({
       return;
     }
     setCurrency(q.currency || currency);
-    setItems(q.items.length ? q.items.map(normalizeItem) : [blankItem()]);
-    setOcrMsg(`Loaded ${q.items.length} item(s) from quotation ${q.qtn_no}.`);
+    setItems(q.items.length ? quoteItemsForOrder(q) : [blankItem()]);
+    setOcrMsg(`Loaded ${q.items.length} item(s) from quotation ${q.qtn_no}${discountNote(q)}.`);
   }
 
   function matchByName<T extends { name: string }>(
@@ -1540,8 +1540,8 @@ function CustomerPoNewForm({
       return;
     }
     setCurrency(linkedQuote.currency || currency);
-    setItems(linkedQuote.items.length ? linkedQuote.items.map(normalizeItem) : [blankItem()]);
-    setOcrMsg(`Loaded ${linkedQuote.items.length} item(s) from quotation ${linkedQuote.qtn_no}.`);
+    setItems(linkedQuote.items.length ? quoteItemsForOrder(linkedQuote) : [blankItem()]);
+    setOcrMsg(`Loaded ${linkedQuote.items.length} item(s) from quotation ${linkedQuote.qtn_no}${discountNote(linkedQuote)}.`);
     setErr(null);
   }
 
@@ -2534,6 +2534,30 @@ function normalizeItem(it: Partial<PoWorkItem>): PoWorkItem {
     // 제외 표식은 저장·재열람에서 살아남아야 한다(그래야 표에서 되살릴 수 있다).
     ...(it.excluded ? { excluded: true as const } : {}),
   };
+}
+
+/**
+ * 고객 견적 → 오더 품목. 견적에 총액 할인(discount_pct)이 있으면 그 할인가가 최종가이므로
+ * 각 단가에 같은 비율을 먹여 불러온다(예전엔 할인 전 단가가 그대로 들어와 오더가 견적보다 컸다).
+ * 단가는 KRW 정수·그 외 소수 둘째 자리로 반올림 — 줄마다 반올림하므로 합계가 견적 최종가와
+ * 몇 원/센트 다를 수 있다.
+ */
+function quoteItemsForOrder(q: { items: PoWorkItem[]; discount_pct?: number; currency?: string }): PoWorkItem[] {
+  const rows = q.items.map(normalizeItem);
+  const d = Number(q.discount_pct || 0);
+  if (!d) return rows;
+  const step = (q.currency || "").toUpperCase() === "KRW" ? 1 : 100;
+  return rows.map((it) => {
+    const up = Number(it.unit_price ?? 0);
+    if (!up) return it;
+    const unit_price = Math.round(up * (1 - d / 100) * step) / step;
+    return { ...it, unit_price, amount: Math.round(Number(it.qty || 1) * unit_price * step) / step };
+  });
+}
+
+function discountNote(q: { discount_pct?: number }): string {
+  const d = Number(q.discount_pct || 0);
+  return d ? ` (discount ${d}% applied to unit prices)` : "";
 }
 
 function cleanItems(items: PoWorkItem[]): PoWorkItem[] {
