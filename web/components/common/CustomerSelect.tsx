@@ -48,6 +48,8 @@ export default function CustomerSelect({
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [pos, setPos] = useState<MenuPos | null>(null);
+  // ↑↓ 로 짚은 줄(ordered 기준). -1 = 맨 위 "선택 안 함" 줄.
+  const [active, setActive] = useState(-1);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -125,6 +127,64 @@ export default function CustomerSelect({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options, ql]);
 
+  // 검색 중이거나 복수 선택이면 "선택 안 함" 줄이 없으니(검색 중엔 Enter 가 첫 결과를
+  // 고르게) 짚을 수 있는 맨 위는 0 이다.
+  const minActive = multiple || ql ? 0 : -1;
+
+  function openMenu() {
+    setQ("");
+    setActive(multiple ? 0 : options.findIndex((c) => c.id === value));
+    setOpen(true);
+  }
+
+  // 짚은 줄이 목록 밖으로 나가면 따라 내린다.
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current
+      ?.querySelector<HTMLElement>(`[data-idx="${active}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [active, open]);
+
+  // 기본 <select> 처럼 ↑↓·Enter·Esc·Home/End 로 고른다(VendorSelect 와 같은 규칙).
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape") {
+      if (open) {
+        e.preventDefault();
+        e.stopPropagation();   // 모달까지 닫히지 않게
+        setOpen(false);
+        setQ("");
+        btnRef.current?.focus();
+      }
+      return;
+    }
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openMenu();
+      }
+      return;
+    }
+    const inSearch = e.target instanceof HTMLInputElement;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      setActive((i) => Math.min(ordered.length - 1, Math.max(minActive, i + step)));
+    } else if (e.key === "Home" && !inSearch) {
+      e.preventDefault();
+      setActive(minActive);
+    } else if (e.key === "End" && !inSearch) {
+      e.preventDefault();
+      setActive(ordered.length - 1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (active < 0) pick("");
+      else if (ordered[active]) pick(ordered[active].id);
+    } else if (e.key === "Tab") {
+      setOpen(false);
+      setQ("");
+    }
+  }
+
   function pick(id: number | "") {
     onChange(id);
     // 복수 선택 모드에서는 메뉴와 검색어를 그대로 둔다 — 같은 검색 결과에서 여러
@@ -132,6 +192,7 @@ export default function CustomerSelect({
     if (multiple) return;
     setOpen(false);
     setQ("");
+    btnRef.current?.focus();
   }
 
   function optionInner(c: CustomerOption, checked = false) {
@@ -174,7 +235,8 @@ export default function CustomerSelect({
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => (open ? setOpen(false) : openMenu())}
+        onKeyDown={onKeyDown}
       >
         <span className="cust-select-val">
           {selected ? optionInner(selected) : <span className="cust-select-placeholder">{emptyLabel}</span>}
@@ -194,16 +256,23 @@ export default function CustomerSelect({
                 className="cust-select-search"
                 placeholder="🔍 Search…"
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setActive(e.target.value.trim() || multiple ? 0 : -1);
+                }}
+                onKeyDown={onKeyDown}
                 autoFocus
               />
               <ul className="cust-select-list">
                 {/* 복수 선택에는 "선택 안 함"이 없다 — 체크를 다시 눌러 빼면 된다. */}
-                {multiple ? null : (
+                {multiple || ql ? null : (
                   <li>
                     <button
                       type="button"
-                      className={`cust-select-opt${value === "" ? " on" : ""}`}
+                      tabIndex={-1}
+                      data-idx={-1}
+                      className={`cust-select-opt${value === "" ? " on" : ""}${active === -1 ? " active" : ""}`}
+                      onMouseEnter={() => setActive(-1)}
                       onClick={() => pick("")}
                     >
                       <span className="cust-select-placeholder">{emptyLabel}</span>
@@ -224,7 +293,10 @@ export default function CustomerSelect({
                       <li>
                         <button
                           type="button"
-                          className={`cust-select-opt${on ? " on" : ""}`}
+                          tabIndex={-1}
+                          data-idx={i}
+                          className={`cust-select-opt${on ? " on" : ""}${i === active ? " active" : ""}`}
+                          onMouseEnter={() => setActive(i)}
                           onClick={() => pick(c.id)}
                         >
                           {optionInner(c, on)}

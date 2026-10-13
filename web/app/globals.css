@@ -8635,11 +8635,15 @@ table.mini .num {
   border-radius: 5px;
   cursor: pointer;
 }
-.cust-select-opt:hover {
+.cust-select-opt:hover,
+.cust-select-opt.active {
   background: #eef3fb;
 }
 .cust-select-opt.on {
   background: #e1ebfb;
+}
+.cust-select-opt.on.active {
+  background: #d3e3f6;
 }
 .cust-select-empty {
   padding: 10px 8px;
