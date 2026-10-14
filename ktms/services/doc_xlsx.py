@@ -1445,7 +1445,8 @@ def make_quotation_costing_xlsx(
 
     # ── Terms & Conditions ─────────────────────────────────────────────
     section_bar(r, "Terms & Conditions"); r += 1
-    for line in quotation_standard_terms(terms):
+    for line in quotation_standard_terms(terms, valid_until=data.get("valid_until", "") or "",
+                                         quote_date=data.get("date", "") or ""):
         merge(r, 1, r, NCOL)
         ws.cell(r, 1, f"• {line}").alignment = left
         ws.row_dimensions[r].height = 13

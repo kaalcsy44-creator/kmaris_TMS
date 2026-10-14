@@ -74,11 +74,32 @@ export const TERM_PRESETS = {
 // 문장이 곧 인쇄될 문장이 되게 한다.
 export const QUOTATION_VALIDITY_DAYS = 30;
 
+/** 'Quotation validity' 문장 — 서버 quotation_validity_text 와 같은 규칙.
+ *  만료일(Valid until)이 있으면 견적일부터의 일수와 만료일, 없으면 기본 30일. */
+export function quotationValidityText(validUntil?: string, quoteDate?: string): string {
+  const vu = (validUntil || "").trim().slice(0, 10);
+  const base = (quoteDate || "").trim().slice(0, 10);
+  if (vu) {
+    const re = /^\d{4}-\d{2}-\d{2}$/;
+    if (re.test(vu) && re.test(base)) {
+      const [ay, am, ad] = base.split("-").map(Number);
+      const [by, bm, bd] = vu.split("-").map(Number);
+      const days = Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+      if (days >= 0) return `Quotation validity: ${days} days from quotation date (valid until ${vu}).`;
+    }
+    return `Quotation validity: until ${vu}.`;
+  }
+  return `Quotation validity: ${QUOTATION_VALIDITY_DAYS} days from quotation date.`;
+}
+
+/** 문장에 끼워 넣을 문서 값 — 거래조건(terms) 밖에 있는 것들. */
+export type ClauseContext = { validUntil?: string; quoteDate?: string };
+
 export const QUOTATION_CLAUSES: readonly {
   id: string;
-  text: (t: QuotationTerms) => string;
+  text: (t: QuotationTerms, ctx?: ClauseContext) => string;
 }[] = [
-  { id: "validity", text: () => `Quotation validity: ${QUOTATION_VALIDITY_DAYS} days from quotation date.` },
+  { id: "validity", text: (_t, ctx) => quotationValidityText(ctx?.validUntil, ctx?.quoteDate) },
   { id: "confirmation", text: () => "Price, availability, and delivery time are subject to final confirmation upon order placement." },
   {
     id: "delivery_term",

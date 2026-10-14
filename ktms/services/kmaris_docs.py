@@ -2078,7 +2078,27 @@ def _qnum(value: Any, dec: int | None = None) -> str:
     return f"{q:,.2f}"
 
 
-def quotation_clause_catalog(terms: Dict[str, Any], validity_days: int = 30) -> List[tuple]:
+def quotation_validity_text(valid_until: str = "", quote_date: str = "", default_days: int = 30) -> str:
+    """'Quotation validity' 문장 — 견적에 적은 Valid until(만료일)을 그대로 따른다.
+
+    예전엔 30일이 박혀 있어 4단계에서 15일로 바꿔도 문서는 늘 30일이었다.
+    만료일이 있으면 견적일부터의 일수와 만료일을 함께, 없으면 기본 일수를 찍는다."""
+    from datetime import date as _date
+    vu = str(valid_until or "").strip()[:10]
+    base = str(quote_date or "").strip()[:10]
+    if vu:
+        try:
+            days = (_date.fromisoformat(vu) - _date.fromisoformat(base)).days
+        except ValueError:
+            days = None
+        if days is not None and days >= 0:
+            return f"Quotation validity: {days} days from quotation date (valid until {vu})."
+        return f"Quotation validity: until {vu}."
+    return f"Quotation validity: {default_days} days from quotation date."
+
+
+def quotation_clause_catalog(terms: Dict[str, Any], validity_days: int = 30,
+                             valid_until: str = "", quote_date: str = "") -> List[tuple]:
     """QUOTATION / COSTING SHEET 표준 Terms & Conditions 문장 목록 [(id, 문장)].
 
     id 는 견적에 저장되는 선택값(terms["clauses"])의 계약이다 — 화면(4단계)에서 문장을
@@ -2090,7 +2110,7 @@ def quotation_clause_catalog(terms: Dict[str, Any], validity_days: int = 30) -> 
     payment = terms.get("payment_terms") or "T/T in advance"
     warranty = terms.get("warranty") or "6 months from delivery"
     return [
-        ("validity", f"Quotation validity: {validity_days} days from quotation date."),
+        ("validity", quotation_validity_text(valid_until, quote_date, validity_days)),
         ("confirmation", "Price, availability, and delivery time are subject to final confirmation upon order placement."),
         ("delivery_term", f"Delivery term: {incoterms} {place}, Incoterms 2020."),
         ("charges_excluded", "Freight, customs duty, local tax, and other logistics charges are excluded unless otherwise stated."),
@@ -2104,14 +2124,15 @@ def quotation_clause_catalog(terms: Dict[str, Any], validity_days: int = 30) -> 
     ]
 
 
-def quotation_standard_terms(terms: Dict[str, Any], validity_days: int = 30) -> List[str]:
+def quotation_standard_terms(terms: Dict[str, Any], validity_days: int = 30,
+                             valid_until: str = "", quote_date: str = "") -> List[str]:
     """문서에 찍을 Terms & Conditions 문장들.
 
     terms["clauses"] 가 있으면 그 id 들만 골라 찍는다(4단계에서 선택한 문장). 값이 없는
     옛 견적은 선택 이력이 없다는 뜻이라 전부 찍는다 — 기존 견적서 내용이 바뀌지 않게.
     terms["extra_clauses"] 는 사용자가 직접 추가한 문장으로 표준 문장 뒤에 붙인다.
     Remarks 는 여기 섞지 않는다 — 품목표와 T&C 사이의 별도 Remark 섹션에서 찍는다."""
-    catalog = quotation_clause_catalog(terms, validity_days)
+    catalog = quotation_clause_catalog(terms, validity_days, valid_until, quote_date)
     picked = terms.get("clauses")
     if isinstance(picked, list):
         chosen = set(str(c) for c in picked)
@@ -2328,7 +2349,8 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     # ── Terms & Conditions ────────────────────────────────────────────
     story.append(section("Terms & Conditions"))
     story.append(Spacer(1, 2 * mm))
-    for line in quotation_standard_terms(terms):
+    for line in quotation_standard_terms(terms, valid_until=data.get("valid_until", "") or "",
+                                         quote_date=data.get("date", "") or ""):
         story.append(_p(f"• {line}", s["small"]))
         story.append(Spacer(1, 1 * mm))
     story.append(Spacer(1, 3 * mm))

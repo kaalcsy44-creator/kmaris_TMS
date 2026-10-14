@@ -1,7 +1,7 @@
 "use client";
 
 import type { QuotationTerms } from "@/lib/types";
-import { TERM_PRESETS, QUOTATION_CLAUSES, selectedClauseIds } from "@/lib/terms";
+import { TERM_PRESETS, QUOTATION_CLAUSES, selectedClauseIds, type ClauseContext } from "@/lib/terms";
 import { fetchTermValues } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
 import ComboBox, { type ComboSection } from "./ComboBox";
@@ -21,6 +21,7 @@ export default function TermsEditor({
   clauses,
   omit,
   suggest,
+  clauseContext,
 }: {
   terms: QuotationTerms;
   onChange: (terms: QuotationTerms) => void;
@@ -28,6 +29,8 @@ export default function TermsEditor({
   omit?: (keyof QuotationTerms)[];
   /** 이 딜에서 받은 견적들이 적어 보낸 값 — 목록 맨 앞 "From vendor quotes" 묶음에 선다. */
   suggest?: Partial<Record<keyof QuotationTerms, string[]>>;
+  /** 문장에 끼울 문서 값(Valid until·견적일) — 유효기간 문장이 입력한 날짜를 따른다. */
+  clauseContext?: ClauseContext;
 }) {
   // 지금까지 문서에 적힌 값 — 코드에 박힌 기본값만으로는 벤더가 보낸 "Shanghai, China" 가
   // 목록에 없었다. 한 번 쓴 값은 다음부터 선택지에 선다(서버 집계, 저장하면 새로 받는다).
@@ -112,7 +115,7 @@ export default function TermsEditor({
                 <label className={"clause-item" + (picked.has(c.id) ? " on" : "")}>
                   <input type="checkbox" checked={picked.has(c.id)} onChange={() => toggleClause(c.id)} />
                   {/* 위 거래조건 필드가 들어간 문장은 지금 값 그대로 보여 준다 — 보이는 문장이 곧 찍힐 문장. */}
-                  <span>{c.text(terms)}</span>
+                  <span>{c.text(terms, clauseContext)}</span>
                 </label>
               </li>
             ))}

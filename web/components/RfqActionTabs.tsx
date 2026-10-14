@@ -3078,7 +3078,7 @@ function CustomerQuoteDetailModal({
             rate={effRate}
           />
           </div>
-          <TermsEditor terms={terms} onChange={setTerms} clauses suggest={vendorTermSuggest(vendorQuotes)} />
+          <TermsEditor terms={terms} onChange={setTerms} clauses suggest={vendorTermSuggest(vendorQuotes)} clauseContext={{ validUntil, quoteDate: sentAt }} />
           </fieldset>
           <div className="form-actions quote-editor-actions">
             <button className="btn" onClick={openPreview} disabled={busy || dlBusy}>
@@ -5314,7 +5314,7 @@ function CustomerQuoteAction({
         rate={effRate}
       />
 
-      <TermsEditor terms={terms} onChange={setTerms} clauses suggest={vendorTermSuggest(vendorQuotes)} />
+      <TermsEditor terms={terms} onChange={setTerms} clauses suggest={vendorTermSuggest(vendorQuotes)} clauseContext={{ validUntil, quoteDate: sentAt }} />
 
       <div className="form-actions">
         <StageTotal label="Final" value={finalTotal} currency={currency} rate={effRate} />
