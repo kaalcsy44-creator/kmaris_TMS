@@ -14,6 +14,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 from services.kmaris_docs import (
+    bank_name_address,
     normalize_items, calc_totals, _num, DOC_TITLES, doc_parties,
     packing_totals, consignee_mark_lines, _dim_parts, _invoice_shipping_rows,
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
@@ -569,11 +570,13 @@ def _pi_bank_block(form: "_FormSheet", company: Dict[str, Any], r: int, currency
     r = form.band(r, "BANK INFORMATION")
     foreign = currency != "KRW"
     holder = (company.get("fx_bank_holder") if foreign else company.get("bank_holder")) or company.get("company_name_en", "")
-    bank_name = (company.get("fx_bank_name") if foreign else company.get("bank_name")) or ""
+    bank_name = bank_name_address(company, foreign)
     account = (company.get("fx_bank_account") if foreign else company.get("bank_account")) or ""
+    # 은행 주소가 붙으면 여러 줄 — 병합 칸은 자동 높이가 안 되므로 줄 수로 높이를 잡는다.
+    lines = sum(max(1, -(-len(x) // 34)) for x in bank_name.split("\n")) if bank_name else 1
     return form.pairs(r, [("Remittee's name", holder, "Bank Name & Address", bank_name),
                           ("Swift Code", company.get("swift", ""), "Remittee's Account No.", account)],
-                      value_align=form.center)
+                      value_align=form.center, heights={0: max(17.4, 14.5 * lines + 4)})
 
 
 def make_proforma_invoice_xlsx(

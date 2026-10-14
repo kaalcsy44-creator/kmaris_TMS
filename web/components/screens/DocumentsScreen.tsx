@@ -2096,15 +2096,20 @@ function BankInfoSection({ currency }: { currency: string }) {
   const foreign = (currency || "USD").toUpperCase() !== "KRW";
   const holder = (foreign ? company?.fx_bank_holder : company?.bank_holder) || company?.company_name_en || "";
   const bank = (foreign ? company?.fx_bank_name : company?.bank_name) || "";
+  // 은행 주소는 해외 송금용이라 외화계좌에만 있다 — 문서엔 은행명 다음 줄에 찍힌다.
+  const bankAddress = foreign ? company?.fx_bank_address || "" : "";
   const account = (foreign ? company?.fx_bank_account : company?.bank_account) || "";
   return (
     <>
       <div className="sub-h doc-sec-h">Bank information</div>
       <div className="form-grid doc-form-grid">
         <ReadonlyField label="Remittee's name" value={holder} />
-        <ReadonlyField label="Bank Name & Address" value={bank} />
+        <ReadonlyField label="Bank Name" value={bank} />
         <ReadonlyField label="Swift Code" value={company?.swift || ""} />
         <ReadonlyField label="Remittee's Account No." value={account} />
+        {foreign ? (
+          <ReadonlyField label="Bank Address" value={bankAddress} wide />
+        ) : null}
       </div>
       <p className="hint-inline" style={{ marginTop: 6 }}>
         {foreign ? "Foreign-currency account" : "KRW account"} from Settings · Company — edit it there.

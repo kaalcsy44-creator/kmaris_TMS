@@ -3961,6 +3961,7 @@ class CompanyProfile(BaseModel):
     fx_bank_name: str | None = ""       # 외화계좌 은행명
     fx_bank_account: str | None = ""    # 외화계좌 번호
     fx_bank_holder: str | None = ""     # 외화계좌 예금주
+    fx_bank_address: str | None = ""    # 외화계좌 은행 주소(해외 송금용 — PI "Bank Name & Address")
     swift: str | None = ""              # 외화계좌 SWIFT
     tagline: str | None = ""
     email_signature: str | None = ""   # 이메일 본문 하단 공용 서명(비우면 기본 서명)

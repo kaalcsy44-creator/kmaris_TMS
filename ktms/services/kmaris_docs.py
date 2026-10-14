@@ -1205,11 +1205,21 @@ def _invoice_item_table(form: _DocForm, data: Dict[str, Any], items: List[Dict[s
     return table
 
 
+def bank_name_address(company: Dict[str, Any], foreign: bool) -> str:
+    """BANK INFORMATION 의 'Bank Name & Address' 칸 — 은행명 다음 줄에 은행 주소.
+    주소는 해외 송금용이라 외화계좌에만 있다(Settings · Company · FX Account)."""
+    if not foreign:
+        return company.get("bank_name") or ""
+    name = (company.get("fx_bank_name") or "").strip()
+    addr = (company.get("fx_bank_address") or "").strip()
+    return "\n".join(x for x in (name, addr) if x)
+
+
 def _bank_block(form: _DocForm, company: Dict[str, Any], currency: str, quad: List[float]) -> List[Any]:
     """BANK INFORMATION — 통화에 맞는 계좌(외화/원화)를 Settings 에서 가져온다."""
     foreign = currency != "KRW"
     holder = (company.get("fx_bank_holder") if foreign else company.get("bank_holder")) or company.get("company_name_en", "")
-    bank = (company.get("fx_bank_name") if foreign else company.get("bank_name")) or ""
+    bank = bank_name_address(company, foreign)
     account = (company.get("fx_bank_account") if foreign else company.get("bank_account")) or ""
     rows = [("Remittee's name", holder, "Bank Name & Address", bank),
             ("Swift Code", company.get("swift", ""), "Remittee's Account No.", account)]

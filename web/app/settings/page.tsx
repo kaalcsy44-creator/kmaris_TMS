@@ -159,6 +159,7 @@ const emptyCompany: CompanyProfile = {
   fx_bank_name: "",
   fx_bank_account: "",
   fx_bank_holder: "",
+  fx_bank_address: "",
   swift: "",
   tagline: "",
   email_signature: "",
@@ -286,6 +287,7 @@ const EN_FIELDS: CompanyField[] = [
   { key: "fx_bank_name", label: "Bank", groupBefore: "FX Account" },
   { key: "fx_bank_account", label: "Account No." },
   { key: "fx_bank_holder", label: "Holder" },
+  { key: "fx_bank_address", label: "Bank address" },
   { key: "swift", label: "SWIFT" },
 ];
 
