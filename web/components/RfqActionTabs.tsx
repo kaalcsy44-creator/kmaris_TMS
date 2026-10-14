@@ -201,15 +201,18 @@ function defaultValidUntil(sentAt: string): string {
   return addDaysToDate(sentAt, DEFAULT_VALID_DAYS);
 }
 
-/** Valid until 입력 — [N]일 + 만료일 두 칸이 서로를 갱신한다. */
+/** Valid until 입력 — [N]일 + 만료일 두 칸이 서로를 갱신한다.
+ *  기준일은 우리 견적이면 발송일(Sent at), 받은 공급사 견적이면 수신일(Quote received at). */
 function ValidUntilField({
   sentAt,
   value,
   onChange,
+  unitLabel = "days from Sent at",
 }: {
-  sentAt: string;          // 기준일(Sent at). 날짜부만 사용한다.
+  sentAt: string;          // 기준일. 날짜부만 사용한다.
   value: string;           // "YYYY-MM-DD" (빈 값 허용 = 기한 없음)
   onChange: (v: string) => void;
+  unitLabel?: string;
 }) {
   const base = dateOnly(sentAt);
   const [days, setDays] = useState<string>(() => {
@@ -256,9 +259,9 @@ function ValidUntilField({
           min={0}
           value={days}
           onChange={(e) => onDays(e.target.value)}
-          aria-label="Valid for (days from Sent at)"
+          aria-label={`Valid for (${unitLabel})`}
         />
-        <span className="vu-unit">days from Sent at</span>
+        <span className="vu-unit">{unitLabel}</span>
         <input
           className="vu-date"
           type="date"
@@ -2300,10 +2303,12 @@ function VendorQuoteDetailModal({
               <label>Quote received at</label>
               <input type="datetime-local" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} />
             </div>
-            <div className="form-field">
-              <label>Valid until</label>
-              <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
-            </div>
+            <ValidUntilField
+              sentAt={receivedAt}
+              value={validUntil}
+              onChange={setValidUntil}
+              unitLabel="days from received"
+            />
             <div className="form-field">
               <label>Currency</label>
               <CurrencyToggle value={currency} onChange={setCurrency} />
@@ -4136,10 +4141,12 @@ function VendorQuoteAction({
                 onChange={(e) => setReceivedAt(e.target.value)}
               />
             </div>
-            <div className="form-field">
-              <label>Valid until</label>
-              <input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
-            </div>
+            <ValidUntilField
+              sentAt={receivedAt}
+              value={validUntil}
+              onChange={setValidUntil}
+              unitLabel="days from received"
+            />
             <div className="form-field">
               <label>Currency</label>
               <CurrencyToggle value={currency} onChange={setCurrency} />
