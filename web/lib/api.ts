@@ -1320,6 +1320,8 @@ export function deleteSettingsMaker(id: number): Promise<{ ok: boolean }> {
 export type PrintBook = {
   title: string;
   subtitle?: string;
+  /** 문서 머리 제목 — 비우면 "<TITLE> LIST". 목록이 아닌 표(견적 비교표)가 쓴다. */
+  heading?: string;
   columns: { label: string; width?: number; align?: "left" | "center" | "right" }[];
   rows: string[][];
 };

@@ -1707,6 +1707,8 @@ class PartnerBookPrint(BaseModel):
     목록이 된다. 눈에 보이는 것이 곧 종이가 되게 한다."""
     title: str = "List"
     subtitle: str = ""
+    # 문서 머리 제목 — 비우면 "<TITLE> LIST". 목록이 아닌 표(견적 비교표 등)가 쓴다.
+    heading: str = ""
     columns: list[PartnerBookCol] = []
     rows: list[list[str]] = []
 
@@ -1715,6 +1717,7 @@ def _partner_book(body: PartnerBookPrint) -> dict:
     return {
         "title": body.title,
         "subtitle": body.subtitle,
+        "heading": body.heading,
         "columns": [c.model_dump() for c in body.columns],
         "rows": body.rows,
     }
@@ -1726,7 +1729,7 @@ def partners_print_xlsx(body: PartnerBookPrint):
     from services.partner_book import make_book_xlsx, filename
     return _doc_file_response(
         make_book_xlsx(_partner_book(body)),
-        filename(body.title, "xlsx"),
+        filename(body.title, "xlsx", body.heading),
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
@@ -1737,7 +1740,7 @@ def partners_print_pdf(body: PartnerBookPrint):
     from services.partner_book import make_book_pdf, filename
     return _doc_file_response(
         make_book_pdf(_partner_book(body)),
-        filename(body.title, "pdf"),
+        filename(body.title, "pdf", body.heading),
         "application/pdf",
     )
 

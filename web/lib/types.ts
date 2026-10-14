@@ -786,6 +786,8 @@ export type BoardVendor = {
 
 export type LineBoard = {
   rfq_id: number;
+  /** 조회(GET)에만 실린다 — 비교표 인쇄물 머리. 채택 저장 응답엔 없다. */
+  meta?: { project_no: string; project_title: string; customer: string; vessel: string };
   lines: BoardLine[];
   vendors: BoardVendor[];
   /** cells[lid][vrfq_id] — 비어 있으면 그 벤더에게 그 줄을 묻지 않았다는 뜻. */

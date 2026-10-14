@@ -34,10 +34,12 @@ function stamp(): string {
 export default function PrintListButton({
   build,
   small = false,
+  label = "🖨 Print",
 }: {
   build: () => PrintBook;
   /** 도구줄이 작은 단추로 채워진 자리(가격 이력 표)에서는 그 크기에 맞춘다. */
   small?: boolean;
+  label?: string;
 }) {
   const [book, setBook] = useState<PrintBook | null>(null);
   return (
@@ -48,7 +50,7 @@ export default function PrintListButton({
         title="Preview and download this list (Excel · PDF)"
         onClick={() => setBook(build())}
       >
-        🖨 Print
+        {label}
       </button>
       {book ? <PrintPreview book={book} onClose={() => setBook(null)} /> : null}
     </>
@@ -66,7 +68,7 @@ function PrintPreview({ book, onClose }: { book: PrintBook; onClose: () => void 
     try {
       const blob = kind === "xlsx" ? await printBookXlsx(book) : await printBookPdf(book);
       const stem = (book.title || "List").replace(/[^A-Za-z0-9 \-_]/g, "_").trim().replace(/\s+/g, "_");
-      saveBlob(blob, `${stem || "List"}_List_${stamp()}.${kind}`);
+      saveBlob(blob, book.heading ? `${stem || "Sheet"}_${stamp()}.${kind}` : `${stem || "List"}_List_${stamp()}.${kind}`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Download failed");
     } finally {
@@ -75,7 +77,7 @@ function PrintPreview({ book, onClose }: { book: PrintBook; onClose: () => void 
   }
 
   return (
-    <Modal title={`🖨 ${book.title} list`} onClose={onClose} maxWidth={1240}>
+    <Modal title={`🖨 ${book.heading || `${book.title} list`}`} onClose={onClose} maxWidth={1240}>
       <div className="plist">
         <div className="plist-bar">
           <span className="plist-sub">
@@ -92,7 +94,7 @@ function PrintPreview({ book, onClose }: { book: PrintBook; onClose: () => void 
 
         <div className="plist-page">
           <div className="plist-head">
-            <b>{book.title.toUpperCase()} LIST</b>
+            <b>{(book.heading || `${book.title} LIST`).toUpperCase()}</b>
             <span>{new Date().toISOString().slice(0, 10)}</span>
           </div>
           <div className="table-wrap plist-wrap">
@@ -110,7 +112,7 @@ function PrintPreview({ book, onClose }: { book: PrintBook; onClose: () => void 
                 {shown.map((r, ri) => (
                   <tr key={ri}>
                     {book.columns.map((c, ci) => (
-                      <td key={ci} style={c.align === "right" ? { textAlign: "right" } : undefined}>
+                      <td key={ci} style={{ whiteSpace: "pre-line", ...(c.align === "right" ? { textAlign: "right" } : {}) }}>
                         {r[ci] || <span className="dash">—</span>}
                       </td>
                     ))}

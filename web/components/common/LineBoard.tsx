@@ -17,9 +17,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchLineBoard, saveLineAwards } from "@/lib/api";
+import { fetchFxRate, fetchLineBoard, saveLineAwards, type PrintBook } from "@/lib/api";
 import type { BoardLine, LineBoard as LineBoardData, LineCell } from "@/lib/types";
 import VendorName from "@/components/common/VendorName";
+import PrintListButton from "@/components/common/PrintListModal";
 
 export type LineBoardMode = "coverage" | "award";
 
@@ -39,6 +40,24 @@ const CELL_TITLE: Record<LineCell["state"], string> = {
   omitted: "Quote received, but this line was left out",
   declined: "Declined to quote",
 };
+
+/** 비교 통화 선택지 — 견적에 실제로 나온 통화가 여기에 없으면 목록 끝에 붙는다. */
+const CMP_CHOICES = ["USD", "KRW", "EUR", "JPY", "CNY", "SGD", "GBP"];
+const CMP_KEY = "lb-cmp-cur";
+/** 소수 없이 읽는 통화 — 환산값을 원 단위까지만 보인다. */
+const WHOLE = new Set(["KRW", "JPY"]);
+
+function today(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** 환산값 — 통화에 맞는 자리로 반올림해 보인다. */
+function cmpMoney(v: number, cur: string): string {
+  const r = WHOLE.has(cur) ? Math.round(v) : Math.round(v * 100) / 100;
+  return money(r, cur);
+}
 
 function money(v: number | null | undefined, cur?: string): string {
   if (v == null) return "—";
@@ -75,6 +94,19 @@ export default function LineBoard({
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  // 비교 통화 — 빈 값이면 받은 통화 그대로만. 견적 통화는 언제나 칸의 주 표시로 남고,
+  // 고르면 그 아래에 환산값이 붙는다(오늘자 매매기준율, KRW 를 거쳐 교차 환산).
+  const [cmpCur, setCmpCur] = useState("");
+  useEffect(() => {
+    try { setCmpCur(localStorage.getItem(CMP_KEY) || ""); } catch { /* 저장소 없음 */ }
+  }, []);
+  const chooseCmp = (c: string) => {
+    setCmpCur(c);
+    try { if (c) localStorage.setItem(CMP_KEY, c); else localStorage.removeItem(CMP_KEY); } catch { /* 무시 */ }
+  };
+  // 통화별 1단위 = ? KRW. null = 고시를 못 받아 환산 불가(폴백 고정환율은 USD 전용이라 쓰지 않는다).
+  const [rates, setRates] = useState<Record<string, number | null>>({ KRW: 1 });
+  const [rateDate, setRateDate] = useState("");
 
   const load = useCallback(() => {
     if (!rfqId) return;
@@ -108,7 +140,7 @@ export default function LineBoard({
     setMsg(null);
     try {
       const d = await saveLineAwards(rfqId, [{ lid, vendor_quote_id: vendorQuoteId }]);
-      setData(d);
+      setData((prev) => ({ ...d, meta: d.meta ?? prev?.meta }));
       setMsg(vendorQuoteId ? `${lid} awarded.` : `${lid} cleared.`);
       onChanged?.();
     } catch (e) {
@@ -129,7 +161,7 @@ export default function LineBoard({
     setMsg(null);
     try {
       const d = await saveLineAwards(rfqId, todo);
-      setData(d);
+      setData((prev) => ({ ...d, meta: d.meta ?? prev?.meta }));
       setMsg(`${todo.length} line(s) awarded to the lowest quote. Change any of them below.`);
       onChanged?.();
     } catch (e) {
@@ -153,6 +185,169 @@ export default function LineBoard({
     return [...by.entries()];
   }, [lines]);
 
+  // 이 보드에 나온 통화들 — 비교 통화 목록과 환율 조회 대상.
+  const quoteCurs = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of Object.values(cells))
+      for (const c of Object.values(row))
+        if (c.state === "quoted") set.add((c.currency || "USD").toUpperCase());
+    for (const l of lines) if (l.award) set.add((l.award.currency || "USD").toUpperCase());
+    return [...set].sort();
+  }, [cells, lines]);
+  const cmpChoices = useMemo(
+    () => [...CMP_CHOICES, ...quoteCurs.filter((c) => !CMP_CHOICES.includes(c))],
+    [quoteCurs]
+  );
+  const neededCurs = useMemo(
+    () => (cmpCur ? [...new Set([cmpCur, ...quoteCurs])].filter((c) => c !== "KRW") : []),
+    [cmpCur, quoteCurs]
+  );
+  useEffect(() => {
+    const date = today();
+    for (const c of neededCurs) {
+      if (c in rates) continue;
+      fetchFxRate(date, c)
+        .then((r) => {
+          // 고시를 못 받으면 서버가 USD 고정환율로 폴백한다 — USD 가 아니면 그 값은 쓸 수 없다.
+          const ok = (r.source === "exim" || c === "USD") && r.rate > 0;
+          setRates((prev) => ({ ...prev, [c]: ok ? r.rate / (r.unit || 1) : null }));
+          if (r.date_used) setRateDate(r.date_used);
+        })
+        .catch(() => setRates((prev) => ({ ...prev, [c]: null })));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [neededCurs]);
+
+  /** v(from 통화) → 비교 통화. 환율이 없으면 null. */
+  const conv = useCallback(
+    (v: number | null | undefined, from?: string): number | null => {
+      if (v == null || !cmpCur) return null;
+      const f = (from || "USD").toUpperCase();
+      if (f === cmpCur) return Number(v);
+      const a = rates[f], b = rates[cmpCur];
+      if (!a || !b) return null;
+      return (Number(v) * a) / b;
+    },
+    [cmpCur, rates]
+  );
+  /** 환산 표시 한 줄 — 같은 통화거나 환산할 수 없으면 빈 문자열. */
+  const cmpText = useCallback(
+    (v: number | null | undefined, from?: string): string => {
+      if (!cmpCur || v == null || (from || "USD").toUpperCase() === cmpCur) return "";
+      const x = conv(v, from);
+      return x == null ? "rate n/a" : `≈ ${cmpMoney(x, cmpCur)}`;
+    },
+    [cmpCur, conv]
+  );
+
+  // 비교 통화로 본 줄별 최저가(통화가 섞여 서버가 최저가를 못 고른 줄도 여기선 고른다).
+  // 값이 온 칸 중 하나라도 환산이 안 되면 그 줄은 고르지 않는다.
+  const cmpBest = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!cmpCur) return m;
+    for (const l of lines) {
+      let best: number | null = null;
+      let bestV: number | null = null;
+      let ok = true;
+      for (const v of vendors) {
+        const c = cells[l.lid]?.[String(v.vrfq_id)];
+        if (c?.state !== "quoted" || c.unit_cost == null) continue;
+        const x = conv(c.unit_cost, c.currency);
+        if (x == null) { ok = false; break; }
+        if (bestV == null || x < bestV) { bestV = x; best = v.vrfq_id; }
+      }
+      if (ok && best != null) m.set(l.lid, best);
+    }
+    return m;
+  }, [cmpCur, lines, vendors, cells, conv]);
+  const isBestCell = (l: BoardLine, vrfqId: number) =>
+    cmpCur ? cmpBest.get(l.lid) === vrfqId : !!l.best && l.best.vrfq_id === vrfqId;
+
+  const cmpTotal = useMemo(() => {
+    if (!cmpCur || !awardTotals.length) return null;
+    let sum = 0;
+    for (const [cur, v] of awardTotals) {
+      const x = conv(v, cur);
+      if (x == null) return null;
+      sum += x;
+    }
+    return sum;
+  }, [cmpCur, awardTotals, conv]);
+
+  const rateNote = cmpCur
+    ? [...new Set([...quoteCurs, cmpCur])]
+        .filter((c) => c !== "KRW")
+        .map((c) =>
+          rates[c] === undefined ? `1 ${c} = …` : rates[c] == null ? `1 ${c}: rate n/a` :
+          `1 ${c} = ${rates[c]!.toLocaleString(undefined, { maximumFractionDigits: 2 })} KRW`)
+        .join(" · ")
+    : "";
+
+  function buildPrint(): PrintBook {
+    const meta = data?.meta;
+    const cellText = (l: BoardLine, vrfqId: number): string => {
+      const c = cells[l.lid]?.[String(vrfqId)];
+      if (!c) return "";
+      if (c.state === "declined") return "✕ declined";
+      if (c.state === "omitted") return "– not quoted";
+      if (c.state === "no_price") return "? no price";
+      if (c.state === "sent") return "• waiting";
+      const marks = [
+        l.award && c.vendor_quote_id && l.award.vendor_quote_id === c.vendor_quote_id ? "✔" : "",
+        isBestCell(l, vrfqId) ? "★" : "",
+      ].filter(Boolean).join(" ");
+      return [
+        `${marks ? marks + " " : ""}${money(c.unit_cost, c.currency)}`,
+        cmpText(c.unit_cost, c.currency),
+        c.lead_time ? `LT ${c.lead_time}` : "",
+      ].filter(Boolean).join("\n");
+    };
+    const lastLabel = mode === "award" ? "Buying from" : "Status";
+    const rows: string[][] = lines.map((l) => [
+      String(l.no),
+      l.part_no || "",
+      l.description || "",
+      `${Number(l.qty || 1)}${l.unit ? ` ${l.unit}` : ""}`,
+      ...vendors.map((v) => cellText(l, v.vrfq_id)),
+      l.award
+        ? [l.award.vendor, money(l.award.unit_cost, l.award.currency), cmpText(l.award.unit_cost, l.award.currency)]
+            .filter(Boolean).join("\n")
+        : STATE_LABEL[l.state],
+    ]);
+    if (mode === "award" && awardTotals.length) {
+      rows.push([
+        "", "", "Awarded purchase total", "",
+        ...vendors.map(() => ""),
+        [
+          ...awardTotals.map(([cur, v]) => money(v, cur)),
+          cmpTotal != null && (awardTotals.length > 1 || awardTotals[0][0] !== cmpCur) ? `≈ ${cmpMoney(cmpTotal, cmpCur)}` : "",
+        ].filter(Boolean).join("\n"),
+      ]);
+    }
+    const head = [meta?.project_no, meta?.project_title, meta?.customer && meta.customer !== "—" ? meta.customer : "", meta?.vessel]
+      .filter(Boolean).join(" · ");
+    const legend = [
+      cmpCur ? `Compared in ${cmpCur} (base rate${rateDate ? ` ${rateDate}` : ""}: ${rateNote || "same currency"})` : "Quoted currencies as received",
+      "★ lowest" + (cmpCur ? ` in ${cmpCur}` : ""),
+      mode === "award" ? "✔ awarded" : "",
+      "LT = lead time",
+    ].filter(Boolean).join(" · ");
+    return {
+      title: `Quote Comparison ${meta?.project_no || ""}`.trim(),
+      heading: "Quote Comparison",
+      subtitle: [head, legend].filter(Boolean).join(" — "),
+      columns: [
+        { label: "#", width: 3, align: "center" },
+        { label: "Part No.", width: 9 },
+        { label: "Description", width: 15 },
+        { label: "Qty", width: 5, align: "right" },
+        ...vendors.map((v) => ({ label: `${v.vendor}\n${v.kmaris_rfq_no}`, width: 10, align: "right" as const })),
+        { label: lastLabel, width: 11 },
+      ],
+      rows,
+    };
+  }
+
   if (err && !data) return <div className="state error">API error: {err}</div>;
   if (!data) return <div className="state">Loading the sourcing board…</div>;
   if (!lines.length)
@@ -174,6 +369,16 @@ export default function LineBoard({
           <span className="lb-total">of {data.lines_total} lines</span>
         </div>
         <div className="lb-actions">
+          <label className="lb-cmp" title="Show every quote converted to one currency as well — the quoted currency stays as it is">
+            Compare in
+            <select value={cmpCur} onChange={(e) => chooseCmp(e.target.value)}>
+              <option value="">— quoted ccy only —</option>
+              {cmpChoices.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </label>
+          <PrintListButton small label="🖨 Preview / Print" build={buildPrint} />
           {mode === "coverage" && onSendSelected ? (
             <>
               {s.not_sourced ? (
@@ -201,6 +406,12 @@ export default function LineBoard({
         </div>
       </div>
 
+      {cmpCur ? (
+        <div className="lb-cmp-note">
+          Converted to <b>{cmpCur}</b> at the base rate{rateDate ? ` of ${rateDate}` : ""} — {rateNote || "same currency"}.
+          {" "}★ = lowest in {cmpCur}.
+        </div>
+      ) : null}
       {unnamed ? (
         <div className="lb-note">
           {unnamed} line(s) from before line IDs existed. They read fine here, but to award
@@ -256,7 +467,8 @@ export default function LineBoard({
                     <Cell
                       key={v.vrfq_id}
                       cell={c}
-                      isBest={!!c && !!l.best && l.best.vrfq_id === v.vrfq_id}
+                      isBest={!!c && isBestCell(l, v.vrfq_id)}
+                      cmp={c?.state === "quoted" ? cmpText(c.unit_cost, c.currency) : ""}
                       isAward={!!l.award && !!c?.vendor_quote_id && l.award.vendor_quote_id === c.vendor_quote_id}
                       canAward={mode === "award" && l.named && !busy && c?.state === "quoted"}
                       onAward={() => {
@@ -272,6 +484,9 @@ export default function LineBoard({
                     <span className="lb-award">
                       <VendorName name={l.award.vendor} />
                       <b>{money(l.award.unit_cost, l.award.currency)}</b>
+                      {cmpText(l.award.unit_cost, l.award.currency) ? (
+                        <span className="lb-cmpv">{cmpText(l.award.unit_cost, l.award.currency)}</span>
+                      ) : null}
                     </span>
                   ) : (
                     <span className={"lb-chip s-" + l.state}>{STATE_LABEL[l.state]}</span>
@@ -295,6 +510,9 @@ export default function LineBoard({
                   {awardTotals.map(([cur, v]) => (
                     <div key={cur}>{money(v, cur)}</div>
                   ))}
+                  {cmpTotal != null && (awardTotals.length > 1 || awardTotals[0][0] !== cmpCur) ? (
+                    <div className="lb-cmpv">≈ {cmpMoney(cmpTotal, cmpCur)}</div>
+                  ) : null}
                 </td>
               </tr>
             </tfoot>
@@ -320,8 +538,11 @@ function Cell({
   isAward,
   canAward,
   onAward,
+  cmp = "",
 }: {
   cell?: LineCell;
+  /** 비교 통화 환산 한 줄("≈ $134.28") — 받은 통화 값 아래에 작게. */
+  cmp?: string;
   isBest: boolean;
   isAward: boolean;
   canAward: boolean;
@@ -335,6 +556,7 @@ function Cell({
     cell.state === "quoted" ? (
       <>
         <b>{money(cell.unit_cost, cell.currency)}</b>
+        {cmp ? <span className="lb-cmpv">{cmp}</span> : null}
         {cell.lead_time ? <span className="lb-lt">{cell.lead_time}</span> : null}
       </>
     ) : cell.state === "declined" ? (

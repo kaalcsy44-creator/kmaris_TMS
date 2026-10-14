@@ -1308,7 +1308,12 @@ def line_board(rfq_id: int):
         rfq = s.query(RFQ).filter_by(id=rfq_id).first()
         if not rfq:
             raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
-        return _line_board(s, rfq)
+        board = _line_board(s, rfq)
+        # 비교표 인쇄물 머리(프로젝트 번호·제목·고객·선박) — 채택 저장 응답엔 싣지 않는다
+        # (Project No. 계산이 무거워 줄마다 누르는 저장에 얹을 일이 아니다).
+        meta = _base_meta(s, rfq)
+        board["meta"] = {k: meta.get(k, "") for k in ("project_no", "project_title", "customer", "vessel")}
+        return board
     finally:
         s.close()
 

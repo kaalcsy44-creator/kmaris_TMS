@@ -18257,6 +18257,18 @@ select.compose-tpl-version {
   color: #7a5a17;
 }
 .lb-msg { flex: none; margin: 8px 12px 0; }
+/* 비교 통화 — 받은 통화가 주 표시, 환산값은 그 아래 한 톤 낮춰. */
+.lb-cmp { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.lb-cmp select { height: 28px; padding: 0 6px; font-size: 12px; }
+.lb-cmp-note {
+  flex: none;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  color: #52607a;
+  background: #f5f8fc;
+  border-bottom: 1px solid #e3eaf3;
+}
+.lb-cmpv { display: block; font-size: 10.5px; color: #2f6db5; font-weight: 500; }
 
 /* 가로(벤더 열이 늘어난다)·세로(품목 줄이 많다) 양쪽으로 구른다. 머리글은 붙박이라
    열일곱 줄을 훑는 동안에도 어느 벤더 칸인지 놓치지 않는다. */

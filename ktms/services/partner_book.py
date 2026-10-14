@@ -64,14 +64,20 @@ def normalize(book: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "title": _cell(book.get("title")) or "List",
         "subtitle": _cell(book.get("subtitle")),
+        # 머리 제목 — 비우면 "<TITLE> LIST". 목록이 아닌 표(견적 비교표)는 제 이름을 쓴다.
+        "heading": _cell(book.get("heading")),
         "columns": columns,
         "rows": rows,
     }
 
 
-def filename(title: str, ext: str) -> str:
-    stem = "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in (title or "List"))
+def filename(title: str, ext: str, heading: str = "") -> str:
     stamp = date.today().strftime("%Y%m%d")
+    if heading:
+        # 목록이 아닌 표 — "<제목>_<날짜>" (예: Quote_Comparison_P-057_20261014).
+        stem = "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in (title or heading))
+        return "{}_{}.{}".format(stem.strip().replace(" ", "_") or "Sheet", stamp, ext)
+    stem = "".join(ch if ch.isalnum() or ch in " -_" else "_" for ch in (title or "List"))
     return "{}_List_{}.{}".format(stem.strip().replace(" ", "_") or "List", stamp, ext)
 
 
@@ -90,7 +96,7 @@ def make_book_xlsx(book: Dict[str, Any]) -> bytes:
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     ws.merge_cells("A1:%s1" % last)
-    ws["A1"] = b["title"]
+    ws["A1"] = b["heading"] or b["title"]
     ws["A1"].font = Font(name="Noto Sans KR", bold=True, size=16, color="0B1D3A")
     ws["A1"].alignment = Alignment(horizontal="left", vertical="center")
     ws.row_dimensions[1].height = 26
@@ -188,14 +194,14 @@ def make_book_pdf(book: Dict[str, Any]) -> bytes:
         buf, pagesize=page,
         leftMargin=PAGE_LEFT, rightMargin=page[0] - PAGE_RIGHT,
         topMargin=12 * mm, bottomMargin=16 * mm,
-        title="%s List" % b["title"],
+        title=b["heading"] or "%s List" % b["title"],
     )
     frame = Frame(doc.leftMargin, doc.bottomMargin, BODY_W,
                   page[1] - doc.topMargin - doc.bottomMargin, id="body",
                   leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
     doc.addPageTemplates([PageTemplate(id="book", frames=[frame], onPage=_footer)])
 
-    story: List[Any] = list(_letterhead(_company(), "%s LIST" % b["title"].upper(), s, width=BODY_W))
+    story: List[Any] = list(_letterhead(_company(), (b["heading"] or "%s LIST" % b["title"]).upper(), s, width=BODY_W))
     caption = " · ".join(x for x in (b["subtitle"], "%d rows" % len(rows),
                                      "as of " + date.today().strftime("%Y-%m-%d")) if x)
     story.append(_p(caption, s["small"]))
