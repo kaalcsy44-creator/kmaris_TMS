@@ -18216,7 +18216,7 @@ select.compose-tpl-version {
      남는다). 그래서 눌리지 않게 못박고, 대신 제 높이를 스스로 제한한 뒤 안에서 구른다 —
      열일곱 줄짜리 표가 아래 발신 폼을 화면 밖으로 밀어내서도 안 되기 때문이다. */
   flex: none;
-  max-height: min(46vh, 430px);
+  max-height: min(69vh, 645px);   /* 1.5배(46vh·430px 에서) — 비교할 줄이 더 보이게 */
   display: flex;
   flex-direction: column;
 }
