@@ -150,11 +150,10 @@ export default function LineBoard({
     }
   }
 
-  /** 값이 온 줄마다 최저가를 한 번에 고른다. 이미 고른 줄은 건드리지 않는다. */
+  /** 값이 온 줄마다 최저가를 한 번에 고른다. 이미 고른 줄은 건드리지 않는다.
+   *  비교 통화를 골랐으면 환산한 값으로 고른다 — 통화가 섞인 줄도 빠지지 않게. */
   async function awardAllBest() {
-    const todo = lines
-      .filter((l) => l.named && !l.award && l.best?.vendor_quote_id)
-      .map((l) => ({ lid: l.lid, vendor_quote_id: l.best!.vendor_quote_id! }));
+    const todo = bestTodo;
     if (!todo.length) return;
     setBusy(true);
     setErr(null);
@@ -171,10 +170,6 @@ export default function LineBoard({
     }
   }
 
-  const bestCount = useMemo(
-    () => lines.filter((l) => l.named && !l.award && l.best?.vendor_quote_id).length,
-    [lines]
-  );
   const awardTotals = useMemo(() => {
     const by = new Map<string, number>();
     for (const l of lines) {
@@ -260,6 +255,22 @@ export default function LineBoard({
     }
     return m;
   }, [cmpCur, lines, vendors, cells, conv]);
+  // "Take lowest" 대상 — 이름 있는 줄 중 아직 안 고른 줄의 최저가 견적.
+  const bestTodo = useMemo(() => {
+    const out: { lid: string; vendor_quote_id: number }[] = [];
+    for (const l of lines) {
+      if (!l.named || l.award) continue;
+      if (cmpCur) {
+        const vr = cmpBest.get(l.lid);
+        const id = vr != null ? cells[l.lid]?.[String(vr)]?.vendor_quote_id : undefined;
+        if (id) out.push({ lid: l.lid, vendor_quote_id: id });
+      } else if (l.best?.vendor_quote_id) {
+        out.push({ lid: l.lid, vendor_quote_id: l.best.vendor_quote_id });
+      }
+    }
+    return out;
+  }, [lines, cells, cmpCur, cmpBest]);
+  const bestCount = bestTodo.length;
   const isBestCell = (l: BoardLine, vrfqId: number) =>
     cmpCur ? cmpBest.get(l.lid) === vrfqId : !!l.best && l.best.vrfq_id === vrfqId;
 

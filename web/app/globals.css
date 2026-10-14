@@ -18572,6 +18572,28 @@ select.compose-tpl-version {
 /* 품목표의 Source 칸 — 읽기만 하는 내부 표시(고객 문서에는 나가지 않는다). */
 .src-cell { white-space: nowrap; }
 .src-tag { font-size: 11.5px; }
+/* 같은 줄을 여러 곳이 견적했다 — Source 칸에서 상세(원가 고르기)로 들어가는 문. */
+.src-alt {
+  display: block; margin-top: 2px; padding: 0; border: 0; background: none;
+  font-size: 10.5px; color: var(--blue); cursor: pointer; text-decoration: underline dotted;
+}
+/* 4단계 줄 상세 — 이 품목에 들어온 공급사 견적들. 하나를 누르면 그 값이 원가가 된다. */
+.lq-pick { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.lq-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.lq-opt {
+  display: inline-flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: #fff; font-size: 12px; cursor: pointer; text-align: left;
+}
+.lq-opt:hover { border-color: var(--blue); }
+.lq-opt.low { background: #f3f8ff; }
+.lq-opt.on { border-color: #11824a; box-shadow: inset 0 0 0 1px #11824a; background: #effaf3; }
+.lq-v { font-weight: 600; }
+.lq-conv { color: #2f6db5; font-size: 11px; }
+.lq-lt { color: var(--muted); font-size: 11px; }
+.lq-low { color: #8a4b00; font-size: 11px; font-weight: 700; }
+.lq-on { color: #11824a; font-size: 11px; font-weight: 700; }
+.form-fieldset.vm-read .lq-opt { pointer-events: none; }
 
 /* Basic Info 한 줄에 필드가 셋일 때(벤더 견적 드롭다운이 출처 띠로 옮겨간 뒤). */
 .quote-meta-grid--3 { grid-template-columns: 1.2fr 1.2fr 1.4fr; }

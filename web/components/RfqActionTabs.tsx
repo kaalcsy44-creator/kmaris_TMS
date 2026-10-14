@@ -44,6 +44,8 @@ import {
   updateCustomerQuotation,
   deleteCustomerQuotation,
   fetchAwardedItems,
+  fetchLineBoard,
+  saveLineAwards,
 } from "@/lib/api";
 import type { LineOption } from "@/lib/api";
 import { confirmDiscard, useDirty, useEditHistory } from "./common/editHistory";
@@ -2829,20 +2831,22 @@ function CustomerQuoteDetailModal({
         setErr("No lines have been awarded yet — pick a vendor per line in stage 3 (⊞ Compare & award).");
         return;
       }
-      // 채택이 두 통화에 걸치면 원가 통화를 하나로 고를 수 없다. 억지로 하나를 고르면
-      // 나머지 줄의 마진이 조용히 틀어지므로, 먼저 사실을 말하고 멈춘다.
-      if (aw.currencies.length > 1) {
+      // 한 통화면 원가 통화를 그 통화로 맞춘다. 여러 통화에 걸치면 지금 원가 통화로
+      // 줄마다 환산해 싣는다 — 환율이 없는 통화가 끼면 마진이 틀어지므로 먼저 말하고 멈춘다.
+      const cur = aw.currencies.length === 1 ? aw.currencies[0] || costCurrency : costCurrency;
+      const noRate = aw.currencies.filter((c) => !canConvert(c, cur, fxAll));
+      if (noRate.length) {
         setErr(
-          `Awarded lines are quoted in ${aw.currencies.join(" and ")}. This quotation carries a single cost currency — award one currency, or build the quotation by hand.`
+          `No exchange rate from ${noRate.join(", ")} to ${cur} — set the cost currency to one of the awarded currencies, or enter the rate.`
         );
         return;
       }
-      const cur = aw.currencies[0] || costCurrency;
       setCostCurrency(cur);
       setItems(customerQuoteItemsFromAwards(aw.items, defaultMargin, cur, currency, roundDigits, fxAll));
       const vendors = aw.by_vendor.map((g) => g.vendor).filter(Boolean);
       setMsg(
-        `Loaded ${aw.items.length} awarded line(s) from ${vendors.length} vendor(s): ${vendors.join(" · ")}.`
+        `Loaded ${aw.items.length} awarded line(s) from ${vendors.length} vendor(s): ${vendors.join(" · ")}`
+        + (aw.currencies.length > 1 ? ` — ${aw.currencies.join(" · ")} converted to ${cur}.` : ".")
       );
       setErr(marginRangeError(defaultMargin));
     } catch (e) {
@@ -3032,6 +3036,7 @@ function CustomerQuoteDetailModal({
           />
           <div className="undo-root" data-undo-scope>
           <CustomerQuoteItemEditor
+            rfqId={d?.rfq_id || 0}
             items={items}
             onChange={setItems}
             currency={currency}
@@ -4762,7 +4767,10 @@ function customerQuoteItemsFromAwards(
   rate: Fx
 ): CustomerQuoteItem[] {
   return rows.map((it) => {
-    const cost = Number(it.cost_price ?? 0);
+    // 줄마다 매입처 통화가 다를 수 있다(A 는 KRW, B 는 USD) — 문서의 원가 통화로 환산해
+    // 싣고, 받은 값(src_cost·src_currency)은 따로 안고 가 환율이 바뀌면 다시 환산된다.
+    const srcCost = Number(it.cost_price ?? 0);
+    const cost = convertCurrency(srcCost, it.currency || costCurrency, costCurrency, rate);
     const qty = Number(it.qty || 1);
     const unit = calcUnitPrice(cost, defaultMargin, costCurrency, saleCurrency, roundDigits, rate);
     return {
@@ -4787,7 +4795,7 @@ function customerQuoteItemsFromAwards(
       src_vendor: it.vendor || "",
       src_vq_no: it.vendor_quote_no || "",
       src_currency: (it.currency || costCurrency).toUpperCase(),
-      src_cost: cost,
+      src_cost: srcCost,
     };
   });
 }
@@ -5029,20 +5037,22 @@ function CustomerQuoteAction({
         setErr("No lines have been awarded yet — pick a vendor per line in stage 3 (⊞ Compare & award).");
         return;
       }
-      // 채택이 두 통화에 걸치면 원가 통화를 하나로 고를 수 없다. 억지로 하나를 고르면
-      // 나머지 줄의 마진이 조용히 틀어지므로, 먼저 사실을 말하고 멈춘다.
-      if (aw.currencies.length > 1) {
+      // 한 통화면 원가 통화를 그 통화로 맞춘다. 여러 통화에 걸치면 지금 원가 통화로
+      // 줄마다 환산해 싣는다 — 환율이 없는 통화가 끼면 마진이 틀어지므로 먼저 말하고 멈춘다.
+      const cur = aw.currencies.length === 1 ? aw.currencies[0] || costCurrency : costCurrency;
+      const noRate = aw.currencies.filter((c) => !canConvert(c, cur, fxAll));
+      if (noRate.length) {
         setErr(
-          `Awarded lines are quoted in ${aw.currencies.join(" and ")}. This quotation carries a single cost currency — award one currency, or build the quotation by hand.`
+          `No exchange rate from ${noRate.join(", ")} to ${cur} — set the cost currency to one of the awarded currencies, or enter the rate.`
         );
         return;
       }
-      const cur = aw.currencies[0] || costCurrency;
       setCostCurrency(cur);
       setItems(customerQuoteItemsFromAwards(aw.items, defaultMargin, cur, currency, roundDigits, fxAll));
       const vendors = aw.by_vendor.map((g) => g.vendor).filter(Boolean);
       setMsg(
-        `Loaded ${aw.items.length} awarded line(s) from ${vendors.length} vendor(s): ${vendors.join(" · ")}.`
+        `Loaded ${aw.items.length} awarded line(s) from ${vendors.length} vendor(s): ${vendors.join(" · ")}`
+        + (aw.currencies.length > 1 ? ` — ${aw.currencies.join(" · ")} converted to ${cur}.` : ".")
       );
       setErr(marginRangeError(defaultMargin));
     } catch (e) {
@@ -5269,6 +5279,7 @@ function CustomerQuoteAction({
         onOpen={() => setMergeOpen(true)}
       />
       <CustomerQuoteItemEditor
+        rfqId={rfqId}
         items={items}
         onChange={setItems}
         currency={currency}
@@ -5388,7 +5399,18 @@ function CustomerQuoteAction({
   );
 }
 
+/** 한 품목 줄에 들어온 공급사 견적 하나 — 4단계 줄 상세에서 원가를 바꿔 고르는 후보. */
+type LineQuoteOption = {
+  vendor: string;
+  vendor_quote_id: number;
+  vendor_quote_no: string;
+  unit_cost: number;
+  currency: string;
+  lead_time: string;
+};
+
 function CustomerQuoteItemEditor({
+  rfqId = 0,
   items,
   onChange,
   currency = "USD",
@@ -5414,8 +5436,42 @@ function CustomerQuoteItemEditor({
   fx?: Fx;
   // 품목표 헤더의 "+ Add" 옆 보조 액션(예: "Load Vendor quote").
   headerActions?: React.ReactNode;
+  /** 딜 — 줄마다 받은 공급사 견적을 불러와 원가를 바꿔 고르는 데 쓴다(0 이면 기능 숨김). */
+  rfqId?: number;
 }) {
   const conv: Fx = fx ?? rate;
+  // 줄(lid)별로 받은 견적들 — 3단계 비교표와 같은 원천(line-board). 값이 0 인 칸은
+  // 견적을 못 낸 것이라 후보에 넣지 않는다.
+  const [lineQuotes, setLineQuotes] = useState<Record<string, LineQuoteOption[]>>({});
+  const [pickMsg, setPickMsg] = useState<string | null>(null);
+  useEffect(() => {
+    if (!rfqId) return;
+    let alive = true;
+    fetchLineBoard(rfqId)
+      .then((b) => {
+        if (!alive) return;
+        const byVrfq = new Map(b.vendors.map((v) => [String(v.vrfq_id), v.vendor]));
+        const out: Record<string, LineQuoteOption[]> = {};
+        for (const [lid, row] of Object.entries(b.cells)) {
+          const opts: LineQuoteOption[] = [];
+          for (const [vrfq, c] of Object.entries(row)) {
+            if (c.state !== "quoted" || c.unit_cost == null || !(Number(c.unit_cost) > 0) || !c.vendor_quote_id) continue;
+            opts.push({
+              vendor: byVrfq.get(vrfq) || "",
+              vendor_quote_id: c.vendor_quote_id,
+              vendor_quote_no: c.vendor_quote_no || "",
+              unit_cost: Number(c.unit_cost),
+              currency: (c.currency || "USD").toUpperCase(),
+              lead_time: c.lead_time || "",
+            });
+          }
+          if (opts.length) out[lid] = opts;
+        }
+        setLineQuotes(out);
+      })
+      .catch(() => { /* 비교 후보가 없을 뿐 — 편집은 그대로 된다 */ });
+    return () => { alive = false; };
+  }, [rfqId]);
   // 발행 자릿수 — 서버 print_decimals 와 같은 규칙(terms.decimals → 양수 round_digits → 0).
   const dec: number = decimals ?? Math.min(Math.max(roundDigits ?? 0, 0), 3);
   const roundRow = (it: CustomerQuoteItem, d: number): CustomerQuoteItem => {
@@ -5438,6 +5494,36 @@ function CustomerQuoteItemEditor({
       onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, dec]);
+  /** 줄 상세에서 다른 공급사 견적을 고른다 — 원가·출처·납기를 그 견적으로 바꾸고 그 줄의
+   *  마진으로 단가를 다시 잡는다. 3단계 채택에도 같은 선택을 저장해 발주(6단계)가 어긋나지 않게. */
+  function pickLineQuote(i: number, opt: LineQuoteOption) {
+    const it = items[i];
+    if (!it) return;
+    if (!canConvert(opt.currency, costCur, conv)) {
+      setPickMsg(`No exchange rate from ${opt.currency} to ${costCur} — enter the rate in Pricing first.`);
+      return;
+    }
+    const cost = convertCurrency(opt.unit_cost, opt.currency, costCur, conv);
+    const margin = Number(it.margin_pct ?? 0);
+    const unit = calcUnitPrice(cost, margin, costCurrency, currency, roundDigits, conv);
+    onChange(items.map((row, idx) => idx !== i ? row : {
+      ...row,
+      cost_price: cost,
+      unit_price: unit,
+      amount: unit * Number(row.qty || 1),
+      lead_time: opt.lead_time || row.lead_time || "",
+      src_vq_id: opt.vendor_quote_id,
+      src_vendor: opt.vendor,
+      src_vq_no: opt.vendor_quote_no,
+      src_currency: opt.currency,
+      src_cost: opt.unit_cost,
+    }));
+    setPickMsg(null);
+    if (rfqId && it.lid) {
+      saveLineAwards(rfqId, [{ lid: it.lid, vendor_quote_id: opt.vendor_quote_id }])
+        .catch((e) => setPickMsg(`Cost changed here, but the stage-3 award was not saved: ${e instanceof Error ? e.message : e}`));
+    }
+  }
   function patch(i: number, key: keyof CustomerQuoteItem, value: string) {
     onChange(
       items.map((it, idx) => {
@@ -5890,6 +5976,16 @@ function CustomerQuoteItemEditor({
                   ) : (
                     <span className="dash">—</span>
                   )}
+                  {(lineQuotes[it.lid || ""]?.length ?? 0) > 1 ? (
+                    <button
+                      type="button"
+                      className="src-alt"
+                      title="Compare the quotes for this line and pick the cost"
+                      onClick={() => { if (!isOpen(i)) toggleRow(i); }}
+                    >
+                      {lineQuotes[it.lid || ""].length} quotes ▾
+                    </button>
+                  ) : null}
                 </td>
               </tr>
               {/* 상세 서브행 — 주행에서 내린 부수 필드. 접혀 있으면 렌더하지 않는다.
@@ -5919,6 +6015,43 @@ function CustomerQuoteItemEditor({
                         />
                       </span>
                     </div>
+                    {lineQuotes[it.lid || ""]?.length ? (() => {
+                      const opts = lineQuotes[it.lid || ""];
+                      const inCost = opts.map((o) =>
+                        canConvert(o.currency, costCur, conv) ? convertCurrency(o.unit_cost, o.currency, costCur, conv) : null);
+                      const known = inCost.filter((v): v is number => v != null);
+                      const low = known.length ? Math.min(...known) : null;
+                      return (
+                        <div className="lq-pick">
+                          <span className="isr-l">4. Cost — quotes for this line</span>
+                          <div className="lq-opts">
+                            {opts.map((o, k) => {
+                              const on = it.src_vq_id === o.vendor_quote_id;
+                              const v = inCost[k];
+                              return (
+                                <button
+                                  key={o.vendor_quote_id}
+                                  type="button"
+                                  className={"lq-opt" + (on ? " on" : "") + (v != null && v === low ? " low" : "")}
+                                  onClick={() => pickLineQuote(i, o)}
+                                  title={on ? "This line's cost comes from this quote" : `Use ${o.vendor}'s price as the cost (margin ${Number(it.margin_pct ?? 0)}% kept)`}
+                                >
+                                  <span className="lq-v"><VendorName name={o.vendor} /></span>
+                                  <b>{amountInputValue(o.unit_cost)} {o.currency}</b>
+                                  {o.currency !== costCur ? (
+                                    <span className="lq-conv">{v == null ? "rate n/a" : `≈ ${amountInputValue(v)} ${costCur}`}</span>
+                                  ) : null}
+                                  {o.lead_time ? <span className="lq-lt">LT {o.lead_time}</span> : null}
+                                  {v != null && v === low && opts.length > 1 ? <span className="lq-low">★ lowest</span> : null}
+                                  {on ? <span className="lq-on">✔ in use</span> : null}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {pickMsg ? <div className="action-err">{pickMsg}</div> : null}
+                        </div>
+                      );
+                    })() : null}
                   </td>
                 </tr>
               ) : null}
