@@ -251,7 +251,7 @@ export default function LineBoard({
       let ok = true;
       for (const v of vendors) {
         const c = cells[l.lid]?.[String(v.vrfq_id)];
-        if (c?.state !== "quoted" || c.unit_cost == null) continue;
+        if (c?.state !== "quoted" || c.unit_cost == null || Number(c.unit_cost) <= 0) continue;
         const x = conv(c.unit_cost, c.currency);
         if (x == null) { ok = false; break; }
         if (bestV == null || x < bestV) { bestV = x; best = v.vrfq_id; }
@@ -290,7 +290,7 @@ export default function LineBoard({
       if (!c) return "";
       if (c.state === "declined") return "✕ declined";
       if (c.state === "omitted") return "– not quoted";
-      if (c.state === "no_price") return "? no price";
+      if (c.state === "no_price") return "no price";
       if (c.state === "sent") return "• waiting";
       const marks = [
         l.award && c.vendor_quote_id && l.award.vendor_quote_id === c.vendor_quote_id ? "✔" : "",

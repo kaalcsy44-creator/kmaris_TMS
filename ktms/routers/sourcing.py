@@ -1221,7 +1221,8 @@ def _line_board(s, rfq) -> dict:
             if got is not None:
                 q, it, cost = got
                 cells.setdefault(ln["lid"], {})[str(vr.id)] = {
-                    "state": "quoted" if cost is not None else "no_price",
+                    # 0원은 값이 아니다 — 견적을 못 냈다는 뜻이라 최저가·채택 후보에서 뺀다.
+                    "state": "quoted" if cost is not None and cost > 0 else "no_price",
                     "unit_cost": cost,
                     "currency": q.currency or "USD",
                     "lead_time": (it.get("lead_time") or "") if isinstance(it, dict) else "",
