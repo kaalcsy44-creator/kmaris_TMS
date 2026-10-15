@@ -91,6 +91,52 @@ function markEmptyFields(root: HTMLElement | null, on: boolean) {
   }
 }
 
+/** 읽기모드에서 입력칸 값을 진짜 텍스트로 비춰 둔다.
+ *  잠긴(disabled) 입력칸의 value 는 텍스트 노드가 아니라 마우스로 긁어 복사할 수 없다 —
+ *  그래서 칸 바로 뒤에 같은 값을 담은 span.vm-text 를 두고 칸은 CSS 로 숨긴다.
+ *  React 가 모르는 노드지만 React 노드를 옮기지 않으므로 재조정을 깨지 않는다.
+ *  행이 지워져 짝을 잃은 span 은 다음 훑기에서 치운다. */
+const MIRROR_SKIP = new Set(["checkbox", "radio", "file", "hidden", "button", "submit", "reset", "range", "color", "image"]);
+
+function mirrorText(el: Element): string {
+  if (el instanceof HTMLSelectElement) {
+    const text = (el.selectedOptions[0]?.textContent || "").trim();
+    return el.value.trim() === "" || text === "—" ? "" : text;
+  }
+  const v = (el as HTMLInputElement | HTMLTextAreaElement).value;
+  // datetime-local 의 원값은 "2026-09-09T20:17" — 화면에서 읽히는 모양으로.
+  return el instanceof HTMLInputElement && el.type === "datetime-local" ? v.replace("T", " ") : v;
+}
+
+function syncReadMirrors(root: HTMLElement | null, on: boolean) {
+  if (!root) return;
+  for (const s of Array.from(root.querySelectorAll<HTMLElement>("span.vm-text"))) {
+    const prev = s.previousElementSibling;
+    if (!on || !prev || !prev.hasAttribute("data-vm-mirror")) s.remove();
+  }
+  if (!on) {
+    for (const c of Array.from(root.querySelectorAll("[data-vm-mirror]"))) c.removeAttribute("data-vm-mirror");
+    return;
+  }
+  for (const c of Array.from(root.querySelectorAll("input, select, textarea"))) {
+    if (c instanceof HTMLInputElement && MIRROR_SKIP.has(c.type)) continue;
+    let span = c.nextElementSibling;
+    if (!(span instanceof HTMLSpanElement && span.classList.contains("vm-text"))) {
+      // 읽기모드 규칙이 칸 자체를 숨겨 둔 경우(도구 줄 등)는 비추지 않는다.
+      if (getComputedStyle(c).display === "none") continue;
+      span = document.createElement("span");
+      span.className = "vm-text" + (c instanceof HTMLTextAreaElement ? " vm-text--multi" : "");
+      c.after(span);
+      c.setAttribute("data-vm-mirror", "");
+    }
+    const value = mirrorText(c);
+    const ph = value ? "" : (c as HTMLInputElement).placeholder || "";
+    const text = value || ph;
+    if (span.textContent !== text) span.textContent = text;
+    span.classList.toggle("vm-text--ph", !value && !!ph);
+  }
+}
+
 /** 편집기 한 곳에서 쓰는 헬퍼.
  *  canEdit(권한)와 표시 모드를 합쳐 "지금 이 폼을 만질 수 있나(editing)"를 낸다.
  *  readMode 는 '권한은 있는데 읽기모드라서 잠긴' 상태 — 권한 부족 안내문과 구분해야 해서 따로 준다.
@@ -108,8 +154,17 @@ export function useEditGate(canEdit: boolean) {
   useEffect(() => {
     if (!readMode && !marked.current) return;
     markEmptyFields(ref.current, readMode);
+    syncReadMirrors(ref.current, readMode);
     marked.current = readMode;
   });
+
+  // 하위 컴포넌트가 따로 데이터를 받아 값을 채우면 이 편집기는 리렌더되지 않는다 —
+  // 읽기모드 동안은 짧은 간격으로 다시 비춰 '보이는 값 = 저장된 값'을 지킨다.
+  useEffect(() => {
+    if (!readMode) return;
+    const t = window.setInterval(() => syncReadMirrors(ref.current, true), 800);
+    return () => window.clearInterval(t);
+  }, [readMode]);
 
   return {
     editing,
@@ -124,9 +179,8 @@ export function useEditGate(canEdit: boolean) {
 }
 
 /** 읽기모드 화면에서 눈에 보이는 값을 그대로 텍스트로 뽑는다.
- *  읽기모드는 값이 <input> 안에 들어 있어 마우스로 긁어 복사할 수 없다 —
- *  입력란의 value 는 텍스트 노드가 아니라서 선택 영역에 잡히지 않기 때문이다.
- *  그래서 "보이는 그대로" 를 만들어 주는 이 함수가 복사 버튼의 몫이 된다.
+ *  (부분은 마우스로 긁어 복사할 수 있다 — syncReadMirrors 참고. 이 함수는 단계 전체를
+ *  라벨·탭 구분으로 한 번에 뽑는 복사 버튼의 몫이다.)
  *  화면에서 숨겨진 것(빈 항목 숨김·다른 탭)은 뽑지 않는다 — 본 것과 복사한 것이 같아야 한다. */
 function isHidden(el: HTMLElement): boolean {
   return el.offsetParent === null && getComputedStyle(el).position !== "fixed";
@@ -149,7 +203,8 @@ function fieldLine(f: HTMLElement): string | null {
   const label = (labelEl?.textContent || "").trim().replace(/\s+/g, " ");
   const parts: string[] = [];
   for (const c of Array.from(f.querySelectorAll("input, select, textarea"))) {
-    if (c instanceof HTMLElement && isHidden(c)) continue;
+    // 비춰 둔 칸은 CSS 로 숨겨져 있지만 값의 원본이다.
+    if (c instanceof HTMLElement && !c.hasAttribute("data-vm-mirror") && isHidden(c)) continue;
     const t = controlText(c);
     if (t) parts.push(t);
   }

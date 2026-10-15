@@ -16476,6 +16476,36 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   font-weight: 500;
 }
 
+/* 입력칸 → 드래그로 복사되는 텍스트. 잠긴 입력칸의 값은 선택이 안 되므로, JS(syncReadMirrors)가
+   칸 뒤에 같은 값을 담은 span.vm-text 를 두고 여기서 칸을 숨긴다. */
+.form-fieldset.vm-read [data-vm-mirror] {
+  display: none !important;
+}
+.form-fieldset:not(.vm-read) .vm-text {
+  display: none;
+}
+.form-fieldset.vm-read .vm-text {
+  color: var(--ink, #16202c);
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+.form-fieldset.vm-read .vm-text--multi {
+  white-space: pre-wrap;
+}
+.form-fieldset.vm-read td > .vm-text {
+  font-weight: 500;
+}
+.form-fieldset.vm-read .vm-text--ph {
+  color: #c4cedb;
+  font-weight: 400;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 /* 읽기 ↔ 편집 토글 — 단계 헤더의 Prev/Next 왼쪽. */
 .stage-mode-toggle {
   display: inline-flex;
