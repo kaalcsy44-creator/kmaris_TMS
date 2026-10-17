@@ -303,8 +303,9 @@ export default function LineBoard({
       if (c.state === "omitted") return "– not quoted";
       if (c.state === "no_price") return "no price";
       if (c.state === "sent") return "• waiting";
+      // ✓(U+2713) — PDF 글꼴(Noto Sans KR)에 ✔(U+2714) 글리프가 없어 빈 네모로 찍힌다.
       const marks = [
-        l.award && c.vendor_quote_id && l.award.vendor_quote_id === c.vendor_quote_id ? "✔" : "",
+        l.award && c.vendor_quote_id && l.award.vendor_quote_id === c.vendor_quote_id ? "✓" : "",
         isBestCell(l, vrfqId) ? "★" : "",
       ].filter(Boolean).join(" ");
       return [
@@ -340,7 +341,7 @@ export default function LineBoard({
     const legend = [
       cmpCur ? `Compared in ${cmpCur} (base rate${rateDate ? ` ${rateDate}` : ""}: ${rateNote || "same currency"})` : "Quoted currencies as received",
       "★ lowest" + (cmpCur ? ` in ${cmpCur}` : ""),
-      mode === "award" ? "✔ awarded" : "",
+      mode === "award" ? "✓ awarded" : "",
       "LT = lead time",
     ].filter(Boolean).join(" · ");
     return {
@@ -348,12 +349,14 @@ export default function LineBoard({
       heading: "Quote Comparison",
       subtitle: [head, legend].filter(Boolean).join(" — "),
       columns: [
-        { label: "#", width: 3, align: "center" },
-        { label: "Part No.", width: 9 },
-        { label: "Description", width: 15 },
-        { label: "Qty", width: 5, align: "right" },
-        ...vendors.map((v) => ({ label: `${v.vendor}\n${v.kmaris_rfq_no}`, width: 10, align: "right" as const })),
-        { label: lastLabel, width: 11 },
+        // 가중치 — 번호·수량은 좁게, 품번(18자 안팎)·품명은 한 줄에 서게, 벤더 칸은
+        // "✓ ★ $341.50 / ≈ 460,513 KRW" 가 꺾이지 않게, 마지막 칸은 벤더명이 안 갈리게.
+        { label: "#", width: 2.5, align: "center" },
+        { label: "Part No.", width: 11 },
+        { label: "Description", width: 16 },
+        { label: "Qty", width: 4, align: "right" },
+        ...vendors.map((v) => ({ label: `${v.vendor}\n${v.kmaris_rfq_no}`, width: 11, align: "right" as const })),
+        { label: lastLabel, width: 13 },
       ],
       rows,
     };

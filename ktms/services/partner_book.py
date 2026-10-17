@@ -113,7 +113,8 @@ def make_book_xlsx(book: Dict[str, Any]) -> bytes:
         cell.fill = PatternFill("solid", fgColor="0B1D3A")
         cell.alignment = Alignment(horizontal=c["align"], vertical="center", wrap_text=True)
         cell.border = border
-    ws.row_dimensions[head_row].height = 20
+    head_lines = max([str(c["label"]).count("\n") + 1 for c in cols] or [1])
+    ws.row_dimensions[head_row].height = 20 if head_lines == 1 else 13 * head_lines + 4
 
     for ri, row in enumerate(rows):
         for ci, v in enumerate(row, start=1):
@@ -126,8 +127,12 @@ def make_book_xlsx(book: Dict[str, Any]) -> bytes:
                 cell.fill = PatternFill("solid", fgColor="F4F6F8")
 
     # 칸 폭 — 실제 글자 길이를 보되 지나치게 벌어지지 않게 9~52자 사이로 가둔다.
+    # 여러 줄 칸(단가·환산가·LT)은 가장 긴 한 줄로 잰다 — 통째 길이로 재면 줄바꿈
+    # 칸만 터무니없이 넓어진다.
+    def _w(v) -> int:
+        return max((len(x) for x in str(v or "").split("\n")), default=0)
     for i, c in enumerate(cols, start=1):
-        longest = max([len(c["label"])] + [len(r[i - 1]) for r in rows])
+        longest = max([_w(c["label"])] + [_w(r[i - 1]) for r in rows if i - 1 < len(r)])
         ws.column_dimensions[get_column_letter(i)].width = min(52, max(9, longest + 2))
 
     ws.freeze_panes = ws.cell(row=head_row + 1, column=1)

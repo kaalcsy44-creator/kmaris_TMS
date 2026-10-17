@@ -61,6 +61,11 @@ function PrintPreview({ book, onClose }: { book: PrintBook; onClose: () => void 
   const [busy, setBusy] = useState<"" | "xlsx" | "pdf">("");
   const [err, setErr] = useState("");
   const shown = book.rows.slice(0, PREVIEW_ROWS);
+  // 칸 폭 — 화면이 준 가중치(width)를 PDF 와 같은 비율로 나눈다. 하나라도 비었으면
+  // 글자 길이대로 맡긴다(가중치를 안 준 목록). 브라우저 자동 배분은 숫자 칸을 넓히고
+  // 글이 긴 칸을 짓눌러 PDF 와 딴판이 된다.
+  const sized = book.columns.length > 0 && book.columns.every((c) => (c.width || 0) > 0);
+  const weightSum = sized ? book.columns.reduce((a, c) => a + (c.width || 0), 0) : 0;
 
   async function download(kind: "xlsx" | "pdf") {
     setBusy(kind);
@@ -98,7 +103,14 @@ function PrintPreview({ book, onClose }: { book: PrintBook; onClose: () => void 
             <span>{new Date().toISOString().slice(0, 10)}</span>
           </div>
           <div className="table-wrap plist-wrap">
-            <table className="mini wide plist-table">
+            <table className={`mini wide plist-table${sized ? " sized" : ""}`}>
+              {sized ? (
+                <colgroup>
+                  {book.columns.map((c, i) => (
+                    <col key={i} style={{ width: `${((c.width || 0) / weightSum) * 100}%` }} />
+                  ))}
+                </colgroup>
+              ) : null}
               <thead>
                 <tr>
                   {book.columns.map((c, i) => (

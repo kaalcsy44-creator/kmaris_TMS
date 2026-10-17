@@ -17442,6 +17442,27 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .plist-table {
   table-layout: auto;
 }
+/* table.mini.wide 의 품목 편집표 규칙(2번째 140px·3번째 180px·4·5번째 110px 하한,
+   마지막 칸 44px — 삭제 아이콘 열)이 인쇄 표에 새어 들어와 수량 칸을 넓히고 마지막
+   칸(Buying from·Status)을 짓눌렀다. 인쇄 표는 그 규칙을 모두 끈다. */
+table.mini.wide.plist-table th,
+table.mini.wide.plist-table td {
+  min-width: 0;
+  width: auto;
+}
+/* 가중치를 받은 표 — colgroup 비율 그대로. 머리글은 칸 안에서 줄을 바꾼다
+   (벤더명\nRFQ 번호처럼 두 줄로 넘어오는 머리글이 있다). */
+.plist-table.sized {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+}
+.plist-table.sized th {
+  white-space: pre-line;
+  vertical-align: bottom;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
 .plist-table th {
   position: sticky;
   top: 0;
