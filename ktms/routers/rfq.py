@@ -33,7 +33,7 @@ from _core import (
     usd_krw_rate,
     _apply_owner_filter,
     assign_line_ids,
-    line_id_of,
+    deal_used_line_ids,
     _assign_rfq_no,
     _close_reason_short,
     _next_kmaris_rfq_no,
@@ -509,10 +509,11 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
                 "row_kind": (getattr(it, "row_kind", "") or ""),
                 "lid": (getattr(it, "lid", "") or "").strip(),
             } for it in body.items if (it.part_no or it.description)]
-            # 수정 전에 쓰던 이름은 예약해 둔다 — 마지막 줄을 지우고 새 줄을 더해도
-            # 방금 지운 이름이 되살아나면 안 된다(그 이름은 아직 벤더 RFQ 안에 있다).
-            prior = {line_id_of(it) for it in (rfq.items or []) if line_id_of(it)}
-            new_items = assign_line_ids(new_items, reserved=prior)
+            # 다른 문서(벤더 RFQ·견적·채택 기록…)가 아직 쓰는 이름만 예약한다 — 지운 줄의
+            # 이름이 그 문서들에 남아 있으면 되살리면 안 된다. 아무 데도 안 쓰인 이름은
+            # 비워 준다(품목을 통째로 다시 넣었을 때 L51 이 아니라 L01 부터 서게).
+            reserved = deal_used_line_ids(s, rfq.id)
+            new_items = assign_line_ids(new_items, reserved=reserved)
             rfq.items = new_items
             apply_line_categories(s, rfq.items)
         if body.source_files is not None:

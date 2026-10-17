@@ -1642,6 +1642,48 @@ def assign_line_ids(items, reserved=None) -> list:
     return items
 
 
+def deal_line_docs(s, rfq_id: int) -> list:
+    """딜의 품목 줄 이름(lid)을 안고 다니는 문서들 — 1단계 RFQ 자신은 뺀다.
+
+    벤더 RFQ·벤더 견적·고객 견적·오더·발주서·PI·CI·PL·세금계산서 자료·미수/미지급.
+    어떤 이름이 '아직 쓰이는 이름'인지 판단하고, 이름을 일괄로 바꿀 때 함께 고칠
+    대상을 모으는 데 쓴다."""
+    vrfqs = s.query(VendorRFQ).filter_by(rfq_id=rfq_id).all()
+    vr_ids = [v.id for v in vrfqs]
+    vqs = s.query(VendorQuote).filter(VendorQuote.vendor_rfq_id.in_(vr_ids)).all() if vr_ids else []
+    qtns = s.query(Quotation).filter_by(rfq_id=rfq_id).all()
+    q_ids = [q.id for q in qtns]
+    oq = s.query(Order).filter(Order.rfq_id == rfq_id)
+    if q_ids:
+        oq = s.query(Order).filter((Order.rfq_id == rfq_id) | Order.quotation_id.in_(q_ids))
+    orders = oq.all()
+    o_ids = [o.id for o in orders]
+    pi_cond = ProformaInvoice.rfq_id == rfq_id
+    if o_ids:
+        pi_cond = pi_cond | ProformaInvoice.order_id.in_(o_ids)
+    pis = s.query(ProformaInvoice).filter(pi_cond).all()
+    pos = cis = ars = aps = []
+    if o_ids:
+        pos = s.query(PurchaseOrder).filter(PurchaseOrder.order_id.in_(o_ids)).all()
+        cis = s.query(CommercialInvoice).filter(CommercialInvoice.order_id.in_(o_ids)).all()
+        ars = s.query(ARRecord).filter(ARRecord.order_id.in_(o_ids)).all()
+        aps = s.query(APRecord).filter(APRecord.order_id.in_(o_ids)).all()
+    ci_ids = [c.id for c in cis]
+    pls = tids = []
+    if ci_ids:
+        pls = s.query(PackingList).filter(PackingList.ci_id.in_(ci_ids)).all()
+        tids = s.query(TaxInvoiceData).filter(TaxInvoiceData.ci_id.in_(ci_ids)).all()
+    return [*vrfqs, *vqs, *qtns, *orders, *pos, *pis, *cis, *pls, *tids, *ars, *aps]
+
+
+def deal_used_line_ids(s, rfq_id: int) -> set[str]:
+    """1단계 RFQ 밖에서 아직 쓰이는 줄 이름 — 다른 문서의 품목 줄과 채택 기록."""
+    used = {line_id_of(it) for d in deal_line_docs(s, rfq_id)
+            for it in (d.items or []) if line_id_of(it)}
+    used |= {a.lid for a in s.query(DealLineAward).filter_by(rfq_id=rfq_id).all() if a.lid}
+    return used
+
+
 def _part_key(v) -> str:
     return str(v or "").strip().upper()
 
@@ -4617,6 +4659,8 @@ __all__ = [
     "DealLineAward",
     "LINE_ID_KEY",
     "assign_line_ids",
+    "deal_line_docs",
+    "deal_used_line_ids",
     "line_id_of",
     "index_doc_by_line",
     "LineAwardIn",
