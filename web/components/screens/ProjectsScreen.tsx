@@ -3,7 +3,7 @@
 import { COL_MENU_W } from "@/components/common/tableHeadMenu";
 import CloseReasonDialog from "@/components/common/CloseReasonDialog";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -1662,6 +1662,51 @@ function BoardPreviewModal({
     .filter((c) => c.variant !== "cancelled" || rows.some((r) => c.match(r)));
   const shownCount = rows.filter((r) => cols.some((c) => c.match(r))).length;
   const today = new Date().toISOString().slice(0, 10);
+  const counts = cols.map((c) => rows.filter((r) => c.match(r)).length);
+  const countsKey = counts.join(",");
+
+  // 한 장에 모든 딜이 들어가게 맞춘다. A4 높이는 정해져 있어 카드가 많은 단계(9장 등)를
+  // 세로로만 쌓으면 아래가 잘린다 — 단계 안에서 R장마다 옆 열로 넘기고(perCol),
+  // 그래도 넘치면 전체를 줄인다(fit). R 은 줄이는 배율이 가장 작아지는(=글자가 가장
+  // 커지는) 값으로 고른다. 카드 높이는 지금 그려진 카드에서 잰다.
+  const fitRef = useRef<HTMLDivElement>(null);
+  const liveRef = useRef<HTMLDivElement>(null);
+  const maxN = Math.max(1, ...counts);
+  const [plan, setPlan] = useState<{ perCol: number; fit: number }>({ perCol: maxN, fit: 1 });
+  useLayoutEffect(() => {
+    const box = fitRef.current;
+    const live = liveRef.current;
+    if (!box || !live) return;
+    const availW = box.clientWidth;
+    const availH = box.clientHeight;
+    const cards = Array.from(live.querySelectorAll<HTMLElement>(".pl-board-list > :not(.pl-board-empty)"));
+    const cardH = cards.length ? Math.max(...cards.map((c) => c.offsetHeight)) : 120;
+    const CARD_W = compact ? 200 : 240; // 카드 한 장이 읽히는 최소 폭(배율 1 기준)
+    const GAP = 8;
+    const HEAD = 52; // 단계 머리 + 목록 위아래 여백
+    const COL_GAP = 10;
+    let best = { perCol: maxN, fit: 0 };
+    for (let r = maxN; r >= 1; r--) {
+      const subs = counts.map((n) => (n ? Math.ceil(n / r) : 0.34));
+      const needW = subs.reduce((a, b) => a + b, 0) * (CARD_W + GAP) + COL_GAP * (counts.length - 1);
+      const needH = HEAD + r * cardH + (r - 1) * GAP;
+      const f = Math.min(1, availW / needW, availH / needH);
+      if (f > best.fit + 0.01) best = { perCol: r, fit: f };
+    }
+    setPlan(best);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countsKey, compact, rows]);
+  // 계획대로 그린 뒤 실제 높이를 재서, 그래도 넘치면 그만큼 더 줄인다(줄이기만 — 왕복 방지).
+  useLayoutEffect(() => {
+    const box = fitRef.current;
+    const live = liveRef.current;
+    if (!box || !live) return;
+    const need = live.scrollHeight * plan.fit;
+    if (need > box.clientHeight + 1) {
+      // 같은 커밋에서 위 효과가 새 계획을 정했으면 그쪽이 이긴다(옛 배치로 잰 값이라).
+      setPlan((p) => (p === plan ? { ...p, fit: Math.max(0.2, (p.fit * box.clientHeight) / need) } : p));
+    }
+  }, [plan]);
 
   async function download() {
     if (!frameRef.current) return;
@@ -1716,15 +1761,30 @@ function BoardPreviewModal({
               </div>
               {/* 실제 Progress 보드와 동일한 컬럼·카드 마크업(BoardCard)을 그대로 재사용해
                   A4 프레임에 맞춘다(스크롤/상호작용은 board-prev-live 오버라이드로 정적화). */}
-              <div className="pl-board board-prev-live">
+              <div className="board-prev-fit" ref={fitRef}>
+              <div
+                ref={liveRef}
+                className="pl-board board-prev-live"
+                style={{ width: `${100 / plan.fit}%`, transform: `scale(${plan.fit})` }}
+              >
                 {cols.map((col, ci) => {
                   const cards = rows.filter((r) => col.match(r));
+                  const subs = Math.max(1, Math.ceil(cards.length / plan.perCol));
                   return (
                     <section
                       key={ci}
                       className={`pl-board-col${col.variant ? ` ${col.variant}` : ""}${
                         cards.length === 0 ? " is-empty" : ""
                       }`}
+                      style={
+                        cards.length
+                          ? ({
+                              flexGrow: subs,
+                              "--prev-subs": subs,
+                              "--prev-rows": Math.min(plan.perCol, cards.length),
+                            } as React.CSSProperties)
+                          : undefined
+                      }
                     >
                       <header className="pl-board-head">
                         <span className="pl-board-title" title={col.label}>{col.label}</span>
@@ -1755,6 +1815,7 @@ function BoardPreviewModal({
                     </section>
                   );
                 })}
+              </div>
               </div>
             </div>
           </div>

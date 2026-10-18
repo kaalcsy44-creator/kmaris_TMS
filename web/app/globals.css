@@ -12900,13 +12900,18 @@ select.sig-owner-pick,
 .board-prev-cols { display: flex; gap: 10px; flex: 1; min-height: 0; align-items: stretch; }
 /* A4 미리보기가 실제 Progress 보드 마크업(.pl-board/.pl-board-col/BoardCard)을 그대로
    재사용한다. 스크롤·최대높이를 없애고 컬럼을 프레임 폭에 균등 분배해 정적 캡처에 맞춘다. */
-.board-prev-live {
+/* 카드가 들어갈 자리(머리글 아래 남은 A4 영역). 안의 보드는 이 칸에 맞춰 배율을 받는다. */
+.board-prev-fit {
   flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
+}
+.board-prev-live {
   gap: 10px;
   padding: 0;
   overflow: visible;
-  align-items: stretch;
+  align-items: flex-start;
+  transform-origin: top left;
 }
 .board-prev-live .pl-board-col,
 .board-prev-live .pl-board-col.done,
@@ -12922,12 +12927,14 @@ select.sig-owner-pick,
   flex: 0.34 1 0;
 }
 .board-prev-live .pl-board-list {
-  /* 정적 A4 캡처는 컬럼을 프레임 폭에 균등 분배하므로 4행 그리드가 아닌
-     기존 1열 세로 스택을 유지한다. */
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  overflow: hidden;
+  /* 단계마다 --prev-rows 장씩 위→아래로 채우고 옆 열(--prev-subs 개)로 넘긴다 —
+     A4 한 장에 모든 딜이 들어가게(배율·열 수는 BoardPreviewModal 이 정한다). */
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(var(--prev-rows, 1), min-content);
+  grid-template-columns: repeat(var(--prev-subs, 1), minmax(0, 1fr));
+  grid-auto-columns: minmax(0, 1fr);
+  overflow: visible;
 }
 .board-prev-live .pl-card { cursor: default; }
 .board-prev-col {
