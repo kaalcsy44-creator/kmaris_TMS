@@ -9,6 +9,11 @@ import { useEffect, useRef, useState } from "react";
 // 그대로 입력·저장 가능.
 // 키보드: ↑↓ 로 목록 안을 옮기고 Enter 로 고른다(Esc 닫기). 아무것도 짚지 않은 채
 // Enter 를 누르면 적은 글자를 그대로 둔다 — 목록에 없는 값을 적는 길을 막지 않게.
+// 언제 열리나: 글자를 적을 때 · ▾ · ↓ · 빈 칸을 클릭할 때뿐. 포커스만으로는 열지 않고
+// (Tab 으로 지나가거나 창이 열리며 포커스가 와도 목록이 아래 칸을 덮지 않게) 포커스가
+// 떠나면 닫는다 — 열린 채 남은 목록이 아래 칸을 덮고 있으면, 그 칸을 누른다는 게
+// 목록의 기존 값을 고르는 일이 되어 버린다(신규 등록 중 기존 업체가 불려 오던 원인).
+// 마우스를 올린 것만으로는 Enter 대상이 되지 않는다 — ↑↓ 로 짚은 값만 Enter 로 고른다.
 /** 목록을 묶음으로 나눠 보여줄 때 — 묶음 제목 + 그 안의 값들.
  *  예: "Already used"(이미 적어 둔 지역) / "Countries"(나머지 국가). */
 export type ComboSection = { label: string; options: readonly string[] };
@@ -33,6 +38,7 @@ export default function ComboBox({
   const [typed, setTyped] = useState(false); // 열린 뒤 사용자가 직접 입력했는지
   const [active, setActive] = useState(-1); // ↑↓ 로 짚은 값(평평한 목록 기준), -1 = 없음
   const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
@@ -74,6 +80,7 @@ export default function ComboBox({
   return (
     <div className="combobox" ref={ref}>
       <input
+        ref={inputRef}
         className="combobox-input"
         value={value}
         placeholder={placeholder}
@@ -83,10 +90,14 @@ export default function ComboBox({
           setTyped(true);
           setOpen(true);
         }}
-        onFocus={() => {
-          setTyped(false);
-          setOpen(true);
+        onMouseDown={() => {
+          // 빈 칸을 누르면 고를 거리를 보여 준다. 값이 있으면 글자를 고치려는 클릭이다.
+          if (!value.trim()) {
+            setTyped(false);
+            setOpen(true);
+          }
         }}
+        onBlur={() => setOpen(false)}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             setOpen(false);
@@ -111,15 +122,24 @@ export default function ComboBox({
         tabIndex={-1}
         disabled={disabled}
         aria-label="Toggle options"
+        // 입력칸의 포커스를 빼앗지 않는다 — 빼앗으면 onBlur 가 먼저 닫고 클릭이 다시 연다.
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => {
           setTyped(false);
           setOpen((v) => !v);
+          inputRef.current?.focus();
         }}
       >
         ▾
       </button>
       {open && count ? (
-        <ul className="combobox-menu" role="listbox" ref={menuRef}>
+        <ul
+          className="combobox-menu"
+          role="listbox"
+          ref={menuRef}
+          // 스크롤바를 끌거나 묶음 제목을 눌러도 입력칸 포커스가 남아 목록이 닫히지 않게.
+          onMouseDown={(e) => e.preventDefault()}
+        >
           {groups.map((g, gi) => (
             <li key={g.label || "_"} className="combobox-group" role="presentation">
               {g.label ? <div className="combobox-group-label">{g.label}</div> : null}
@@ -135,7 +155,6 @@ export default function ComboBox({
                       className={[o === value ? "on" : "", idx === active ? "active" : ""]
                         .filter(Boolean)
                         .join(" ")}
-                      onMouseEnter={() => setActive(idx)}
                       // onMouseDown(+preventDefault): input blur 전에 선택이 먼저 처리되게 한다.
                       onMouseDown={(e) => {
                         e.preventDefault();
