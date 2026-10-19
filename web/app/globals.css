@@ -8465,10 +8465,17 @@ table.mini .num {
     position: sticky;
     top: var(--topnav-h, 58px);
     overflow-x: auto;
+    /* overflow-x 만 auto 로 두면 y 도 auto 로 따라가서, 탭 글자가 1px 만 넘쳐도 오른쪽
+       끝에 세로 스크롤바가 섰다. 세로는 막고, 가로 스크롤바도 숨긴다(손가락으로 민다). */
+    overflow-y: hidden;
+    scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
     white-space: nowrap;
     /* 아래 내용이 탭 밑을 지나갈 때 경계가 보이게 — 배경만으로는 붙어 있는 티가 안 난다. */
     box-shadow: 0 6px 10px -8px rgba(16, 32, 60, 0.45);
+  }
+  .page-tabs::-webkit-scrollbar {
+    display: none;
   }
   .page-tabs button {
     padding: 9px 13px;
