@@ -19054,3 +19054,102 @@ select.compose-tpl-version {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ── Mail(미분류 메일) — 폰 폭 ────────────────────────────────────────────────
+   데스크톱 표는 칸 폭을 못 박아 두었다(When 92 · Counterpart 224 · Assign 340). 그 합만
+   650px 이 넘어 폰에선 표가 화면보다 넓어지고, 페이지 전체가 옆으로 밀려 로고와 Sync
+   버튼이 화면 밖으로 나갔다. 폰에선 표를 버리고 한 대화 = 카드 한 장으로 쌓는다:
+     [날짜]  [상대]
+     [제목·요약 — 한 줄 전체]
+     [프로젝트 고르기 ............] [Assign] [Not a deal] [Promo] */
+@media (max-width: 720px) {
+  .umail-actions {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+  .umail-queues {
+    flex-wrap: wrap;
+  }
+  table.mini.wide.umail-table,
+  .umail-table tbody {
+    display: block;
+    width: 100%;
+    table-layout: auto;
+  }
+  .umail-table thead {
+    display: none;
+  }
+  .umail-table tr {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "when party"
+      "conv conv"
+      "assign assign";
+    gap: 6px 12px;
+    margin-bottom: 10px;
+    padding: 11px 12px;
+    border: 1px solid var(--line, #e3e8ef);
+    border-radius: 10px;
+    background: #fff;
+  }
+  table.mini.wide.umail-table td {
+    display: block;
+    width: auto;
+    padding: 0;
+    border: 0;
+  }
+  table.mini.wide.umail-table td.umail-c-when {
+    grid-area: when;
+    width: auto;
+    font-size: 11.5px;
+  }
+  table.mini.wide.umail-table td.umail-c-party {
+    grid-area: party;
+    width: auto;
+    min-width: 0;
+  }
+  /* 상대가 여럿이면 옆으로 늘어놓는다 — 카드에선 세로로 쌓을 이유(대화 칸 밀림)가 없다. */
+  .umail-table .umail-parties {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+  }
+  .umail-table td:nth-child(3) {
+    grid-area: conv;
+    min-width: 0;
+  }
+  table.mini.wide.umail-table td.umail-c-assign {
+    grid-area: assign;
+    width: auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    white-space: normal;
+    padding-top: 8px;
+    border-top: 1px dashed var(--line, #e3e8ef);
+  }
+  .umail-c-assign .pjpick {
+    flex: 1 1 100%;
+    width: auto;
+  }
+  /* 버튼 사이 간격은 gap 이 맡는다 — 데스크톱용 margin-left 는 줄 첫머리에서 들여쓰기가 된다. */
+  .umail-c-assign .umail-notdeal,
+  .umail-c-assign .umail-promo {
+    margin-left: 0;
+  }
+  .umail-c-assign .btn.sm {
+    height: 32px;
+    padding: 0 14px;
+    font-size: 12px;
+  }
+  .umail-c-assign .umail-why {
+    flex: 1 1 100%;
+  }
+  /* Unregistered 함(주소 단위 표, 7칸)은 카드로 바꾸기엔 칸이 많다 — 대신 표만 자기
+     상자 안에서 옆으로 밀리게 해, 페이지 전체가 밀리지는 않게 한다. */
+  .uaddr {
+    overflow-x: auto;
+  }
+}
