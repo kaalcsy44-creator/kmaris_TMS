@@ -19351,13 +19351,18 @@ select.compose-tpl-version {
   .fin-subtab-bar [aria-label="Currency"] { grid-area: cur; justify-self: end; }
   .fin-subtab-bar [aria-label="Settled or not"] { grid-area: st; justify-self: start; }
   .fin-subtab-bar .fin-ledger-period { grid-area: per; justify-self: end; }
+  /* 버튼 글자는 한 줄 — "Consulting fee" 가 두 줄로 접히면 그 덩이만 키가 커져
+     옆 덩이(통화)와 높이가 어긋났다. */
   .fin-subtab-bar .seg-toggle button {
-    padding: 6px 9px;
+    padding: 6px 8px;
     font-size: 11.5px;
+    white-space: nowrap;
   }
 }
-/* 아주 좁은 폰 — 두 덩이를 한 줄에 못 세우면 잘리느니 한 줄에 하나씩. */
-@media (max-width: 420px) {
+/* 아주 좁은 폰 — 두 덩이를 한 줄에 못 세우면 잘리느니 한 줄에 하나씩. 버튼 글자를 한
+   줄로 묶은 뒤로 윗줄(Outflow 갈래 넷 + 통화)은 420px 남짓이 들고, 실제 화면에선 페이지·
+   카드 여백으로 70px 가량이 빠지므로 500px 에서 끊는다. */
+@media (max-width: 500px) {
   .fin-subtab-bar {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "tabs" "cur" "st" "per";
