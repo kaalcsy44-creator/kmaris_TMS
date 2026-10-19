@@ -19171,3 +19171,20 @@ select.compose-tpl-version {
   .fin-cap-long { display: none; }
   .fin-cap-short { display: inline; }
 }
+
+/* ── 알림 패널 — 폰 폭 ─────────────────────────────────────────────────────────
+   패널은 종 버튼의 오른쪽 끝에 매달려 왼쪽으로 펼쳐진다. 폭 상한(100vw − 32px)은
+   걸려 있었지만 종이 화면 오른쪽 끝에서 150px 가까이 안쪽에 있어, 그만큼 왼쪽으로
+   삐져나가 제목과 금액 앞머리가 잘렸다. 폰에선 종이 아니라 화면에 붙인다 — 좌우 8px,
+   머리줄(--topnav-h) 바로 아래. */
+@media (max-width: 860px) {
+  .nbell-panel {
+    position: fixed;
+    top: calc(var(--topnav-h, 58px) + 6px);
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100vh - var(--topnav-h, 58px) - 16px);
+  }
+}
