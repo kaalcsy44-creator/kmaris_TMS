@@ -19188,3 +19188,50 @@ select.compose-tpl-version {
     max-height: calc(100vh - var(--topnav-h, 58px) - 16px);
   }
 }
+
+/* ── Briefing 상단 줄 — 폰 폭 ──────────────────────────────────────────────────
+   칩 다섯 개가 두 줄로 접히고, 그 아래 Show·Cols·경고 링크·Write digests 가 한 줄에
+   끼어 "9 unmatched" 가 두 줄로 꺾이고 Write digests 는 오른쪽 밖으로 잘렸다.
+     1줄: 칩 다섯 — 한 줄 고정, 모자라면 이 줄만 옆으로 민다
+     2줄: Show · Cols · 9 unmatched · 39 unregistered (각각 한 줄)
+     3줄: Write digests (2줄에 자리가 없을 때만 내려온다) */
+@media (max-width: 720px) {
+  .brief-bar {
+    gap: 8px;
+    padding: 8px 0;
+  }
+  .brief-chips {
+    flex: 1 1 100%;
+    min-width: 0;
+    flex-wrap: nowrap;
+    gap: 5px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .brief-chips::-webkit-scrollbar {
+    display: none;
+  }
+  .brief-chips .mail-chip {
+    flex: 0 0 auto;
+    padding: 4px 9px;
+    font-size: 11.5px;
+    white-space: nowrap;
+  }
+  .brief-chips .mail-chip b {
+    margin-left: 4px;
+  }
+  .brief-acts {
+    flex: 1 1 100%;
+    min-width: 0;
+    margin-left: 0;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+  .brief-warn {
+    white-space: nowrap;
+  }
+  .brief-acts > .btn {
+    margin-left: auto;
+  }
+}
