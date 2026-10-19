@@ -1344,7 +1344,14 @@ function StatisticsTab() {
           {marginFiltered.length === 0 ? (
             <div className="state">No projects at this stage.</div>
           ) : (
-            <div style={{ width: `${Math.min(100, Math.max(30, marginFiltered.length * 5))}%` }}>
+            /* 프로젝트 하나에 최소 56px(막대 둘 + 꼬리표 "29.4%")을 준다. 화면이 그보다 좁으면
+               욱여넣지 않고 이 상자 안에서 옆으로 민다 — 폰에서 스무 건이 한 화면에 눌려 막대와
+               꼬리표, 아래 이름이 서로 겹쳤다. 넓은 화면에선 전과 같이 폭을 채운다. */
+            <div className="stat-hscroll">
+            <div style={{
+              width: `${Math.min(100, Math.max(30, marginFiltered.length * 5))}%`,
+              minWidth: marginFiltered.length * 56 + 70,
+            }}>
               <ResponsiveContainer width="100%" height={340}>
                 <BarChart data={marginFiltered} margin={{ top: 28, right: 16, bottom: 64, left: 8 }}
                   barGap={0} barCategoryGap="45%">
@@ -1365,6 +1372,7 @@ function StatisticsTab() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+            </div>
             </div>
           )}
         </div>

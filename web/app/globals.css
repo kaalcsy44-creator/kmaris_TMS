@@ -5250,6 +5250,9 @@ table.mini.items-edit td.row-tools {
   margin-bottom: 20px;
 }
 .stat-chart {
+  /* 격자 칸은 기본 최소폭이 내용 폭이다 — 안에 가로 스크롤 차트(.stat-hscroll)가 있으면
+     칸이 차트 폭만큼 늘어 페이지 전체가 밀린다. 0 으로 풀어 상자 안에서만 굴리게 한다. */
+  min-width: 0;
   background: #fff;
   border: 1px solid #e3eaf3;
   border-radius: 12px;
@@ -19283,4 +19286,15 @@ select.compose-tpl-version {
     padding: 2px 6px;
     white-space: nowrap;
   }
+}
+
+/* 차트 가로 스크롤 상자 — 항목이 많아 화면에 다 못 넣는 차트를 이 안에서만 옆으로 민다
+   (Project Sales vs Purchase). 페이지 전체가 밀리지 않게 상자가 넘침을 가둔다. */
+.stat-hscroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #c7d2e0 transparent;
+  padding-bottom: 4px;
 }
