@@ -14728,7 +14728,7 @@ td.uaddr-c-end .btn.sm + .btn.sm { margin-left: 6px; }
    모두 같은 트랙 하나를 민다. 가로 스크롤은 이 트랙 안에서만 일어나야 한다: 페이지가
    통째로 가로로 밀리면 상단 고정 줄은 세로로만 붙어 있고 가로로는 함께 밀려, 옆으로
    스크롤했을 때 그 자리로 카드가 지나간다. */
-.brief-deck { display: flex; align-items: stretch; gap: 8px; height: 100%; }
+.brief-deck { position: relative; display: flex; align-items: stretch; height: 100%; }
 /* 열 수는 이제 "한 번에 몇 장을 볼까"다(cols-2 / cols-3, 상단 Cols 스위치·localStorage).
    좁아지면 아래 미디어쿼리가 고른 값과 무관하게 접는다 — 480px 짜리 3열은 못 읽는다. */
 /* 이름이 rail 인 이유: .brief-track 은 카드 **안**의 진행바 줄이 이미 쓰고 있다(아래).
@@ -14763,17 +14763,33 @@ td.uaddr-c-end .btn.sm + .btn.sm { margin-left: 6px; }
   scroll-snap-align: start;
   scrollbar-width: thin; scrollbar-color: #c7d2e0 transparent;
 }
-/* 카드 줄과 같은 높이의 세로 버튼 — 틀이 고정이라 화살표는 늘 같은 자리에 있다.
-   어디를 눌러도 넘어가므로, 카드 아래쪽을 읽다가 마우스를 위로 되돌릴 일이 없다. */
+/* 좌우 이동 — 프로젝트 보드(.pl-board-nav)와 같은 모양: 자리를 차지하지 않고 트랙의
+   좌·우 가장자리에 겹쳐 뜨는 투명 띠다. 예전엔 트랙 양옆에 26px 짜리 버튼이 따로 서서
+   폰에서 카드 폭을 그만큼 깎아 먹었다. 평소엔 숨어 있다가 마우스를 올리면 옅게 뜨고,
+   그 방향으로 더 갈 곳이 없으면 아예 없다. */
 .brief-nav {
-  flex: 0 0 26px; align-self: stretch; min-height: 140px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 0; border: 1px solid var(--line); border-radius: 10px;
-  background: #fff; color: #6b7c93; cursor: pointer;
+  position: absolute; top: 0; bottom: 8px; /* .brief-rail 아래 여백(스크롤바 자리) */
+  width: 36px; z-index: 3;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; border: 0; cursor: pointer; color: var(--ink);
+  opacity: 0; transition: opacity 0.15s ease;
 }
-.brief-nav:hover:not(:disabled) { border-color: var(--blue); background: var(--sel); color: var(--blue); }
-.brief-nav:disabled { opacity: 0.3; cursor: default; }
-.brief-nav span { font-size: 22px; font-weight: 700; line-height: 1; }
+.brief-nav.prev {
+  left: 0; border-radius: 12px 0 0 12px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0));
+}
+.brief-nav.next {
+  right: 0; border-radius: 0 12px 12px 0;
+  background: linear-gradient(270deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0));
+}
+.brief-deck:hover .brief-nav { opacity: 0.5; }
+.brief-nav:hover { opacity: 1; }
+.brief-nav:disabled { display: none; }
+.brief-nav span { font-size: 28px; font-weight: 700; line-height: 1; }
+/* 손가락에는 hover 가 없다 — 처음부터 옅게 띄워 둔다(보드와 같다). */
+@media (hover: none) {
+  .brief-deck .brief-nav { opacity: 0.55; }
+}
 .brief-card {
   display: flex; flex-direction: column; gap: 6px; padding: 11px 13px 9px;
   /* flex 항목의 기본 최소폭은 내용 크기다 — 0 으로 풀어야 정해 준 폭(트랙 폭 ÷ 열 수)
