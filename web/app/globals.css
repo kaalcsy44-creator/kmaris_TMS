@@ -14749,6 +14749,46 @@ td.uaddr-c-end .btn.sm + .btn.sm { margin-left: 6px; }
 .brief-warn { font-size: 11.5px; font-weight: 700; color: #a06a1c; text-decoration: none; }
 .brief-warn:hover { text-decoration: underline; }
 
+/* 딜 현황 요약(Briefing → Summary) — 왼쪽 고르기, 오른쪽 붙여 넣을 글 그대로. */
+.dsum { display: flex; gap: 18px; flex: 1 1 auto; min-height: 0; padding-bottom: 18px; width: 100%; }
+.dsum-opts { flex: 0 0 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; }
+.dsum-opts fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px 10px; margin: 0; }
+.dsum-opts legend { font-size: 11px; font-weight: 700; color: var(--muted); padding: 0 4px; text-transform: uppercase; letter-spacing: .03em; }
+.dsum-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+.dsum-chk { display: flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; line-height: 1.5; }
+.dsum-chk input { margin: 0; }
+.dsum-opts fieldset > .dsum-chk { margin-top: 6px; }
+.dsum-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12.5px; }
+.dsum-row > span { color: var(--muted); font-weight: 600; min-width: 28px; }
+.dsum-row select, .dsum-row input { flex: 1 1 auto; min-width: 0; font-size: 12.5px; padding: 3px 6px; border: 1px solid var(--line-strong); border-radius: 6px; }
+.dsum-seg { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.dsum-seg button {
+  font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--line); background: #fff; color: var(--muted);
+}
+.dsum-seg button:hover { border-color: var(--blue); color: var(--blue); }
+.dsum-seg button.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+.dsum-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+.dsum-preset { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 999px; overflow: hidden; }
+.dsum-preset button { border: 0; background: #fff; font-size: 12px; padding: 2px 8px; cursor: pointer; color: var(--ink); }
+.dsum-preset button:hover { background: var(--hover); }
+.dsum-preset button.x { color: var(--muted); padding: 2px 6px 2px 2px; }
+.dsum-reset { margin-top: 8px; border: 0; background: none; color: var(--muted); font-size: 11.5px; cursor: pointer; padding: 0; text-decoration: underline; }
+.dsum-preview { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.dsum-preview-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+.dsum-actions { display: inline-flex; align-items: center; gap: 6px; }
+.dsum-copied { color: #11824a; font-weight: 600; }
+.dsum-text {
+  flex: 1 1 auto; min-height: 320px; margin: 0; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  background: var(--zebra); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px;
+  font-family: inherit; font-size: 13px; line-height: 1.6; color: var(--ink); user-select: text;
+}
+@media (max-width: 760px) {
+  .dsum { flex-direction: column; overflow-y: auto; }
+  .dsum-opts { flex: 0 0 auto; overflow: visible; }
+  .dsum-text { min-height: 260px; }
+}
+
 /* 카드는 세로로 쌓지 않고 옆으로 넘긴다 — 화살표(‹ ›)와 드래그, 트랙패드 가로 스크롤이
    모두 같은 트랙 하나를 민다. 가로 스크롤은 이 트랙 안에서만 일어나야 한다: 페이지가
    통째로 가로로 밀리면 상단 고정 줄은 세로로만 붙어 있고 가로로는 함께 밀려, 옆으로

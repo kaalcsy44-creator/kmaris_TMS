@@ -39,6 +39,8 @@ import {
   vendorBadgesOf,
 } from "@/lib/deal";
 import PrepaidTag from "@/components/common/PrepaidTag";
+import DealSummaryModal from "@/components/common/DealSummaryModal";
+import type { SummaryDeal } from "@/lib/dealSummary";
 
 // Briefing — 아침에 가장 먼저 여는 화면. 프로젝트 하나가 카드 하나다.
 //
@@ -120,6 +122,7 @@ export default function BriefingTab() {
   const [openRfqId, setOpenRfqId] = useState<number | null>(null);
   const [addRfqId, setAddRfqId] = useState<number | null>(null);   // 활동기록 팝업을 연 딜
   const [stageTarget, setStageTarget] = useState<{ stage: number; vrfqId?: number } | null>(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);   // 딜 현황 글 요약(카톡·메일용)
 
   // 고른 열 수는 기억한다. 첫 렌더 뒤에 읽어 서버/클라 첫 그림을 같게 유지한다.
   useEffect(() => {
@@ -227,6 +230,26 @@ export default function BriefingTab() {
   );
 
   const missing = needDigest.length;
+
+  // 글 요약의 재료. "All active" 는 카드 자격(최근 14일)과 무관하게 취소 아닌 딜 전부 —
+  // 보고에서는 조용한 딜이 빠지면 안 된다. 메일 요약은 다이제스트에 실린 딜에만 있다.
+  const summaryOpenDeals = useMemo<SummaryDeal[]>(() => {
+    if (!summaryOpen) return [];
+    const mailBy = new Map<number, MailDigestRow>();
+    for (const m of digest?.rows ?? []) mailBy.set(m.rfq_id, m);
+    const cardAt = new Map(cards.map((c) => [c.row.rfq_id, c.lastAt]));
+    return (pipeline?.rows ?? [])
+      .filter((r) => !r.cancelled)
+      .map((row) => ({
+        row,
+        mail: mailBy.get(row.rfq_id) ?? null,
+        lastAt: cardAt.get(row.rfq_id) || lastActivityISO(row),
+      }));
+  }, [summaryOpen, pipeline, digest, cards]);
+  const summaryBriefingDeals = useMemo<SummaryDeal[]>(
+    () => (summaryOpen ? shown.map((c) => ({ row: c.row, mail: c.mail, lastAt: c.lastAt })) : []),
+    [summaryOpen, shown]
+  );
 
   // 롤업 생성은 딜당 AI 호출 1회다. 한 번에 다 만들지 않고 상한까지만 만든 뒤
   // 남은 수를 알려 준다 — 눌러 놓고 20초를 기다리게 하는 것보다 낫다.
@@ -422,6 +445,14 @@ export default function BriefingTab() {
           </Chip>
         </span>
         <span className="brief-acts">
+          <button
+            type="button"
+            className="btn sm"
+            title="Text summary of active deals by stage — for KakaoTalk / email"
+            onClick={() => setSummaryOpen(true)}
+          >
+            Summary
+          </button>
           <span className="brief-show" role="group" aria-label="Lines per project">
             <span className="brief-show-lbl">Show</span>
             {SHOW_CHOICES.map((n) => (
@@ -576,9 +607,27 @@ export default function BriefingTab() {
           />
         </Modal>
       ) : null}
+
+      {summaryOpen ? (
+        <DealSummaryModal
+          openDeals={summaryOpenDeals}
+          briefingDeals={summaryBriefingDeals}
+          briefingLabel={FILTER_LABELS[filter]}
+          steps={steps}
+          onClose={() => setSummaryOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
+
+const FILTER_LABELS: Record<Filter, string> = {
+  all: "All",
+  ours: "Our move",
+  theirs: "Waiting on them",
+  nomail: "No recent mail",
+  done: "Settled",
+};
 
 function Chip({
   on,
