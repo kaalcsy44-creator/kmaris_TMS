@@ -27,7 +27,9 @@ import base64
 import html
 import io
 import json
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -305,6 +307,63 @@ def fetch_site(website: str) -> dict:
             "images": _image_urls(raws)}
 
 
+# 직접 읽어서 안 되는 사이트가 생각보다 많다. 하나는 자바스크립트로만 그리는 사이트
+# (HTML 에 글이 없다), 또 하나는 서버가 해외 데이터센터(Render 싱가포르)에 있어서
+# 국내 호스팅의 방화벽이 빈 쪽이나 다른 쪽을 주는 경우다 — 같은 주소가 사무실에서는
+# 멀쩡히 읽히는데 운영 서버에서는 "글이 없다"가 나왔다(HLB Ocean Tech). 둘 다 브라우저로
+# 그려 주는 읽기 서비스(r.jina.ai)를 거치면 읽힌다. 직접 읽기가 실패했을 때만 쓴다.
+READER = "https://r.jina.ai/"
+READER_TIMEOUT = 45.0
+READER_PAGES = 4       # 첫 화면 + 따라 들어갈 링크 3개
+
+
+def _reader_get(cli: httpx.Client, url: str) -> str:
+    try:
+        r = cli.get(READER + url)
+    except Exception:
+        return ""
+    return r.text if r.status_code < 400 else ""
+
+
+def fetch_via_reader(website: str) -> dict:
+    """읽기 서비스를 거쳐 홈페이지와 그 안의 몇 쪽을 읽는다. 반환 형식은 fetch_site 와 같다."""
+    home = site_url(website)
+    headers = {"User-Agent": _UA, "X-Return-Format": "markdown"}
+    key = os.environ.get("JINA_API_KEY", "").strip()
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    with httpx.Client(timeout=READER_TIMEOUT, headers=headers) as cli:
+        first = _reader_get(cli, home)
+        if not first.strip():
+            return {"pages": [], "text": "", "error": "", "thin": True, "images": []}
+        host = urlparse(home).netloc.lower().removeprefix("www.")
+        links: list[str] = []
+        # ![그림](…) 은 링크가 아니다 — 앞의 ! 로 거른다.
+        for m in re.finditer(r"(?<!!)\[([^\]]{0,80})\]\((https?://[^)\s]+)\)", first):
+            label, url = m.group(1), m.group(2).split("#")[0].rstrip("/")
+            if urlparse(url).netloc.lower().removeprefix("www.") != host:
+                continue
+            path = urlparse(url).path
+            if _SKIP.search(path) or _NOT_A_PAGE.search(path) or url in links:
+                continue
+            if url.rstrip("/") != home.rstrip("/") and _WORTH.search(url + " " + label):
+                links.append(url)
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            subs = list(ex.map(lambda u: _reader_get(cli, u), links[: READER_PAGES - 1]))
+
+    pages, chunks = [], []
+    for url, body in [(home, first), *zip(links, subs)]:
+        t = re.sub(r"\s+", " ", body).strip()[:PAGE_CHARS]
+        if len(t) < 80:
+            continue
+        pages.append({"url": url, "chars": len(t)})
+        chunks.append(f"### {url}\n{t}")
+    text = "\n\n".join(chunks)[:TOTAL_CHARS]
+    body_only = re.sub(r"### \S+", "", text).strip()
+    return {"pages": pages, "text": text, "error": "",
+            "thin": len(body_only) < THIN_CHARS, "images": []}
+
+
 def _menus(s) -> tuple[list[dict], list[dict], dict, dict]:
     """고를 수 있는 것들 — 제조사 명부와 부품 분류 2단.
 
@@ -411,6 +470,12 @@ def scan_partner(s, name: str, website: str, kind: str = "vendor") -> dict:
            "summary", "error"}
     """
     site = fetch_site(website)
+    direct = site
+    # 직접 못 열었거나 글이 없으면 읽기 서비스로 한 번 더 — 위 READER 설명 참조.
+    if site["error"] or site["thin"]:
+        alt = fetch_via_reader(website)
+        if not alt["thin"]:
+            site = alt
     base = {"pages": site["pages"], "images": 0, "makers": [], "categories": [],
             "unlisted_brands": [], "evidence": "", "summary": "", "error": ""}
     if site["error"]:
@@ -422,9 +487,12 @@ def scan_partner(s, name: str, website: str, kind: str = "vendor") -> dict:
     if site["thin"]:
         shots = fetch_images(site.get("images") or [])
         if not shots:
+            # 어디까지 갔고 몇 자를 읽었는지 같이 보여 준다 — 다음에 원인을 바로 짚도록.
+            seen = ", ".join(f"{p['url']} ({p['chars']}자)" for p in direct["pages"][:3])
             return {**base, "error": (
-                "홈페이지에서 읽을 수 있는 글이 거의 없습니다 — 자바스크립트로만 그리는 "
-                "사이트일 수 있습니다. 취급품목 쪽 주소를 직접 넣어 다시 시도해 보세요.")}
+                "홈페이지에서 읽을 수 있는 글이 거의 없습니다 — 직접 읽기와 브라우저 "
+                "읽기 둘 다 실패했습니다. 취급품목 쪽 주소를 직접 넣어 다시 시도해 보세요."
+                + (f" [읽은 쪽: {seen}]" if seen else ""))}
     base["images"] = len(shots)
 
     makers, cats, maker_by_id, cat_by_id = _menus(s)
