@@ -5312,6 +5312,17 @@ table.mini.items-edit td.row-tools {
   padding: 4px 10px;
   font-size: 12px;
 }
+/* 월 이동 줄 끝의 통화 전환 — 오른쪽 끝에 붙인다. 폭이 모자라면 줄을 바꿔 내려간다. */
+.stat-cur-inline {
+  margin-left: auto;
+  align-self: center;
+}
+@media (max-width: 720px) {
+  .stat-cur-inline button {
+    padding: 4px 8px;
+    font-size: 11.5px;
+  }
+}
 .stat-margin-legend {
   display: inline-flex;
   align-items: center;

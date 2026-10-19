@@ -1126,25 +1126,18 @@ function StatisticsTab() {
 
   return (
     <>
-      <div className="stat-toolbar">
-        {/* 환산 중일 때만 어떤 환율로 옮겼는지 밝힌다 — 합계가 환율에 따라 달라지므로,
-            숫자만 두면 검산할 근거가 없다. */}
-        {cur === "KRWC" ? (
+      {/* 환산 중일 때만 어떤 환율로 옮겼는지 밝힌다 — 합계가 환율에 따라 달라지므로,
+          숫자만 두면 검산할 근거가 없다. */}
+      {cur === "KRWC" ? (
+        <div className="stat-toolbar">
           <span className="stat-fx-note">
             USD → KRW {fxRate.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             {stat.fx?.source === "exim"
               ? ` · base rate${stat.fx.date ? ` (posted ${stat.fx.date})` : ""}`
               : " · fixed rate (quote lookup failed)"}
           </span>
-        ) : null}
-        <div className="stat-cur-toggle">
-          {STAT_CUR_KEYS.map((c) => (
-            <button key={c} className={cur === c ? "on" : ""} onClick={() => setCur(c)}>
-              {curLabel(c)}
-            </button>
-          ))}
         </div>
-      </div>
+      ) : null}
 
       {/* ① 금액 KPI 스트립 — 월 앞뒤 이동으로 과거 실적 확인(월별 시계열 기반) ---- */}
       <div className="dash-subhead stat-monthhead">
@@ -1164,7 +1157,15 @@ function StatisticsTab() {
             aria-label="Next month" title="Next month"
           >›</button>
         </span>
-        <span className="s">{curLabel(cur)}</span>
+        {/* 통화 전환 — 따로 한 줄을 차지하던 것을 월 이동 줄 끝으로 옮겼다. 이 줄 끝에
+            있던 통화 이름(회색 "USD")은 토글이 곧 그 말이라 뺐다. */}
+        <div className="stat-cur-toggle sm stat-cur-inline">
+          {STAT_CUR_KEYS.map((c) => (
+            <button key={c} className={cur === c ? "on" : ""} onClick={() => setCur(c)}>
+              {curLabel(c)}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="kpi-row">
         <Kpi label="Revenue" value={fmtMoney(cur, mRevenue)} sub="Tax-invoiced"
