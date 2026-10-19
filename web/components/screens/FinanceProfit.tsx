@@ -338,20 +338,27 @@ export default function FinanceProfitTab() {
             </button>
           ))}
         </div>
-        <label className="check-chip" style={{ marginLeft: "auto", cursor: "pointer" }}>
-          <input type="checkbox" checked={withVat} onChange={(e) => setWithVat(e.target.checked)} />
-          {" "}Count estimated VAT as tax
-        </label>
-        <label className="check-chip" style={{ cursor: "pointer" }}>
-          <input type="checkbox" checked={withTax} onChange={(e) => setWithTax(e.target.checked)} />
-          {" "}Simulate corporate tax
-        </label>
-        {/* 켜면 줄마다 그 줄을 이룬 것들이 표 안에 펼쳐진다 — 칸마다 마우스를 올려
-            확인하던 것을 한 화면에서 읽는다. 켤 때만 내역을 접지 않고 받아 온다. */}
-        <label className="check-chip" style={{ cursor: "pointer" }}>
-          <input type="checkbox" checked={expanded} onChange={(e) => setExpanded(e.target.checked)} />
-          {" "}Show breakdown
-        </label>
+        {/* 계산 옵션 셋은 한 덩이 — 줄이 바뀌어도 같이 움직이고, 폰에선 셋이 한 줄에 서도록
+            짧은 이름(.fin-opt-short)으로 바뀐다. 긴 이름은 title 로도 남긴다. */}
+        <span className="fin-opts">
+          <label className="check-chip" style={{ cursor: "pointer" }} title="Count estimated VAT as tax">
+            <input type="checkbox" checked={withVat} onChange={(e) => setWithVat(e.target.checked)} />
+            <span className="fin-opt-long">Count estimated VAT as tax</span>
+            <span className="fin-opt-short">Est. VAT</span>
+          </label>
+          <label className="check-chip" style={{ cursor: "pointer" }} title="Simulate corporate tax">
+            <input type="checkbox" checked={withTax} onChange={(e) => setWithTax(e.target.checked)} />
+            <span className="fin-opt-long">Simulate corporate tax</span>
+            <span className="fin-opt-short">Corp. tax</span>
+          </label>
+          {/* 켜면 줄마다 그 줄을 이룬 것들이 표 안에 펼쳐진다 — 칸마다 마우스를 올려
+              확인하던 것을 한 화면에서 읽는다. 켤 때만 내역을 접지 않고 받아 온다. */}
+          <label className="check-chip" style={{ cursor: "pointer" }} title="Show breakdown">
+            <input type="checkbox" checked={expanded} onChange={(e) => setExpanded(e.target.checked)} />
+            <span className="fin-opt-long">Show breakdown</span>
+            <span className="fin-opt-short">Breakdown</span>
+          </label>
+        </span>
       </div>
 
       {error && !data ? <div className="state error">API error: {error.message}</div> : null}

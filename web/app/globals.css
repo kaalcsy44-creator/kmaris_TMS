@@ -19298,3 +19298,14 @@ select.compose-tpl-version {
   scrollbar-color: #c7d2e0 transparent;
   padding-bottom: 4px;
 }
+
+/* Profit 계산 옵션 셋(추정 부가세·법인세·내역) — 한 덩이로 오른쪽에. 폰에선 셋이 한
+   줄에 서도록 짧은 이름으로 바꾸고 칩을 줄인다(예전엔 칩마다 줄이 바뀌어 두 줄을 먹었다). */
+.fin-opts { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: 8px; }
+.fin-opt-short { display: none; }
+@media (max-width: 720px) {
+  .fin-opts { flex: 1 1 100%; margin-left: 0; flex-wrap: nowrap; gap: 6px; }
+  .fin-opts .check-chip { flex: 1 1 0; min-width: 0; justify-content: center; gap: 5px; padding: 5px 8px; font-size: 12px; white-space: nowrap; }
+  .fin-opt-long { display: none; }
+  .fin-opt-short { display: inline; }
+}
