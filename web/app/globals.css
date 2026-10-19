@@ -19153,3 +19153,21 @@ select.compose-tpl-version {
     overflow-x: auto;
   }
 }
+
+/* ── Profit 월별 막대 — 폰 폭 ─────────────────────────────────────────────────
+   데스크톱에선 막대를 아래 표의 달 칸 위에 맞추느라 좌우에 16%·10% 를 비워 둔다. 폰에선
+   그 표가 1240px 이라 어차피 옆으로 굴러가 맞물릴 일이 없는데, 여백만 남아 열두 달이
+   가운데에 몰리고 "−3,423K" 꼬리표가 옆 칸과 겹쳤다. 여백을 걷고 짧은 꼴로 바꾼다. */
+.fin-cap-short { display: none; }
+@media (max-width: 720px) {
+  .fin-net-chart.fin-pl-chart {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .fin-pl-cap {
+    font-size: 9.5px;
+    letter-spacing: -0.02em;
+  }
+  .fin-cap-long { display: none; }
+  .fin-cap-short { display: inline; }
+}

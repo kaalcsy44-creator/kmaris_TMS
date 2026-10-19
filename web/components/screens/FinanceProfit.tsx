@@ -40,6 +40,14 @@ function compact(n: number): string {
   if (a < 1000) return `${sign}${Math.round(a)}`;
   return `${sign}${Math.round(a / 1000).toLocaleString()}K`;
 }
+/** 막대 꼬리표의 짧은 꼴 — 백만 단위는 소수 한 자리 M(−3.4M), 그 아래는 K. */
+function shortAmt(n: number): string {
+  const a = Math.abs(n);
+  const sign = n < 0 ? "−" : "";
+  if (a >= 1_000_000) return `${sign}${(a / 1_000_000).toFixed(1)}M`;
+  if (a >= 1000) return `${sign}${Math.round(a / 1000)}K`;
+  return `${sign}${Math.round(a)}`;
+}
 const won = (n: number) => `${n < 0 ? "−" : ""}₩${Math.abs(Math.round(n)).toLocaleString()}`;
 
 /**
@@ -510,6 +518,9 @@ function NetBars({ labels, net, revenue, costs, taxes }: {
   taxes: number[];
 }) {
   const max = Math.max(1, ...net.map(Math.abs));
+  // 막대는 반쪽 높이의 40% 까지만 — 남은 10% 가 꼬리표 자리다. 48% 였을 때는 가장 긴
+  // 손실 막대의 꼬리표가 틀 밖으로 나가 달 이름 위에 겹쳤다.
+  const S = 40;
   return (
     <div className="fin-net-chart fin-pl-chart">
       {labels.map((lab, i) => (
@@ -524,14 +535,17 @@ function NetBars({ labels, net, revenue, costs, taxes }: {
             {Math.round(net[i]) ? (
               <div
                 className={`fin-pl-cap ${net[i] >= 0 ? "pos" : "neg"}`}
-                style={{ [net[i] >= 0 ? "bottom" : "top"]: `calc(50% + ${(Math.abs(net[i]) / max) * 48}%)` } as React.CSSProperties}
+                style={{ [net[i] >= 0 ? "bottom" : "top"]: `calc(50% + ${(Math.abs(net[i]) / max) * S}%)` } as React.CSSProperties}
               >
-                {compact(net[i])}
+                {/* 폰에선 달 칸이 25px 남짓이라 "−3,423K" 가 옆 칸까지 번진다 — 짧은 꼴(−3.4M)을
+                    함께 두고 CSS 가 폭에 따라 하나만 보인다. */}
+                <span className="fin-cap-long">{compact(net[i])}</span>
+                <span className="fin-cap-short">{shortAmt(net[i])}</span>
               </div>
             ) : null}
             <div
               className={`fin-net-bar ${net[i] >= 0 ? "pos" : "neg"}`}
-              style={{ height: `${(Math.abs(net[i]) / max) * 48}%`, [net[i] >= 0 ? "bottom" : "top"]: "50%" } as React.CSSProperties}
+              style={{ height: `${(Math.abs(net[i]) / max) * S}%`, [net[i] >= 0 ? "bottom" : "top"]: "50%" } as React.CSSProperties}
             />
           </div>
           <div className="fin-bar-label">{lab}</div>
