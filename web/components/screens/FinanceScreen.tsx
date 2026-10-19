@@ -526,14 +526,16 @@ function OverviewTab() {
 
   return (
     <div className="fin-overview">
-      <div className="fin-period-bar">
-        <div className="seg-toggle" role="group" aria-label="Unit">
+      {/* fin-cf-* 클래스는 폰 폭 배치용 — 거기선 [단위|통화] / [시작·구간·This year] /
+          [기초잔고] / [스위치 셋] 네 줄로 다시 앉힌다(데스크톱은 지금처럼 한 줄 흐름). */}
+      <div className="fin-period-bar fin-cf-bar">
+        <div className="seg-toggle fin-cf-unit" role="group" aria-label="Unit">
           {/* 월 단위는 한 해를 통째로, 주 단위는 이번 달부터 — 1월부터 12주만 보면
               지금이 창 밖으로 밀려나 고를 것이 없다. */}
           <button className={unit === "month" ? "on" : ""} onClick={() => { setUnit("month"); setCount(12); setStartM(1); setPicked(null); }}>Monthly</button>
           <button className={unit === "week" ? "on" : ""} onClick={() => { setUnit("week"); setCount(12); setStartY(new Date().getFullYear()); setStartM(new Date().getMonth() + 1); setPicked(null); }}>Weekly</button>
         </div>
-        <label className="fin-inline-field">
+        <label className="fin-inline-field fin-cf-start">
           {/* 시작점을 뒤로 물리면 지나간 달의 실적까지 함께 굴러간다 — 연초부터 되짚어 볼 때.
               주 단위도 같은 자리에서 시작한다(그 달 1일부터 N주). */}
           Start
@@ -546,13 +548,13 @@ function OverviewTab() {
         </label>
         <button
           type="button"
-          className="btn sm"
+          className="btn sm fin-cf-thisyear"
           title="Open the window at January and run it through December"
           onClick={() => { setStartY(new Date().getFullYear()); setStartM(1); setCount(12); setPicked(null); }}
         >
           This year
         </button>
-        <label className="fin-inline-field">
+        <label className="fin-inline-field fin-cf-periods">
           Periods
           <select value={count} onChange={(e) => { setCount(Number(e.target.value)); setPicked(null); }}>
             {(unit === "month" ? [3, 6, 12, 18, 24] : [8, 12, 16, 24]).map((n) => <option key={n} value={n}>{n}</option>)}
@@ -561,32 +563,36 @@ function OverviewTab() {
         {/* '어느 칸을 들여다볼지'는 이 줄에 없다 — 이 줄은 창을 어떻게 뜰지 정하는
             설정들이고, 그건 아래 세 기둥이 무엇을 말하는지를 정하는 것이라 기둥 바로
             왼쪽(표의 Period 칸 자리)에 서 있다. */}
-        <div className="seg-toggle" role="group" aria-label="Currency">
+        <div className="seg-toggle fin-cf-cur" role="group" aria-label="Currency">
           <button className={currency === "KRW" ? "on" : ""} onClick={() => setCurrency("KRW")}>₩ KRW</button>
           <button className={currency === "USD" ? "on" : ""} onClick={() => setCurrency("USD")}>$ USD</button>
         </div>
-        <label className="fin-inline-field">
+        <label className="fin-inline-field fin-cf-opening">
           {/* 기준일을 라벨에 박아 둔다 — 첫 구간이 이번 달 1일부터라 '오늘 잔고'를 넣으면
               이번 달에 이미 오간 돈이 두 번 세어진다. */}
           Opening balance ({sym(currency).trim()}) <span className="muted">as of {openingAsOf}</span>
           <AmountInput inputMode="decimal" value={openingInput} onChange={(e) => setOpeningInput(e.target.value.replace(/,/g, ""))} style={{ width: 140 }} />
         </label>
-        <label className="check-chip" style={{ cursor: "pointer" }}>
-          <input type="checkbox" checked={includePo} onChange={(e) => setIncludePo(e.target.checked)} /> Include vendor PO outflow (est.)
+        <label className="check-chip fin-cf-opt" style={{ cursor: "pointer" }} title="Include vendor PO outflow (est.)">
+          <input type="checkbox" checked={includePo} onChange={(e) => setIncludePo(e.target.checked)} />
+          <span className="fin-opt-long"> Include vendor PO outflow (est.)</span>
+          <span className="fin-opt-short">Vendor PO (est.)</span>
         </label>
         {/* 예정을 흐름에 태워 보는 스위치 — 기본은 꺼짐(잔고는 실제로 오간 돈만).
             켜면 아래 잔고 곡선이 통장이 아니라 예측이 된다. */}
         <label
-          className="check-chip"
+          className="check-chip fin-cf-opt"
           style={{ cursor: "pointer" }}
           title="Scheduled items that have not moved yet are kept out of the balance — the balance shows money that actually moved. Tick to roll them in and project ahead."
         >
-          <input type="checkbox" checked={includeExpected} onChange={(e) => setIncludeExpected(e.target.checked)} /> Count expected in balance
+          <input type="checkbox" checked={includeExpected} onChange={(e) => setIncludeExpected(e.target.checked)} />
+          <span className="fin-opt-long"> Count expected in balance</span>
+          <span className="fin-opt-short">Expected</span>
         </label>
         {/* 연체를 흐름에 태워 보는 스위치 — 기본은 꺼짐(잔고 밖에 세워 둔다). 연체는
             예정의 부분집합이라, 예정을 통째로 세워 둔 동안에는 고를 것이 없다. */}
         <label
-          className={`check-chip${includeExpected ? "" : " off"}`}
+          className={`check-chip fin-cf-opt${includeExpected ? "" : " off"}`}
           style={{ cursor: includeExpected ? "pointer" : "default" }}
           title={includeExpected
             ? "Overdue items are unsettled, so by default they are kept out of the balance. Tick to roll them in."
@@ -597,7 +603,9 @@ function OverviewTab() {
             checked={includeOverdue && includeExpected}
             disabled={!includeExpected}
             onChange={(e) => setIncludeOverdue(e.target.checked)}
-          /> Include overdue in balance
+          />
+          <span className="fin-opt-long"> Include overdue in balance</span>
+          <span className="fin-opt-short">Overdue</span>
         </label>
       </div>
 

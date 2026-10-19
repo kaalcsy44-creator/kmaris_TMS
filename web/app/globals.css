@@ -19365,3 +19365,53 @@ select.compose-tpl-version {
     white-space: nowrap;
   }
 }
+
+/* ── Cash flow(Overview) 설정 줄 — 폰 폭 ─────────────────────────────────────────
+   아홉 개 손잡이가 한 흐름으로 접혀 무엇이 무엇과 한 덩이인지 안 읽혔다. 네 줄로 다시 앉힌다:
+     1) [Monthly|Weekly] ............... [₩ KRW|$ USD]   — 무엇을 어떤 돈으로 볼까
+     2) Start [Jan][2026] · Periods [12] ...... [This year] — 창의 위치와 길이
+     3) Opening balance (₩) as of … [금액 ...........]    — 출발 잔고
+     4) [Vendor PO (est.)] [Expected] [Overdue]          — 잔고 계산 스위치(짧은 이름)
+   줄 나눔은 순서(order)와 폭 100% 짜리(기초잔고 줄)·보이지 않는 줄끊개(::after)로 한다. */
+@media (max-width: 720px) {
+  .fin-cf-bar {
+    gap: 8px;
+    row-gap: 8px;
+  }
+  .fin-cf-bar .fin-cf-unit { order: 1; }
+  .fin-cf-bar .fin-cf-cur { order: 2; margin-left: auto; }
+  .fin-cf-bar::after { content: ""; order: 3; flex: 0 0 100%; height: 0; margin-top: -8px; }
+  .fin-cf-bar .fin-cf-start { order: 4; }
+  .fin-cf-bar .fin-cf-periods { order: 5; }
+  .fin-cf-bar .fin-cf-thisyear { order: 6; margin-left: auto; }
+  .fin-cf-bar .fin-cf-opening {
+    order: 7;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+  }
+  /* 금액 칸은 남은 폭을 다 쓴다(인라인 width:140 을 넘는다). */
+  .fin-cf-bar .fin-cf-opening input {
+    flex: 1 1 140px;
+    min-width: 0;
+    width: auto !important;
+  }
+  .fin-cf-bar .fin-cf-opt {
+    order: 8;
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: center;
+    gap: 5px;
+    padding: 5px 6px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .fin-cf-bar .fin-inline-field select { height: 30px; }
+  .fin-cf-bar .seg-toggle button { white-space: nowrap; }
+  /* Showing 의 구간 이름 — 데스크톱에선 옆 카드 제목만 하게(16px) 세웠지만 폰에선 카드가
+     한 줄씩 쌓여 그만큼 클 이유가 없다. 두 단계 낮춘다. */
+  .fin-three-lead .fin-focus-select {
+    height: 32px;
+    font-size: 13.5px;
+  }
+}
