@@ -657,19 +657,18 @@ def delete_commercial_invoice(order_id: int):
 @app.post("/api/admin/documents/{order_id}/reset-stage/{stage}",
           dependencies=[Depends(require_token)])
 def reset_stage(order_id: int, stage: int):
-    """7~11단계 중 한 단계의 '완료 근거'를 이 오더(고객 P/O)에서 한 번에 제거해 그 앞 단계로 되돌린다.
+    """7~10단계 중 한 단계의 '완료 근거'를 이 오더(고객 P/O)에서 한 번에 제거해 그 앞 단계로 되돌린다.
 
     각 단계 근거(= 그 단계를 완료로 계산하게 만드는 것):
-      · 7 Delivery Readiness : CI(+하위 PL)·SA·수하인/벤더서류 마일스톤
-      · 8 Delivery Complete  : POD(인도증빙)·인도일
-      · 9 Tax Invoice·Billing: 세금계산서·AR 레코드
-      · 10 Tax Invoice Issued: 수동 완료 플래그(stage_dates)
-      · 11 Payment Completed : 수동 완료 플래그(AR 완납이면 AR 화면에서 먼저 해제)
+      · 7 Delivery Readiness   : CI(+하위 PL)·SA·수하인/벤더서류 마일스톤
+      · 8 Delivery Complete    : POD(인도증빙)·인도일
+      · 9 Billing · Tax Invoice: 세금계산서 데이터·AR 레코드 + 세금계산서 발행 표시("tax")
+      · 10 Payment Completed   : 수동 완료 플래그(AR 완납이면 AR 화면에서 먼저 해제)
     공통으로 해당 단계의 수동 완료 플래그(stage_dates)·서비스 입력(service_info)도 제거한다.
 
     상위(더 진행된) 단계 근거가 남아 있으면 막는다 — 반드시 위 단계부터 순서대로 초기화해야 한다."""
-    if stage not in (7, 8, 9, 10, 11):
-        raise HTTPException(status_code=400, detail="7~11단계만 초기화할 수 있습니다.")
+    if stage not in (7, 8, 9, 10):
+        raise HTTPException(status_code=400, detail="7~10단계만 초기화할 수 있습니다.")
     s = get_session()
     try:
         order = s.query(Order).filter_by(id=order_id).first()
@@ -708,7 +707,9 @@ def reset_stage(order_id: int, stage: int):
                     s.delete(tax)
             (s.query(ARRecord).filter_by(order_id=order_id)
              .filter(ARRecord.kind != "extra").delete(synchronize_session=False))
-        elif stage == 11:
+            # 9단계 안의 세금계산서 발행 표시도 함께 거둔다(옛 10단계를 흡수했다).
+            set_manual_stage(rfq, order, "tax", None)
+        elif stage == 10:
             ars = (s.query(ARRecord).filter_by(order_id=order_id)
                    .filter(ARRecord.kind != "extra").all())
             if any(_enum_val(a.status) == "완납" for a in ars):

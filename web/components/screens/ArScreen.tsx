@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   createArRecord,
   completeOrderStage,
+  setTaxIssued,
   deleteArRecord,
   fetchArOverview,
   fetchDocumentDetail,
@@ -138,9 +139,10 @@ const emptyForm: ArForm = {
 
 const emptyTaxItem: TaxInvoiceItem = { description: "", part_no: "", qty: 1, unit_price: 0, amount: 0 };
 
-type StageTab = 9 | 10 | 11;
+// 9 = 청구·세금계산서(2026-10 옛 10단계 Tax Invoice 흡수), 10 = 수금(옛 11).
+type StageTab = 9 | 10;
 
-// 프로젝트 팝업(진행현황) 내 AR 작업 — 이 오더의 세금계산서 발행(10)·수금 완료(11)를
+// 프로젝트 팝업(진행현황) 내 AR 작업 — 이 오더의 청구·세금계산서 발행(9)·수금 완료(10)를
 // 인라인으로 편집한다. 전역 목록·SOA 내보내기는 진행현황 통합 목록으로 이전됨.
 export function ArOverview({
   initialOrderId = null,
@@ -161,7 +163,7 @@ export function ArOverview({
   const { data, refresh } = useCachedData("ar:overview", fetchArOverview);
   const { data: options } = useCachedData("ar:workoptions", fetchPoWorkOptions);
   const [stageTab, setStageTab] = useState<StageTab>(
-    initialStage === 11 ? 11 : initialStage === 9 ? 9 : 10
+    initialStage === 10 ? 10 : 9
   );
   // 수취(AR, 고객 청구) / 지급(AP, 벤더 매입) / 클레임(납품 후 하자·상계) 문서 탭.
   // 지급대장에서 온 딥링크는 AP 로 연다.
@@ -171,10 +173,9 @@ export function ArOverview({
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const orderId = initialOrderId ?? null;
 
-  // 딥링크 단계(?stage=9|10|11) 변화 시 탭 동기화.
+  // 딥링크 단계(?stage=9|10) 변화 시 탭 동기화.
   useEffect(() => {
-    if (initialStage === 11) setStageTab(11);
-    else if (initialStage === 10) setStageTab(10);
+    if (initialStage === 10) setStageTab(10);
     else if (initialStage === 9) setStageTab(9);
   }, [initialStage]);
 
@@ -224,8 +225,9 @@ export function ArOverview({
   const match = addingAr ? undefined : orderArs.find((r) => r.id === selArId) ?? orderArs[0];
   // 화면의 다른 곳(클레임·담당자 판정)은 본 청구서를 기준으로 삼는다.
   const mainAr = orderArs.find((r) => (r.kind ?? "main") !== "extra") ?? orderArs[0];
-  // 9~11단계 모두 같은 대금청구서 편집기(ArAddForm)를 본문으로 쓴다 — P/O 간·단계 간 화면 일관성.
-  // 레코드가 없으면 생성 폼, 있으면 편집 폼. 10·11단계는 그 아래 발행/수금 완료 바(MilestoneBar)를 덧붙인다.
+  // 9·10단계 모두 같은 대금청구서 편집기(ArAddForm)를 본문으로 쓴다 — P/O 간·단계 간 화면 일관성.
+  // 레코드가 없으면 생성 폼, 있으면 편집 폼. 그 아래 9단계는 세금계산서 발행, 10단계는 수금
+  // 완료 바(MilestoneBar)를 덧붙인다.
   // AR(수취) 옆에 AP(지급, 벤더 매입) 탭 — 각 벤더 P/O 의 대금청구서·전자세금계산서를 입력.
   return (
     <div className="embedded-detail ar-ap-detail">
@@ -246,7 +248,7 @@ export function ArOverview({
       {/* 탭 본문은 저마다 제 상자에 담고 key 를 준다.
           그전에는 AR 은 Fragment(자식 여럿, 그나마 조건부라 개수가 들쭉날쭉), AP·Claim 은
           단일 요소였다. 같은 자리에서 "자식 여럿"과 "자식 하나"가 오가면 React 가 옛
-          자식들을 지우지 못하고 남겨 두는 일이 생긴다 — 실제로 10·11단계에서 AR 입력폼이
+          자식들을 지우지 못하고 남겨 두는 일이 생긴다 — 실제로 (옛) 10·11단계에서 AR 입력폼이
           서너 개씩 남아 AP 내용 위에 쌓였고, Claim 탭으로 옮겨도 그대로 있었다.
           상자 하나에 key 하나면 탭을 바꿀 때 통째로 갈린다. */}
       {docTab === "ar" ? (
@@ -305,12 +307,8 @@ export function ArOverview({
           {/* key = AR 레코드 id — P/O 를 바꾸면 완료 바의 입력값(수금액·일자)도 그 청구서 것으로
               다시 채워진다. key 가 없으면 앞서 보던 P/O 의 금액이 그대로 남아 엉뚱한 청구서에
               저장된다(P/O A 금액이 B 에 기록되던 원인). */}
-          {match && stageTab !== 9 ? (
-            <MilestoneBar key={match.id} row={match} stage={stageTab} onChanged={load} />
-          ) : null}
-          {/* 9단계는 완료 바가 없다(청구서 저장이 곧 완료) — 벤더측 잔여만 한 줄로 알린다. */}
-          {match && stageTab === 9 ? (
-            <div className="ar-milestone ar-milestone--note"><ApGate row={match} stage={9} /></div>
+          {match ? (
+            <MilestoneBar key={`${match.id}-${stageTab}`} row={match} stage={stageTab} onChanged={load} />
           ) : null}
         </div>
       ) : docTab === "ap" ? (
@@ -422,7 +420,7 @@ function ApSection({
         </div>
       ) : null}
       {/* 추가 매입 — 일정 지연처럼 본 발주와 별개로 받은 청구. 보조 P/O 를 끊지 않는다
-          (그러면 이미 끝난 9·10·11단계가 미지급 때문에 되돌아간다). */}
+          (그러면 이미 끝난 9·10단계가 미지급 때문에 되돌아간다). */}
       {!addingExtra ? (
         <div className="ar-add-extra">
           <button type="button" className="btn sm" onClick={() => setAddingExtra(true)}>
@@ -1068,7 +1066,8 @@ function ApAddForm({
         </div>
       </div>
 
-      {stage === 10 ? (
+      {/* 벤더 전자세금계산서 수취 — 9단계(청구·세금계산서). 청구서를 받는 자리와 같은 단계다. */}
+      {stage === 9 ? (
         <div className="ar-milestone">
           <div className="form-section-title">e-Tax invoice received (from vendor)</div>
           <div className="milestone-row" style={{ marginBottom: 10 }}>
@@ -1088,9 +1087,9 @@ function ApAddForm({
         </div>
       ) : null}
 
-      {/* 지급 확인 — 11단계(Payment Completed) 전용. 9단계는 청구서를 받는 자리,
-          10단계는 전자세금계산서 수취 자리라 각자 제 일만 한다. */}
-      {stage === 11 ? (
+      {/* 지급 확인 — 10단계(Payment Completed) 전용. 9단계는 청구서·전자세금계산서를
+          받는 자리라 각자 제 일만 한다. */}
+      {stage === 10 ? (
         <div className="ar-milestone">
           <div className="form-section-title">Payment (to vendor)</div>
           <div className="milestone-row">
@@ -1147,15 +1146,18 @@ function ApAddForm({
   );
 }
 
-/** 10·11단계 완료 바 — 대금청구서 편집(ArAddForm) 아래에 붙는 발행/수금 완료 액션.
- *  청구서 필드는 위 ArAddForm 에서 편집하므로, 여기서는 발행일/수금액 등 마일스톤만 다룬다. */
 /** 매입(AP)측 잔여 안내 — 이 단계를 막고 있는 벤더 P/O 건수를 한 줄로 알려 준다.
- *  9·10·11 단계는 고객측(AR)과 벤더측(AP)이 모두 끝나야 완료로 계산된다. */
+ *  9·10 단계는 고객측(AR)과 벤더측(AP)이 모두 끝나야 완료로 계산된다. 9단계의 벤더측은
+ *  청구서 수취와 전자세금계산서 수취 둘이라, 덜 끝난 쪽 건수로 센다. */
 function ApGate({ row, stage }: { row: ArRow; stage: StageTab }) {
   const total = row.ap_total ?? 0;
   if (!total) return null;   // 벤더 P/O 가 없는 딜은 매입측이 없다.
-  const done = stage === 9 ? row.ap_billed : stage === 10 ? row.ap_tax : row.ap_paid;
-  const label = stage === 9 ? "vendor bill received" : stage === 10 ? "vendor tax invoice received" : "vendor paid";
+  const done = stage === 9
+    ? Math.min(row.ap_billed ?? 0, row.ap_tax ?? 0)
+    : row.ap_paid;
+  const label = stage === 9
+    ? `vendor bill + tax invoice received (bills ${row.ap_billed ?? 0}/${total} · tax invoices ${row.ap_tax ?? 0}/${total})`
+    : "vendor paid";
   if ((done ?? 0) >= total) {
     return <span className="hint-inline ap-gate ok" style={{ marginLeft: 10 }}>Vendor side (AP) complete — {total}/{total} {label}</span>;
   }
@@ -1166,15 +1168,18 @@ function ApGate({ row, stage }: { row: ArRow; stage: StageTab }) {
   );
 }
 
-function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; onChanged: () => void }) {
+/** 9·10단계 완료 바 — 대금청구서 편집(ArAddForm) 아래에 붙는 발행/수금 완료 액션.
+ *  9 = 고객 전자세금계산서 발행(옛 10단계), 10 = 수금 완료(옛 11단계). 청구서 필드는
+ *  위 ArAddForm 에서 편집하므로, 여기서는 발행일/수금액 등 마일스톤만 다룬다. */
+function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: StageTab; onChanged: () => void }) {
   const canEditThis = can("ar", "edit") && canEditDeal(row.assignee_id);
   const { editing: canWriteNow, readMode, fieldsetProps } = useEditGate(canEditThis);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const done = stage === 10 ? row.tax_issued : row.paid_done;
+  const done = stage === 9 ? row.tax_issued : row.paid_done;
   // PI 로 갈음한 발행 — 되돌릴 수동 완료 기록이 없으므로 Undo 를 내밀면 안 된다
   // (눌러도 아무 변화가 없다). 대신 "무엇이 대신했는지" 를 적어 준다.
-  const byPi = stage === 10 && !!row.tax_covered_by_pi;
+  const byPi = stage === 9 && !!row.tax_covered_by_pi;
   // 발행 일시 칸의 초기값. PI 로 갈음한 건은 PI 발행일이 곧 세금계산서 발행일은 아니므로
   // 그 날짜를 넣지 않는다 — 이 칸은 "전자세금계산서도 따로 끊었을 때만" 채우는 자리다.
   const [issuedAt, setIssuedAt] = useState(
@@ -1197,7 +1202,7 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
   const payDay = (paidAt || "").slice(0, 10) || today();
   const [feeQuote, setFeeQuote] = useState<{ fee: number; rate: number; date: string } | null>(null);
   useEffect(() => {
-    if (!foreign || stage !== 11) { setFeeQuote(null); return; }
+    if (!foreign || stage !== 10) { setFeeQuote(null); return; }
     let alive = true;
     fetchFxRate(payDay, row.currency || "USD")
       .then((q) => {
@@ -1214,13 +1219,14 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
     setBusy(true);
     setErr(null);
     try {
-      if (stage === 11 && flag) {
+      if (stage === 10 && flag) {
         // 빈 칸 = 금액은 건드리지 않고 완료만 표시. 0 을 넣으면 기록된 수금을 취소한다.
         const text = amount.trim();
         // 입금일은 '적은 날'이 아니라 '들어온 날' — 수수료 환율의 기준일이라 반드시 넘긴다.
         if (text !== "") await recordArPayment(row.id, num(text), payDue, true, payDay, foreign && bankFee);
       }
-      await completeOrderStage(row.order_id, stage, flag, flag ? (stage === 10 ? issuedAt : paidAt) : undefined);
+      if (stage === 9) await setTaxIssued(row.order_id, flag, flag ? issuedAt : undefined);
+      else await completeOrderStage(row.order_id, 10, flag, flag ? paidAt : undefined);
       onChanged();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
@@ -1232,17 +1238,17 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
   return (
     <div className="ar-milestone">
       <div className="form-section-title">
-        {stage === 10 ? "Tax invoice issuance" : "Payment"}
+        {stage === 9 ? "Tax invoice issuance (to customer)" : "Payment"}
       </div>
       <div className="milestone-row" style={{ marginBottom: 10 }}>
         <span className={`ar-badge${done ? "" : " overdue"}`}>
-          {stage === 10
+          {stage === 9
             ? (row.tax_issued
                 ? (byPi ? `Covered by Proforma Invoice${row.tax_pi_no ? ` ${row.tax_pi_no}` : ""}` : `Issued (${row.tax_issued_date || "done"})`)
                 : "Not issued")
             : (row.paid_done ? `Paid (${row.paid_date || "done"})` : "Pending")}
         </span>
-        {stage === 11 ? (
+        {stage === 10 ? (
           <span className="hint-inline" style={{ marginLeft: 10 }}>
             Invoice {row.invoice_amount.toLocaleString()} · received {row.paid_amount.toLocaleString()} ·
             {/* 클레임 상계가 있으면 그만큼은 받을 돈이 아니다 — 잔액이 왜 줄었는지 여기서 밝힌다. */}
@@ -1252,7 +1258,7 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
         ) : null}
         {/* 받은 금액이 청구액을 넘었다 = 같은 수금이 두 번 들어갔거나 금액을 잘못 넣은 것.
             아래 칸에 올바른 총액을 넣고 다시 저장하면 그 값으로 정정된다. */}
-        {stage === 11 && row.outstanding < 0 ? (
+        {stage === 10 && row.outstanding < 0 ? (
           <span className="hint-inline ap-gate wait" style={{ marginLeft: 10 }}>
             Received more than invoiced — fix the total below and save again.
           </span>
@@ -1263,7 +1269,7 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
       </div>
       <fieldset {...fieldsetProps}>
         <div className="form-grid">
-          {stage === 10 ? (
+          {stage === 9 ? (
             <Field label="Issued at" value={issuedAt} onChange={setIssuedAt} type="datetime-local" />
           ) : (
             <>
@@ -1275,7 +1281,7 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
         </div>
         {/* 외화 입금에만 뜬다 — 원화에는 수취수수료가 없다. 입금일을 바꾸면 그날 고시로
             다시 계산된다(칸 위의 'Paid at' 날짜가 곧 기준일이다). */}
-        {stage === 11 && foreign ? (
+        {stage === 10 && foreign ? (
           <label className="check-chip" style={{ display: "inline-flex", marginTop: 8, cursor: "pointer" }}>
             <input type="checkbox" checked={bankFee} onChange={(e) => setBankFee(e.target.checked)} />
             {" "}Bank deducted its receiving fee
@@ -1287,7 +1293,7 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
             ) : null}
           </label>
         ) : null}
-        {stage === 11 ? (
+        {stage === 10 ? (
           <p className="hint-inline" style={{ display: "block", margin: "6px 0 0" }}>
             The amount is the total received against this invoice, not an addition — saving twice records it once.
             Leave it empty to just mark the stage complete, or enter 0 to undo a payment recorded by mistake.
@@ -1310,12 +1316,12 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: 10 | 11; o
           <>
             <button className="btn primary" disabled={busy} onClick={() => complete(true)}>
               {busy ? "Working…" : done
-                ? (stage === 10 ? "Save issued date" : "Save paid date")
-                : (stage === 10 ? "Complete tax invoice issuance" : "Complete payment")}
+                ? (stage === 9 ? "Save issued date" : "Save paid date")
+                : (stage === 9 ? "Complete tax invoice issuance" : "Complete payment")}
             </button>
             {done && !byPi ? (
               <button className="btn" disabled={busy} onClick={() => complete(false)}>
-                {stage === 10 ? "Undo issuance" : "Undo completion"}
+                {stage === 9 ? "Undo issuance" : "Undo completion"}
               </button>
             ) : null}
           </>

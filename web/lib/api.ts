@@ -857,6 +857,18 @@ export function savePodNotes(
 }
 
 /** 11·12 등 수동 완료 단계 토글 — 완료 시 현황판 단계가 해당 단계로 진행. */
+/** 9단계 안의 '고객 세금계산서 발행' 표시(옛 10단계) — stage_dates["tax"]. */
+export function setTaxIssued(
+  orderId: number,
+  done: boolean,
+  at?: string
+): Promise<{ ok: boolean; stage: number; done: boolean }> {
+  return post(`/api/admin/orders/${orderId}/tax-issued`, {
+    done,
+    at: at ?? null,
+  });
+}
+
 export function completeOrderStage(
   orderId: number,
   stage: number,
@@ -890,7 +902,7 @@ export function fetchFinanceReceivables(): Promise<{ rows: FinanceReceivable[]; 
 export function fetchFinancePayables(): Promise<{ rows: FinancePayable[]; fx: FxQuote }> {
   return get<{ rows: FinancePayable[]; fx: FxQuote }>("/api/admin/finance/payables");
 }
-/** 이 오더가 속한 딜에 직접 걸린 지급(벤더 P/O 없는 매입) — 프로젝트 9~11단계 Payable 탭용. */
+/** 이 오더가 속한 딜에 직접 걸린 지급(벤더 P/O 없는 매입) — 프로젝트 9·10단계 Payable 탭용. */
 export function fetchDealPayables(orderId: number): Promise<DealPayables> {
   return get<DealPayables>(`/api/admin/finance/deal-payables/${orderId}`);
 }

@@ -22,7 +22,7 @@ import type { ArCandidate, ClaimCost, ClaimRow, CreditNoteItem, CreditNoteRow } 
 import { useEditGate } from "@/lib/viewMode";
 import RecordStrip from "@/components/common/RecordStrip";
 
-// 납품 후 클레임 · 크레딧 노트 — 11단계(수금 완료) 워크스페이스의 세 번째 탭.
+// 납품 후 클레임 · 크레딧 노트 — 10단계(수금 완료) 워크스페이스의 세 번째 탭.
 //
 // 왜 여기인가: 상계할 청구서와 고객·P/O 가 이미 이 화면의 맥락에 있다. 클레임을 파이프라인
 // 단계로 두지 않는 이유는 backend Claim 모델 주석 참고(예외 사건이라 단계로 두면 클레임이

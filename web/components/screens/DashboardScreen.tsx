@@ -302,7 +302,7 @@ function HomeTab() {
           due: a.due_date,
           days: daysBetween(t, a.due_date),
           amount: dualCurrencyText(a.outstanding, a.currency),
-          href: `/project?order=${a.order_id}&stage=11`,
+          href: `/project?order=${a.order_id}&stage=10`,
           order_id: a.order_id || undefined,
         });
       }
@@ -480,7 +480,7 @@ function HomeTab() {
           getRowKey={(r) => r.id}
           defaultSortKey="date"
           defaultSortDir="desc"
-          onRowClick={(r) => openByOrderId(r.order_id, `/project?order=${r.order_id}&stage=11`)}
+          onRowClick={(r) => openByOrderId(r.order_id, `/project?order=${r.order_id}&stage=10`)}
           empty="No sales records yet."
         />
       ),
@@ -942,7 +942,7 @@ const STAGE_COLORS: Record<StageKey, { sales: string; purchase: string }> = {
 // 단계는 순서형이므로 임의 카테고리색이 아니라 단일 색조 심도로 진행감을 준다.
 const PHASE_RAMP = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#0d366b"];
 const PHASE_LABELS = ["RFQ", "Quote", "P/O", "Documents", "AR"];
-const PHASE_BOUNDS = [2, 4, 6, 9, 11]; // 각 phase 의 단계 상한(누적): 1–2 / 3–4 / 5–6 / 7–9 / 10–11
+const PHASE_BOUNDS = [2, 4, 6, 8, 10]; // 각 phase 의 단계 상한(누적): 1–2 / 3–4 / 5–6 / 7–8 / 9–10
 /** 1-based 단계 번호 → phase 인덱스(0..3). */
 function phaseOfStage(stage: number): number {
   const i = PHASE_BOUNDS.findIndex((b) => stage <= b);
@@ -1527,7 +1527,7 @@ function AlertCard({
   function go(r: StatAlertRow) {
     // 모든 단계 작업은 진행현황(Progress) 프로젝트 팝업으로 통합됨 → 딥링크로 해당 단계를 연다.
     if (kind === "quote" && r.rfq_id) router.push(`/project?rfq=${r.rfq_id}&stage=4`);
-    else if (kind === "ar" && r.order_id) router.push(`/project?order=${r.order_id}&stage=11`);
+    else if (kind === "ar" && r.order_id) router.push(`/project?order=${r.order_id}&stage=10`);
     else if (r.rfq_id) router.push(`/project?rfq=${r.rfq_id}`);
     else if (r.order_id) router.push(`/project?order=${r.order_id}`);
     else router.push("/project");

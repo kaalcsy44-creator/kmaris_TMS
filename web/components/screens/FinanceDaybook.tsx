@@ -302,7 +302,7 @@ function DaybookLine({ row, start, end, currency }: {
   // 따로 세우는 건 자리 때문이다: 번호는 위 줄의 Reference 칸, 금액은 Amount 칸에 그대로
   // 내려서야, 번호를 들고 금액을 맞춰 보는 눈이 가로로 헤매지 않고 세로로 내려간다.
   // 주인공은 위의 실입금액이고 이 두 줄은 근거라, 옅은 글자로 물려 둔다. 두 번호는 각자의
-  // 자리로 열린다 — 청구서는 그 딜의 청구 단계, 노트는 11단계 Claim 탭.
+  // 자리로 열린다 — 청구서는 그 딜의 청구 단계, 노트는 10단계 Claim 탭.
   const splits = netted
     ? [
         {
@@ -314,7 +314,7 @@ function DaybookLine({ row, start, end, currency }: {
             <ProjectDocLink
               orderId={r.order_id}
               rfqId={r.rfq_id}
-              stage={11}
+              stage={10}
               claim
               label={r.set_off_ref || "credit note"}
             />

@@ -115,9 +115,9 @@ export function ProjectDocLink({
   hint?: boolean;
   /** 지급(AP) 행 전용 — AP 탭 + 이 벤더 P/O 가 선택된 상태로 연다. */
   apPoId?: number;
-  /** 열 단계 — 비우면 기존 규칙(AP 행은 11, 그 밖은 9). 클레임 대장은 11로 연다. */
+  /** 열 단계 — 비우면 기존 규칙(AP 행은 10, 그 밖은 9). 클레임 대장은 10으로 연다. */
   stage?: number;
-  /** 11단계를 클레임 탭으로 연다(클레임 대장에서 눌러 온 경우). */
+  /** 10단계를 클레임 탭으로 연다(클레임 대장에서 눌러 온 경우). */
   claim?: boolean;
 }) {
   const text = label || "—";
@@ -125,7 +125,7 @@ export function ProjectDocLink({
   if (!orderId && !rfqId) return hint ? <span className="hint-inline">{text}</span> : <>{text}</>;
   // rfq 와 order 를 함께 넘긴다 — rfq 로 프로젝트를 찾고, order 로 그 프로젝트 안에서
   // 이 문서의 고객 P/O 를 고른다. (한 프로젝트에 P/O 가 여러 건일 수 있다.)
-  // 지급(AP) 행은 11단계(Payment Completed)로 연다 — 지급 확인 칸이 붙어 있는 단계라,
+  // 지급(AP) 행은 10단계(Payment Completed)로 연다 — 지급 확인 칸이 붙어 있는 단계라,
   // 목록에서 누르면 바로 그 칸이 보인다. 수입(AR) 행은 청구서를 편집하는 9단계 그대로.
   // 돌아올 자리 — 팝업을 닫으면 이 주소로 되돌린다. 없으면 프로젝트 목록에 남는데,
   // 여기서 넘어온 사람이 보고 있던 것은 그 목록이 아니라 지금 이 대장이다.
@@ -136,7 +136,7 @@ export function ProjectDocLink({
   const params = [
     rfqId ? `rfq=${rfqId}` : "",
     orderId ? `order=${orderId}` : "",
-    `stage=${stage ?? (apPoId ? 11 : 9)}`,
+    `stage=${stage ?? (apPoId ? 10 : 9)}`,
     apPoId ? `ap=${apPoId}` : "",
     claim ? "claim=1" : "",
     back ? `back=${encodeURIComponent(back)}` : "",
@@ -146,9 +146,9 @@ export function ProjectDocLink({
       className={`fin-doc-link${hint ? " hint" : ""}`}
       href={`/project?${params}`}
       title={claim
-        ? "Open this claim · stage 11 Claim · Credit Note"
+        ? "Open this claim · stage 10 Claim · Credit Note"
         : apPoId
-          ? "Open this vendor bill · stage 11 Payable (AP)"
+          ? "Open this vendor bill · stage 10 Payable (AP)"
           : "Open this project's billing · AR/AP stage"}
     >
       {text}

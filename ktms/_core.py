@@ -246,12 +246,14 @@ def _sync_schema() -> None:
             migrate_columns, migrate_normalize_incoterms, migrate_backfill_price_history,
             migrate_reset_mail_sync_cursor, migrate_seed_mail_groups,
             migrate_split_stage_dates_to_orders, migrate_seed_line_ids,
+            migrate_merge_tax_stage,
         )
 
         Base.metadata.create_all(bind=get_engine())
         migrate_columns()
         migrate_normalize_incoterms()   # 'EXW Busan' 등 기존 incoterms 값 표준 라벨로 1회 정규화
         migrate_split_stage_dates_to_orders()  # 단계 완료 표시를 프로젝트 → 고객 P/O 단위로 이관
+        migrate_merge_tax_stage()  # 옛 10단계(Tax Invoice)를 9단계로 흡수 — 저장된 단계 번호 11→10
         migrate_backfill_price_history()  # 품목 구매/판매가 이력 초기 백필(마커 가드 1회)
         migrate_reset_mail_sync_cursor()  # 메일 동기화 커서 되감기(최신부터 읽도록 고친 뒤 1회)
         migrate_seed_mail_groups()  # 한 문의에서 갈라진 형제 딜을 메일 묶음으로 연결
@@ -297,9 +299,10 @@ INTERNAL_STEPS = [
     "P/O Sent",                   # 6  (to Vendor)
     "Delivery Readiness",         # 7  (구 'Delivery Arrangement'(구 8)를 흡수)
     "Delivery Complete · POD",    # 8  (구 9)
-    "Billing · Statement",        # 9  (구 10) — 매출 대금청구서·매입 거래명세서(금액 최종확인)
-    "Tax Invoice (e-Tax)",        # 10 (구 11) — 전자세금계산서 발행(고객)/수취(벤더)
-    "Payment Completed",          # 11 (구 12)
+    "Billing · Tax Invoice",      # 9  — 대금청구서(매출)·거래명세서(매입) + 전자세금계산서
+                                  #      발행(고객)/수취(벤더). 2026-10 옛 10단계를 흡수했다:
+                                  #      날짜 하나 찍는 일이라 단계 하나를 따로 둘 일이 아니었다.
+    "Payment Completed",          # 10 (구 11)
 ]
 
 # 업무타입 "서비스"는 7·8단계를 서비스 관점 명칭으로 별도 관리한다.
@@ -915,24 +918,26 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
     # 뒤에 온다(P-056 KOMECO). 그 건에서 9단계를 마치자 아무 일도 없던 7·8 이 완료로 켜졌다.
     # 이제 7·8 은 자기 근거(운송통지·CI·POD·수동 완료·내수 건너뛰기)로만 끝나고, 딜의 자리
     # (stage)는 순서대로 끝낸 마지막 단계에 머문다. 먼저 끝난 돈 단계는 done 에 따로 담는다.
-    s9 = bool(order) and ar_billed and ap_all_billed
-    # 10) 프로포마 인보이스로 청구한 건은 국내 전자세금계산서를 따로 끊지 않는다 —
-    # 발행할 세금계산서가 없으므로 PI 발행을 10단계 완료로 본다(수동 완료 버튼 불필요).
-    # 다만 PI 존재만으로 10단계를 끝내지는 않는다: PI 는 보통 7단계(선적 전)에 나가므로
-    # 그랬다간 아직 출고도 안 한 건이 세금계산서 단계로 보인다. 청구가 시작된 뒤(9단계
-    # 완료)에만 적용한다.
-    pi_covers_tax = pi is not None and s9
-    # 10·11 단계는 매출(AR)·매입(AP) 양쪽이 끝나야 완료다 — 고객에게 세금계산서를 끊고
-    # 수금까지 마쳐도 벤더 세금계산서 수취·지급이 남아 있으면 그 P/O 는 아직 진행 중이다.
-    s10 = (bool(sd.get("10")) or pi_covers_tax) and ap_all_tax
-    s11 = (bool(sd.get("11")) or ar_paid) and ap_all_paid
-    money_done = [n for n, ok in ((9, s9), (10, s10), (11, s11)) if ok]
+    # 9) 청구·세금계산서 — 청구(고객 AR·벤더 청구서 수취)와 세금계산서(고객 발행·벤더 수취)가
+    # 모두 끝나야 완료다(2026-10 옛 10단계 흡수). 세금계산서를 빠뜨린 딜이 9단계에 남아
+    # 눈에 띄게 하려는 것 — 옛 10단계가 하던 "아직 안 끊었다"는 경고를 그대로 잇는다.
+    billed = bool(order) and ar_billed and ap_all_billed
+    # 프로포마 인보이스로 청구한 건은 국내 전자세금계산서를 따로 끊지 않는다 — PI 발행을
+    # 세금계산서 발행으로 본다(수동 표시 불필요). 다만 PI 는 보통 7단계(선적 전)에 나가므로
+    # 청구가 시작된 뒤에만 적용한다(아니면 출고도 안 한 건의 세금계산서가 끝나 보인다).
+    pi_covers_tax = pi is not None and billed
+    # 고객 세금계산서 발행일은 stage_dates["tax"] — 단계 번호가 아니라 9단계 안의 표시다.
+    tax_issued = bool(sd.get("tax")) or pi_covers_tax
+    s9 = billed and tax_issued and ap_all_tax
+    # 10) 수금 — 매출(AR) 수금과 매입(AP) 지급이 모두 끝나야 완료다.
+    s10 = (bool(sd.get("10")) or ar_paid) and ap_all_paid
+    money_done = [n for n, ok in ((9, s9), (10, s10)) if ok]
     # 옛 규칙의 값(최고 도달 단계) — 바뀐 규칙으로 자리가 달라지는 딜을 세어 볼 때 쓴다.
     legacy_stage = max([stage, *money_done])
     if stage >= 8:
         # 물건이 다 갔으면 예전과 같다 — 돈 단계는 이어서 센다.
         stage = legacy_stage
-    # 선입금 딜 — 돈 단계가 물건(7·8)보다 먼저 끝났거나, 결제조건이 선금이다.
+    # 선입금 딜 — 돈 단계(9·10)가 물건(7·8)보다 먼저 끝났다(결제조건 선금은 따로 센다).
     pay_terms = " ".join(
         str((getattr(x, "terms", None) or {}).get("payment_terms") or "")
         for x in (order, quo) if x is not None)
@@ -979,14 +984,13 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
         # 8) 운송 완료 · POD 수취 — POD 업로드 일시 우선, 없으면 인도일 (구 9)
         _set(8, (getattr(pod, "uploaded_at", "") if pod else "")
              or _date_iso(getattr(order, "delivered_date", None)))
-        # 9) Tax Invoice 작성 · 대금 청구 — Tax/AR 근거만 (구 10)
-        _set(9, (_date_iso(tax.date) or _kst_iso(tax.created_at) if tax else "")
+        # 9) 청구·세금계산서 — 세금계산서 발행일(수동 "tax" · PI 로 갈음하면 PI 일자)이
+        #    완료 일시다. 아직 안 끊었으면 청구 근거(Tax 데이터·AR)의 일시를 보여 준다.
+        _set(9, (sd.get("tax") or "")
+             or ((_date_iso(pi.date) or _kst_iso(pi.created_at)) if pi_covers_tax else "")
+             or (_date_iso(tax.date) or _kst_iso(tax.created_at) if tax else "")
              or _kst_iso(min((a.created_at for a in ars if a.created_at), default=None)))
-        # 10) 세금계산서 발행 — PI 로 갈음한 건은 PI 발행일이 완료 일시.
-        #     그 외에는 근거 레코드가 없다(수동 완료 stage_dates 로만 표시).
-        # 11) 대금 결제 완료 — 수동 완료(stage_dates)로만 표시
-        if pi_covers_tax:
-            _set(10, _date_iso(pi.date) or _kst_iso(pi.created_at))
+        # 10) 대금 결제 완료 — 수동 완료(stage_dates)로만 표시
 
     result = (stage, auto)
     _dp_cache[_dp_key] = result
@@ -1195,9 +1199,9 @@ def _deal_state_map(s) -> dict[int, dict]:
             out[r.id] = {"state": "quoted" if r.id in quoted_rfqs else "open", "note": ""}
             continue
         ars = [a for o in orders for a in ars_by_order.get(o.id, [])]
-        # 결제 완료 = 수금 레코드가 모두 완납이거나, 11단계(대금 결제 완료)를 손으로 표시한 것.
+        # 결제 완료 = 수금 레코드가 모두 완납이거나, 10단계(대금 결제 완료)를 손으로 표시한 것.
         # 오더가 여럿이면 전부 끝나야 이 딜이 끝난 것이다.
-        marked_paid = all((o.stage_dates or {}).get("11") for o in orders)
+        marked_paid = all((o.stage_dates or {}).get("10") for o in orders)
         all_paid = bool(ars) and all(_enum_val(a.status) == "완납" for a in ars)
         if all_paid or marked_paid:
             when = max((a.paid_date or "" for a in ars), default="")
@@ -3040,8 +3044,8 @@ def _document_detail_payload(session, order: Order) -> dict:
             "filename": pod.filename or "POD",
             "uploaded_at": pod.uploaded_at or "",
         },
-        # 수동 완료(완료 버튼) 단계 상태 — 7·8(서비스) · 10 · 11
-        "stage_done": {k: bool(sd.get(k)) for k in ("7", "8", "10", "11")},
+        # 수동 완료(완료 버튼) 표시 — 7·8(서비스) · tax(9단계 안 세금계산서 발행) · 10(수금)
+        "stage_done": {k: bool(sd.get(k)) for k in ("7", "8", "tax", "10")},
         "pi": None if not pi else {
             "id": pi.id,
             "pi_no": pi.pi_no or "",
@@ -3216,7 +3220,7 @@ def _project_doc_context(session, rfq: RFQ) -> dict:
             "doc_defaults": _doc_defaults_from(None, "", quo),
         },
         "pod": None,
-        "stage_done": {k: False for k in ("7", "8", "10", "11")},
+        "stage_done": {k: False for k in ("7", "8", "tax", "10")},
         "pi": None if not pi else {
             "id": pi.id,
             "pi_no": pi.pi_no or "",
@@ -3714,9 +3718,9 @@ def _finance_receivable_rows(s) -> list[dict]:
         rid = getattr(order, "rfq_id", None) or qtn_rfq.get(getattr(order, "quotation_id", None) or 0)
         return rid or 0
 
-    def _stage11_date(order) -> str:
+    def _paid_stage_date(order) -> str:
         rfq = rfq_by_id.get(_rfq_id_of(order))
-        return (manual_stage_dates(rfq, order).get("11") or "")[:10]
+        return (manual_stage_dates(rfq, order).get("10") or "")[:10]
 
     rows: list[dict] = []
     for r in s.query(ARRecord).all():
@@ -3758,7 +3762,7 @@ def _finance_receivable_rows(s) -> list[dict]:
             "invoice_date": (r.invoice_date or "")[:10],
             "due_date": r.due_date or "",
             # 완납일 — 레코드에 기록된 날짜 우선, 없으면 11단계(수금 완료) 일시로 폴백.
-            "paid_date": ((r.paid_date or "")[:10] or _stage11_date(o)) if settled else "",
+            "paid_date": ((r.paid_date or "")[:10] or _paid_stage_date(o)) if settled else "",
             # 이 입금에서 은행이 실제로 떼어간 수취수수료(입금 통화). 0 = 기록 없음.
             "bank_fee": round(float(getattr(r, "bank_fee", None) or 0), 2),
             # 크레딧 노트(클레임 상계)로 깎아 준 금액 — 0 이면 상계 없음.

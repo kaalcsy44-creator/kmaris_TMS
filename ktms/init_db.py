@@ -1262,6 +1262,79 @@ def migrate_remove_stage_8():
     print(f"[OK] remove_stage_8 migration applied: {n_rfq} RFQs, {n_ord} orders renumbered.")
 
 
+def migrate_merge_tax_stage(dry_run: bool = False) -> dict:
+    """1회성: 옛 10단계(Tax Invoice)를 9단계로 흡수하면서 저장된 단계 번호를 옮긴다.
+
+    11단계 → 10단계. 세금계산서 발행은 단계가 아니라 9단계 안의 표시가 된다.
+      · stage_dates(RFQ·Order): "10"(세금계산서 발행일) → "tax", "11"(수금 완료) → "10"
+      · stage_notes(RFQ):        "10" 의 노트는 "9" 뒤에 붙이고, "11" → "10"
+    service_info 는 7~9 키만 써서 대상이 아니다.
+    applied_migrations 마커로 가드 → 매 부팅 실행돼도 1회만 적용(재실행 안전).
+    dry_run=True 면 바뀔 건수만 세고 아무것도 쓰지 않는다(마커도 남기지 않는다)."""
+    eng = get_engine()
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='merge_tax_stage'")).first():
+            return {"applied": False, "reason": "already applied"}
+
+    def dates(d):
+        if not isinstance(d, dict) or not ({"10", "11"} & set(map(str, d))):
+            return d, False
+        out = {}
+        for k, v in d.items():
+            k = str(k)
+            if k == "10":
+                out["tax"] = out.get("tax") or v
+            elif k == "11":
+                out["10"] = v
+            else:
+                out[k] = v
+        return out, True
+
+    def notes(d):
+        if not isinstance(d, dict) or not ({"10", "11"} & set(map(str, d))):
+            return d, False
+        out = {str(k): v for k, v in d.items() if str(k) not in ("10", "11")}
+        if d.get("10"):
+            out["9"] = list(out.get("9") or []) + list(d.get("10") or [])
+        if d.get("11"):
+            out["10"] = list(d.get("11") or [])
+        return out, True
+
+    s = get_session()
+    counts = {"rfq_dates": 0, "rfq_notes": 0, "order_dates": 0}
+    try:
+        for r in s.query(RFQ).all():
+            sd, c1 = dates(getattr(r, "stage_dates", None))
+            sn, c2 = notes(getattr(r, "stage_notes", None))
+            if c1:
+                counts["rfq_dates"] += 1
+                if not dry_run:
+                    r.stage_dates = sd
+            if c2:
+                counts["rfq_notes"] += 1
+                if not dry_run:
+                    r.stage_notes = sn
+        for o in s.query(Order).all():
+            od, c = dates(getattr(o, "stage_dates", None))   # NULL(프로젝트 값 폴백)은 그대로
+            if c:
+                counts["order_dates"] += 1
+                if not dry_run:
+                    o.stage_dates = od
+        if dry_run:
+            s.rollback()
+            return {"applied": False, "dry_run": True, **counts}
+        s.commit()
+    finally:
+        s.close()
+    with eng.begin() as conn:
+        conn.execute(text("INSERT INTO applied_migrations (name) VALUES ('merge_tax_stage')"))
+    print(f"[OK] merge_tax_stage migration applied: {counts}")
+    return {"applied": True, **counts}
+
+
 _INCOTERM_LABELS = {
     "EXW": "EXW (Ex Works)",
     "FCA": "FCA (Free Carrier)",
@@ -1653,6 +1726,8 @@ if __name__ == "__main__":
     migrate_widen_specialization()
     migrate_normalize_incoterms()
     migrate_split_stage_dates_to_orders()
+    # 오더별 단계 기록이 생긴 뒤에 옮긴다(Order.stage_dates 도 대상).
+    migrate_merge_tax_stage()
     migrate_seed_line_ids()
     migrate_backfill_price_history()
     migrate_classify_item_types()

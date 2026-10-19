@@ -165,15 +165,15 @@ export function activityPersons(r: PipelineRow): string[] {
   return out;
 }
 
-// 업무타입 "서비스"는 내부 11단계 중 7·8단계를 서비스 명칭으로 표시한다.
+// 업무타입 "서비스"는 내부 10단계 중 7·8단계를 서비스 명칭으로 표시한다.
 const SERVICE_STEP_OVERRIDES: Record<number, string> = {
   7: "Service Readiness",
   8: "Service Complete · Report",
 };
 
-/** 업무타입에 맞는 단계 이름 배열. 내부 11단계에만 적용(고객 7단계는 그대로). */
+/** 업무타입에 맞는 단계 이름 배열. 내부 10단계에만 적용(고객 7단계는 그대로). */
 export function resolveSteps(baseSteps: string[], workType?: string | null): string[] {
-  if (baseSteps.length !== 11 || (workType || "부품공급") !== "서비스") return baseSteps;
+  if (baseSteps.length !== INTERNAL_STAGE_COUNT || (workType || "부품공급") !== "서비스") return baseSteps;
   return baseSteps.map((name, i) => SERVICE_STEP_OVERRIDES[i + 1] ?? name);
 }
 
@@ -186,12 +186,15 @@ export function fmtStageDate(iso: string): string {
   return `${y.slice(2)}-${mo}-${d} ${h}:${mi}`;
 }
 
+/** 내부 단계 수 — 2026-10 옛 10단계(Tax Invoice)를 9단계로 흡수해 11 → 10. */
+export const INTERNAL_STAGE_COUNT = 10;
+
 /**
- * 내부 11단계 바에서 i번째(0부터) 칸을 채울지.
+ * 내부 10단계 바에서 i번째(0부터) 칸을 채울지.
  *
  * 순서대로 끝낸 마지막 단계(stage)까지는 채우고, 그 뒤라도 따로 끝난 단계(선입금 딜의
- * 9~11)는 채운다 — 돈이 먼저 끝나고 물건(7·8)이 남은 딜은 바 가운데가 비어 보인다.
- * 고객용 7단계 바(total≠11)는 번호 체계가 달라 stage 만 본다.
+ * 9·10)는 채운다 — 돈이 먼저 끝나고 물건(7·8)이 남은 딜은 바 가운데가 비어 보인다.
+ * 고객용 7단계 바(total≠10)는 번호 체계가 달라 stage 만 본다.
  */
 export function stageSegOn(
   r: { stage_done?: number[] } | null | undefined,
@@ -200,7 +203,7 @@ export function stageSegOn(
   total: number,
 ): boolean {
   if (i < stage) return true;
-  return total === 11 && !!r?.stage_done?.includes(i + 1);
+  return total === INTERNAL_STAGE_COUNT && !!r?.stage_done?.includes(i + 1);
 }
 
 /** 단계의 표시 일시: 수동 저장값 우선, 없으면 자동 동기화값, 둘 다 없으면 "". */
@@ -340,7 +343,7 @@ export type StageChainItem = {
 };
 
 /**
- * 11단계 체인 — 1~6은 문서번호·금액, 7~11은 문서 없이 완료 일시만.
+ * 10단계 체인 — 1~6은 문서번호·금액, 7~10은 문서 없이 완료 일시만.
  * 상세 모달의 단계 스트립과 개요 페이지의 타임라인이 같은 값을 쓰도록 여기서 만든다.
  * rSteps 는 resolveSteps() 를 거친(업무타입 반영) 단계 이름 배열.
  */

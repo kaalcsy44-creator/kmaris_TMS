@@ -3261,7 +3261,7 @@ function emptyDocDetail(): DocumentDetail {
       items: [],
     },
     pod: null,
-    stage_done: { "7": false, "8": false, "10": false, "11": false },
+    stage_done: { "7": false, "8": false, tax: false, "10": false },
     pi: null, ci: null, pl: null, sa: null, tax: null,
     smtp_configured: false,
   };

@@ -622,14 +622,14 @@ function Overview({
         nav={{ rfqId: row.rfq_id, onOpenStage }}
       />
 
-      {/* 납품 뒤에 생긴 일 — 있을 때만 선다. 입력·발행은 11단계의 Claim 탭에서 한다. */}
+      {/* 납품 뒤에 생긴 일 — 있을 때만 선다. 입력·발행은 10단계의 Claim 탭에서 한다. */}
       {claimRows.length ? <ClaimsSection claims={claimRows} onOpenStage={onOpenStage} /> : null}
     </div>
   );
 }
 
 /** 클레임 요약 — 사건과 비용 라인, 그 클레임으로 끊은 크레딧 노트를 읽기 전용으로 펼친다.
- *  고치는 자리는 11단계의 Claim 탭이다(제목의 링크가 그리로 보낸다). */
+ *  고치는 자리는 10단계의 Claim 탭이다(제목의 링크가 그리로 보낸다). */
 function ClaimsSection({
   claims,
   onOpenStage,
@@ -651,10 +651,10 @@ function ClaimsSection({
           <button
             type="button"
             className="proj-ov-actlink"
-            onClick={() => onOpenStage(11)}
-            title="Open stage 11 · Claim · Credit Note"
+            onClick={() => onOpenStage(10)}
+            title="Open stage 10 · Claim · Credit Note"
           >
-            Edit in stage 11 →
+            Edit in stage 10 →
           </button>
         ) : null}
       </h2>

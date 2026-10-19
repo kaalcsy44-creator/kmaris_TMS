@@ -1071,7 +1071,7 @@ export type DocumentDetail = {
     };
   };
   pod: null | { id: number; filename: string; uploaded_at: string };
-  stage_done: { "7": boolean; "8": boolean; "10": boolean; "11": boolean };
+  stage_done: { "7": boolean; "8": boolean; tax: boolean; "10": boolean };
   pi: null | {
     id: number;
     pi_no: string;
@@ -1165,7 +1165,7 @@ export type ArRow = {
   ap_total: number;
   ap_billed: number;   // 벤더 대금청구서 수취(9단계)
   ap_tax: number;      // 벤더 전자세금계산서 수취(10단계)
-  ap_paid: number;     // 벤더 지급 완료(11단계)
+  ap_paid: number;     // 벤더 지급 완료(10단계)
   vessel: string;
   work_type: string;
   trade_type: string;
@@ -1466,7 +1466,7 @@ export type FinancePayable = {
   rfq_id?: number;
 };
 
-/** 한 딜에 직접 걸린 지급(벤더 P/O 없는 매입) — 프로젝트 9~11단계 Payable 탭이 읽는다. */
+/** 한 딜에 직접 걸린 지급(벤더 P/O 없는 매입) — 프로젝트 9·10단계 Payable 탭이 읽는다. */
 export type DealPayables = {
   rfq_id: number;
   project_no: string;
@@ -1559,7 +1559,7 @@ export type FinanceReceivable = {
   outstanding: number;
   invoice_date?: string; // 청구서 발행일(9단계 대금청구서). 기타 수입은 없음
   due_date: string;
-  paid_date?: string;    // 완납 건의 수금 완료일(11단계 완료일 / 기타 수입은 실제 입금일)
+  paid_date?: string;    // 완납 건의 수금 완료일(10단계 완료일 / 기타 수입은 실제 입금일)
   status: string;
   overdue: boolean;
   // "ar" = 프로젝트 매출(ARRecord), "income" = 수동 등록한 기타 수입.

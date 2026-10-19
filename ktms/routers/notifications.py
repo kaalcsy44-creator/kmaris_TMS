@@ -148,7 +148,7 @@ def _pipeline_alerts(rows: list[dict], today: date) -> list[dict]:
     out: list[dict] = []
     for r in rows:
         stage = r.get("stage") or 0
-        if r.get("cancelled") or stage < 1 or stage >= 11:
+        if r.get("cancelled") or stage < 1 or stage >= 10:   # 10 = 수금 완료(마지막 단계)
             continue
         warn, urgent, text = STAGE_RULES.get(stage, LATE_STAGE_RULE)
         # 마지막 활동 — 단계 일시(수동/자동)·추가 발송/수신·노트 중 가장 늦은 것.

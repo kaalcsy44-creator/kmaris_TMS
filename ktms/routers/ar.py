@@ -137,15 +137,16 @@ def ar_overview():
                 "bill_to_contact": r.bill_to_contact or "",
                 "bill_to_email": r.bill_to_email or "",
                 "bill_to_phone": r.bill_to_phone or "",
-                # 단계 재번호(구 8 제거) 후: 세금계산서 발행=10, 수금 완료=11.
-                "tax_issued": bool(sd.get("10")) or pi is not None,
-                "tax_issued_date": sd.get("10", "") or (pi.date or "" if pi else ""),
+                # 세금계산서 발행 = 9단계 안의 표시(stage_dates["tax"]), 수금 완료 = 10단계.
+                # (2026-10 옛 10단계 Tax Invoice 를 9단계로 흡수 — 11→10.)
+                "tax_issued": bool(sd.get("tax")) or pi is not None,
+                "tax_issued_date": sd.get("tax", "") or (pi.date or "" if pi else ""),
                 # PI 로 갈음한 건 — 화면에서 "무엇으로 갈음했는지" 를 보여주고,
                 # 되돌릴 수동 완료가 없다는 것도 함께 알려야 한다(Undo 가 먹지 않는다).
-                "tax_covered_by_pi": pi is not None and not sd.get("10"),
+                "tax_covered_by_pi": pi is not None and not sd.get("tax"),
                 "tax_pi_no": (pi.pi_no or "") if pi else "",
-                "paid_done": bool(sd.get("11")),
-                "paid_date": sd.get("11", "") or "",
+                "paid_done": bool(sd.get("10")),
+                "paid_date": sd.get("10", "") or "",
                 # 매입(AP) 진척 — 이 오더의 벤더 P/O 총건수 대비 청구서 수취·세금계산서
                 # 수취·지급 완료 건수. 셋 다 총건수와 같아야 9·10·11 단계가 완료된다.
                 **_ap_progress(po_ids_by_order.get(r.order_id, []), ap_by_po),

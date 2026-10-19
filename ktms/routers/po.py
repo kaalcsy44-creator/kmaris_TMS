@@ -974,7 +974,7 @@ def vendor_po_send(
 @app.post("/api/admin/orders/{order_id}/stage/{stage}/complete",
           dependencies=[Depends(require_token)])
 def complete_order_stage(order_id: int, stage: int, body: StageCompleteBody):
-    """10·11 등 수동 완료 단계를 토글한다. 완료 시 이 고객 P/O(오더)의 stage_dates[stage]에
+    """10(수금) 등 수동 완료 단계를 토글한다. 완료 시 이 고객 P/O(오더)의 stage_dates[stage]에
     지정 시각(없으면 현재)을 기록한다 — 같은 프로젝트의 다른 P/O 는 영향받지 않는다."""
     if not (1 <= stage <= len(INTERNAL_STEPS)):
         raise HTTPException(status_code=400, detail="잘못된 단계 번호입니다.")
@@ -988,6 +988,30 @@ def complete_order_stage(order_id: int, stage: int, body: StageCompleteBody):
             raise HTTPException(status_code=400, detail="연결된 RFQ가 없습니다.")
         at = ((body.at or "").strip()[:16] or _kst_iso(datetime.utcnow())) if body.done else None
         set_manual_stage(rfq, order, stage, at)
+        s.commit()
+        return {"ok": True, "stage": _pipeline_stage(s, rfq.id), "done": body.done}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/orders/{order_id}/tax-issued",
+          dependencies=[Depends(require_token)])
+def set_tax_issued(order_id: int, body: StageCompleteBody):
+    """9단계 안의 '고객 세금계산서 발행' 표시를 토글한다(stage_dates["tax"]).
+
+    옛 10단계(Tax Invoice)를 9단계로 흡수하면서 단계 번호가 아니라 9단계의 한 항목이
+    됐다 — 그래서 단계 완료 경로(/stage/{n}/complete)와 따로 둔다. 9단계는 청구와 이
+    표시(+ 벤더 세금계산서 수취)가 모두 끝나야 완료다."""
+    s = get_session()
+    try:
+        order = s.query(Order).filter_by(id=order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
+        rfq = _rfq_for_order(s, order)
+        if not rfq:
+            raise HTTPException(status_code=400, detail="연결된 RFQ가 없습니다.")
+        at = ((body.at or "").strip()[:16] or _kst_iso(datetime.utcnow())) if body.done else None
+        set_manual_stage(rfq, order, "tax", at)
         s.commit()
         return {"ok": True, "stage": _pipeline_stage(s, rfq.id), "done": body.done}
     finally:

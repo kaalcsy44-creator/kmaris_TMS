@@ -34,6 +34,7 @@ import {
   resolveSteps,
   stageForNote,
   stageSegOn,
+  INTERNAL_STAGE_COUNT,
   vendorOf,
   vendorBadgesOf,
 } from "@/lib/deal";
@@ -77,19 +78,19 @@ type Card = {
   lines: Line[];
   lastAt: string;             // 사건·메일 통틀어 마지막 움직임
   waitingDays: number;        // 마지막 메일이 수신인 채 지난 날수(메일 없으면 0)
-  // 결제까지 끝난 딜(11단계)인가, 그리고 그 완료 일시. 끝난 건은 아무 차례도 아니다.
+  // 결제까지 끝난 딜(10단계)인가, 그리고 그 완료 일시. 끝난 건은 아무 차례도 아니다.
   settled: boolean;
   settledAt: string;
 };
 
-/** 결제 완료 일시 — 11단계(Payment Completed)에 찍힌 시각. 미기록이면 빈 문자열.
+/** 결제 완료 일시 — 10단계(Payment Completed)에 찍힌 시각. 미기록이면 빈 문자열.
  *
  * 브리핑의 '누구 차례'는 마지막 메일의 방향에서 나온다. 그런데 그 자는 결제가 끝나는
  * 순간 뜻을 잃는다 — 마지막 메일이 수신이었다는 이유만으로 이미 정산이 끝난 건이
  * 아침마다 "우리 차례 5일째"로 서고, 카드의 Next 줄은 이미 한 일을 시키고 있었다.
- * 파이프라인이 이미 아는 사실(단계 11)로 그것을 덮는다. */
+ * 파이프라인이 이미 아는 사실(단계 10)로 그것을 덮는다. */
 function settledDate(row: PipelineRow): string {
-  return row.stage_dates?.["11"] || row.stage_auto?.["11"] || "";
+  return row.stage_dates?.["10"] || row.stage_auto?.["10"] || "";
 }
 
 export default function BriefingTab() {
@@ -174,7 +175,7 @@ export default function BriefingTab() {
         })),
       ];
       lines.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
-      const settled = row.stage >= 11;
+      const settled = row.stage >= INTERNAL_STAGE_COUNT;
       out.push({
         row,
         mail,

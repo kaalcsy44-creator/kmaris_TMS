@@ -663,7 +663,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             _events = [e["sent_at"] for e in rfq_sends] + [e["received_at"] for e in quote_receipts]
             _stalled = (
                 _days_since_iso(_last_activity_iso(_sd, _auto, _sn, _events), today_iso)
-                if (stage < 12 and not _lost) else None
+                if (stage < len(INTERNAL_STEPS) and not _lost) else None
             )
             _na = _next_action(stage, steps_for(r.work_type), lost=_lost, stalled_days=_stalled)
 
@@ -1235,10 +1235,10 @@ def statistics(months: int = 12):
             ci = _ci_by_no.get(a.ci_no) or _ci_by_order.get(a.order_id)
             if ci and _tax_date_by_ci.get(ci.id):
                 return _month_key(_tax_date_by_ci[ci.id])
-            # 폴백: 수동 '세금계산서 발행'(stage 10) 완료일
+            # 폴백: 수동 '세금계산서 발행' 표시일(9단계 안의 "tax" — 옛 10단계)
             o = order_map.get(a.order_id)
             sd = manual_stage_dates(_rfq_of(o), o)
-            return _month_key(sd.get("10") or "")
+            return _month_key(sd.get("tax") or "")
 
         # ── 매출(세금계산서 발행 기준) + 고객사 랭킹 ─────────────────────────────
         for a in all_ars:
@@ -1371,9 +1371,10 @@ def statistics(months: int = 12):
                     today_delivery.append({"order_id": o.id, "project_no": pno, "customer": _cust_of(o), "date": pd})
                 elif today_iso < pd[:10] <= week_iso:
                     week_delivery.append({"order_id": o.id, "project_no": pno, "customer": _cust_of(o), "date": pd})
-            # 미청구: 인도완료(delivered_date) 이나 세금계산서 미발행 — 이 P/O 기준
+            # 미청구: 인도완료(delivered_date) 이나 세금계산서 미발행 — 이 P/O 기준.
+            # (예전엔 "11"(=수금 완료)을 봐서 발행했어도 수금 전이면 미청구로 남았다.)
             sd = manual_stage_dates(rfq, o)
-            if delivered and not sd.get("11"):
+            if delivered and not (sd.get("tax") or sd.get("10")):
                 uninvoiced.append({"order_id": o.id, "project_no": pno, "customer": _cust_of(o), "date": o.delivered_date or ""})
 
         # 미입고 발주: 발송된 Vendor P/O 인데 해당 오더가 아직 미인도
@@ -1598,7 +1599,7 @@ def statistics_debug(month: str | None = None):
                 return _month_key(_tax_date_by_ci[ci.id])
             o = order_map.get(a.order_id)
             sd = manual_stage_dates(_rfq_for_order(s, o) if o else None, o)
-            return _month_key(sd.get("10") or "")
+            return _month_key(sd.get("tax") or "")   # 세금계산서 발행 표시(옛 10단계)
 
         # ── Orders Won — statistics() order_series 와 동일 로직 ──
         won = {"USD": 0.0, "KRW": 0.0}

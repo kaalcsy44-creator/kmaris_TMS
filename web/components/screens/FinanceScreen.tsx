@@ -1248,7 +1248,7 @@ function InflowTab() {
                 {/* 기타 수입은 이 화면에서 바로 입금 처리(실제 입금일 입력). 기일이 지난
                     건도 눌러야 한다 — 연체 배지만 띄우면 늦게 들어온 돈을 영영 기록할 수
                     없다. 그래서 연체는 배지 대신 이 단추의 색과 이름으로 알린다.
-                    프로젝트 매출(AR)은 9~11단계에서 수금하므로 여기서는 읽기전용. */}
+                    프로젝트 매출(AR)은 9~10단계에서 수금하므로 여기서는 읽기전용. */}
                 {isIncome ? (
                   <button
                     type="button"
@@ -1286,7 +1286,7 @@ function InflowTab() {
                       ) : null}
                     </>
                   ) : (
-                    <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label="Project stage 9–11" hint />
+                    <ProjectDocLink orderId={r.order_id} rfqId={r.rfq_id} label="Project stage 9–10" hint />
                   )}
                 </div>
               </td>
@@ -1670,14 +1670,14 @@ function OutflowTab() {
       <td data-label="Status">
         {derived ? (
           // 벤더 청구서도 기타 지출과 같은 칩으로 보여준다 — 다만 지급 기록은
-          // 프로젝트 11단계 AP 탭의 Payment 칸에서 하므로 여기서는 누를 수 없다.
+          // 프로젝트 10단계 AP 탭의 Payment 칸에서 하므로 여기서는 누를 수 없다.
           // 수취수수료는 입금되는 순간 떼인 돈이라 애초에 기록할 것이 없다.
           <button
             type="button"
             className={`wt-badge fin-paid-toggle${p.paid ? " on" : ""}${late ? " overdue" : ""}`}
             title={p.source === "bankfee"
               ? "Deducted by the bank as the money came in"
-              : "Record the payment in the project's stage 11 Payable (AP)"}
+              : "Record the payment in the project's stage 10 Payable (AP)"}
             disabled
           >
             {p.paid
@@ -1773,7 +1773,7 @@ function OutflowTab() {
             // 수금에 딸려 나온 행이라 고칠 것이 없다 — 그 수금이 있는 자리로 보낸다.
             <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label="From this receipt" hint />
           ) : p.source === "ap" ? (
-            <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label="Project stage 11" hint apPoId={p.po_id} />
+            <ProjectDocLink orderId={p.order_id} rfqId={p.rfq_id} label="Project stage 10" hint apPoId={p.po_id} />
           ) : (
             <>
               {can("finance", "edit") ? (
@@ -1844,7 +1844,7 @@ function OutflowTab() {
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "8px 0 10px" }}>
         {view === "payables"
-          ? "Vendor bills arrive here automatically from the project's billing stages and are read-only — click the bill number to open that project's stage 11 Payable (AP), where the payment is confirmed. Payments registered by hand under the vendor-payment category sit here too."
+          ? "Vendor bills arrive here automatically from the project's billing stages and are read-only — click the bill number to open that project's stage 10 Payable (AP), where the payment is confirmed. Payments registered by hand under the vendor-payment category sit here too."
           : view === "consulting"
             ? "Introducer commission. The table above works out what each project owes — its sales times the fee rate agreed on the RFQ — and Register turns one of those lines into a payable with the consultant and the amount already filled in. The list below is what has actually been booked."
             : view === "other"
@@ -2922,7 +2922,7 @@ function ClaimsTab() {
                         <tr>
                           <td>{r.date || "—"}</td>
                           <td>
-                            <ProjectDocLink rfqId={r.rfq_id} orderId={r.order_id} stage={11} claim
+                            <ProjectDocLink rfqId={r.rfq_id} orderId={r.order_id} stage={10} claim
                                             label={r.project_no || `#${r.rfq_id}`} />
                           </td>
                           <td>
@@ -2946,13 +2946,13 @@ function ClaimsTab() {
                             <td className="muted">CN</td>
                             <td colSpan={2}>
                               {/* 두 문서 번호는 각자의 자리로 간다 — 노트는 이 클레임의
-                                  11단계 Claim 탭, 청구서는 그 청구서가 선 딜의 9단계.
+                                  10단계 Claim 탭, 청구서는 그 청구서가 선 딜의 9단계.
                                   상계 대상은 다른 프로젝트의 미수일 수 있어(cn.rfq_id)
                                   둘이 서로 다른 딜을 가리킬 수 있다. */}
                               <ProjectDocLink
                                 rfqId={r.rfq_id}
                                 orderId={r.order_id}
-                                stage={11}
+                                stage={10}
                                 claim
                                 label={cn.cn_no || `CN#${cn.id}`}
                               />
@@ -2985,7 +2985,7 @@ function ClaimsTab() {
               rate), so a fully credited claim closes at zero instead of leaving a rounding tail.
               What the customer or the vendor bore is not counted here as ours. A credited amount is a
               deduction from sales (it already lowers that invoice and its VAT), a cash amount is a cost
-              under Outflow — never both for the same line. Claims are entered on the deal, at stage 11 →
+              under Outflow — never both for the same line. Claims are entered on the deal, at stage 10 →
               Claim · Credit Note.
             </p>
             {/* 어떤 환율로 옮겼는지 — 이 줄이 없으면 표를 검산할 수가 없고, 고시를 못 받아
@@ -3304,7 +3304,7 @@ function CalendarTab() {
             }`
           : `${e.kind === "receivable" ? "Receivable" : "Payable"} · ${e.title} · ${money(e.amount, e.currency)}${
               e.paid ? ` (paid${e.paid_on ? ` ${e.paid_on}` : ""})` : ""
-            }${e.source === "ap" ? " — recorded in the project's stage 11 Payable (AP)" : ""}`
+            }${e.source === "ap" ? " — recorded in the project's stage 10 Payable (AP)" : ""}`
       }
       onClick={() => togglePayable(e)}
     >
@@ -3385,7 +3385,7 @@ function CalendarTab() {
         )}
       </div>
       <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-        Colour is the direction of the money — blue comes in, amber goes out — dark text is money still to move, faded text is money that has already moved (✓ marks the day it really moved), and a solid block is a scheduled date now overdue. Every item sits on its scheduled date until it settles, then it also appears on the day the money actually moved, as its own line even when that is the same day — the scheduled entry is struck through and the ✓ entry is the real date. Click one of your own costs to record its payment — you enter the date it was really paid, which may differ from the scheduled date (recurring items settle one occurrence at a time); click a paid one to undo. Customer invoices (AR) and vendor bills (AP) are managed from the project stages instead — both on stage 11, the Receivable tab for collections and the Payable tab for vendor payments.
+        Colour is the direction of the money — blue comes in, amber goes out — dark text is money still to move, faded text is money that has already moved (✓ marks the day it really moved), and a solid block is a scheduled date now overdue. Every item sits on its scheduled date until it settles, then it also appears on the day the money actually moved, as its own line even when that is the same day — the scheduled entry is struck through and the ✓ entry is the real date. Click one of your own costs to record its payment — you enter the date it was really paid, which may differ from the scheduled date (recurring items settle one occurrence at a time); click a paid one to undo. Customer invoices (AR) and vendor bills (AP) are managed from the project stages instead — both on stage 10, the Receivable tab for collections and the Payable tab for vendor payments.
       </p>
       {payingEvent ? (
         <Modal title="Record payment" onClose={() => setPayingEvent(null)} form maxWidth={340}>

@@ -39,13 +39,13 @@ import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen"
 import Modal from "@/components/common/Modal";
 import { useCachedData } from "@/lib/useCachedData";
 
-// 내부 11단계 → 5개 버킷(RFQ 1–2 / Quote 3–4 / PO 5–6 / Documents 7–9 / AR 10–11).
+// 내부 10단계 → 5개 버킷(RFQ 1–2 / Quote 3–4 / PO 5–6 / Documents 7–8 / AR 9–10).
 const PHASES: { label: string; from: number; to: number }[] = [
   { label: "RFQ", from: 1, to: 2 },
   { label: "Quote", from: 3, to: 4 },
   { label: "PO", from: 5, to: 6 },
-  { label: "Documents", from: 7, to: 9 },
-  { label: "AR", from: 10, to: 11 },
+  { label: "Documents", from: 7, to: 8 },
+  { label: "AR", from: 9, to: 10 },
 ];
 function phaseOf(stage: number): number {
   for (let i = 0; i < PHASES.length; i++) if (stage >= PHASES[i].from && stage <= PHASES[i].to) return i;
@@ -57,7 +57,7 @@ const STAGE_COLUMNS: { label: string; tone: string; from: number; to: number }[]
   { label: "RFQ", tone: "r", from: 1, to: 2 },
   { label: "Quote", tone: "q", from: 3, to: 4 },
   { label: "P/O", tone: "p", from: 5, to: 6 },
-  { label: "C/I & after", tone: "c", from: 7, to: 11 },
+  { label: "C/I & after", tone: "c", from: 7, to: 10 },
 ];
 // 딜의 현재 단계가 속한 열 인덱스(단계 필터·진행 bar 공용).
 function stageColOf(stage: number): number {

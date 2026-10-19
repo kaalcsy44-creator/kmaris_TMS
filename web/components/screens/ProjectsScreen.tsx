@@ -35,6 +35,7 @@ import {
   fmtStageDate,
   stageDateOf,
   stageSegOn,
+  INTERNAL_STAGE_COUNT,
   buildStageChain,
   joinDot,
   activityParties,
@@ -80,20 +81,20 @@ const CUSTOMER_STEPS = [
   "In Transit",
   "Delivered",
 ];
-// 내부 11단계 → 고객 7단계 매핑(인덱스 = 내부단계-1). 필요 시 경계 조정.
-const CUSTOMER_STAGE_MAP = [1, 2, 2, 3, 4, 5, 6, 7, 7, 7, 7];
+// 내부 10단계 → 고객 7단계 매핑(인덱스 = 내부단계-1). 필요 시 경계 조정.
+const CUSTOMER_STAGE_MAP = [1, 2, 2, 3, 4, 5, 6, 7, 7, 7];
 function customerStage(internal: number): number {
   if (internal <= 0) return 0;
-  return CUSTOMER_STAGE_MAP[Math.min(internal, 11) - 1] ?? 0;
+  return CUSTOMER_STAGE_MAP[Math.min(internal, INTERNAL_STAGE_COUNT) - 1] ?? 0;
 }
 
-// 내부 11단계 → 5개 중분류(영역): RFQ 1–2 / Quote 3–4 / PO 5–6 / Docs 7–9 / AR 10–11.
-// (7 Readiness · 8 Complete·POD · 9 Tax·Billing 은 모두 Documents 페이지 탭 → Documents.)
+// 내부 10단계 → 5개 중분류(영역): RFQ 1–2 / Quote 3–4 / PO 5–6 / Docs 7–8 / AR 9–10.
+// (2026-10 옛 10단계 Tax Invoice 를 9단계 Billing · Tax Invoice 로 흡수 — 9·10 은 AR 화면.)
 const STAGE_PHASES: { label: string; count: number }[] = [
   { label: "RFQ", count: 2 },
   { label: "Quote", count: 2 },
   { label: "PO", count: 2 },
-  { label: "Documents", count: 3 },
+  { label: "Documents", count: 2 },
   { label: "AR", count: 2 },
 ];
 // 5개 중분류 accent(보드 컬럼과 동일) — 타임라인 점 색상에 사용.
@@ -142,7 +143,7 @@ export default function ProjectsScreen({ onFill }: { onFill?: (fill: boolean) =>
   // ?ap=<po_id> — 지급대장에서 벤더 청구서 번호를 눌러 온 경우. 9단계를 AP(지급) 탭 +
   // 그 벤더 P/O 가 선택된 상태로 연다.
   const deepAp = params.get("ap");
-  // ?claim=1 — 클레임 대장에서 눌러 온 경우. 11단계를 클레임 탭으로 연다.
+  // ?claim=1 — 클레임 대장에서 눌러 온 경우. 10단계를 클레임 탭으로 연다.
   const deepClaim = params.get("claim");
   const deepView = params.get("view");
   // ?back=<주소> — 어디서 눌러 왔는지. 팝업을 닫으면 그 자리로 되돌려 보낸다(지급대장에서
@@ -384,14 +385,14 @@ function StageBar({
   steps: string[];
   savedAt: string;
   lastAt?: string;
-  /** 단계별 완료·선입금 표시의 근거(내부 11단계일 때만 쓴다). */
+  /** 단계별 완료·선입금 표시의 근거(내부 10단계일 때만 쓴다). */
   row?: PipelineRow;
 }) {
   const total = steps.length;
   const filled = Math.max(0, Math.min(stage, total));
   const done = doneStageLabel(stage, steps);
-  // 내부 11단계에서만 4개 중분류로 그룹핑(고객확인용 7단계는 기존 평면 바 유지).
-  const grouped = total === 11;
+  // 내부 10단계에서만 중분류로 그룹핑(고객확인용 7단계는 기존 평면 바 유지).
+  const grouped = total === INTERNAL_STAGE_COUNT;
   // 경과일 = 마지막 활동(단계 저장·노트·추가 RFQ 발송/견적 수신) 이후 오늘까지.
   // 단계 저장일만 보면 같은 단계에 머문 채 벤더를 더 붙인 딜이 방치된 것으로 보인다.
   // 오래 멈춘 딜은 배지 색이 앰버→레드로 짙어진다.
@@ -601,7 +602,7 @@ function PipelineTable({
   customers: CustomerOption[];
   vessels: SettingsVessel[];
   onChanged: () => void | Promise<unknown>;
-  // 단계 체계 추상화: 내부확인용=11단계(r.stage), 고객확인용=7단계(매핑값)
+  // 단계 체계 추상화: 내부확인용=10단계(r.stage), 고객확인용=7단계(매핑값)
   stageOf?: (r: PipelineRow) => number;
   // 컬럼 커스터마이즈 저장 키(내부/고객 뷰 별도).
   // 열이 8개 단일필드 → 6개 그룹으로 바뀌면서 progress-* 에서 projects-* 로 갈아탔다.
@@ -618,7 +619,7 @@ function PipelineTable({
   openVrfqId?: number | null;
   // 딥링크로 9단계 진입 시 초점 벤더 P/O id(AP 탭 + 그 P/O 선택).
   openApPoId?: number | null;
-  /** 11단계를 클레임 탭으로 연다(클레임 대장에서 눌러 온 경우). */
+  /** 10단계를 클레임 탭으로 연다(클레임 대장에서 눌러 온 경우). */
   openClaim?: boolean;
   openView?: "work" | "overview";
   /** 딥링크로 왔을 때 팝업을 닫으면 돌아갈 주소(없으면 이 목록에 남는다). */
@@ -639,7 +640,7 @@ function PipelineTable({
   const [deepVrfqId, setDeepVrfqId] = useState<number | null>(null);
   // 딥링크로 9단계 진입 시 초점 벤더 P/O id(지급대장에서 청구서 번호를 눌러 온 경우).
   const [deepApPoId, setDeepApPoId] = useState<number | null>(null);
-  // 딥링크로 11단계 진입 시 클레임 탭으로 열지 여부(클레임 대장에서 눌러 온 경우).
+  // 딥링크로 10단계 진입 시 클레임 탭으로 열지 여부(클레임 대장에서 눌러 온 경우).
   const [deepClaim, setDeepClaim] = useState(false);
   // 딥링크가 가리키는 고객 P/O(오더) — 한 프로젝트에 오더가 여럿일 때 그 문서의 오더를 연다.
   const [deepOrderId, setDeepOrderId] = useState<number | null>(null);
@@ -952,8 +953,9 @@ function PipelineTable({
   }
 
   // 3) 종결(취소·실주) + 완료(Done) 프로젝트 접기 — 표·보드 공통.
-  //    Done 은 내부 11단계 뷰에서만 존재(마지막 단계 도달). 고객 7단계 뷰는 취소만 대상.
-  const isDone = (r: PipelineRow) => steps.length === 11 && stageOf(r) >= 11;
+  //    Done 은 내부 10단계 뷰에서만 존재(마지막 단계 도달). 고객 7단계 뷰는 취소만 대상.
+  const isDone = (r: PipelineRow) =>
+    steps.length === INTERNAL_STAGE_COUNT && stageOf(r) >= INTERNAL_STAGE_COUNT;
   // Status = active(진행) / done(완료) / closed(취소·실주). 별개 항목으로 선택.
   const statusOf = (r: PipelineRow): string => (r.cancelled ? "closed" : isDone(r) ? "done" : "active");
   const cancelledCount = displayRows.filter((r) => r.cancelled).length;
@@ -1451,16 +1453,18 @@ type BoardCol = {
   match: (r: PipelineRow) => boolean;
 };
 
-/** 내부 11단계 보드의 컬럼 정의(Closed·RFQ·Quote·PO·Documents·AR·Done). 보드/미리보기 공용. */
+/** 내부 10단계 보드의 컬럼 정의(Closed·RFQ·Quote·PO·Documents·AR·Done). 보드/미리보기 공용.
+ *  stage 는 "끝낸 마지막 단계"라, Documents 칸(7·8)에는 청구·세금계산서를 기다리는 딜까지
+ *  들어 있고 AR 칸(9)은 세금계산서까지 끝나 수금을 기다리는 딜이다. */
 function groupedBoardColumns(stageOf: (r: PipelineRow) => number): BoardCol[] {
   return [
     { label: "Closed", variant: "cancelled", match: (r) => !!r.cancelled },
     { label: "RFQ", match: (r) => !r.cancelled && stageOf(r) <= 2 },
     { label: "Quote", match: (r) => !r.cancelled && stageOf(r) >= 3 && stageOf(r) <= 4 },
     { label: "PO", match: (r) => !r.cancelled && stageOf(r) >= 5 && stageOf(r) <= 6 },
-    { label: "Documents", match: (r) => !r.cancelled && stageOf(r) >= 7 && stageOf(r) <= 9 },
-    { label: "AR", match: (r) => !r.cancelled && stageOf(r) === 10 },
-    { label: "Done ✓", variant: "done", match: (r) => !r.cancelled && stageOf(r) >= 11 },
+    { label: "Documents", match: (r) => !r.cancelled && stageOf(r) >= 7 && stageOf(r) <= 8 },
+    { label: "AR", match: (r) => !r.cancelled && stageOf(r) === 9 },
+    { label: "Done ✓", variant: "done", match: (r) => !r.cancelled && stageOf(r) >= INTERNAL_STAGE_COUNT },
   ];
 }
 
@@ -1505,9 +1509,9 @@ function PipelineBoard({
       return next;
     });
   }, []);
-  const grouped = steps.length === 11;
+  const grouped = steps.length === INTERNAL_STAGE_COUNT;
   // 종결(취소/실주) 딜은 진행 컬럼에서 빼고 별도 Closed 존(RFQ 좌측 맨 앞)으로 모은다.
-  // 완료(11단계 Payment Completed)는 AR 을 떠나 Done 컬럼으로 종결 처리한다.
+  // 완료(10단계 Payment Completed)는 AR 을 떠나 Done 컬럼으로 종결 처리한다.
   const allCols: BoardCol[] = grouped
     ? groupedBoardColumns(stageOf)
     : steps.map((label, i) => ({
@@ -1869,7 +1873,7 @@ function BoardCard({
   // 현재(최종 진행) 단계의 날짜: 수동 저장값 우선, 없으면 자동 동기화값. yymmdd로 표기.
   // 조회는 내부 단계번호(r.stage) 기준 — Customer 탭에서 filled가 재매핑돼도 정확.
   const stageDate = fmtYYMMDD(stageDateOf(r, r.stage));
-  // 종결 상태: 취소(회색+리본) / 완료(11단계 Payment Completed → 초록 체크).
+  // 종결 상태: 취소(회색+리본) / 완료(10단계 Payment Completed → 초록 체크).
   const cancelled = !!r.cancelled;
   const done = !cancelled && filled >= total;
   // 대응 경과일에 따른 배지 색상 레벨(오래될수록 앰버→레드). 종결·완료 카드는 중립 유지.
@@ -2012,7 +2016,7 @@ function BoardCard({
         <span className="pl-card-stage">
           {steps[filled - 1] ?? ""}
           {stageDate ? <span className="pl-card-stage-date"> ({stageDate})</span> : null}
-          {total === 11 ? <PrepaidTag row={r} /> : null}
+          {total === INTERNAL_STAGE_COUNT ? <PrepaidTag row={r} /> : null}
         </span>
         {age != null ? <span className={`pl-card-age${ageLv ? ` lv-${ageLv}` : ""}`} title={ageTitle}>{age}d</span> : null}
       </div>
@@ -2427,7 +2431,7 @@ export function PipelineModal({
   initialVrfqId?: number | null;
   // 딥링크로 9단계 진입 시 초점 벤더 P/O id(AP 탭 + 그 P/O 의 청구서를 바로 연다).
   initialApPoId?: number | null;
-  // 딥링크로 11단계 진입 시 클레임 탭으로 열지 여부(클레임 대장에서 눌러 온 경우).
+  // 딥링크로 10단계 진입 시 클레임 탭으로 열지 여부(클레임 대장에서 눌러 온 경우).
   initialClaim?: boolean;
   // 딥링크가 가리키는 고객 P/O(오더) id — 6단계 이후 화면이 이 오더 기준으로 열린다.
   initialOrderId?: number | null;
@@ -2517,13 +2521,13 @@ export function PipelineModal({
   }
   // 단계 상세 표시: 단계별 그룹(stages, 편집 가능) / 시간순 여정(timeline, 읽기전용)
   const [selectedStage, setSelectedStage] = useState<StageTabKey>(
-    Math.min(Math.max(initialStage || r.stage || 1, 1), 11)
+    Math.min(Math.max(initialStage || r.stage || 1, 1), INTERNAL_STAGE_COUNT)
   );
   // 2단계 진입 시 선택할 벤더 RFQ id — 개요의 특정 "RFQ Sent" 로그(또는 딥링크)에서 지정.
   const [focusVrfqId, setFocusVrfqId] = useState<number | null>(initialVrfqId ?? null);
   // 9단계 진입 시 선택할 벤더 P/O id — 지급대장(Payables)에서 청구서 번호를 눌러 온 경우.
   const [focusApPoId, setFocusApPoId] = useState<number | null>(initialApPoId ?? null);
-  // 클레임 대장에서 눌러 온 경우 — 11단계를 클레임 탭으로 연다(그 뒤엔 사용자의 선택이 우선).
+  // 클레임 대장에서 눌러 온 경우 — 10단계를 클레임 탭으로 연다(그 뒤엔 사용자의 선택이 우선).
   const [focusClaim, setFocusClaim] = useState(initialClaim);
   // 딥링크가 가리키는 고객 P/O — 프로젝트에 오더가 여럿이면 이 오더를 골라 연다.
   const [focusOrderId, setFocusOrderId] = useState<number | null>(initialOrderId ?? null);
@@ -2583,7 +2587,7 @@ export function PipelineModal({
    *  vrfqId 를 주면(2단계 RFQ Sent 로그) 그 벤더 RFQ 를, orderId 를 주면(Items 묶음의
    *  P/O·C/I 번호) 그 선박의 고객 P/O 를 선택해 연다. */
   const openStageFromOverview = useCallback((no: number, vrfqId?: number, orderId?: number) => {
-    setSelectedStage(Math.min(Math.max(no, 1), 11));
+    setSelectedStage(Math.min(Math.max(no, 1), INTERNAL_STAGE_COUNT));
     setFocusVrfqId(vrfqId ?? null);
     setFocusApPoId(null);
     setFocusClaim(false);
@@ -2598,7 +2602,7 @@ export function PipelineModal({
   useEffect(() => {
     if (prevRfqId.current === r.rfq_id) return;
     prevRfqId.current = r.rfq_id;
-    setSelectedStage(Math.min(Math.max(r.stage || 1, 1), 11));
+    setSelectedStage(Math.min(Math.max(r.stage || 1, 1), INTERNAL_STAGE_COUNT));
     setFocusVrfqId(null);
     setFocusApPoId(null);
     setFocusClaim(false);
@@ -2837,7 +2841,7 @@ export function PipelineModal({
     if (no <= 4) return "rfq";
     if (no <= 6) return "po";
     if (no <= 8) return "documents";
-    // 9~11단계는 업무유형·거래유형과 무관하게 AR/AP 화면으로 통일한다.
+    // 9·10단계는 업무유형·거래유형과 무관하게 AR/AP 화면으로 통일한다.
     // (수출·부품 딜의 홈택스 xlsx 편집기는 9단계 AR/AP 옆 Tax Invoice Data 탭으로 이동)
     return "ar";
   }
@@ -3355,13 +3359,13 @@ function WorkspacePanel({
   row: PipelineRow;
   focusVrfqId?: number | null;
   focusApPoId?: number | null;
-  /** 11단계를 클레임 탭으로 열지 — 클레임 대장 딥링크. */
+  /** 10단계를 클레임 탭으로 열지 — 클레임 대장 딥링크. */
   focusClaim?: boolean;
   /** 딥링크가 가리키는 고객 P/O(오더) — 이 프로젝트의 오더면 그 오더를 선택해 연다. */
   focusOrderId?: number | null;
   onChanged: () => void | Promise<unknown>;
 }) {
-  // 이 프로젝트(RFQ)의 고객 P/O(오더)들 — 6~11단계는 어느 P/O 기준으로 진행할지 선택.
+  // 이 프로젝트(RFQ)의 고객 P/O(오더)들 — 6~10단계는 어느 P/O 기준으로 진행할지 선택.
   const { data: poOptions } = useCachedData("po:work-options", fetchPoWorkOptions);
   // 복수 P/O는 K-Maris PO 번호 오름차순(숫자 빠른 순)으로 좌→우 배치.
   const projectOrders = useMemo(
@@ -3438,8 +3442,8 @@ function WorkspacePanel({
       <MissingOrderPanel />
     );
   }
-  // AR 영역 단계 = 실제 파이프라인 단계(서비스/내수 9단계 청구도 여기로 옴). 9~11로 한정.
-  const arStage = Math.max(9, Math.min(stage, 11));
+  // AR 영역 단계 = 실제 파이프라인 단계(서비스/내수 9단계 청구도 여기로 옴). 9~10으로 한정.
+  const arStage = Math.max(9, Math.min(stage, 10));
   return effectiveOrderId > 0 ? (
     <>
       {picker}
@@ -3448,7 +3452,7 @@ function WorkspacePanel({
           <ArOverview
             key={docReloadKey}
             initialOrderId={effectiveOrderId}
-            initialStage={arStage as 9 | 10 | 11}
+            initialStage={arStage as 9 | 10}
             initialApPoId={focusApPoId ?? null}
             initialDocTab={focusClaim ? "claim" : undefined}
             onChanged={onChanged}
