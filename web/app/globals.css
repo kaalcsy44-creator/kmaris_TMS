@@ -8385,7 +8385,7 @@ table.mini .num {
   .topnav-menu {
     display: none;
     position: absolute;
-    top: 58px;
+    top: var(--topnav-h, 58px);
     left: 0;
     right: 0;
     flex-direction: column;
@@ -8406,15 +8406,40 @@ table.mini .num {
   .topnav-user .uname {
     display: none;
   }
-  /* 좁은 화면: 검색 입력 축소, 포커스 시에도 화면폭 안에서 확장. */
-  .gsearch-input {
-    width: 130px;
+  /* 좁은 화면: 검색칸은 남색 바 안의 둘째 줄로 내려 화면폭을 다 쓴다 — 첫 줄에 끼워
+     두면 130px 라 안내 문구부터 잘리고, 친 글자도 몇 자밖에 안 보였다. 바 안에 두는
+     것은 스크롤해도 함께 붙어 있게 하려는 것. 높이가 바뀌므로 바에 붙는 것들(햄버거
+     메뉴·탭 줄)은 --topnav-h 를 본다. */
+  :root {
+    --topnav-h: 104px;
   }
+  .topnav-inner {
+    flex-wrap: wrap;
+    height: auto;
+    gap: 0 10px;                /* 줄 사이 간격은 0 — 높이를 --topnav-h 에 맞춘다 */
+    padding: 0 14px 10px;
+  }
+  .topnav-brand {
+    min-height: 58px;           /* 첫 줄 높이는 그대로 58px */
+  }
+  .topnav-right {
+    display: contents;          /* 검색칸이 줄을 바꿔 내려갈 수 있게 */
+  }
+  .gsearch {
+    order: 5;
+    flex: 1 0 100%;
+  }
+  .gsearch-input,
   .gsearch-input:focus {
-    width: 180px;
+    width: 100%;
+    height: 36px;
+    font-size: 16px;            /* 16px 미만이면 iOS 가 포커스 때 화면을 확대한다 */
   }
   .gsearch-panel {
-    width: 88vw;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-width: none;
   }
 
   /* Content area: tighter padding, full width */
@@ -8434,11 +8459,11 @@ table.mini .num {
     font-size: 17px;
   }
   /* 탭은 붙어 있어야 한다 — 폰에서는 한 탭이 화면 몇 개 길이라, 옮기려고 맨 위까지
-     되감는 일이 잦다. 여기서는 몸통 전체가 스크롤하므로 상단 바(58px) 아래에 세운다
+     되감는 일이 잦다. 여기서는 몸통 전체가 스크롤하므로 상단 바(--topnav-h) 아래에 세운다
      — top:0 이면 z-index 가 낮은 탭이 남색 바 뒤로 숨는다. */
   .page-tabs {
     position: sticky;
-    top: 58px;
+    top: var(--topnav-h, 58px);
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     white-space: nowrap;
