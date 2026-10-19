@@ -10378,6 +10378,10 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   align-items: center;
   gap: 8px;
 }
+.stage-pane-move {
+  display: inline-flex;
+  gap: 8px;
+}
 .stage-pane-prev,
 .stage-pane-next {
   flex: 0 0 auto;
@@ -16475,6 +16479,11 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .form-fieldset.vm-read .valid-until-row .vu-days {
   width: 36px;
 }
+/* 이 줄의 값(일수·만료일)은 .form-field 의 직계가 아니라 한 겹 안에 있어 값 글자 크기
+   규칙(.form-field > span, 12px)을 못 받고 본문 크기로 커졌다 — 옆 칸들과 맞춘다. */
+.form-fieldset.vm-read .valid-until-row .vm-text {
+  font-size: 12px;
+}
 .form-fieldset.vm-read .valid-until-row .vu-date {
   flex: 0 1 auto;
   min-width: 0;
@@ -18974,3 +18983,45 @@ select.compose-tpl-version {
   user-select: none;
 }
 .ms-toggle input { margin: 0; cursor: pointer; }
+
+/* ── 단계 편집기: 좁은 화면 균형 ───────────────────────────────────────────────
+   폰·좁은 창에서 견적 편집기를 열면 (1) 단계 머리줄의 Read/Edit·Copy·Print·Prev·Next 가
+   한 줄에 다 안 들어가 오른쪽이 잘렸고, (2) Basic Info 격자가 데스크톱의 3~4칸을 그대로
+   지켜(.quote-meta-grid 가 좁은 화면 접기 규칙보다 뒤에 선언돼 이긴다) 값 칸이 몇 글자
+   폭이 되어 "KMS-QUO-…" 가 한 글자씩 줄을 바꿨다. */
+@media (max-width: 980px) {
+  /* 이 폭에선 위의 전환 탭(Project info | 4. Quote Sent)이 이미 단계 이름을 말한다 —
+     같은 이름을 한 번 더 세우느라 조작 버튼을 밀어낼 이유가 없다. (버튼 줄이 없는
+     신규 등록 화면에선 제목이 유일한 내용이라 남긴다.) */
+  .stage-pane-head:has(.stage-pane-nav) .stage-pane-title {
+    display: none;
+  }
+  .stage-pane-head {
+    flex-wrap: wrap;
+  }
+  .stage-pane-nav {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  /* Prev/Next 는 오른쪽 끝에 붙여 둔다 — 줄이 바뀌어도 늘 같은 자리에서 찾게. */
+  .stage-pane-move {
+    margin-left: auto;
+  }
+}
+@media (max-width: 860px) {
+  .quote-meta-grid,
+  .quote-meta-grid--3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* "[15] days from Sent at [만료일]" 은 세 조각이라 반 칸에선 접힌다 — 한 줄을 다 준다. */
+  .quote-meta-grid > .form-field:has(.valid-until-row) {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 520px) {
+  .quote-meta-grid,
+  .quote-meta-grid--3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

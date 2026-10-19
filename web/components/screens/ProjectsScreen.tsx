@@ -3267,6 +3267,8 @@ export function PipelineModal({
                       </button>
                     </>
                   ) : null}
+                  {/* Prev·Next 는 한 덩이 — 좁은 화면에서 줄이 바뀌어도 둘이 갈라지지 않게. */}
+                  <span className="stage-pane-move">
                   <button
                     type="button"
                     className="stage-pane-prev"
@@ -3285,6 +3287,7 @@ export function PipelineModal({
                   >
                     Next<span aria-hidden> →</span>
                   </button>
+                  </span>
                 </div>
               ) : null}
             </div>
