@@ -235,29 +235,26 @@ export function buildDealSummary(
   if (!count) return { text: `${title}\n\n해당하는 딜이 없습니다.`, html: "", count };
 
   const out: string[] = [];
+  // 딜마다 일련번호를 달지 않는다 — 프로젝트 번호가 이미 이름이다. 대신 제목 줄을
+  // <<…>> 로 감싸 세우고 딜 사이에 빈 줄을 둬, 긴 목록에서도 딜의 시작이 눈에 걸리게.
+  const pushDeal = (d: SummaryDeal) => {
+    const l = dealLines(d, f, steps, today);
+    out.push("", `<<${l.head || "-"}>>`);
+    if (l.meta.length) out.push(l.meta.join(" · "));
+    for (const x of l.details) out.push(`- ${x.label}: ${x.body}`);
+  };
   if (opt.format === "kakao") {
-    // 카톡은 폭이 좁고 줄바꿈이 그대로 산다 — 들여쓰기를 얕게, 빈 줄은 묶음 사이에만.
     out.push(title, `총 ${count}건 (${tally})`);
     for (const g of groups) {
       out.push("", `■ ${g.label} (${g.deals.length})`);
-      g.deals.forEach((d, i) => {
-        const l = dealLines(d, f, steps, today);
-        out.push(`${i + 1}. ${l.head || "-"}`);
-        if (l.meta.length) out.push(`   ${l.meta.join(" · ")}`);
-        for (const x of l.details) out.push(`   - ${x.label}: ${x.body}`);
-      });
+      g.deals.forEach(pushDeal);
     }
   } else {
     const rule = "─".repeat(32);
-    out.push(title, `총 ${count}건 (${tally})`, "");
+    out.push(title, `총 ${count}건 (${tally})`);
     for (const g of groups) {
-      out.push(rule, `${g.label}  (${g.deals.length}건)`, rule);
-      g.deals.forEach((d, i) => {
-        const l = dealLines(d, f, steps, today);
-        out.push(`${i + 1}. ${l.head || "-"}${l.meta.length ? `  [${l.meta.join(" · ")}]` : ""}`);
-        for (const x of l.details) out.push(`    · ${x.label}: ${x.body}`);
-        out.push("");
-      });
+      out.push("", rule, `${g.label}  (${g.deals.length}건)`, rule);
+      g.deals.forEach(pushDeal);
     }
   }
   const text = out.join("\n").trimEnd();
@@ -288,14 +285,11 @@ function emailHtml(
       `<div style="font-weight:700;color:#0055a8;border-bottom:2px solid #0055a8;padding:2px 0;margin:14px 0 6px">` +
       `${esc(g.label)} <span style="color:#6b7280;font-weight:400">(${g.deals.length}건)</span></div>`
     );
-    g.deals.forEach((d, i) => {
+    g.deals.forEach((d) => {
       const l = dealLines(d, f, steps, today);
-      h.push(`<div style="margin:0 0 8px">`);
-      h.push(
-        `<div><b>${i + 1}. ${esc(l.head || "-")}</b>` +
-        (l.meta.length ? ` <span style="color:#6b7280">— ${esc(l.meta.join(" · "))}</span>` : "") +
-        `</div>`
-      );
+      h.push(`<div style="margin:0 0 14px">`);
+      h.push(`<div style="font-weight:700;font-size:14px">${esc(`<<${l.head || "-"}>>`)}</div>`);
+      if (l.meta.length) h.push(`<div style="color:#6b7280">${esc(l.meta.join(" · "))}</div>`);
       for (const x of l.details) {
         const strong = x.label === "Next" || x.label === "Issue";
         const color = x.label === "Issue" ? "#a06a1c" : x.label === "Next" ? "#0055a8" : "#6b7280";
