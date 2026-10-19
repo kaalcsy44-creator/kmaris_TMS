@@ -2054,6 +2054,14 @@ export type PipelineRow = {
   // (RFQ 를 보낸 벤더 전체가 아니다). 3단계 활동을 수신별 별도 행으로 표시.
   quote_receipts?: { id: number; vendor: string; received_at: string; quote_no?: string }[];
   stage: number;
+  /** 단계별 완료 목록 — stage 까지는 모두 들어 있고, 선입금 딜에서만 그 뒤로 9~11 이
+   *  건너뛰어 붙는다(돈이 물건 7·8 보다 먼저 끝난 경우). 옛 백엔드면 없다. */
+  stage_done?: number[];
+  /** 선입금 딜 — 돈 단계(9~11)가 7·8 보다 먼저 끝났다. */
+  prepaid?: boolean;
+  /** 결제조건(Payment Terms)이 선금이다. 화면에는 쓰지 않는다 — "in advance" 가 사실상
+   *  기본 조건이라 딜 대부분이 참이다(선입금 표시는 prepaid 로만). */
+  advance_terms?: boolean;
   status: string;
   cancelled?: boolean;            // 종결(취소/실주) — 보드 Cancelled 존 분류
   close_reason?: string;          // 종결 사유 코드(schedule/slow_response/no_quote/other)

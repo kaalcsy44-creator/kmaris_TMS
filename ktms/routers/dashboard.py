@@ -52,6 +52,7 @@ from _core import (
     _rfq_no_disp,
     _search_href,
     _stage_auto_times,
+    _deal_done,
     _next_action,
     _last_activity_iso,
     _days_since_iso,
@@ -654,6 +655,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             # 수동 완료 일시는 이 행이 대표로 잡은 고객 P/O(o) 기준 — stage_auto 와 같은 오더.
             _sd = manual_stage_dates(r, o)
             _auto = _stage_auto_times(s, r, o)
+            _done = _deal_done(s, r, o)
             _sn = getattr(r, "stage_notes", None) or {}
             _lost = _enum_val(r.status) == RFQStatus.LOST.value
             # 2·3단계의 자동 일시는 최초 발송/수신(min)이라 벤더를 나중에 더 추가한 건이
@@ -728,6 +730,11 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "vendor_email": vendor_po_email,
                 # 상태 · 단계 일시
                 "stage": stage,
+                # 단계별 완료 — stage(순서대로 끝낸 마지막 단계)까지는 모두 완료이고,
+                # 선입금 딜에서만 그 뒤로 9~11 이 건너뛰어 붙는다(7·8 은 아직).
+                "stage_done": _done["done"],
+                "prepaid": _done["prepaid"],
+                "advance_terms": _done["advance_terms"],
                 "status": _status_label(stage, r.work_type),
                 # 종결(취소/실주) 여부 — 보드에서 진행 컬럼 대신 Cancelled 존으로 분류한다.
                 "cancelled": _lost,

@@ -34,7 +34,7 @@ from _core import (
     Vendor,
     Vessel,
     _customer_for_order,
-    _deal_progress,
+    _deal_done,
     _doc_file_response,
     _document_detail_payload,
     _enum_val,
@@ -676,11 +676,14 @@ def reset_stage(order_id: int, stage: int):
         if not order:
             raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
         rfq = _rfq_for_order(s, order)
-        # 이 P/O 기준 현재 단계 — 상위 단계 근거가 남아 있으면(cur>stage) 먼저 그걸 초기화해야 한다.
-        cur = _deal_progress(s, rfq, order)[0] if rfq else 0
-        if cur > stage:
+        # 상위 단계 근거가 남아 있으면 먼저 그걸 초기화해야 한다. 물건(7·8)과 돈(9~11)은
+        # 따로 진행하는 두 갈래라(선입금 딜은 돈이 먼저 끝난다) 같은 갈래 안에서만 순서를 본다.
+        done = _deal_done(s, rfq, order)["done"] if rfq else []
+        higher = [n for n in done if n > stage and (n <= 8) == (stage <= 8)]
+        if higher:
+            cur = max(higher)
             raise HTTPException(status_code=400,
-                detail=f"이 P/O는 현재 {cur}단계입니다. {stage}단계보다 위 단계부터 순서대로 초기화하세요.")
+                detail=f"이 P/O는 {cur}단계까지 완료돼 있습니다. {stage}단계보다 위 단계부터 순서대로 초기화하세요.")
 
         if stage == 7:
             ci = _latest_ci(s, order_id)

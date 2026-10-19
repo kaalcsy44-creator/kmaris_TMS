@@ -186,6 +186,23 @@ export function fmtStageDate(iso: string): string {
   return `${y.slice(2)}-${mo}-${d} ${h}:${mi}`;
 }
 
+/**
+ * 내부 11단계 바에서 i번째(0부터) 칸을 채울지.
+ *
+ * 순서대로 끝낸 마지막 단계(stage)까지는 채우고, 그 뒤라도 따로 끝난 단계(선입금 딜의
+ * 9~11)는 채운다 — 돈이 먼저 끝나고 물건(7·8)이 남은 딜은 바 가운데가 비어 보인다.
+ * 고객용 7단계 바(total≠11)는 번호 체계가 달라 stage 만 본다.
+ */
+export function stageSegOn(
+  r: { stage_done?: number[] } | null | undefined,
+  i: number,
+  stage: number,
+  total: number,
+): boolean {
+  if (i < stage) return true;
+  return total === 11 && !!r?.stage_done?.includes(i + 1);
+}
+
 /** 단계의 표시 일시: 수동 저장값 우선, 없으면 자동 동기화값, 둘 다 없으면 "". */
 export function stageDateOf(r: PipelineRow, stage: number): string {
   return r.stage_dates?.[String(stage)] ?? r.stage_auto?.[String(stage)] ?? "";

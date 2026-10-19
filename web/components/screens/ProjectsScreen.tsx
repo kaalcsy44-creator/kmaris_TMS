@@ -34,6 +34,7 @@ import {
   resolveSteps,
   fmtStageDate,
   stageDateOf,
+  stageSegOn,
   buildStageChain,
   joinDot,
   activityParties,
@@ -59,6 +60,7 @@ import { useCustomerLogo } from "@/lib/customerLogos";
 import VendorName from "@/components/common/VendorName";
 import VendorMonograms from "@/components/common/VendorMonograms";
 import ProjectNo from "@/components/common/ProjectNo";
+import PrepaidTag from "@/components/common/PrepaidTag";
 import RfqActionTabs from "@/components/RfqActionTabs";
 import NewRfqForm from "@/components/screens/NewRfqForm";
 import { PoActionTabs } from "@/components/screens/PoScreen";
@@ -376,7 +378,15 @@ function StageBar({
   steps,
   savedAt,
   lastAt,
-}: { stage: number; steps: string[]; savedAt: string; lastAt?: string }) {
+  row,
+}: {
+  stage: number;
+  steps: string[];
+  savedAt: string;
+  lastAt?: string;
+  /** 단계별 완료·선입금 표시의 근거(내부 11단계일 때만 쓴다). */
+  row?: PipelineRow;
+}) {
   const total = steps.length;
   const filled = Math.max(0, Math.min(stage, total));
   const done = doneStageLabel(stage, steps);
@@ -398,7 +408,7 @@ function StageBar({
               <span key={p.label} className="seg-group" style={{ flexGrow: p.count }} title={p.label}>
                 {Array.from({ length: p.count }).map((_, k) => {
                   const gi = start + k;
-                  return <span key={gi} className={`seg${gi < filled ? " on" : ""}`} />;
+                  return <span key={gi} className={`seg${stageSegOn(row, gi, filled, total) ? " on" : ""}`} />;
                 })}
               </span>
             );
@@ -407,12 +417,13 @@ function StageBar({
       ) : (
         <span className="pl-stage-segs">
           {Array.from({ length: total }).map((_, i) => (
-            <span key={i} className={`seg${i < filled ? " on" : ""}`} />
+            <span key={i} className={`seg${stageSegOn(row, i, filled, total) ? " on" : ""}`} />
           ))}
         </span>
       )}
       <div className="pl-stage-meta">
         <span className="pl-stage-done" title={done}>{done}</span>
+        {grouped && row ? <PrepaidTag row={row} /> : null}
         {day ? (
           <span className="pl-stage-when" title={fmtStageDate(savedAt)}>{day}</span>
         ) : null}
@@ -1947,7 +1958,7 @@ function BoardCard({
         </div>
         <div className="pl-card-bar" title={barTitle}>
           {Array.from({ length: total }).map((_, i) => (
-            <span key={i} className={`seg${i < filled ? " on" : ""}`} />
+            <span key={i} className={`seg${stageSegOn(r, i, filled, total) ? " on" : ""}`} />
           ))}
         </div>
         {vendorOf(r) ? (
@@ -1994,13 +2005,14 @@ function BoardCard({
       ) : null}
       <div className="pl-card-bar" title={barTitle}>
         {Array.from({ length: total }).map((_, i) => (
-          <span key={i} className={`seg${i < filled ? " on" : ""}`} />
+          <span key={i} className={`seg${stageSegOn(r, i, filled, total) ? " on" : ""}`} />
         ))}
       </div>
       <div className="pl-card-stageline">
         <span className="pl-card-stage">
           {steps[filled - 1] ?? ""}
           {stageDate ? <span className="pl-card-stage-date"> ({stageDate})</span> : null}
+          {total === 11 ? <PrepaidTag row={r} /> : null}
         </span>
         {age != null ? <span className={`pl-card-age${ageLv ? ` lv-${ageLv}` : ""}`} title={ageTitle}>{age}d</span> : null}
       </div>
@@ -2287,6 +2299,7 @@ function PipelineCell({
             steps={resolveSteps(steps, r.work_type)}
             savedAt={stageDateOf(r, r.stage)}
             lastAt={lastActivityISO(r)}
+            row={r}
           />
         </td>
       );
@@ -3039,7 +3052,7 @@ export function PipelineModal({
             const no = c.no;
             const cls = [
               selectedStage === no ? "on" : "",
-              no <= r.stage ? "done" : "",
+              no <= r.stage || r.stage_done?.includes(no) ? "done" : "",
               no === r.stage ? "current" : "",
               c.skip ? "skip" : "",
             ]

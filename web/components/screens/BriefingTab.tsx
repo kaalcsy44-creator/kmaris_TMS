@@ -33,9 +33,11 @@ import {
   buildStageChain,
   resolveSteps,
   stageForNote,
+  stageSegOn,
   vendorOf,
   vendorBadgesOf,
 } from "@/lib/deal";
+import PrepaidTag from "@/components/common/PrepaidTag";
 
 // Briefing — 아침에 가장 먼저 여는 화면. 프로젝트 하나가 카드 하나다.
 //
@@ -688,7 +690,7 @@ function BriefCard({
         <div className="brief-track" title={stageLabel ? `Current stage: ${stageLabel}` : undefined}>
           <div className="brief-steps">
             {steps.map((_, i) => (
-              <span key={i} className={`brief-step${i < row.stage ? " on" : ""}`} />
+              <span key={i} className={`brief-step${stageSegOn(row, i, row.stage, steps.length) ? " on" : ""}`} />
             ))}
           </div>
           {stageLabel ? (
@@ -696,6 +698,7 @@ function BriefCard({
               <b>{row.stage}</b> {stageLabel}
             </span>
           ) : null}
+          <PrepaidTag row={row} />
         </div>
       ) : null}
 

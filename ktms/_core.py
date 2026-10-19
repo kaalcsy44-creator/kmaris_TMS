@@ -47,6 +47,8 @@ def _invalidate_deal_progress_cache(session, flush_context):
     폐기돼 오래된 단계값이 남지 않는다. (autoflush=False 이므로 flush=커밋 시점)."""
     if getattr(session, "_deal_progress_cache", None):
         session._deal_progress_cache = {}
+    if getattr(session, "_deal_done_cache", None):
+        session._deal_done_cache = {}
 from services.tracking_status import (
     rfq_tracking_step, order_tracking_step, RFQ_STEPS, ORDER_STEPS,
 )
@@ -896,9 +898,6 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
 
         ar_billed = ar_billed or bool(ars)
         ar_paid = any(_enum_val(a.status) == "완납" for a in ars)
-        # 9) 청구 — 고객 청구(AR)와 벤더 청구서 수취(AP)가 모두 잡혀야 이 단계로 본다.
-        if ar_billed and ap_all_billed:
-            stage = max(stage, 9)
 
     # 수동 완료(완료 버튼/POD)로 표시된 단계를 반영.
     # (자동 근거가 약하거나 없는 단계만 — 의도치 않은 점프 방지)
@@ -910,18 +909,36 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
         if sd.get(k):
             stage = max(stage, int(k))
 
+    # ── 9~11(돈) 은 7·8(물건) 과 따로 판정한다 ─────────────────────────────────
+    # 예전엔 단계가 숫자 하나(도달한 최고 단계)라, 9단계가 끝나면 7·8 도 끝난 것으로 쳤다.
+    # 그런데 제작품은 선입금을 받고 나서 만들어 보낸다 — 9·10·11 이 먼저 끝나고 7·8 이
+    # 뒤에 온다(P-056 KOMECO). 그 건에서 9단계를 마치자 아무 일도 없던 7·8 이 완료로 켜졌다.
+    # 이제 7·8 은 자기 근거(운송통지·CI·POD·수동 완료·내수 건너뛰기)로만 끝나고, 딜의 자리
+    # (stage)는 순서대로 끝낸 마지막 단계에 머문다. 먼저 끝난 돈 단계는 done 에 따로 담는다.
+    s9 = bool(order) and ar_billed and ap_all_billed
     # 10) 프로포마 인보이스로 청구한 건은 국내 전자세금계산서를 따로 끊지 않는다 —
     # 발행할 세금계산서가 없으므로 PI 발행을 10단계 완료로 본다(수동 완료 버튼 불필요).
-    # 다만 PI 존재만으로 10단계까지 끌어올리지는 않는다: PI 는 보통 7단계(선적 전)에 나가므로
-    # 그랬다간 아직 출고도 안 한 건이 파이프라인에서 세금계산서 단계로 보인다.
-    # 청구가 시작된 뒤(9단계 이상)에만 적용한다.
-    pi_covers_tax = pi is not None and stage >= 9
+    # 다만 PI 존재만으로 10단계를 끝내지는 않는다: PI 는 보통 7단계(선적 전)에 나가므로
+    # 그랬다간 아직 출고도 안 한 건이 세금계산서 단계로 보인다. 청구가 시작된 뒤(9단계
+    # 완료)에만 적용한다.
+    pi_covers_tax = pi is not None and s9
     # 10·11 단계는 매출(AR)·매입(AP) 양쪽이 끝나야 완료다 — 고객에게 세금계산서를 끊고
     # 수금까지 마쳐도 벤더 세금계산서 수취·지급이 남아 있으면 그 P/O 는 아직 진행 중이다.
-    if (bool(sd.get("10")) or pi_covers_tax) and ap_all_tax:
-        stage = max(stage, 10)
-    if (bool(sd.get("11")) or ar_paid) and ap_all_paid:
-        stage = max(stage, 11)
+    s10 = (bool(sd.get("10")) or pi_covers_tax) and ap_all_tax
+    s11 = (bool(sd.get("11")) or ar_paid) and ap_all_paid
+    money_done = [n for n, ok in ((9, s9), (10, s10), (11, s11)) if ok]
+    # 옛 규칙의 값(최고 도달 단계) — 바뀐 규칙으로 자리가 달라지는 딜을 세어 볼 때 쓴다.
+    legacy_stage = max([stage, *money_done])
+    if stage >= 8:
+        # 물건이 다 갔으면 예전과 같다 — 돈 단계는 이어서 센다.
+        stage = legacy_stage
+    # 선입금 딜 — 돈 단계가 물건(7·8)보다 먼저 끝났거나, 결제조건이 선금이다.
+    pay_terms = " ".join(
+        str((getattr(x, "terms", None) or {}).get("payment_terms") or "")
+        for x in (order, quo) if x is not None)
+    advance_terms = bool(_ADVANCE_RE.search(pay_terms))
+    prepaid = bool(money_done) and stage < 8
+    done = sorted(set(range(1, stage + 1)) | set(money_done))
 
     # ── (2) 단계별 자동 완료 일시 ─────────────────────────────────────────────
     # 근거 레코드가 존재하는 단계만 채운다(수동 stage_dates 미입력 시 표시·기본값).
@@ -973,7 +990,33 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
 
     result = (stage, auto)
     _dp_cache[_dp_key] = result
+    _dd = getattr(s, "_deal_done_cache", None)
+    if _dd is None:
+        _dd = s._deal_done_cache = {}
+    _dd[_dp_key] = {"done": done, "prepaid": prepaid, "advance_terms": advance_terms,
+                    "legacy_stage": legacy_stage}
     return result
+
+
+# 결제조건 문구에서 '선금' 을 알아본다 — 견적·고객 P/O 의 Payment Terms 칸(자유 입력).
+_ADVANCE_RE = re.compile(
+    r"(in advance|advance payment|advanced payment|prepay|pre-pay|prepaid|"
+    r"CIA|CWO|cash with order|선금|선입금|선지급|선결제)", re.I)
+
+
+def _deal_done(s, rfq, order) -> dict:
+    """`_deal_progress` 와 같은 계산에서 나온 단계별 완료 목록과 선입금 표시.
+
+    {"done": [완료 단계 번호…], "prepaid": 돈 단계가 7·8 보다 먼저 끝났나,
+     "advance_terms": 결제조건이 선금인가, "legacy_stage": 옛 규칙의 단계 번호}
+    stage(딜의 자리)는 순서대로 끝낸 마지막 단계라 done 의 앞부분과 같고, 선입금 딜에서만
+    그 뒤로 9~11 이 건너뛰어 붙는다.
+    """
+    if rfq is None:
+        return {"done": [1], "prepaid": False, "advance_terms": False, "legacy_stage": 1}
+    _deal_progress(s, rfq, order)
+    key = (rfq.id, order.id if order is not None else 0)
+    return s._deal_done_cache[key]
 
 
 def _pipeline_stage(s, rfq_id: int) -> int:
