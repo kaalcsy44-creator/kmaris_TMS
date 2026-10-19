@@ -16434,6 +16434,7 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   background: transparent;
   padding-left: 0;
   font-weight: 600;
+  font-size: 12px;            /* 다른 값(span.vm-text)과 같은 크기 — 고객 선택만 13px 였다 */
 }
 
 /* 라벨 위·값 아래(2줄) → 라벨 왼쪽·값 오른쪽(1줄). 세로 길이가 절반 가까이 줄어
@@ -16486,10 +16487,16 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .form-fieldset.vm-read .valid-until-row .vu-days {
   width: 36px;
 }
-/* 이 줄의 값(일수·만료일)은 .form-field 의 직계가 아니라 한 겹 안에 있어 값 글자 크기
-   규칙(.form-field > span, 12px)을 못 받고 본문 크기로 커졌다 — 옆 칸들과 맞춘다. */
-.form-fieldset.vm-read .valid-until-row .vm-text {
+/* 읽기모드 값 글자 크기는 한 가지로. 값(span.vm-text)이 .form-field 의 직계면
+   .form-field > span 규칙(12px)을 받지만, 한 겹 안에 있으면(콤보박스 .combobox·
+   Valid until 줄·환율칸 등) 그 규칙을 못 받고 본문 크기(16px)로 커졌다 — "EXW" 가
+   옆 칸보다 한참 크게 보이던 이유. 깊이와 상관없이 칸 안의 값은 모두 12px. */
+.form-fieldset.vm-read .form-field .vm-text {
   font-size: 12px;
+}
+/* 콤보박스의 ▾ 는 고르는 손잡이다 — 읽기에선 고를 수 없으니 감춘다(값만 남긴다). */
+.form-fieldset.vm-read .combobox-toggle {
+  display: none;
 }
 .form-fieldset.vm-read .valid-until-row .vu-date {
   flex: 0 1 auto;
@@ -19005,6 +19012,10 @@ select.compose-tpl-version {
   }
   .stage-pane-head {
     flex-wrap: wrap;
+    /* 이 폭에선 위의 전환 탭(.pl-pane-tabs, 36px)도 같은 스크롤 상자 맨 위(top:0)에
+       붙는다. 둘 다 0 이면 내려갈 때 헤더가 탭을 덮어 탭은 왼쪽 모서리만 회색으로
+       삐져나왔다 — 헤더는 탭 바로 아래에 붙인다. */
+    top: 36px;
   }
   .stage-pane-nav {
     flex: 1 1 100%;
@@ -19026,9 +19037,20 @@ select.compose-tpl-version {
     grid-column: 1 / -1;
   }
 }
+@media (max-width: 720px) {
+  /* 3칸 고정(PL No.·PL Date 등)은 접는 규칙이 아예 없었다. */
+  .form-grid--thirds {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 @media (max-width: 520px) {
+  /* 폰 폭에선 한 줄에 한 칸. 읽기모드는 라벨이 값 왼쪽에 서서 칸 하나가 라벨+값을
+     함께 담는데, 2칸으로 두면 값 자리가 100px 남짓이라 날짜·번호가 줄을 바꾼다.
+     .received-fields(1·3·5단계 Basic Info)는 2칸에서 멈춰 있었다. */
   .quote-meta-grid,
-  .quote-meta-grid--3 {
+  .quote-meta-grid--3,
+  .form-grid--thirds,
+  .received-fields {
     grid-template-columns: minmax(0, 1fr);
   }
 }
