@@ -15,8 +15,11 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import re
+import shutil
 import sys
+import tempfile
 import threading
 import time
 import urllib.request
@@ -34,6 +37,7 @@ _IMO = re.compile(r"(?<!\d)(\d{7})(?!\d)")
 # 하루 한 번이면 충분하다 — 두 명부 모두 많아야 주 몇 번 갱신된다.
 _REFRESH_EVERY = timedelta(hours=20)
 _CHECK_EVERY_SEC = 60 * 60
+_START_DELAY_SEC = 120
 
 # 프로세스 안 캐시 — 목록 화면마다 DB 의 큰 JSON 을 다시 읽지 않게. (updated_at, by_imo)
 _memo: dict = {"at": 0.0, "by_imo": None, "updated_at": ""}
@@ -45,17 +49,18 @@ def _norm_imo(v) -> str:
     return m.group(1) if m else ""
 
 
-def _parse_ofac(text: str) -> dict[str, dict]:
+def _parse_ofac(f) -> dict[str, dict]:
     """SDN.CSV — 열 순서: ent_num, name, sdn_type, program, title, call_sign, vess_type,
-    tonnage, grt, vess_flag, vess_owner, remarks. 배는 remarks 에 'IMO 1234567' 이 있다."""
+    tonnage, grt, vess_flag, vess_owner, remarks. 배는 remarks 에 'IMO 1234567' 이 있다.
+    f = 열린 텍스트 파일(한 줄씩 읽는다)."""
     out: dict[str, dict] = {}
-    for row in csv.reader(io.StringIO(text)):
+    clean = lambda v: "" if v.strip() in ("-0-", "") else v.strip()
+    for row in csv.reader(f):
         if len(row) < 12 or row[2].strip().lower() != "vessel":
             continue
         m = re.search(r"IMO (\d{7})", row[11])
         if not m:
             continue
-        clean = lambda v: "" if v.strip() in ("-0-", "") else v.strip()
         out[m.group(1)] = {
             "source": "US OFAC",
             "name": clean(row[1]),
@@ -66,21 +71,27 @@ def _parse_ofac(text: str) -> dict[str, dict]:
     return out
 
 
-def _parse_uk(text: str) -> dict[str, dict]:
-    """UK Sanctions List CSV — 첫 줄은 'Report Date', 둘째 줄이 머리글. 배는
-    Designation Type 이 'Ship' 이고 'IMO number' 칸이 있다. 별칭마다 줄이 반복된다."""
-    # splitlines() 는 칸 안의 특수 줄바꿈 문자(\x1c·  등)에서도 끊어 행을 망가뜨린다 —
-    # 머리글 자리에서 잘라 csv 에 통째로 맡긴다.
-    head = text.find("Last Updated,")
+def _parse_uk(f) -> dict[str, dict]:
+    """UK Sanctions List CSV — 첫 줄은 'Report Date', 그다음이 머리글('Last Updated,…').
+    배는 Designation Type 이 'Ship' 이고 'IMO number' 칸이 있다. 별칭마다 줄이 반복된다.
+    f = 열린 텍스트 파일(newline=""). 머리글까지 건너뛴 뒤 한 줄씩 읽는다."""
+    header = None
+    while True:
+        line = f.readline()
+        if not line:
+            return {}
+        if line.startswith("Last Updated,"):
+            header = next(csv.reader([line]))
+            break
     out: dict[str, dict] = {}
-    for row in csv.DictReader(io.StringIO(text[head:] if head >= 0 else text, newline="")):
+    for row in csv.DictReader(f, fieldnames=header):
         if (row.get("Designation Type") or "").strip().lower() != "ship":
             continue
         imo = _norm_imo(row.get("IMO number"))
         if not imo or imo in out:
             continue
         name = (row.get("Name 6") or "").strip()
-        # 이름 없이 'IMO 9317315 ('LUCH')' 처럼 적힌 줄 — 괄호 안이 배 이름이다.
+        # 이름 없이 "IMO 9317315 ('LUCH')" 처럼 적힌 줄 — 괄호 안이 배 이름이다.
         m = re.search(r"\(\s*'?([^')]+?)'?\s*\)", name) if name.upper().startswith("IMO") else None
         out[imo] = {
             "source": "UK",
@@ -93,6 +104,21 @@ def _parse_uk(text: str) -> dict[str, dict]:
     return out
 
 
+def _fetch_parse(url: str, parse) -> dict[str, dict]:
+    """받아서 바로 임시 파일로 흘려 쓰고, 파일을 한 줄씩 읽어 배만 추린다.
+
+    **통째로 메모리에 올리지 말 것.** 영국 명부는 50MB 다 — bytes·디코딩한 str·csv 행이
+    한꺼번에 떠 Render Starter(512MB)를 넘겼고, 서버가 재시작할 때마다 다시 받다가 또
+    죽는 루프에 빠졌다(2026-10-21). 지금은 아무리 커도 한 줄 몫의 메모리만 쓴다."""
+    req = urllib.request.Request(url, headers={"User-Agent": "KTMS/1.0"})
+    with tempfile.TemporaryFile() as tmp:
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            shutil.copyfileobj(resp, tmp, 1024 * 1024)
+        tmp.seek(0)
+        with io.TextIOWrapper(tmp, encoding="utf-8-sig", errors="ignore", newline="") as f:
+            return parse(f)
+
+
 def refresh(session) -> dict:
     """두 명부를 새로 받아 DB 에 둔다. 한쪽이 실패하면 그쪽은 지난번 값을 유지한다."""
     row = session.query(AppSetting).filter_by(key=STATE_KEY).first()
@@ -102,9 +128,7 @@ def refresh(session) -> dict:
     errors: dict[str, str] = {}
     for key, url, parse in (("ofac", OFAC_SDN_URL, _parse_ofac), ("uk", UK_LIST_URL, _parse_uk)):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "KTMS/1.0"})
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                parsed = parse(resp.read().decode("utf-8-sig", errors="ignore"))
+            parsed = _fetch_parse(url, parse)
             if not parsed:
                 raise ValueError("no vessels parsed")
             lists[key] = {"fetched_at": datetime.utcnow().isoformat(timespec="seconds"), "by_imo": parsed}
@@ -170,6 +194,8 @@ def _needs_refresh(session) -> bool:
 
 
 def _loop(get_session) -> None:
+    # 부팅 직후는 피한다 — 서버가 뜨는 동안 내려받기·파싱이 겹치지 않게.
+    time.sleep(_START_DELAY_SEC)
     while True:
         s = get_session()
         try:
@@ -185,4 +211,6 @@ def _loop(get_session) -> None:
 def start(get_session) -> None:
     """서버가 뜨면 얇은 스레드 하나로 하루 한 번 명부를 새로 받는다(mail_auto 와 같은 방식 —
     "몇 시에"가 아니라 "마지막으로 받은 지 하루가 지났나"를 자주 본다)."""
+    if os.environ.get("SANCTIONS_AUTO", "1").strip() == "0":
+        return
     threading.Thread(target=_loop, args=(get_session,), daemon=True, name="sanctions-refresh").start()
