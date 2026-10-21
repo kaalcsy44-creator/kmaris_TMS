@@ -2107,20 +2107,19 @@ def quotation_clause_catalog(terms: Dict[str, Any], validity_days: int = 30,
     거래조건 필드(Incoterms·결제·보증)는 문장에 그때그때 끼워 넣어 항상 최신값으로 찍힌다."""
     incoterms = terms.get("incoterms") or "EXW (Ex Works)"
     place = terms.get("delivery_place") or "Busan, Republic of Korea"
-    payment = terms.get("payment_terms") or "T/T in advance"
     warranty = terms.get("warranty") or "6 months from delivery"
     return [
         ("validity", quotation_validity_text(valid_until, quote_date, validity_days)),
         ("confirmation", "Price, availability, and delivery time are subject to final confirmation upon order placement."),
         ("delivery_term", f"Delivery term: {incoterms} {place}, Incoterms 2020."),
-        ("charges_excluded", "Freight, customs duty, local tax, and other logistics charges are excluded unless otherwise stated."),
-        ("payment_term", f"Payment term: {payment}"),
-        ("buyer_check", "Buyer to confirm part number, description, quantity, engine type, and technical suitability before order."),
+        ("charges_excluded", "Packing, freight, and delivery charges are excluded."),
+        # 결제조건은 문장으로 넣지 않는다 — 견적서에 따로 선 Payment 섹션과 같은 말을 두 번 찍었다.
+        # (옛 견적에 저장된 "payment_term" id 는 목록에 없으니 그냥 건너뛴다.)
+        ("buyer_check", "Buyer to confirm part number, description, quantity, equipment model, and technical suitability before order."),
         ("certificates", "Certificates are excluded unless specifically stated."),
         ("cancellation", "Cancellation or return may not be accepted after order confirmation, especially for specially ordered or non-stock items."),
         ("warranty", f"Warranty follows {warranty}."),
-        ("complete_order", "The unit price suggested is based on the complete order with complete quantities. In case of reduction for qty, "
-                           "it may constitute a variation to the contract, subject to mutual agreement."),
+        ("complete_order", "Unit prices are based on the complete order quantity and may be subject to change for partial orders."),
     ]
 
 

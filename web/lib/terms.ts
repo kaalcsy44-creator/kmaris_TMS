@@ -106,18 +106,13 @@ export const QUOTATION_CLAUSES: readonly {
     text: (t) =>
       `Delivery term: ${t.incoterms || "EXW (Ex Works)"} ${t.delivery_place || "Busan, Republic of Korea"}, Incoterms 2020.`,
   },
-  { id: "charges_excluded", text: () => "Freight, customs duty, local tax, and other logistics charges are excluded unless otherwise stated." },
-  { id: "payment_term", text: (t) => `Payment term: ${t.payment_terms || "T/T in advance"}` },
-  { id: "buyer_check", text: () => "Buyer to confirm part number, description, quantity, engine type, and technical suitability before order." },
+  { id: "charges_excluded", text: () => "Packing, freight, and delivery charges are excluded." },
+  // 결제조건 문장은 없앴다 — 견적서의 Payment 섹션과 같은 말이 두 번 찍혔다(서버와 짝).
+  { id: "buyer_check", text: () => "Buyer to confirm part number, description, quantity, equipment model, and technical suitability before order." },
   { id: "certificates", text: () => "Certificates are excluded unless specifically stated." },
   { id: "cancellation", text: () => "Cancellation or return may not be accepted after order confirmation, especially for specially ordered or non-stock items." },
   { id: "warranty", text: (t) => `Warranty follows ${t.warranty || "6 months from delivery"}.` },
-  {
-    id: "complete_order",
-    text: () =>
-      "The unit price suggested is based on the complete order with complete quantities. In case of reduction for qty, "
-      + "it may constitute a variation to the contract, subject to mutual agreement.",
-  },
+  { id: "complete_order", text: () => "Unit prices are based on the complete order quantity and may be subject to change for partial orders." },
 ];
 
 // 지금 문서에 찍힐 문장 id 들. 고른 적이 없는(=clauses 미저장) 견적은 전체가 들어간다 —
