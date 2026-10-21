@@ -3716,7 +3716,7 @@ function VendorRfqAction({
         <span className="hint-inline">
           {maker
             ? `${maker.name} joins the vendor list once you draft the email or mark this as sent — the quote, P/O and payment that follow all run through a vendor. Picking it here alone changes nothing.`
-            : "Pick the manufacturer you are asking directly. Register it under Settings ▸ Partners ▸ Maker first if it is not listed."}
+            : "Pick the manufacturer you are asking directly. Register it under Partners ▸ Maker first if it is not listed."}
         </span>
       ) : null}
       {rfqId ? (

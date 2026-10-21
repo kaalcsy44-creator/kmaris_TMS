@@ -214,7 +214,7 @@ def _vendor_tag_alerts() -> list[dict]:
             "currency": "",
             "date": r.get("last") or "",
             "days": 0,
-            "href": "/settings?tab=partners&side=vendors&company=" + quote(r["company"]),
+            "href": "/partners?side=vendors&company=" + quote(r["company"]),
             "company": r["company"],
             "suggestions": items,
         })

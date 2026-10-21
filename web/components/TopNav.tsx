@@ -21,6 +21,8 @@ const ITEMS: Item[] = [
   // 두 번 그리는 중복이라 하나로 합쳤다. 권한은 progress 모듈을 그대로 쓴다.
   { href: "/project", label: "Projects", key: "projects", perm: "progress" },
   // 업무일지 — 파이프라인(progress) 열람 권한 사용자면 접근 가능.
+  // 상대처(Customer·Vendor·Maker)·선박 명부 — 자주 쓰여 Settings 에서 승격. 권한은 settings(마스터 데이터).
+  { href: "/partners", label: "Partners", key: "partners", perm: "settings" },
   { href: "/activity", label: "Activity", key: "activity", perm: "progress" },
   { href: "/finance", label: "Finance", key: "finance" },
   { href: "/marketing", label: "Marketing", key: "marketing" },

@@ -131,15 +131,20 @@ import { HeadTh, useHeadMenu, type HeadCol } from "@/components/common/tableHead
 // 둘 다 한 가지 일을 두 자리에서 하게 만들던 구분이라 합쳤다 — 계정과 그 계정이 할 수
 // 있는 일은 같은 물음이고, 고객과 벤더는 같은 상대처 명부를 사고 파는 방향으로만
 // 나눈 것이다. ?tab= 링크는 옛 이름으로 들어와도 새 탭으로 보낸다(TAB_ALIAS).
+// Partners(고객·벤더·메이커)와 Vessels 는 자주 쓰여 상단 메뉴 "Partners"(/partners)로
+// 승격했다. 옛 ?tab=partners|vessels|customers|vendors 링크는 그리로 보낸다(PARTNER_TABS).
 type Tab =
   | "company" | "users"
-  | "partners" | "vessels" | "consultants" | "email" | "account";
+  | "consultants" | "email" | "account";
 
 /** 옛 ?tab= 값 → 지금 탭. 밖에 나가 있는 링크·북마크가 죽지 않게. */
 const TAB_ALIAS: Record<string, Tab> = {
   permissions: "users",
-  customers: "partners",
-  vendors: "partners",
+};
+
+/** /partners 로 옮겨 간 옛 탭 → 그 페이지의 side. */
+const PARTNER_TABS: Record<string, string> = {
+  partners: "", customers: "customers", vendors: "vendors", makers: "makers", vessels: "vessels",
 };
 
 const emptyCompany: CompanyProfile = {
@@ -167,7 +172,7 @@ const emptyCompany: CompanyProfile = {
 
 /** 화면을 채우고 그 안에서 굴리는 배치(fill)를 쓰는 탭 — 표가 본문인 탭들이다.
  *  보통 배치에서는 표 상자와 페이지가 각자 굴러 스크롤 막대가 둘이 된다. */
-const FILL_TABS = new Set<Tab>(["partners"]);
+const FILL_TABS = new Set<Tab>([]);
 
 export default function SettingsPage() {
   // 껍데기(AppShell)가 알아야 하는 값이라 여기 둔다. 탭 상태 자체를 올리지 않는 것은
@@ -195,9 +200,8 @@ function Settings({ onFill }: { onFill: (v: boolean) => void }) {
     const raw = params.get("tab") || "";
     const asked = (TAB_ALIAS[raw] ?? raw) as Tab;
     // 링크로 들어온 탭이라도 권한이 없으면 기본 탭으로.
-    if (asked === "partners" && (admin || canMaster)) return asked;
     if (asked === "email" && (admin || canMaster)) return asked;
-    return admin ? "company" : canMaster ? "partners" : "account";
+    return admin ? "company" : canMaster ? "consultants" : "account";
   });
 
   useEffect(() => { onFill(FILL_TABS.has(tab)); }, [tab, onFill]);
@@ -208,6 +212,19 @@ function Settings({ onFill }: { onFill: (v: boolean) => void }) {
   useEffect(() => {
     if (legacyMail) window.location.replace("/activity?view=mail&conn=1");
   }, [legacyMail]);
+
+  // 상대처·선박 명부는 상단 메뉴 Partners 로 옮겼다 — 옛 링크(알림의 거래선 태그 제안 등)를
+  // side·company 를 살려 그리로 보낸다.
+  const legacyTab = params.get("tab") || "";
+  const legacyPartner = legacyTab in PARTNER_TABS;
+  useEffect(() => {
+    if (!legacyPartner) return;
+    const q = new URLSearchParams(params.toString());
+    q.delete("tab");
+    if (PARTNER_TABS[legacyTab] && !q.get("side")) q.set("side", PARTNER_TABS[legacyTab]);
+    const qs = q.toString();
+    window.location.replace("/partners" + (qs ? "?" + qs : ""));
+  }, [legacyPartner, legacyTab, params]);
 
   // 마스터 데이터 권한도 없는 사용자(예: 권한 없는 viewer)는 본인 비밀번호 변경만.
   if (!admin && !canMaster) {
@@ -228,14 +245,10 @@ function Settings({ onFill }: { onFill: (v: boolean) => void }) {
     ? [
         { key: "company", label: "Company" },
         { key: "users", label: "Users & Permissions" },
-        { key: "partners", label: "Partners" },
-        { key: "vessels", label: "Vessels" },
         { key: "consultants", label: "Consultant" },
         { key: "email", label: "Email Templates" },
       ]
     : [
-        { key: "partners", label: "Partners" },
-        { key: "vessels", label: "Vessels" },
         { key: "consultants", label: "Consultant" },
         { key: "email", label: "Email Templates" },
         { key: "account", label: "My Account" },
@@ -256,8 +269,6 @@ function Settings({ onFill }: { onFill: (v: boolean) => void }) {
       </div>
       {admin && tab === "company" && <CompanyTab />}
       {admin && tab === "users" && <UsersTab />}
-      {tab === "partners" && <PartnersTab />}
-      {tab === "vessels" && <VesselsTab />}
       {tab === "consultants" && <ConsultantsTab />}
       {tab === "email" && <EmailTemplatesTab initialType={params.get("type") || undefined} />}
       {tab === "account" && (
@@ -1002,40 +1013,6 @@ function invalidatePartnerCaches() {
   invalidateCache("settings-makers");
 }
 
-/* ── Partners — 고객과 벤더를 한 번에 한 쪽씩 ─────────────────────────────────
-   둘은 같은 상대처 명부를 사고 파는 방향으로만 나눈 것이라 한 탭 안에 함께 두지만,
-   좌우로 반씩 나눠 놓으면 어느 쪽도 제 폭을 못 쓴다 — 취급품목이나 담당자 이름처럼
-   길이가 있는 칸이 서너 줄로 접힌다. 한 번에 한 쪽만 전폭으로 보이고, 위의 알약
-   전환으로 넘나든다(페이지 탭 밑의 한 급 아래 계층). */
-function PartnersTab() {
-  // ?side=vendors — 알림(종)의 거래선 태그 제안에서 그 회사 창으로 곧장 온다.
-  const sideParam = useSearchParams().get("side");
-  const [side, setSide] = useState<"customers" | "vendors" | "makers">(
-    sideParam === "vendors" || sideParam === "makers" ? sideParam : "customers"
-  );
-  return (
-    <>
-      <div className="ms-party-tabs" role="tablist" aria-label="Partner type">
-        {([["customers", "Customer"], ["vendors", "Vendor"], ["makers", "Maker"]] as const).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={side === key}
-            className={`ms-party-tab${side === key ? " on" : ""}`}
-            onClick={() => setSide(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {side === "customers" ? <CustomersTab />
-        : side === "vendors" ? <VendorsTab />
-          : <MakersTab />}
-    </>
-  );
-}
-
 const EMPTY_MAKER: SettingsMaker = {
   id: 0, name: "", contact: "", duty: "", email: "", contact_phone: "", country: "", address: "",
   website: "", specialization: "", note: "", logo: "",
@@ -1058,7 +1035,7 @@ const EMPTY_MAKER: SettingsMaker = {
  * 그 id 를 들고 있으므로, 고르는 자리는 회사 단위로 모아 보여 주고(useMakerCompanies)
  * 담당자 줄을 지울 때는 서버가 남은 줄로 그 참조를 옮긴다(delete_maker).
  */
-function MakersTab() {
+export function MakersTab() {
   const catText = useCategoryText();
   const catNames = useCategoryNames();
   const [company, setCompany] = useState<CompanyNavCtx<SettingsMaker> | null>(null);
@@ -1299,7 +1276,7 @@ function MakersTab() {
   );
 }
 
-function CustomersTab() {
+export function CustomersTab() {
   // 회사 공통정보 편집 대상 그룹(같은 회사명의 담당자 레코드들). null = 닫힘.
   // 회사 목록 전체와 지금 보고 있는 자리 — 창 안에서 옆 회사로 건너뛰려면 이웃을 알아야 한다.
   const [company, setCompany] = useState<
@@ -2927,7 +2904,7 @@ const EMPTY_VENDOR: SettingsVendor = {
   addresses: [], emails: [], phones: [], regions: [], category_ids: [], maker_ids: [],
 };
 
-function VendorsTab() {
+export function VendorsTab() {
   const catText = useCategoryText();
   const makerText = useMakerText();
   const makerNames = useMakerNames();
@@ -3193,7 +3170,7 @@ function VendorsTab() {
   );
 }
 
-function VesselsTab() {
+export function VesselsTab() {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   useEffect(() => {
     fetchCustomers().then(setCustomers).catch(() => setCustomers([]));
