@@ -137,6 +137,66 @@ function syncReadMirrors(root: HTMLElement | null, on: boolean) {
   }
 }
 
+/** 읽기모드에서 값이 길어 좁은 칸 안에서 여러 줄로 접히는 항목은 한 행 전체로 넓힌다.
+ *  여러 칸을 늘어놓는 격자(.form-grid · .received-fields)는 칸 폭이 고정이라, 긴 값(긴 선박명,
+ *  담당자 여럿, 주소, 경고문)이 3분의 1 폭 안에서 세로로 길게 늘어져 보기 싫었다.
+ *  넓힌 칸이 남긴 빈자리는 뒤의 짧은 항목이 메운다(CSS grid-auto-flow: dense).
+ *
+ *  한 번 넓힌 칸은 값이 바뀌거나(data-vm-wide 서명) 창 크기가 바뀔 때만 다시 잰다 —
+ *  넓힌 상태에선 접히지 않으니 매번 재면 넓혔다 좁혔다를 되풀이한다. */
+const WIDE_FIELD_SEL = ".form-grid > .form-field, .received-fields .form-field";
+function widenLongFields(root: HTMLElement | null, on: boolean, reset = false) {
+  if (!root) return;
+  const fields = Array.from(root.querySelectorAll<HTMLElement>(WIDE_FIELD_SEL));
+  if (!on || reset) {
+    for (const f of fields) {
+      f.classList.remove("vm-wide");
+      f.removeAttribute("data-vm-wide");
+    }
+    if (!on) return;
+  }
+  // 먼저 모두 잰 다음 한꺼번에 바꾼다 — 재는 도중 배치가 바뀌면 뒤 칸의 측정이 틀어진다.
+  const widen: HTMLElement[] = [];
+  for (const f of fields) {
+    const sig = String((f.textContent || "").length);
+    if (f.classList.contains("vm-wide")) {
+      if (f.getAttribute("data-vm-wide") === sig) continue;
+      f.classList.remove("vm-wide");   // 값이 바뀌었다 — 다시 잰다
+    }
+    // 원래 한 행을 다 쓰는 칸, 표·여러 줄 입력이 든 칸은 대상이 아니다.
+    if (f.classList.contains("field-full") || getComputedStyle(f).gridColumnEnd === "-1") continue;
+    if (f.querySelector("table, .vm-text--multi, .item-box")) continue;
+    if (f.offsetParent === null) continue;
+    const vals = Array.from(f.children).slice(1) as HTMLElement[];   // 첫 자식 = 라벨
+    // 글자가 실제로 몇 줄에 걸쳐 놓였는지 센다 — 높이로 재면 테두리·로고가 있는 한 줄짜리
+    // 값(고객 선택 버튼 등)도 "두 줄"로 오인한다. 글자 조각의 줄 위치(top)가 둘 이상이면 접힌 것.
+    const wraps = vals.some((v) => {
+      const text = (v.textContent || "").trim();
+      if (!text || text.includes("\n") || v.offsetParent === null) return false;
+      // 글자 마디(text node)만 본다 — 로고·아이콘 상자는 글자와 높이가 달라 줄로 세면 안 된다.
+      const rects: DOMRect[] = [];
+      const walker = document.createTreeWalker(v, NodeFilter.SHOW_TEXT);
+      const range = document.createRange();
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (!(n.textContent || "").trim()) continue;
+        range.selectNodeContents(n);
+        for (const r of Array.from(range.getClientRects())) if (r.width > 1 && r.height > 1) rects.push(r);
+      }
+      rects.sort((a, b) => a.top - b.top);
+      let lines = rects.length ? 1 : 0;
+      for (let i = 1; i < rects.length; i++) {
+        if (rects[i].top > rects[i - 1].top + rects[i - 1].height * 0.6) lines++;
+      }
+      return lines >= 2;
+    });
+    if (wraps) widen.push(f);
+  }
+  for (const f of widen) {
+    f.classList.add("vm-wide");
+    f.setAttribute("data-vm-wide", String((f.textContent || "").length));
+  }
+}
+
 /** 편집기 한 곳에서 쓰는 헬퍼.
  *  canEdit(권한)와 표시 모드를 합쳐 "지금 이 폼을 만질 수 있나(editing)"를 낸다.
  *  readMode 는 '권한은 있는데 읽기모드라서 잠긴' 상태 — 권한 부족 안내문과 구분해야 해서 따로 준다.
@@ -155,6 +215,7 @@ export function useEditGate(canEdit: boolean) {
     if (!readMode && !marked.current) return;
     markEmptyFields(ref.current, readMode);
     syncReadMirrors(ref.current, readMode);
+    widenLongFields(ref.current, readMode);
     marked.current = readMode;
   });
 
@@ -162,8 +223,17 @@ export function useEditGate(canEdit: boolean) {
   // 읽기모드 동안은 짧은 간격으로 다시 비춰 '보이는 값 = 저장된 값'을 지킨다.
   useEffect(() => {
     if (!readMode) return;
-    const t = window.setInterval(() => syncReadMirrors(ref.current, true), 800);
-    return () => window.clearInterval(t);
+    const t = window.setInterval(() => {
+      syncReadMirrors(ref.current, true);
+      widenLongFields(ref.current, true);
+    }, 800);
+    // 창 폭이 바뀌면 접히는 칸이 달라진다 — 넓힌 표시를 지우고 처음부터 다시 잰다.
+    const onResize = () => widenLongFields(ref.current, true, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.clearInterval(t);
+      window.removeEventListener("resize", onResize);
+    };
   }, [readMode]);
 
   return {

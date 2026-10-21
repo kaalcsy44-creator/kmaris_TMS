@@ -19503,7 +19503,7 @@ select.compose-tpl-version {
   margin: 6px 0; padding: 8px 10px; border-radius: 6px; font-size: 13px; line-height: 1.45;
   color: #7a1616; background: #fdecec; border: 1px solid #f3c2c2;
 }
-.vs-warn-sub { display: block; font-size: 12px; color: #9a3a3a; }
+.vs-warn-sub { margin-left: 6px; font-size: 12px; color: #9a3a3a; }
 .vs-lookup { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .vs-note { margin: 6px 0 2px; font-size: 12.5px; line-height: 1.5; }
 .vs-conf { margin-left: 6px; padding: 0 5px; border-radius: 3px; font-size: 11px; background: #eef2f7; color: #475569; }
@@ -19511,3 +19511,24 @@ select.compose-tpl-version {
 .vs-clear { margin-left: 8px; color: #1f7a3d; }
 .vs-src a { margin-right: 6px; font-weight: 600; }
 .vs-lists { font-size: 12px; color: #64748b; }
+
+/* ── 읽기모드: 긴 값은 칸을 넓혀 한 줄로(lib/viewMode.tsx widenLongFields) ──────────────
+   여러 칸 격자에서 값이 좁은 칸 안에 세로로 길게 접히면, 그 항목을 한 행 전체로 넓힌다.
+   넓힌 칸이 남긴 빈자리는 뒤의 짧은 항목이 당겨 와 메운다(dense) — 빈 구멍을 남기지 않게. */
+.form-fieldset.vm-read .form-grid,
+.form-fieldset.vm-read .received-fields {
+  grid-auto-flow: row dense;
+}
+.form-fieldset.vm-read .form-grid > .form-field.vm-wide,
+.form-fieldset.vm-read .received-fields .form-field.vm-wide {
+  grid-column: 1 / -1;
+}
+/* 항목 안의 덧붙임 줄(안내·경고·오류)은 [라벨 | 값] 두 칸 중 좁은 라벨 칸으로 떨어지지 않고
+   항목 폭 전체를 쓴다 — 제재 경고가 라벨 칸 폭으로 열두 줄 접히던 문제. */
+.form-fieldset.vm-read .form-grid > .form-field > :is(.hint-inline, .action-err, .action-ok, .vs-warn),
+.form-fieldset.vm-read .received-fields .form-field > :is(.hint-inline, .action-err, .action-ok, .vs-warn) {
+  grid-column: 1 / -1;
+}
+/* 선박 선택 아래의 제재 경고 — 한 행 전체를 쓰는 짧은 띠. */
+.vs-warn-row { grid-column: 1 / -1; }
+.vs-warn-row .vs-warn { margin: 0; }

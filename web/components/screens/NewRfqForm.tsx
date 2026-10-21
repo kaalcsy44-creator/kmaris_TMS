@@ -893,9 +893,14 @@ export default function NewRfqForm({
                 </option>
               ))}
             </select>
-            {/* 제재 명부(US OFAC · UK)에 오른 배 — 경고만 하고 진행은 막지 않는다. */}
-            <SanctionWarning hits={vessels.find((v) => v.id === vesselId)?.sanctions} />
           </Field>
+          {/* 제재 명부(US OFAC · UK)에 오른 배 — 경고만 하고 진행은 막지 않는다. 좁은 Vessel
+              칸 안에 넣으면 세로로 길게 접혀, 그 아래 한 행 전체를 쓰는 띠로 세운다. */}
+          {vessels.find((v) => v.id === vesselId)?.sanctions?.length ? (
+            <div className="vs-warn-row">
+              <SanctionWarning hits={vessels.find((v) => v.id === vesselId)?.sanctions} />
+            </div>
+          ) : null}
           <Field label="Customer RFQ No.">
             <input
               value={custRfqNo}
