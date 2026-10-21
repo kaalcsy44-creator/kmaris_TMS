@@ -15,6 +15,8 @@ import {
   createSettingsVessel,
 } from "@/lib/api";
 import type { CustomerOption, SettingsVessel, SettingsConsultant, RfqSourceFile } from "@/lib/types";
+import type { VesselLookupResult } from "@/lib/api";
+import { LookupNote, SanctionWarning, VesselLookupButton } from "@/components/common/VesselSanctions";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import Modal from "@/components/common/Modal";
 import { imageFromClipboard } from "@/lib/imagePaste";
@@ -887,10 +889,12 @@ export default function NewRfqForm({
               <option value="">Select…</option>
               {vessels.map((v) => (
                 <option key={v.id} value={v.id}>
-                  {v.name}
+                  {v.sanctions?.length ? `⚠ ${v.name}` : v.name}
                 </option>
               ))}
             </select>
+            {/* 제재 명부(US OFAC · UK)에 오른 배 — 경고만 하고 진행은 막지 않는다. */}
+            <SanctionWarning hits={vessels.find((v) => v.id === vesselId)?.sanctions} />
           </Field>
           <Field label="Customer RFQ No.">
             <input
@@ -1334,6 +1338,9 @@ function QuickVesselCreate({
 }) {
   const [name, setName] = useState(defaultName);
   const [imo, setImo] = useState("");
+  const [vesselType, setVesselType] = useState("");
+  const [flag, setFlag] = useState("");
+  const [lookup, setLookup] = useState<VesselLookupResult | null>(null);
   const [engine, setEngine] = useState("");
   const [hull, setHull] = useState("");
   const [ownerId, setOwnerId] = useState<number | "">(defaultOwnerId ?? "");
@@ -1358,6 +1365,8 @@ function QuickVesselCreate({
       const r = await createSettingsVessel({
         name: name.trim(),
         imo,
+        vessel_type: vesselType,
+        ais_flag: flag,
         engine_type: engine,
         hull_no: hull,
         customer_id: ownerId === "" ? undefined : ownerId,
@@ -1383,6 +1392,24 @@ function QuickVesselCreate({
         </Field>
         <Field label="IMO No.">
           <input value={imo} onChange={(e) => setImo(e.target.value)} />
+          {/* IMO 로 선종·기국을 웹에서 찾고 제재 명부도 함께 본다 — 칸에 채우기만 한다. */}
+          <VesselLookupButton
+            imo={imo}
+            name={name}
+            onResult={(r) => {
+              setLookup(r);
+              if (r.vessel_type) setVesselType(r.vessel_type);
+              if (r.flag) setFlag(r.flag);
+              if (!name.trim() && r.name) setName(r.name);
+            }}
+          />
+          {lookup && lookup.imo === imo.replace(/\D/g, "") ? <LookupNote r={lookup} /> : null}
+        </Field>
+        <Field label="Vessel type">
+          <input value={vesselType} onChange={(e) => setVesselType(e.target.value)} />
+        </Field>
+        <Field label="AIS Flag">
+          <input value={flag} onChange={(e) => setFlag(e.target.value)} />
         </Field>
         <Field label="Main Engine Type">
           <input value={engine} onChange={(e) => setEngine(e.target.value)} />

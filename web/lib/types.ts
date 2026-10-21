@@ -169,6 +169,18 @@ export type SettingsVessel = {
   hull_no: string;
   customer_id: number | null;
   customer: string;
+  /** 제재 명부(US OFAC · UK)에 오른 IMO 면 그 지정 내역 — 경고용. 서버가 붙여 준다. */
+  sanctions?: VesselSanction[];
+};
+
+/** 제재 명부 한 곳의 지정 내역(ktms/services/sanctions.py). name 은 명부에 오른 이름 —
+ *  배가 이름을 바꿨으면 지금 이름과 다르다. */
+export type VesselSanction = {
+  source: string;   // "US OFAC" | "UK"
+  name: string;
+  program: string;
+  vessel_type?: string;
+  flag?: string;
 };
 
 export type SettingsItem = {

@@ -4,6 +4,8 @@ from __future__ import annotations
 from fastapi import Body
 
 from services.vendor_scan import scan_partner
+from services import sanctions as _sanctions
+from services.vessel_lookup import lookup_vessel
 
 from _core import (
     email_template_names,
@@ -1903,10 +1905,64 @@ def settings_vessels():
                  "vessel_type": getattr(v, "vessel_type", None) or "",
                  "ais_flag": getattr(v, "ais_flag", None) or "",
                  "engine_type": v.engine_type or "", "hull_no": v.hull_no or "",
-                 "customer_id": v.customer_id, "customer": cust_names.get(v.customer_id, "") if v.customer_id else ""}
+                 "customer_id": v.customer_id, "customer": cust_names.get(v.customer_id, "") if v.customer_id else "",
+                 # 제재 명부(US OFAC · UK)에 오른 IMO 면 그 지정 내역 — 경고용(services/sanctions.py).
+                 "sanctions": _sanctions.check(s, v.imo)}
                 for v in s.query(Vessel).order_by(Vessel.name).all()]
     finally:
         s.close()
+
+
+class VesselLookupIn(BaseModel):
+    imo: str = ""
+    name: str = ""
+
+
+@app.post("/api/admin/settings/vessels/lookup", dependencies=[Depends(require_token)])
+def vessel_lookup(body: VesselLookupIn):
+    """IMO → 선종·기국(Claude 웹 검색, 출처 포함) + 제재 명부 확인. 저장하지 않는다 —
+    화면이 칸에 채워 보여 주고 사람이 저장한다."""
+    imo = _sanctions._norm_imo(body.imo)
+    if not imo:
+        raise HTTPException(status_code=400, detail="IMO 번호(7자리)를 입력하세요.")
+    s = get_session()
+    try:
+        hits = _sanctions.check(s, imo)
+    finally:
+        s.close()
+    try:
+        found = lookup_vessel(imo, (body.name or "").strip())
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=f"선박 조회 실패: {exc}") from exc
+    return {"imo": imo, **found, "sanctions": hits}
+
+
+@app.get("/api/admin/settings/vessels/sanctions-status", dependencies=[Depends(require_token)])
+def vessel_sanctions_status():
+    s = get_session()
+    try:
+        return _sanctions.status(s)
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/vessels/sanctions-refresh", dependencies=[Depends(require_token)])
+def vessel_sanctions_refresh():
+    """명부를 지금 다시 받는다(평소에는 하루 한 번 자동)."""
+    s = get_session()
+    try:
+        return _sanctions.refresh(s)
+    finally:
+        s.close()
+
+
+@app.on_event("startup")
+def _start_sanctions_refresh() -> None:
+    try:
+        _sanctions.start(get_session)
+    except Exception as exc:
+        import sys as _sys
+        print(f"[WARN] sanctions refresh not started: {exc}", file=_sys.stderr)
 
 
 @app.post("/api/admin/settings/vessels", dependencies=[Depends(require_token)])

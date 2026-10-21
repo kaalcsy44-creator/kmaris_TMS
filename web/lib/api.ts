@@ -61,6 +61,7 @@ import type {
   SettingsVendor,
   SettingsMaker,
   SettingsVessel,
+  VesselSanction,
   SettingsItem,
   ItemCategory,
   ItemLedger,
@@ -1652,9 +1653,32 @@ export function createSettingsVessel(body: {
 }
 export function updateSettingsVessel(
   id: number,
-  body: Omit<SettingsVessel, "id" | "customer">
+  body: Omit<SettingsVessel, "id" | "customer" | "sanctions">
 ): Promise<{ ok: boolean; id: number }> {
   return put(`/api/admin/settings/vessels/${id}`, body);
+}
+
+/** IMO → 선종·기국(Claude 웹 검색, 출처 포함) + 제재 명부 확인. 저장하지 않는다. */
+export type VesselLookupResult = {
+  imo: string;
+  name: string | null;
+  vessel_type: string | null;
+  flag: string | null;
+  confidence: "high" | "medium" | "low";
+  note: string;
+  sources: { title: string; url: string }[];
+  sanctions: VesselSanction[];
+};
+export function lookupVessel(imo: string, name = ""): Promise<VesselLookupResult> {
+  return post<VesselLookupResult>("/api/admin/settings/vessels/lookup", { imo, name });
+}
+export type SanctionsStatus = {
+  updated_at: string;
+  lists: Record<string, { fetched_at: string; vessels: number }>;
+  errors: Record<string, string>;
+};
+export function fetchSanctionsStatus(): Promise<SanctionsStatus> {
+  return get<SanctionsStatus>("/api/admin/settings/vessels/sanctions-status");
 }
 export function deleteSettingsVessel(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/settings/vessels/${id}`);

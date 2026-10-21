@@ -32,6 +32,8 @@ import {
   fetchVendorCategorySuggestions,
   fetchVendorTagSuggestions,
   fetchSettingsVessels,
+  lookupVessel,
+  fetchSanctionsStatus,
   parseBusinessCard,
   updateCompanyProfile,
   updateCustomerCompanyInfo,
@@ -68,6 +70,7 @@ import {
   previewEmailSignature,
 } from "@/lib/api";
 import type { SettingsMaker } from "@/lib/types";
+import type { SanctionsStatus, VesselLookupResult } from "@/lib/api";
 import type {
   PermissionsConfig,
   RolePermRow,
@@ -117,6 +120,7 @@ import { AgencyBadges, AgencyTagPicker } from "@/components/common/AgencyPicker"
 import { WebsiteScanPanel } from "@/components/common/WebsiteScanPanel";
 import VendorTagSuggestions from "@/components/common/VendorTagSuggestions";
 import CompanyProjects from "@/components/common/CompanyProjects";
+import { LookupNote, SanctionBadge, SanctionWarning, VesselLookupButton } from "@/components/common/VesselSanctions";
 import type { VendorTagSuggestion } from "@/lib/types";
 import RegionCombo from "@/components/common/RegionPicker";
 // 목록의 상대처는 다른 화면과 같은 모양(로고 + 이름)으로 — 같은 회사를 두 표기로 읽지 않도록.
@@ -3177,6 +3181,44 @@ export function VesselsTab() {
   useEffect(() => {
     fetchCustomers().then(setCustomers).catch(() => setCustomers([]));
   }, []);
+  // 마지막 IMO 조회 결과 — 폼의 IMO 가 그 번호일 때만 보인다(다른 배를 열면 사라진다).
+  const [lookup, setLookup] = useState<VesselLookupResult | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [sanc, setSanc] = useState<SanctionsStatus | null>(null);
+  useEffect(() => {
+    fetchSanctionsStatus().then(setSanc).catch(() => setSanc(null));
+  }, []);
+  // 일괄 채우기 — 선종·기국이 빈 배만, 빈 칸만 채운다(사람이 적은 값은 덮지 않는다).
+  const [fill, setFill] = useState<{ done: number; total: number; filled: number; failed: number } | null>(null);
+  async function fillEmpty() {
+    const all = await fetchSettingsVessels();
+    const todo = all.filter((v) => /\d{7}/.test(v.imo || "") && (!v.vessel_type || !v.ais_flag));
+    if (!todo.length) {
+      alert("Every vessel with an IMO number already has a type and flag.");
+      return;
+    }
+    if (!confirm(`Look up ${todo.length} vessel(s) on the web and fill only their empty Vessel type / AIS Flag?\n`
+      + `About 15 seconds each. Values come from public ship pages — spot-check them afterwards.`)) return;
+    const st = { done: 0, total: todo.length, filled: 0, failed: 0 };
+    setFill({ ...st });
+    for (const v of todo) {
+      try {
+        const r = await lookupVessel(v.imo, v.name);
+        const vessel_type = v.vessel_type || r.vessel_type || "";
+        const ais_flag = v.ais_flag || r.flag || "";
+        if (vessel_type !== v.vessel_type || ais_flag !== v.ais_flag) {
+          const { customer: _c, sanctions: _s, id: _id, ...rest } = v;
+          await updateSettingsVessel(v.id, { ...rest, vessel_type, ais_flag });
+          st.filled++;
+        }
+      } catch {
+        st.failed++;
+      }
+      st.done++;
+      setFill({ ...st });
+    }
+    setReloadKey((k) => k + 1);
+  }
 
   return (
     <MasterSection<SettingsVessel>
@@ -3190,17 +3232,59 @@ export function VesselsTab() {
       headCols={vesselHeadCols}
       empty={{ id: 0, name: "", imo: "", vessel_type: "", ais_flag: "", engine_type: "", hull_no: "", customer_id: null, customer: "" }}
       load={fetchSettingsVessels}
+      reloadKey={reloadKey}
       create={(body) => {
-        const { customer: _customer, ...payload } = body;
+        const { customer: _customer, sanctions: _s, ...payload } = body;
         return createSettingsVessel({ ...payload, customer_id: payload.customer_id ?? undefined });
       }}
       update={(id, body) => {
-        const { customer: _customer, ...payload } = body;
+        const { customer: _customer, sanctions: _s, ...payload } = body;
         return updateSettingsVessel(id, payload);
       }}
       remove={deleteSettingsVessel}
+      toolbarExtra={
+        <>
+          {sanc ? (
+            <span
+              className="vs-lists"
+              title={`Sanctions lists checked by IMO, refreshed daily. Last update ${sanc.updated_at || "—"} UTC`
+                + (Object.keys(sanc.errors).length ? ` · last download failed: ${Object.keys(sanc.errors).join(", ")}` : "")}
+            >
+              Sanctions: {Object.entries(sanc.lists).map(([k, l]) => `${k === "ofac" ? "US OFAC" : "UK"} ${l.vessels.toLocaleString()}`).join(" · ") || "not loaded yet"}
+            </span>
+          ) : null}
+          <button type="button" className="btn sm" disabled={!!fill && fill.done < fill.total} onClick={fillEmpty}
+                  title="Look up every vessel that has an IMO but no type or flag, and fill only the empty fields">
+            {fill && fill.done < fill.total
+              ? `Filling… ${fill.done}/${fill.total}`
+              : fill
+                ? `Filled ${fill.filled}/${fill.total}${fill.failed ? ` · ${fill.failed} failed` : ""}`
+                : "Fill type & flag"}
+          </button>
+        </>
+      }
+      topForm={(form, setForm) => (
+        <div className="form-field" style={{ gridColumn: "1 / -1" }}>
+          <VesselLookupButton
+            imo={form.imo}
+            name={form.name}
+            onResult={(r) => {
+              setLookup(r);
+              setForm({
+                ...form,
+                vessel_type: r.vessel_type || form.vessel_type,
+                ais_flag: r.flag || form.ais_flag,
+                name: form.name || r.name || "",
+              });
+            }}
+          />
+          {lookup && lookup.imo === (form.imo || "").replace(/\D/g, "") ? <LookupNote r={lookup} /> : null}
+          {/* 열어 둔 배가 이미 명부에 올라 있으면 조회하지 않아도 바로 경고. */}
+          {!lookup || lookup.imo !== (form.imo || "").replace(/\D/g, "") ? <SanctionWarning hits={form.sanctions} /> : null}
+        </div>
+      )}
       columns={[
-        ["name", "Vessel"],
+        ["name", "Vessel", (r) => <>{r.name}<SanctionBadge hits={r.sanctions} /></>],
         ["imo", "IMO"],
         ["vessel_type", "Vessel type"],
         ["ais_flag", "AIS Flag"],
