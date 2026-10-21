@@ -2484,10 +2484,10 @@ def _make_vendor_rfq_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes
     info.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
     story += [info, Spacer(1, 4 * mm)]
 
-    # ── 품목표 — 단가/납기/원산지는 공급사 기입용 빈칸 ─────────────────────
-    headers = ["No.", "Part No.", "Description", "Maker", "Qty", "Unit",
-               "Unit Price", "Lead Time", "Country of Origin", "Remark"]
-    widths = [8, 22, 42, 22, 10, 12, 22, 16, 16, 20]
+    # ── 품목표 — 단가/납기/원산지 빈칸 열은 두지 않는다(공급사는 자기 견적서로 답하고,
+    #    빈 열은 Remark 만 좁혀 서너 줄로 접히게 했다). 물을 것은 Instructions 에 적는다.
+    headers = ["No.", "Part No.", "Description", "Maker", "Qty", "Unit", "Remark"]
+    widths = [8, 26, 62, 26, 10, 12, 46]
     rows = [[_p(h, s["th"]) for h in headers]]
     # 옵션(대안)으로 나눠 물을 때는 제목행으로 끊어 보낸다. 단가를 공급사가 채우는
     # 문서라 소계는 적지 않는다 — 값이 없는 Total 행은 표만 어지럽힌다.
@@ -2499,7 +2499,7 @@ def _make_vendor_rfq_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes
             continue
         if entry["kind"] == "option":
             option_rows.append(r)
-            rows.append([_p(f"<b>{entry['label']}</b>", s["tiny"])] + [_p("", s["tiny"]) for _ in range(9)])
+            rows.append([_p(f"<b>{entry['label']}</b>", s["tiny"])] + [_p("", s["tiny"]) for _ in range(len(headers) - 1)])
             continue
         it = entry["item"]
         item_rows.append(r)
@@ -2510,9 +2510,6 @@ def _make_vendor_rfq_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes
             _p(it.get("maker", ""), s["tiny"]),
             _p(_qnum(it["qty"]), s["tiny"]),
             _p(it.get("unit", ""), s["tiny"]),
-            _p("", s["tiny"]),   # Unit Price — 공급사 입력
-            _p("", s["tiny"]),   # Lead Time — 공급사 입력
-            _p("", s["tiny"]),   # Country of Origin — 공급사 입력
             _p(it.get("remark", ""), s["tiny"]),
         ])
     items_table = Table(rows, colWidths=[w * mm for w in widths], repeatRows=1)
@@ -2520,7 +2517,6 @@ def _make_vendor_rfq_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> bytes
         ("BACKGROUND", (0, 0), (-1, 0), NAVY), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("GRID", (0, 0), (-1, -1), 0.35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("ALIGN", (0, 1), (0, -1), "CENTER"), ("ALIGN", (4, 1), (4, -1), "RIGHT"),
-        ("ALIGN", (6, 1), (6, -1), "RIGHT"),
         ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
         ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]
