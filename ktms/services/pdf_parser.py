@@ -355,7 +355,16 @@ _ORDER_JSON_SCHEMA = _doc_schema(
     _nullable_str("customer_hint", "po_no", "order_date", "vessel_name", "promised_delivery"),
     _ORDER_ITEM_FIELDS,
 )
-_VQ_JSON_SCHEMA = _doc_schema(_nullable_str("vendor_quote_no", "currency"), _VQ_ITEM_FIELDS)
+# 견적서 머리·꼬리의 유효기간과 거래조건 — 3단계 Valid until 과 Terms & Conditions 를 채운다.
+_VQ_TERM_HEAD = {
+    **_nullable_str("valid_until", "incoterms", "delivery_place", "payment_terms",
+                    "packing", "warranty", "remarks"),
+    "validity_days": {"type": ["number", "null"]},
+}
+_VQ_JSON_SCHEMA = _doc_schema({**_nullable_str("vendor_quote_no", "currency"), **_VQ_TERM_HEAD},
+                              _VQ_ITEM_FIELDS)
+_VQ_TERMS_SCHEMA = {"type": "object", "properties": _VQ_TERM_HEAD, "required": list(_VQ_TERM_HEAD),
+                    "additionalProperties": False}
 
 # 여러 쪽에 걸친 부품표에서 한 줄도 흘리지 않게 하는 지시. 구역 제목(예: CYLINDER BLOCK)이
 # 품목 행으로 둔갑하던 것과, 뒤쪽 페이지를 "이하 동일"로 요약해 버리던 것을 함께 막는다.
@@ -459,13 +468,33 @@ _VQ_INSTRUCTIONS = (
     "reference number (labels such as 'Quotation No', 'Quote No', 'Our Ref', '견적번호', "
     "'문서번호'); never use the buyer's RFQ number ('Your Ref') or a date. "
     "currency = the ISO code the prices are in (KRW, USD, EUR, JPY, CNY, SGD; '원'/'₩' = KRW). "
-    "Use null when not printed."
+    "Use null when not printed. "
+)
+
+# 유효기간·거래조건 — 표 밖(머리글·꼬리의 Remarks / Other Conditions / Terms)에 적힌 것.
+_VQ_TERMS_INSTRUCTIONS = (
+    "From the quotation's header and footer (sections such as Remarks, Notes, Other Conditions, "
+    "Terms & Conditions) capture, using null for anything not printed: "
+    "valid_until = the expiry date of the offer as YYYY-MM-DD, only when an explicit date is printed; "
+    "validity_days = the validity period in days when it is given as a number of days "
+    "(e.g. 'Validity: 15' or '15 days' -> 15; '1 month' -> 30); "
+    "incoterms = the delivery rule written as one of 'EXW (Ex Works)', 'FCA (Free Carrier)', "
+    "'FOB (Free On Board)', 'CFR (Cost and Freight)', 'CIF (Cost, Insurance and Freight)', "
+    "'DAP (Delivered at Place)' (e.g. 'Ex works' -> 'EXW (Ex Works)'), or as printed if it is another rule; "
+    "delivery_place = the named place/port of that delivery term in English (e.g. 'Busan, Korea'); "
+    "payment_terms = the payment condition as printed, in English (e.g. 'T/T 30 days after invoicing'); "
+    "packing = the packing condition; warranty = the warranty period/condition; "
+    "remarks = any other remarks printed for this quotation (e.g. 'Original maker's one.'), one per line, "
+    "translated to English, WITHOUT numbering and WITHOUT the items already captured above. "
+    "Never put generic boilerplate into remarks (company general-terms disclaimers, thank-you lines, "
+    "signatures, bank details)."
 )
 
 
 def parse_vendor_quote_text(text: str) -> dict:
     """Vendor 견적 PDF 텍스트에서 품목 리스트를 Claude로 추출."""
     prompt = f"""{_VQ_INSTRUCTIONS}
+{_VQ_TERMS_INSTRUCTIONS}
 {_LONG_TABLE_RULES}
 
 Document:
@@ -473,9 +502,19 @@ Document:
     return _ask_claude(prompt, _VQ_JSON_SCHEMA)
 
 
+def parse_vendor_quote_terms(text: str) -> dict:
+    """품목을 표 파서가 읽은 견적서 — 유효기간·거래조건만 Claude 로 따로 읽는다."""
+    prompt = f"""{_VQ_TERMS_INSTRUCTIONS}
+
+Document:
+{_sanitize_text(text)}"""
+    return _ask_claude(prompt, _VQ_TERMS_SCHEMA, max_tokens=1024)
+
+
 def parse_vendor_quote_image(image_bytes: bytes, media_type: str) -> dict:
     """Vendor 견적 이미지(스크린샷/사진)에서 품목 리스트를 Claude 비전으로 추출."""
     prompt = f"""{_VQ_INSTRUCTIONS}
+{_VQ_TERMS_INSTRUCTIONS}
 The attached file is a screenshot or photo of a vendor quotation.
 {_LONG_TABLE_RULES}"""
     return _parse_image(image_bytes, media_type, prompt, _VQ_JSON_SCHEMA)
@@ -487,6 +526,7 @@ def parse_vendor_quote_pdf_document(pdf_bytes: bytes) -> dict:
     스캔본(텍스트 없음)이나 표 파서·텍스트 파서가 실패하는 비정형 PDF 대비 폴백.
     """
     prompt = f"""{_VQ_INSTRUCTIONS}
+{_VQ_TERMS_INSTRUCTIONS}
 The attached file is a vendor quotation PDF (it may be scanned or non-standard).
 {_LONG_TABLE_RULES}"""
     return _ask_claude([_pdf_document_block(pdf_bytes), {"type": "text", "text": prompt}],

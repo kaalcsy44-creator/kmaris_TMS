@@ -72,7 +72,7 @@ from services.pdf_parser import (
     parse_rfq_pdf_document, parse_order_pdf_document, PDF_DOC_MAX_BYTES,
     parse_rfq_image, parse_order_image,
     parse_business_card_image, parse_business_card_pdf_document,
-    parse_vendor_quote_text, parse_vendor_quote_image,
+    parse_vendor_quote_text, parse_vendor_quote_image, parse_vendor_quote_terms,
     parse_vendor_quote_pdf_document,
 )
 from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
@@ -4814,6 +4814,7 @@ __all__ = [
     "parse_vendor_quote_image",
     "parse_vendor_quote_pdf_document",
     "parse_vendor_quote_text",
+    "parse_vendor_quote_terms",
     "quotation_email_body",
     "quotation_email_subject",
     "require_token",

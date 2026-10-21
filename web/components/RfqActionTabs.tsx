@@ -20,6 +20,7 @@ import {
   sendVendorRfqEmail,
   createVendorQuote,
   parseVendorQuoteFile,
+  type VendorQuoteParseResult,
   createCustomerQuote,
   quotationPdfUrl,
   combinedQuotationUrl,
@@ -186,6 +187,31 @@ function addDaysToDate(date: string, n: number): string {
   const t = new Date(Date.UTC(y, m - 1, d + n));
   const p = (x: number) => String(x).padStart(2, "0");
   return `${t.getUTCFullYear()}-${p(t.getUTCMonth() + 1)}-${p(t.getUTCDate())}`;
+}
+
+/** Auto-fill 로 읽은 견적서의 유효기간 → Valid until. 날짜가 적혀 있으면 그대로,
+ *  일수만 있으면(“Validity: 15”) 받은 날부터 센다. 없으면 null. */
+function parsedValidUntil(r: VendorQuoteParseResult, receivedAt: string): string | null {
+  const vu = (r.valid_until || "").trim().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(vu)) return vu;
+  const n = Number(r.validity_days);
+  return r.validity_days != null && Number.isFinite(n) && n > 0 ? addDaysToDate(receivedAt, Math.round(n)) : null;
+}
+
+/** Auto-fill 로 읽은 거래조건을 지금 Terms 에 얹는다 — 견적서에 적힌 칸만 덮고(기본값보다
+ *  견적서가 맞다), Remarks 는 이미 적은 줄 뒤에 겹치지 않게 덧붙인다. */
+function mergeParsedTerms(t: QuotationTerms, r: VendorQuoteParseResult): QuotationTerms {
+  const out: QuotationTerms = { ...t };
+  for (const k of ["incoterms", "delivery_place", "payment_terms", "packing", "warranty"] as const) {
+    const v = (r[k] || "").trim();
+    if (v) out[k] = v;
+  }
+  const add = (r.remarks || "").split("\n").map((l) => l.trim()).filter(Boolean);
+  if (add.length) {
+    const cur = (t.remarks || "").split("\n").map((l) => l.trim()).filter(Boolean);
+    out.remarks = [...cur, ...add.filter((l) => !cur.includes(l))].join("\n");
+  }
+  return out;
 }
 
 /** from → to 사이의 일수(음수 가능). 형식이 이상하면 null. */
@@ -2134,6 +2160,10 @@ function VendorQuoteDetailModal({
         if (pno) setNo((cur) => cur.trim() || pno);
         const pcur = (r.currency || "").toUpperCase();
         if (pcur && VQ_CURRENCIES.includes(pcur) && !next.some((it) => Number(it.cost_price))) setCurrency(pcur);
+        // 견적서에 적힌 유효기간·거래조건(Remarks / Other Conditions)도 함께 채운다.
+        const pvu = parsedValidUntil(r, receivedAt);
+        if (pvu) setValidUntil(pvu);
+        setTerms((t) => mergeParsedTerms(t, r));
         added += parsed.length;
         ok++;
         newFiles.push({
@@ -3954,6 +3984,10 @@ function VendorQuoteAction({
         if (pno) setNo((cur) => cur.trim() || pno);
         const pcur = (r.currency || "").toUpperCase();
         if (pcur && VQ_CURRENCIES.includes(pcur) && !next.some((it) => Number(it.cost_price))) setCurrency(pcur);
+        // 견적서에 적힌 유효기간·거래조건(Remarks / Other Conditions)도 함께 채운다.
+        const pvu = parsedValidUntil(r, receivedAt);
+        if (pvu) setValidUntil(pvu);
+        setTerms((t) => mergeParsedTerms(t, r));
         added += parsed.length;
         ok++;
         newFiles.push({

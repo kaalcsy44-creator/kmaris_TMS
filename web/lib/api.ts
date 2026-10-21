@@ -2350,6 +2350,16 @@ export type VendorQuoteParseResult = {
   items: Partial<VendorQuoteItem>[];
   vendor_quote_no?: string | null;
   currency?: string | null;
+  /** 견적서에 적힌 유효기간 — 만료일(YYYY-MM-DD) 또는 일수. 없으면 null. */
+  valid_until?: string | null;
+  validity_days?: number | null;
+  /** 견적서 꼬리의 거래조건(Remarks / Other Conditions) — 3단계 Terms & Conditions 를 채운다. */
+  incoterms?: string | null;
+  delivery_place?: string | null;
+  payment_terms?: string | null;
+  packing?: string | null;
+  warranty?: string | null;
+  remarks?: string | null;
 };
 
 export function parseVendorQuoteFile(file: File): Promise<VendorQuoteParseResult> {

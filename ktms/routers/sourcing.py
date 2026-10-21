@@ -80,6 +80,7 @@ from _core import (
     parse_vendor_quote_image,
     parse_vendor_quote_pdf_document,
     parse_vendor_quote_text,
+    parse_vendor_quote_terms,
     require_token,
     text,
 )
@@ -828,18 +829,28 @@ def vendor_quote_parse(file: UploadFile = File(...)):
         file.file.seek(0)
         raw = file.file.read()
         result = _parse_vq_file(file, raw, name)
-        # 견적번호·통화 — 모델이 못 읽었거나 표 파서 경로라 비어 있으면 본문/파일명에서 찾는다.
-        if not (result.get("vendor_quote_no") and result.get("currency")):
+        # 표 파서 경로는 품목만 읽는다 — 유효기간·거래조건(_VQ_TERM_HEAD)이 아예 없으면
+        # 본문에서 그것만 따로 읽는다. 실패해도 품목 자동 채우기는 그대로 돌려준다.
+        need_terms = "payment_terms" not in result
+        if need_terms or not (result.get("vendor_quote_no") and result.get("currency")):
             lower = name.lower()
             text = ""
             if lower.endswith(".pdf"):
                 text = extract_text_from_pdf(io.BytesIO(raw)) or ""
             elif lower.endswith((".xlsx", ".xls")):
                 text = excel_to_text(raw) or ""
+            # 견적번호·통화 — 모델이 못 읽었거나 표 파서 경로라 비어 있으면 본문/파일명에서 찾는다.
             head = extract_vq_header(text, name)
             for k, v in head.items():
                 if v and not result.get(k):
                     result[k] = v
+            if need_terms and text.strip():
+                try:
+                    for k, v in (parse_vendor_quote_terms(text) or {}).items():
+                        if v not in (None, "") and not result.get(k):
+                            result[k] = v
+                except Exception:
+                    pass
         return result
     except HTTPException:
         raise
