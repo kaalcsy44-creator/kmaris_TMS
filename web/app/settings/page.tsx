@@ -2295,10 +2295,12 @@ function CompanyInfoModal<
                       <tr key={`${r.id}-tools`} className="co-row-tools">
                         <td colSpan={6}>
                           <div className="co-tools">
-                            <button type="button" className="btn sm primary" disabled={busy}
-                                    onClick={saveContact}>✓ Save</button>
+                            {/* 저장·취소는 오른쪽 끝 — 창 아래 Close·Edit 와 같은 자리 감각. */}
+                            <span className="co-tools-gap" />
                             <button type="button" className="btn sm" disabled={busy}
                                     onClick={() => { setDraft(null); setErr(""); }}>✕ Cancel</button>
+                            <button type="button" className="btn sm primary" disabled={busy}
+                                    onClick={saveContact}>✓ Save</button>
                           </div>
                         </td>
                       </tr>
