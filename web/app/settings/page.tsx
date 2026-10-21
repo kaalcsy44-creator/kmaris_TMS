@@ -3189,7 +3189,7 @@ export function VesselsTab() {
     fetchSanctionsStatus().then(setSanc).catch(() => setSanc(null));
   }, []);
   // 일괄 채우기 — 선종·기국이 빈 배만, 빈 칸만 채운다(사람이 적은 값은 덮지 않는다).
-  const [fill, setFill] = useState<{ done: number; total: number; filled: number; failed: number } | null>(null);
+  const [fill, setFill] = useState<{ done: number; total: number; filled: number; failed: number; error?: string } | null>(null);
   async function fillEmpty() {
     const all = await fetchSettingsVessels();
     const todo = all.filter((v) => /\d{7}/.test(v.imo || "") && (!v.vessel_type || !v.ais_flag));
@@ -3199,8 +3199,10 @@ export function VesselsTab() {
     }
     if (!confirm(`Look up ${todo.length} vessel(s) on the web and fill only their empty Vessel type / AIS Flag?\n`
       + `About 15 seconds each. Values come from public ship pages — spot-check them afterwards.`)) return;
-    const st = { done: 0, total: todo.length, filled: 0, failed: 0 };
+    const st: { done: number; total: number; filled: number; failed: number; error?: string } =
+      { done: 0, total: todo.length, filled: 0, failed: 0 };
     setFill({ ...st });
+    let streak = 0;   // 같은 오류가 연달아 난 횟수
     for (const v of todo) {
       try {
         const r = await lookupVessel(v.imo, v.name);
@@ -3211,8 +3213,20 @@ export function VesselsTab() {
           await updateSettingsVessel(v.id, { ...rest, vessel_type, ais_flag });
           st.filled++;
         }
-      } catch {
+        streak = 0;
+      } catch (e) {
         st.failed++;
+        // 이유를 버리지 않는다 — 예전엔 "37 failed" 만 남아 크레딧 부족인 줄 몰랐다.
+        const msg = e instanceof Error ? e.message : String(e);
+        streak = msg === st.error ? streak + 1 : 1;
+        st.error = msg;
+        // 크레딧 부족·같은 오류 3연속이면 나머지도 똑같이 실패한다 — 거기서 멈춘다.
+        if (/크레딧|credit|billing/i.test(msg) || streak >= 3) {
+          st.done++;
+          st.total = st.done;
+          setFill({ ...st });
+          break;
+        }
       }
       st.done++;
       setFill({ ...st });
@@ -3261,6 +3275,7 @@ export function VesselsTab() {
                 ? `Filled ${fill.filled}/${fill.total}${fill.failed ? ` · ${fill.failed} failed` : ""}`
                 : "Fill type & flag"}
           </button>
+          {fill?.error && fill.done >= fill.total ? <span className="action-err">{fill.error}</span> : null}
         </>
       }
       topForm={(form, setForm) => (
