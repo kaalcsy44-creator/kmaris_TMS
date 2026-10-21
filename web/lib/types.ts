@@ -693,6 +693,9 @@ export type CustomerQuoteItem = {
   unit: string;
   cost_price: number | null;
   margin_pct: number | null;
+  /** 이 줄만의 단가 올림 단위(Excel ROUNDUP num_digits). 비우면(null) 견적 Pricing 의
+   *  "Round up to" 를 따른다 — 비싼 줄만 100 단위로 올리는 식으로 줄마다 달리 줄 때 쓴다. */
+  round_digits?: number | null;
   unit_price: number | null;
   amount: number | null;
   lead_time?: string;

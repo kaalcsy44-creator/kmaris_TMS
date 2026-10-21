@@ -5494,6 +5494,22 @@ function CustomerQuoteItemEditor({
       onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, dec]);
+  /** 이 줄의 올림 단위 — 줄에 따로 준 값이 없으면 견적 Pricing 의 "Round up to". */
+  const rdOf = (it: CustomerQuoteItem): number => it.round_digits ?? roundDigits;
+  /** 줄마다 올림 단위를 바꾼다(null = 견적 기본값으로 되돌림). 원가가 있으면 원가·마진에서
+   *  단가를 다시 낸다 — 이미 올린 값을 다시 올리면 더 굵은 단위에서 되돌아갈 수 없어서다.
+   *  원가가 없는(단가만 손으로 친) 줄은 지금 단가를 그 단위로 올린다. */
+  function patchRound(i: number, d: number | null) {
+    onChange(items.map((it, idx) => {
+      if (idx !== i || isOptionRow(it)) return it;
+      const next: CustomerQuoteItem = { ...it, round_digits: d };
+      const cost = Number(next.cost_price || 0);
+      const unit = cost > 0
+        ? calcUnitPrice(cost, Number(next.margin_pct || 0), costCurrency, currency, rdOf(next), conv)
+        : roundUp(Number(next.unit_price || 0), rdOf(next));
+      return { ...next, unit_price: unit, amount: unit * Number(next.qty || 1) };
+    }));
+  }
   /** 줄 상세에서 다른 공급사 견적을 고른다 — 원가·출처·납기를 그 견적으로 바꾸고 그 줄의
    *  마진으로 단가를 다시 잡는다. 3단계 채택에도 같은 선택을 저장해 발주(6단계)가 어긋나지 않게. */
   function pickLineQuote(i: number, opt: LineQuoteOption) {
@@ -5505,7 +5521,7 @@ function CustomerQuoteItemEditor({
     }
     const cost = convertCurrency(opt.unit_cost, opt.currency, costCur, conv);
     const margin = Number(it.margin_pct ?? 0);
-    const unit = calcUnitPrice(cost, margin, costCurrency, currency, roundDigits, conv);
+    const unit = calcUnitPrice(cost, margin, costCurrency, currency, rdOf(it), conv);
     onChange(items.map((row, idx) => idx !== i ? row : {
       ...row,
       cost_price: cost,
@@ -5543,7 +5559,7 @@ function CustomerQuoteItemEditor({
         // 놓는다(놓지 않으면 환율·원가 통화를 바꾸는 순간 손으로 고친 값이 되돌아간다).
         if (key === "cost_price") next.src_cost = null;
         if (key === "cost_price" || key === "margin_pct" || key === "qty") {
-          const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, roundDigits, conv);
+          const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, rdOf(next), conv);
           next.unit_price = unit;
           next.amount = unit * Number(next.qty || 1);
         }
@@ -5606,7 +5622,7 @@ function CustomerQuoteItemEditor({
     const next: CustomerQuoteItem = { ...it };
     if (changed.includes("cost_price")) next.src_cost = null;   // 손으로 들어온 원가 — 앵커를 놓는다
     if (changed.includes("cost_price") || changed.includes("margin_pct") || changed.includes("qty")) {
-      const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, roundDigits, conv);
+      const unit = calcUnitPrice(Number(next.cost_price || 0), Number(next.margin_pct || 0), costCurrency, currency, rdOf(next), conv);
       next.unit_price = unit;
       next.amount = unit * Number(next.qty || 1);
     }
@@ -5674,6 +5690,8 @@ function CustomerQuoteItemEditor({
     { key: "cost", label: `Cost (${costCur})`, className: "num" },
     { key: "cost_amount", label: `Cost Amount (${costCur})`, className: "num" },
     { key: "margin", label: "Margin %", className: "num" },
+    // 줄별 올림 단위 — 비워 두면 Pricing 의 "Round up to" 를 따른다.
+    { key: "round", label: "Round up" },
     { key: "unit_price", label: `Unit Price (${saleCur})`, className: "num" },
     { key: "amount", label: `Amount (${saleCur})`, className: "num" },
     { key: "lead_time", label: "Lead Time" },
@@ -5889,6 +5907,7 @@ function CustomerQuoteItemEditor({
               <ItemTh grid={grid} k="cost" className="num">Cost ({costCur})</ItemTh>
               <ItemTh grid={grid} k="cost_amount" className="num">Cost Amount ({costCur})</ItemTh>
               <ItemTh grid={grid} k="margin" className="num">Margin %</ItemTh>
+              <ItemTh grid={grid} k="round">Round up</ItemTh>
               <ItemTh grid={grid} k="unit_price" className="num">Unit Price ({saleCur})</ItemTh>
               <ItemTh grid={grid} k="amount" className="num">Amount ({saleCur})</ItemTh>
               <ItemTh grid={grid} k="lead_time">Lead Time</ItemTh>
@@ -5953,6 +5972,22 @@ function CustomerQuoteItemEditor({
                   value={it.margin_pct}
                   onChange={(e) => patch(i, "margin_pct", e.target.value)}
                 /></td>
+                {/* 줄별 올림 단위 — "Auto" 는 Pricing 의 Round up to 를 따른다. */}
+                <td>
+                  <select
+                    className={"round-cell" + (it.round_digits != null ? " on" : "")}
+                    value={it.round_digits == null ? "" : String(it.round_digits)}
+                    title={it.round_digits == null
+                      ? `Follows Pricing › Round up to (${roundUnitLabel(roundDigits)})`
+                      : `This line rounds up to ${roundUnitLabel(it.round_digits)}`}
+                    onChange={(e) => patchRound(i, e.target.value === "" ? null : Number(e.target.value))}
+                  >
+                    <option value="">Auto ({roundUnitLabel(roundDigits)})</option>
+                    {ROUND_DIGIT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </td>
                 <td><AmountInput {...keys.cell(i, 6)} className="num" value={it.unit_price} decimals={dec} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
                 <td className="num">{amountInputValue(it.amount, dec)}</td>
                 {/* 납기 — 공급사 견적에서 그대로 넘어오고 견적서 품목표에도 인쇄되는 값. */}
@@ -6239,7 +6274,7 @@ function applyMarginToAll(
 ): CustomerQuoteItem[] {
   return items.map((it) => {
     if (isOptionRow(it)) return it;   // 옵션 구분행에는 단가·마진이 없다
-    const unit = calcUnitPrice(Number(it.cost_price || 0), marginPct, costCur, saleCur, roundDigits, rate);
+    const unit = calcUnitPrice(Number(it.cost_price || 0), marginPct, costCur, saleCur, it.round_digits ?? roundDigits, rate);
     return { ...it, margin_pct: marginPct, unit_price: unit, amount: unit * Number(it.qty || 1) };
   });
 }
@@ -6258,7 +6293,7 @@ function recomputeCustomerQuoteItems(
   return items.map((it) => {
     if (isOptionRow(it)) return it;   // 옵션 구분행에는 단가·마진이 없다
     const cost = anchoredCost(it, costCur, rate);
-    const unit = calcUnitPrice(cost, Number(it.margin_pct || 0), costCur, saleCur, roundDigits, rate);
+    const unit = calcUnitPrice(cost, Number(it.margin_pct || 0), costCur, saleCur, it.round_digits ?? roundDigits, rate);
     return { ...it, cost_price: cost, unit_price: unit, amount: unit * Number(it.qty || 1) };
   });
 }
