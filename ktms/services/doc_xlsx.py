@@ -1723,7 +1723,9 @@ def make_purchase_order_xlsx(
     def write_total_row(r: int, label: str, amount) -> None:
         for ci in range(1, NCOL + 1):
             put(r, ci, "", fill=lightblue).border = bdr
-        put(r, 3, label, fill=lightblue, font=boldsm, align=left)
+        # 라벨(Total/Subtotal)은 Amount 앞 A~F 를 합친 칸 가운데.
+        merge(r, 1, r, 6)
+        put(r, 1, label, fill=lightblue, font=boldsm, align=center)
         put(r, 7, amount, fill=lightblue, font=boldsm, align=right, fmt=numfmt(total))
         ws.row_dimensions[r].height = 16
 
