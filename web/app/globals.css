@@ -18620,6 +18620,10 @@ select.compose-tpl-version {
 }
 .lb-foot { background: #f8fafc; font-weight: 600; }
 .lb-foot.num { text-align: right; }
+/* 벤더별 견적 합계 — 위 칸들과 같은 가운데 정렬, 굵은 합계 아래에 환산값·답한 줄 수. */
+.lb-vtotal .lb-foot.lb-c { text-align: center; border-top: 2px solid var(--line); }
+.lb-vtotal .lb-foot:first-child { text-align: right; border-top: 2px solid var(--line); }
+.lb-vtotal .lb-foot.lb-c b { font-weight: 700; }
 
 /* 보드에서 줄을 골라 들어온 발신 폼 — 무엇이 실려 있는지 한 줄로 밝힌다. */
 .embedded-add-note {

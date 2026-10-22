@@ -285,6 +285,48 @@ export default function LineBoard({
     return sum;
   }, [cmpCur, awardTotals, conv]);
 
+  // 벤더별 견적 합계(단가×수량) — 값이 온 줄만 센다. 통화가 섞이면 통화별로 따로 더하고,
+  // 비교 통화를 골랐으면 환산 합계를 한 줄 더 붙인다. 벤더마다 답한 줄 수가 다르면 합계끼리
+  // 바로 견줄 수 없으므로 "n/총 lines" 를 함께 보인다.
+  const vendorTotals = useMemo(() => {
+    const out = new Map<number, { sums: [string, number][]; n: number; cmp: number | null }>();
+    for (const v of vendors) {
+      const by = new Map<string, number>();
+      let n = 0;
+      for (const l of lines) {
+        const c = cells[l.lid]?.[String(v.vrfq_id)];
+        if (c?.state !== "quoted" || c.unit_cost == null) continue;
+        const cur = (c.currency || "USD").toUpperCase();
+        by.set(cur, (by.get(cur) ?? 0) + Number(c.unit_cost) * Number(l.qty || 1));
+        n++;
+      }
+      const sums = [...by.entries()];
+      let cmp: number | null = null;
+      if (cmpCur && sums.length) {
+        cmp = 0;
+        for (const [cur, val] of sums) {
+          const x = conv(val, cur);
+          if (x == null) { cmp = null; break; }
+          cmp += x;
+        }
+      }
+      out.set(v.vrfq_id, { sums, n, cmp });
+    }
+    return out;
+  }, [vendors, lines, cells, cmpCur, conv]);
+  const hasVendorTotals = [...vendorTotals.values()].some((t) => t.n > 0);
+  /** 합계 칸의 줄들 — 통화별 합계, 환산 합계(필요할 때), 답한 줄 수. */
+  const vendorTotalLines = (vrfqId: number): string[] => {
+    const t = vendorTotals.get(vrfqId);
+    if (!t || !t.n) return [];
+    const showCmp = cmpCur && (t.sums.length > 1 || t.sums[0][0] !== cmpCur);
+    return [
+      ...t.sums.map(([cur, v]) => money(Math.round(v * 100) / 100, cur)),
+      showCmp ? (t.cmp == null ? "rate n/a" : `≈ ${cmpMoney(t.cmp, cmpCur)}`) : "",
+      `${t.n}/${lines.length} lines`,
+    ].filter(Boolean);
+  };
+
   const rateNote = cmpCur
     ? [...new Set([...quoteCurs, cmpCur])]
         .filter((c) => c !== "KRW")
@@ -326,6 +368,13 @@ export default function LineBoard({
             .filter(Boolean).join("\n")
         : STATE_LABEL[l.state],
     ]);
+    if (hasVendorTotals) {
+      rows.push([
+        "", "", "Quote total", "",
+        ...vendors.map((v) => vendorTotalLines(v.vrfq_id).join("\n")),
+        "",
+      ]);
+    }
     if (mode === "award" && awardTotals.length) {
       rows.push([
         "", "", "Awarded purchase total", "",
@@ -514,10 +563,35 @@ export default function LineBoard({
               </tr>
             ))}
           </tbody>
-          {mode === "award" && awardTotals.length ? (
+          {hasVendorTotals || (mode === "award" && awardTotals.length) ? (
             <tfoot>
+              {hasVendorTotals ? (
+                <tr className="lb-vtotal">
+                  <td className="lb-foot" colSpan={4 + (pickable ? 1 : 0)}>
+                    Quote total
+                  </td>
+                  {vendors.map((v) => {
+                    const ls = vendorTotalLines(v.vrfq_id);
+                    return (
+                      <td key={v.vrfq_id} className="lb-foot lb-c num">
+                        {ls.length ? (
+                          <>
+                            <b>{ls[0]}</b>
+                            {ls.slice(1, -1).map((x, i) => (
+                              <span key={i} className="lb-cmpv">{x}</span>
+                            ))}
+                            <span className="lb-lt">{ls[ls.length - 1]}</span>
+                          </>
+                        ) : null}
+                      </td>
+                    );
+                  })}
+                  <td className="lb-foot" />
+                </tr>
+              ) : null}
+              {mode === "award" && awardTotals.length ? (
               <tr>
-                <td className="lb-foot" colSpan={4 + vendors.length}>
+                <td className="lb-foot" colSpan={4 + (pickable ? 1 : 0) + vendors.length}>
                   Awarded purchase total
                 </td>
                 <td className="lb-foot num">
@@ -529,6 +603,7 @@ export default function LineBoard({
                   ) : null}
                 </td>
               </tr>
+              ) : null}
             </tfoot>
           ) : null}
         </table>
