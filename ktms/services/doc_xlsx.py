@@ -1777,7 +1777,14 @@ def make_purchase_order_xlsx(
     r = trow + 1
     merge(r, 1, r, NCOL)
     # 발주 금액은 공급가(부가세 별도) — 공급사가 VAT 포함으로 읽지 않게 못박는다.
-    put(r, 1, f"Total: {_money(total, currency, po_dec)} (VAT Excluded)", font=bold, align=right)
+    # 금액까지만 굵게, "(VAT Excluded)" 는 보통 글씨 — 셀 안 서식(리치 텍스트).
+    # 글꼴 이름은 run 마다 직접 박는다(_apply_noto_font 는 셀 글꼴만 바꾸고 run 은 못 건드린다).
+    from openpyxl.cell.rich_text import CellRichText, TextBlock
+    from openpyxl.cell.text import InlineFont
+    put(r, 1, CellRichText(
+        TextBlock(InlineFont(rFont="Noto Sans KR", b=True, sz=11), f"Total: {_money(total, currency, po_dec)}"),
+        TextBlock(InlineFont(rFont="Noto Sans KR", sz=11), "  (VAT Excluded)"),
+    ), font=bold, align=right)
     ws.row_dimensions[r].height = 18
 
     def section_bar(row, title):
