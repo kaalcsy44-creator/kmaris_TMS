@@ -1611,10 +1611,14 @@ def make_purchase_order_xlsx(
         except Exception:
             pass
 
+    # 맨 위 1행은 여백 — 머리(로고·회사명)가 종이 윗단에 붙지 않게 한 줄 띄운다.
+    # 머리 이하 모든 행이 한 줄씩 내려간다(TOP).
+    TOP = 1
+    ws.row_dimensions[1].height = 14
     logo = _find_asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg")
     if logo:
-        # 로고는 B 열 안(폭 15 ≈ 110px) × 1~3행 높이(58pt ≈ 77px) — 회사명(C~G) 바로 왼쪽.
-        add_image_fit(logo, "B1", 108, 74)
+        # 로고는 B 열 안(폭 15 ≈ 110px) × 2~4행 높이(58pt ≈ 77px) — 회사명(C~G) 바로 왼쪽.
+        add_image_fit(logo, f"B{1 + TOP}", 108, 74)
     GRAYTX = "404040"
     addr = company.get("address_en") or company.get("address") or ""
     bits = []
@@ -1625,28 +1629,28 @@ def make_purchase_order_xlsx(
     if company.get("website"):
         bits.append(company["website"])
     # 회사명·주소·연락처는 C~G 열 — 로고가 A·B 열을 차지하므로 B 부터 합치면 로고와 겹친다.
-    merge(1, 3, 1, 7)
-    put(1, 3, company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
+    merge(1 + TOP, 3, 1 + TOP, 7)
+    put(1 + TOP, 3, company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
         font=Font(name="Calibri", size=16, color=GRAYTX), align=center)
-    merge(2, 3, 2, 7)
-    put(2, 3, addr, font=Font(name="Calibri", size=8, color=GRAYTX), align=center)
-    merge(3, 3, 3, 7)
-    put(3, 3, "   |   ".join(bits), font=Font(name="Calibri", size=8, color=GRAYTX), align=center)
-    merge(1, 8, 3, NCOL)
-    put(1, 8, (company.get("tagline", "") or "").replace(". ", ".\n", 1),
+    merge(2 + TOP, 3, 2 + TOP, 7)
+    put(2 + TOP, 3, addr, font=Font(name="Calibri", size=8, color=GRAYTX), align=center)
+    merge(3 + TOP, 3, 3 + TOP, 7)
+    put(3 + TOP, 3, "   |   ".join(bits), font=Font(name="Calibri", size=8, color=GRAYTX), align=center)
+    merge(1 + TOP, 8, 3 + TOP, NCOL)
+    put(1 + TOP, 8, (company.get("tagline", "") or "").replace(". ", ".\n", 1),
         font=Font(name="Calibri", italic=True, size=9, color="0055A8"),
         align=Alignment(horizontal="left", vertical="center", wrap_text=True))
     for row, height in ((1, 30), (2, 14), (3, 14), (4, 6)):
-        ws.row_dimensions[row].height = height
+        ws.row_dimensions[row + TOP].height = height
     for col in range(1, NCOL + 1):
-        ws.cell(3, col).border = Border(bottom=Side(style="medium", color="0055A8"))
+        ws.cell(3 + TOP, col).border = Border(bottom=Side(style="medium", color="0055A8"))
 
     # ── 타이틀 ─────────────────────────────────────────────────────────
-    merge(5, 1, 5, NCOL)
-    put(5, 1, "PURCHASE ORDER",
+    merge(5 + TOP, 1, 5 + TOP, NCOL)
+    put(5 + TOP, 1, "PURCHASE ORDER",
         font=Font(name="Calibri", bold=True, size=18, color="0B1D3A"), align=center)
-    ws.row_dimensions[5].height = 28
-    ws.row_dimensions[6].height = 5
+    ws.row_dimensions[5 + TOP].height = 28
+    ws.row_dimensions[6 + TOP].height = 5
 
     # ── 정보 박스(2단) — PDF 와 같은 항목·순서 ──────────────────────────
     incoterms = terms.get("incoterms", "")
@@ -1672,7 +1676,7 @@ def make_purchase_order_xlsx(
         ("Payment", terms.get("payment_terms", "")),
         ("Engine Type", vessel.get("engine_type", "")),
     ]
-    META_ROW = 7
+    META_ROW = 7 + TOP
     META_ROWS = len(left_rows)
     for i in range(META_ROWS):
         r = META_ROW + i
