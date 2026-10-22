@@ -1566,6 +1566,11 @@ export type CompanyInfoSave = {
   website?: string;
   note?: string;
   logo?: string;
+  /** 대금을 보낼 계좌(거래선 전용, 회사 단위) — Finance 캘린더 상세 창과 같은 칸. */
+  bank_name?: string;
+  bank_account?: string;
+  bank_holder?: string;
+  bank_swift?: string;
   /** 같은 이름으로 다른 명부에도 서 있는 그 회사에 이 변경을 함께 옮길 곳
    *  ("customers" | "vendors" | "makers"). 주소·홈페이지·로고·소개와 회사명만 간다 —
    *  취급분류·Makes·결제조건은 명부마다 묻는 것이 달라 저쪽 값을 덮지 않는다. */

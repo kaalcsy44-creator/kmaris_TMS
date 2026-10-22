@@ -2979,7 +2979,15 @@ export function VendorsTab() {
           initial: company.groups[company.index]?.find((r) => (r.maker_ids ?? []).length)
                      ?.maker_ids ?? [],
         }}
-        fields={[["website", "Website"]]}
+        fields={[
+          ["website", "Website"],
+          // 대금을 보낼 계좌 — Finance 캘린더의 지급 상세 창에서 적은 값과 같은 칸이라
+          // 어느 쪽에서 고쳐도 양쪽에 같이 보인다.
+          ["bank_name", "Bank"],
+          ["bank_account", "Account No."],
+          ["bank_holder", "Account holder"],
+          ["bank_swift", "SWIFT"],
+        ]}
         areas={[
           { key: "specialization", label: "Specialization", rows: 3,
             placeholder: "Engine spares, hydraulics, deck machinery…" },

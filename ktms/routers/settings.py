@@ -288,6 +288,12 @@ class CompanyInfoSave(BaseModel):
     website: str | None = None           # 회사 홈페이지
     note: str | None = None              # 회사 소개 요약(고객사·거래선 공통)
     logo: str | None = None
+    # 대금을 보낼 계좌(거래선 전용, 회사 단위). Finance 캘린더 상세 창에서 적은 값과 같은
+    # 칸이다(PUT /finance/vendor-bank) — 어느 쪽에서 고쳐도 다른 쪽에 그대로 보인다.
+    bank_name: str | None = None
+    bank_account: str | None = None
+    bank_holder: str | None = None
+    bank_swift: str | None = None
     # 같은 이름으로 다른 명부에도 서 있는 그 회사에 이 변경을 함께 옮길지
     # ("customers" | "vendors" | "makers"). 빈 값 = 이 명부만 고친다.
     sync: list[str] | None = None
@@ -605,6 +611,11 @@ def settings_vendors():
                  "country": v.country or "", "address": v.address or "",
                  "payment_terms": getattr(v, "payment_terms", None) or "",
                  "logo": getattr(v, "logo", None) or "",
+                 # 대금을 보낼 계좌(회사 단위) — Finance 캘린더 상세 창과 같은 칸.
+                 "bank_name": getattr(v, "bank_name", None) or "",
+                 "bank_account": getattr(v, "bank_account", None) or "",
+                 "bank_holder": getattr(v, "bank_holder", None) or "",
+                 "bank_swift": getattr(v, "bank_swift", None) or "",
                  "addresses": _multi_out(getattr(v, "addresses", None), v.address),
                  "emails": _multi_out(getattr(v, "emails", None), v.email),
                  "phones": _multi_out(getattr(v, "phones", None), getattr(v, "contact_phone", None)),
@@ -1021,7 +1032,8 @@ def update_vendor_company(body: CompanyInfoSave):
         name = _apply_company_info(
             rows, body,
             ("specialization", "category_ids", "maker_ids", "website", "note",
-             "payment_terms", "logo"))
+             "payment_terms", "logo",
+             "bank_name", "bank_account", "bank_holder", "bank_swift"))
         synced = _sync_company_twins(s, "vendors", body)
         s.commit()
         return {"ok": True, "updated": len(rows), "name": name, "synced": synced}

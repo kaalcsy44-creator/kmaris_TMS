@@ -89,6 +89,11 @@ export type SettingsCustomer = {
 export type SettingsVendor = {
   id: number;
   name: string;
+  /** 대금을 보낼 계좌(회사 단위) — Finance 캘린더 상세 창에서 적은 값과 같은 칸. */
+  bank_name?: string;
+  bank_account?: string;
+  bank_holder?: string;
+  bank_swift?: string;
   contact: string;
   /** 담당 분야 — 이 사람이 회사 안에서 무엇을 맡는가(영업·기술·구매). 회사가 아니라
    *  사람에게 붙는 값이라 회사 공통정보에 들어가지 않는다. */
