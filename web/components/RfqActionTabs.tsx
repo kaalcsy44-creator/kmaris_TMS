@@ -4399,6 +4399,16 @@ function VendorQuoteItemEditor({
     { key: "remark", label: "Remark" },
   ];
   const grid = useItemGrid("vquote-items", cols, { phoneHideFoot: true });
+  const plan = optionPlan(items);
+  // 줄 이름(lid) → 그 이름을 단 행 번호들. 같은 이름이 두 행에 붙으면 비교표·개요는 첫
+  // 행만 쓰고 나머지 줄은 사라진다(딜의 다른 줄은 "안 받은 줄"이 된다) — Line 칸이
+  // 경고하고, 드롭다운은 이미 쓴 줄에 행 번호를 달아 보여 준다.
+  const lidRows = new Map<string, number[]>();
+  for (const e of plan) {
+    if (e.kind !== "item") continue;
+    const lid = (e.item.lid || "").trim();
+    if (lid) lidRows.set(lid, [...(lidRows.get(lid) ?? []), e.seq]);
+  }
   // 옵션 제목행 <td colSpan> 이 덮을 칸 수 — 숨긴 컬럼을 빼고 센다.
   const visibleColSpan = grid.cols.filter((c) => c.fixed || !grid.layout.hidden.has(c.key)).length;
   // 엑셀식 편집 — fields 는 아래 keys.cell(i, 0..10) 열 번호와 순서가 같아야 한다.
@@ -4466,7 +4476,7 @@ function VendorQuoteItemEditor({
             </tr>
           </thead>
           <tbody>
-            {optionPlan(items).map((entry) => {
+            {plan.map((entry) => {
               // 옵션 소계행 — 그 옵션의 원가만 세어 합계행과 같은 칸(Unit Price·Amount)에
               // 세운다. 첫 옵션 앞의 덩어리는 건너뛴다(옵션이 하나면 맨 아래 Total 과 같은
               // 숫자가 두 번 찍힌다).
@@ -4521,6 +4531,8 @@ function VendorQuoteItemEditor({
                     value={it.lid || ""}
                     lines={lines}
                     asked={asked}
+                    seq={entry.seq}
+                    lidRows={lidRows}
                     onChange={(lid) => onChange(items.map((x, idx) => (idx === i ? { ...x, lid } : x)))}
                   />
                 </td>
@@ -4575,25 +4587,40 @@ function LinePick({
   value,
   lines,
   asked,
+  seq,
+  lidRows,
   onChange,
 }: {
   value: string;
   lines?: LineOption[];
   asked?: string[];
+  /** 이 행의 번호(No.) — lidRows 에서 자기 자신을 빼는 데 쓴다. */
+  seq?: number;
+  /** 줄 이름 → 그 이름을 단 행 번호들(편집기 전체). */
+  lidRows?: Map<string, number[]>;
   onChange: (lid: string) => void;
 }) {
-  if (!lines || lines.length === 0) return <span className="muted">{value || "—"}</span>;
+  const others = (lid: string) => (lidRows?.get(lid) ?? []).filter((n) => n !== seq);
+  const dupOf = value ? others(value) : [];
+  const dupNote = dupOf.length
+    ? `Also linked on row ${dupOf.join(", ")} — only the first row counts in the comparison; pick the right line.`
+    : "";
+  if (!lines || lines.length === 0)
+    return <span className={dupOf.length ? "line-dup" : "muted"} title={dupNote || undefined}>{value || "—"}</span>;
   const askedSet = new Set(asked ?? []);
-  const label = (l: LineOption) =>
-    `${l.lid} · ${[l.part_no, l.description].filter(Boolean).join(" · ").slice(0, 60)}`;
+  const label = (l: LineOption) => {
+    const used = others(l.lid);
+    return `${l.lid} · ${[l.part_no, l.description].filter(Boolean).join(" · ").slice(0, 60)}` +
+      (used.length ? `  (row ${used.join(", ")})` : "");
+  };
   const first = lines.filter((l) => askedSet.has(l.lid));
   const rest = lines.filter((l) => !askedSet.has(l.lid));
   const cur = lines.find((l) => l.lid === value);
   return (
     <select
-      className={`line-pick${value ? "" : " unlinked"}`}
+      className={`line-pick${value ? "" : " unlinked"}${dupOf.length ? " dup" : ""}`}
       value={value}
-      title={cur ? label(cur) : value || "Not linked to a project item"}
+      title={dupNote || (cur ? label(cur) : value || "Not linked to a project item")}
       onChange={(e) => onChange(e.target.value)}
     >
       <option value="">— link —</option>

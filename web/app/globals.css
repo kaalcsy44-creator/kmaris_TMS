@@ -18993,6 +18993,13 @@ select.compose-tpl-version {
   background: color-mix(in srgb, var(--warn, #d97706) 8%, transparent);
   color: var(--warn, #b45309);
 }
+/* 같은 줄 이름이 두 행에 — 비교표는 첫 행만 쓰므로 빨갛게 세운다. */
+.line-pick.dup,
+.line-dup {
+  border-color: var(--danger, #dc2626);
+  background: color-mix(in srgb, var(--danger, #dc2626) 10%, transparent);
+  color: var(--danger, #b91c1c);
+}
 .line-match-note {
   display: block;
   margin: 6px 0 2px;

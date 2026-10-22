@@ -2412,7 +2412,7 @@ export function matchVendorQuoteLines(
   items: VendorQuoteItem[]
 ): Promise<{
   items: VendorQuoteItem[];
-  matches: { index: number; lid: string; how: "part" | "code" | "desc" | "only" }[];
+  matches: { index: number; lid: string; how: "part" | "code" | "desc" | "only" | "order" }[];
   unmatched: number[];
   lines: LineOption[];
   /** 이 벤더에게 물어본 줄 — 드롭다운에서 앞에 세운다. */

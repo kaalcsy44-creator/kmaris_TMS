@@ -1926,6 +1926,30 @@ def stamp_doc_line_ids(base_items, doc_items, scope_lids=None) -> dict:
                 str(doc[i].get("description") or "")):
             take(i, lid, "only")
 
+    # 남은 줄 수가 양쪽 같고, 순서대로 놓았을 때 수량이 줄마다 똑같으면 그 순서가 답이다.
+    # 벤더가 품번을 빼고 품명만 자기 식으로 적어 보낸 견적(LIMIT VALVE 가 네 줄)은 품번·
+    # 품명으로는 하나도 못 가르는데, 물어본 순서 그대로 답한 경우가 대부분이다. 사람이
+    # 열일곱 줄을 손으로 고르다 비슷한 이름을 잘못 찍는 것보다 이쪽이 정확하다.
+    rest_i = sorted(left)
+    rest_l = list(free)
+    if len(rest_i) >= 2 and len(rest_i) == len(rest_l):
+        def _q(v):
+            try:
+                return float(v or 0)
+            except (TypeError, ValueError):
+                return None
+        ok = True
+        for i, lid in zip(rest_i, rest_l):
+            qd, qb = _q(doc[i].get("qty")), _q(free[lid].get("qty"))
+            _, why = _line_match_score(doc[i], free[lid])
+            if (qd is None or qd != qb or why in ("sibling", "differs")
+                    or _CHARGE_LINE.search(str(doc[i].get("description") or ""))):
+                ok = False
+                break
+        if ok:
+            for i, lid in zip(rest_i, rest_l):
+                take(i, lid, "order")
+
     return {"matches": matches, "unmatched": sorted(left)}
 
 
