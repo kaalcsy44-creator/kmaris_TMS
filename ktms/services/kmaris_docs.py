@@ -2218,6 +2218,8 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     story: List[Any] = []
 
     # ── 헤더: 공통 레터헤드(로고 + 회사정보 + 슬로건) + 중앙 타이틀 ──────────
+    # 맨 위 여백 한 줄 — 엑셀 1행(빈 행, 높이 14pt ≈ 5mm)과 맞춘다.
+    story.append(Spacer(1, 5 * mm))
     story += _letterhead(company, "QUOTATION / COSTING SHEET", s)
 
     # ── 정보 박스(2단) ─────────────────────────────────────────────────
