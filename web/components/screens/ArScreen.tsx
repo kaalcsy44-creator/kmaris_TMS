@@ -1483,6 +1483,11 @@ function ArAddForm({
     contacts: { name: string; email: string; phone: string; position: string }[];
   }>({ taxInvoiceEmail: "", contactName: "", emails: [], phones: [], contacts: [] });
   const sel = useRowSelection(form.items.length);
+  // 해외 고객(수출) — 국내 전자세금계산서를 끊지 않으므로 사업자번호 칸과 세금계산서
+  // 미리보기를 감춘다(PI·CI 가 청구서 노릇을 한다). 오더를 불러오기 전엔 기존 행 값을 쓴다.
+  const [exportDeal, setExportDeal] = useState(
+    existing ? (existing.trade_type || "수출") !== "내수" : false
+  );
 
   // 오더 선택 시 해당 프로젝트/CI 정보를 불러와 빈 항목 자동 입력.
   useEffect(() => {
@@ -1502,6 +1507,7 @@ function ArAddForm({
         const flatContact = d.order.customer_contact || "";
         const taxInvoiceEmail = d.order.customer_tax_invoice_email || "";
         setAutoInvoiceNo(autoInv);
+        setExportDeal((d.order.trade_type || "수출") !== "내수");
         setCiItems(ci);
         setPiItems(pi);
         setPoItems(po);
@@ -1704,7 +1710,9 @@ function ArAddForm({
       {/* 청구처(BILL TO) — 세금계산서에 인쇄. 저장된 고객 정보에서 고르거나 직접 입력. */}
       <div className="form-section-title">Bill to</div>
       <div className="form-grid">
-        <Field label="Customer Tax ID" value={form.bill_to_tax_id} onChange={(v) => setForm({ ...form, bill_to_tax_id: v })} />
+        {exportDeal ? null : (
+          <Field label="Customer Tax ID" value={form.bill_to_tax_id} onChange={(v) => setForm({ ...form, bill_to_tax_id: v })} />
+        )}
         <ComboField
           label="Contact"
           value={form.bill_to_contact}
@@ -1845,7 +1853,9 @@ function ArAddForm({
 
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
-          <TaxPreviewButton orderId={form.order_id === "" ? null : form.order_id} form={form} />
+          {exportDeal ? null : (
+            <TaxPreviewButton orderId={form.order_id === "" ? null : form.order_id} form={form} />
+          )}
         </div>
         <div className="doc-actions-center">
           {err ? <span className="action-err">{err}</span> : null}
