@@ -2,6 +2,14 @@
 // 엑셀/구글시트가 클립보드에 넣는 형식은 TSV — 탭=열, 개행=행이고, 셀 안에 탭·개행·따옴표가
 // 있으면 그 셀을 따옴표로 감싸고 내부 따옴표는 두 번 겹쳐 온다("" → ").
 
+/** 붙여넣는 것이 표(엑셀·구글시트·워드 표)인지, 그냥 글인지.
+ *  표 프로그램은 클립보드에 HTML <table> 을 함께 싣고, 여러 열이면 텍스트에 탭이 들어간다.
+ *  메일·PDF·문서 본문에서 긁은 글은 줄바꿈만 있는 텍스트라 둘 다 없다 — 그런 글의 줄바꿈은
+ *  행 구분이 아니라 한 칸 안의 줄바꿈이다(품목 설명 여러 줄을 한 행에 넣을 때). */
+export function isGridPaste(text: string, html?: string): boolean {
+  return text.includes("\t") ||/<table[\s>]/i.test(html || "");
+}
+
 /** 클립보드 TSV → 행×열 격자. */
 export function parseClipboardGrid(text: string): string[][] {
   const rows: string[][] = [];

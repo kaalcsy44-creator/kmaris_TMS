@@ -2,7 +2,7 @@
 
 import type { ClipboardEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { cellText, parseClipboardGrid, tsvCell } from "./itemClipboard";
+import { cellText, isGridPaste, parseClipboardGrid, tsvCell } from "./itemClipboard";
 import { isOptionRow, type OptionRowLike } from "../../lib/quoteOptions";
 
 /** 화면 전체가 쓰는 USD↔KRW 기본 환율. 앱이 뜰 때 오늘자 매매기준율로 바뀐다(lib/todayFx.ts).
@@ -776,6 +776,23 @@ export function useItemGridKeys<T extends object>({
   function onPaste(e: ClipboardEvent<GridCell>) {
     const text = e.clipboardData.getData("text/plain");
     if (!text) return;
+    // 표가 아닌 그냥 글(메일·PDF·문서에서 긁은 여러 줄)은 행으로 쪼개지 않고 이 칸 하나에
+    // 넣는다. 여러 줄 칸(textarea)은 브라우저 기본 붙여넣기가 줄바꿈을 그대로 살린다.
+    // 한 줄 칸(input)은 줄바꿈을 받을 수 없어 공백으로 이어 붙인다.
+    if (!isGridPaste(text, e.clipboardData.getData("text/html"))) {
+      const el = e.currentTarget;
+      e.stopPropagation();
+      if (el.tagName === "TEXTAREA" || !/[\r\n]/.test(text)) return;
+      const row = Number(el.dataset.gridRow);
+      const col = Number(el.dataset.gridCol);
+      if (!Number.isFinite(row) || !Number.isFinite(col)) return;
+      e.preventDefault();
+      const flat = text.replace(/\s*[\r\n]+\s*/g, " ").trim();
+      const s0 = el.selectionStart ?? el.value.length;
+      const s1 = el.selectionEnd ?? s0;
+      writeField(row, col, el.value.slice(0, s0) + flat + el.value.slice(s1));
+      return;
+    }
     const block = parseClipboardGrid(text);
     // 한 칸짜리는 브라우저 기본 동작에 맡긴다(부분 선택 교체 등이 자연스럽게 동작).
     if (block.length === 0 || (block.length === 1 && block[0].length === 1)) return;

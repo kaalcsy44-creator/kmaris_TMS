@@ -2,7 +2,7 @@
 //   cd web && node --test components/common/itemClipboard.test.ts
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { parseClipboardGrid, toTsv, tsvCell, cellText } from "./itemClipboard.ts";
+import { isGridPaste, parseClipboardGrid, toTsv, tsvCell, cellText } from "./itemClipboard.ts";
 
 test("엑셀에서 복사한 여러 행×열 — 끝 개행은 빈 행으로 남지 않는다", () => {
   assert.deepEqual(parseClipboardGrid("A1\tB1\r\nA2\tB2\r\n"), [
@@ -68,3 +68,14 @@ test("숫자는 자릿수 구분 없이 나가야 엑셀이 숫자로 받는다"
   assert.equal(cellText(undefined), "");
   assert.equal(cellText(0), "0");
 });
+
+test("표인지 글인지 — 엑셀은 <table>·탭, 문서 글은 줄바꿈뿐", () => {
+  // 엑셀 한 열 여러 행: 탭은 없지만 HTML 표가 함께 온다 → 여러 행으로.
+  assert.equal(isGridPaste("Valve\r\nSeal kit\r\n", "<html><body><table><tr><td>Valve</td></tr></table>"), true);
+  // 여러 열: 탭이 있다.
+  assert.equal(isGridPaste("A\tB\r\nC\tD"), true);
+  // 메일·PDF 에서 긁은 여러 줄 설명 → 한 칸.
+  assert.equal(isGridPaste("DC SENSOR\n• Maker : KOMECO\n• Supply : +24 VDC"), false);
+  assert.equal(isGridPaste("line1\nline2", "<p>line1<br>line2</p>"), false);
+});
+
