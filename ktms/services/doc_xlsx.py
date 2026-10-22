@@ -1624,13 +1624,14 @@ def make_purchase_order_xlsx(
         bits.append(company["sales_email"])
     if company.get("website"):
         bits.append(company["website"])
-    merge(1, 2, 1, 7)
-    put(1, 2, company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
+    # 회사명·주소·연락처는 C~G 열 — 로고가 A·B 열을 차지하므로 B 부터 합치면 로고와 겹친다.
+    merge(1, 3, 1, 7)
+    put(1, 3, company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
         font=Font(name="Calibri", size=16, color=GRAYTX), align=center)
-    merge(2, 2, 2, 7)
-    put(2, 2, addr, font=Font(name="Calibri", size=8, color=GRAYTX), align=center)
-    merge(3, 2, 3, 7)
-    put(3, 2, "   |   ".join(bits), font=Font(name="Calibri", size=8, color=GRAYTX), align=center)
+    merge(2, 3, 2, 7)
+    put(2, 3, addr, font=Font(name="Calibri", size=8, color=GRAYTX), align=center)
+    merge(3, 3, 3, 7)
+    put(3, 3, "   |   ".join(bits), font=Font(name="Calibri", size=8, color=GRAYTX), align=center)
     merge(1, 8, 3, NCOL)
     put(1, 8, (company.get("tagline", "") or "").replace(". ", ".\n", 1),
         font=Font(name="Calibri", italic=True, size=9, color="0055A8"),
