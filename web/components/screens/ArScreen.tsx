@@ -1467,7 +1467,9 @@ function ArAddForm({
   // 송장번호 자동생성 규칙 = P/O번호 + "-INV". auto 모드면 이 값을 그대로 사용.
   const [autoInvoiceNo, setAutoInvoiceNo] = useState("");
   // 편집 모드는 저장된 송장번호를 그대로 보여준다(수동). 신규는 자동 생성이 기본.
-  const [invMode, setInvMode] = useState<"auto" | "manual">(editing ? "manual" : "auto");
+  const [invMode, setInvMode] = useState<"auto" | "pi" | "manual">(editing ? "manual" : "auto");
+  // 이 오더의 Proforma Invoice 번호 — PI 로 청구한 건은 그 번호가 곧 송장번호다.
+  const [piNo, setPiNo] = useState("");
   // "Load CI" 버튼용 — 선택 오더의 CI 품목을 보관했다가 필요 시 표에 다시 채운다.
   const [ciItems, setCiItems] = useState<TaxInvoiceItem[]>([]);
   // CI가 없을 때의 대체 소스 — PI(프로포마) 품목. "Load PI" 로 표에 채운다.
@@ -1506,7 +1508,15 @@ function ArAddForm({
         const primary = contacts[0];
         const flatContact = d.order.customer_contact || "";
         const taxInvoiceEmail = d.order.customer_tax_invoice_email || "";
+        const pino = d.pi?.pi_no || "";
         setAutoInvoiceNo(autoInv);
+        setPiNo(pino);
+        // 고르는 칸의 처음 자리 — 저장된 번호가 PI·자동 번호와 같으면 그 항목, 신규는 PI 가 있으면 PI.
+        setInvMode((m) => {
+          const cur = existing?.invoice_no || "";
+          if (existing) return pino && cur === pino ? "pi" : autoInv && cur === autoInv ? "auto" : m;
+          return pino ? "pi" : "auto";
+        });
         setExportDeal((d.order.trade_type || "수출") !== "내수");
         setCiItems(ci);
         setPiItems(pi);
@@ -1524,7 +1534,7 @@ function ArAddForm({
           currency: d.ci?.currency || f.currency,
           invoice_amount: f.invoice_amount || taxSubtotal(auto),
           // 송장번호 = P/O번호+"-INV"(비어있을 때만). 항목은 CI(없으면 P/O) 품목을 기본값으로 불러온다.
-          invoice_no: f.invoice_no || autoInv,
+          invoice_no: f.invoice_no || d.pi?.pi_no || autoInv,
           items: f.items.length ? f.items : auto,
           // 청구처는 고객 마스터값을 기본으로 채운다(사용자가 덮어쓰면 유지).
           // 세금계산서 수신메일을 최우선, 없으면 대표 이메일. 담당자/연락처는 대표(primary) 기준.
@@ -1684,14 +1694,26 @@ function ArAddForm({
       <div className="form-grid">
         <label className="form-field">
           <span>Invoice No.</span>
-          {invMode === "auto" ? (
-            <select value="auto" onChange={(e) => { if (e.target.value === "manual") setInvMode("manual"); }}>
+          {invMode !== "manual" ? (
+            <select
+              value={invMode}
+              onChange={(e) => {
+                const v = e.target.value as "auto" | "pi" | "manual";
+                setInvMode(v);
+                if (v === "pi") setForm((f) => ({ ...f, invoice_no: piNo }));
+                else if (v === "auto") setForm((f) => ({ ...f, invoice_no: autoInvoiceNo }));
+              }}
+            >
+              {piNo ? <option value="pi">{piNo} (Proforma Invoice)</option> : null}
               <option value="auto">{autoInvoiceNo ? `${autoInvoiceNo} (auto)` : "Auto-generate"}</option>
               <option value="manual">Manual entry…</option>
             </select>
           ) : (
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <input value={form.invoice_no} onChange={(e) => setForm({ ...form, invoice_no: e.target.value })} placeholder="Invoice No.…" autoFocus style={{ flex: 1 }} />
+              {piNo ? (
+                <button type="button" className="btn sm" onClick={() => { setInvMode("pi"); setForm((f) => ({ ...f, invoice_no: piNo })); }} title="Use the Proforma Invoice number">PI</button>
+              ) : null}
               <button type="button" className="btn sm" onClick={() => { setInvMode("auto"); setForm((f) => ({ ...f, invoice_no: autoInvoiceNo })); }} title="Use auto number">auto</button>
             </div>
           )}
