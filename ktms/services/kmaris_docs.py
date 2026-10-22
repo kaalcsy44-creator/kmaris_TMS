@@ -2131,6 +2131,10 @@ def quotation_clause_catalog(terms: Dict[str, Any], validity_days: int = 30,
     ]
 
 
+# 고른 적이 없는(clauses 미저장) 견적에서 기본으로 빠지는 문장 id.
+CLAUSES_OFF_BY_DEFAULT = ("warranty",)
+
+
 def quotation_standard_terms(terms: Dict[str, Any], validity_days: int = 30,
                              valid_until: str = "", quote_date: str = "") -> List[str]:
     """문서에 찍을 Terms & Conditions 문장들.
@@ -2145,7 +2149,8 @@ def quotation_standard_terms(terms: Dict[str, Any], validity_days: int = 30,
         chosen = set(str(c) for c in picked)
         lines = [text for cid, text in catalog if cid in chosen]
     else:
-        lines = [text for _cid, text in catalog]
+        # 고른 적이 없는 견적 — 기본 빠짐 문장(보증)만 빼고 전부(웹 CLAUSES_OFF_BY_DEFAULT 와 짝).
+        lines = [text for cid, text in catalog if cid not in CLAUSES_OFF_BY_DEFAULT]
     for extra in (terms.get("extra_clauses") or []):
         if str(extra).strip():
             lines.append(str(extra).strip())

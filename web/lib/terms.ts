@@ -123,8 +123,13 @@ export const QUOTATION_CLAUSES: readonly {
   { id: "complete_order", text: () => "Unit prices are based on the complete order quantity and may be subject to change for partial orders." },
 ];
 
-// 지금 문서에 찍힐 문장 id 들. 고른 적이 없는(=clauses 미저장) 견적은 전체가 들어간다 —
-// 서버 quotation_standard_terms 와 같은 판정이라 화면 미리보기와 문서가 일치한다.
+// 기본으로 빠져 있는 문장 — 고른 적이 없는 견적에선 체크 해제 상태로 시작한다(서버 짝).
+export const CLAUSES_OFF_BY_DEFAULT = ["warranty"];
+
+// 지금 문서에 찍힐 문장 id 들. 고른 적이 없는(=clauses 미저장) 견적은 기본 빠짐 문장을 뺀
+// 전체가 들어간다 — 서버 quotation_standard_terms 와 같은 판정이라 화면 미리보기와 문서가 일치한다.
 export function selectedClauseIds(t: QuotationTerms): string[] {
-  return Array.isArray(t.clauses) ? t.clauses : QUOTATION_CLAUSES.map((c) => c.id);
+  return Array.isArray(t.clauses)
+    ? t.clauses
+    : QUOTATION_CLAUSES.map((c) => c.id).filter((id) => !CLAUSES_OFF_BY_DEFAULT.includes(id));
 }
