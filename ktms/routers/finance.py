@@ -2775,3 +2775,204 @@ def finance_calendar(start: str = "", end: str = ""):
         return {"rows": events, "start": d0.isoformat(), "end": d1.isoformat()}
     finally:
         s.close()
+
+
+# ── 캘린더 한 건의 상세 + 계좌 ──────────────────────────────────────────────
+# 캘린더 칸은 이름과 금액뿐이다. 눌렀을 때 그 돈이 무엇이고(청구서·발주·프로젝트) 어디로
+# 보내는지(계좌)를 한 창에서 읽게 한다. 계좌는 방향에 따라 다른 것을 보여 준다:
+#   나가는 돈  → 받는 쪽 계좌. 지급 건에 적힌 것이 먼저, 없으면 연결 거래선(회사 단위),
+#               그것도 없으면 이름이 같은 소개자(컨설턴트) 명부의 계좌.
+#   들어오는 돈 → 우리 계좌(회사 프로필) — 고객에게 어디로 보내라고 했는지 확인용.
+from pydantic import BaseModel as _BaseModel  # noqa: E402
+from services.company_profile import read_company_profile  # noqa: E402
+
+_BANK_KEYS = ("bank_name", "bank_account", "bank_holder", "swift")
+
+
+def _same_name(a, b) -> bool:
+    return " ".join((a or "").split()).lower() == " ".join((b or "").split()).lower()
+
+
+def _bank_of(obj, swift_attr: str = "bank_swift") -> dict | None:
+    if obj is None:
+        return None
+    d = {"bank_name": (getattr(obj, "bank_name", None) or "").strip(),
+         "bank_account": (getattr(obj, "bank_account", None) or "").strip(),
+         "bank_holder": (getattr(obj, "bank_holder", None) or "").strip(),
+         "swift": (getattr(obj, swift_attr, None) or "").strip()}
+    return d if (d["bank_account"] or d["bank_name"]) else None
+
+
+def _vendor_company(s, vendor_id=None, name: str = "") -> tuple[str, dict | None]:
+    """거래선 회사 이름과 그 회사의 계좌(담당자 줄 중 계좌가 적힌 첫 줄)."""
+    if vendor_id and not name:
+        v = s.query(Vendor).filter_by(id=vendor_id).first()
+        name = (v.name or "") if v else ""
+    if not name:
+        return "", None
+    rows = [v for v in s.query(Vendor).all() if _same_name(v.name, name)]
+    for v in rows:
+        b = _bank_of(v)
+        if b:
+            return rows[0].name or name, b
+    return (rows[0].name if rows else name) or "", None
+
+
+@app.get("/api/admin/finance/calendar/item", dependencies=[Depends(require_token)])
+def finance_calendar_item(source: str, ref_id: int, occurrence: str = ""):
+    """캘린더 칸 하나의 상세. source = ar | income | payable | ap (캘린더 이벤트의 source,
+    지급대장 수동 항목은 source 가 비어 있어 'payable' 로 부른다)."""
+    s = get_session()
+    try:
+        out: dict = {"source": source, "ref_id": ref_id, "occurrence": occurrence or "",
+                     "rfq_id": 0, "order_id": 0, "po_id": 0, "project_no": "",
+                     "account": None, "account_from": "", "account_edit": None}
+        if source == "ar":
+            r = next((x for x in _finance_receivable_rows(s) if x["id"] == ref_id), None)
+            if not r:
+                raise HTTPException(status_code=404, detail="Receivable not found.")
+            o = s.query(Order).filter_by(id=r["order_id"]).first() if r["order_id"] else None
+            out.update({
+                "direction": "in", "title": r["customer"], "category": "Sales (AR)",
+                "description": "", "currency": r["currency"],
+                "invoice_amount": r["invoice_amount"], "paid_amount": r["paid_amount"],
+                "outstanding": r["outstanding"], "credit_amount": r["credit_amount"],
+                "bank_fee": r["bank_fee"], "doc_label": "Invoice No.",
+                "doc_no": r["invoice_no"] or r["ci_no"], "ci_no": r["ci_no"],
+                "customer_po": (o.po_no or "") if o else "",
+                "bill_date": r["invoice_date"], "due_date": r["due_date"],
+                "paid": r["outstanding"] <= 0 and r["invoice_amount"] > 0,
+                "paid_on": r["paid_date"], "overdue": r["overdue"], "status": r["status"],
+                "rfq_id": r["rfq_id"], "order_id": r["order_id"],
+            })
+        elif source == "ap":
+            r = next((x for x in _ap_record_rows(s) if x["id"] == ref_id), None)
+            if not r:
+                raise HTTPException(status_code=404, detail="Vendor bill not found.")
+            ap = s.query(APRecord).filter_by(id=ref_id).first()
+            vname, bank = _vendor_company(s, vendor_id=getattr(ap, "vendor_id", None))
+            out.update({
+                "direction": "out", "title": r["vendor"], "category": "Vendor bill (AP)",
+                "description": "", "currency": r["currency"],
+                "invoice_amount": r["invoice_amount"], "paid_amount": r["paid_amount"],
+                "outstanding": r["outstanding"], "doc_label": "Bill No.",
+                "doc_no": r["bill_no"], "po_no": r["po_no"], "end_customer": r["customer"],
+                "bill_date": r["bill_date"], "due_date": r["due_date"],
+                "paid": r["outstanding"] <= 0 and r["invoice_amount"] > 0,
+                "paid_on": r["paid_date"], "overdue": r["overdue"], "status": r["status"],
+                "tax_invoice_no": r["tax_invoice_no"], "tax_received": r["tax_received"],
+                "rfq_id": r["rfq_id"], "order_id": r["order_id"], "po_id": r["po_id"],
+                "account": bank, "account_from": "vendor" if bank else "",
+                "account_edit": {"kind": "vendor", "name": vname} if vname else None,
+            })
+        elif source in ("payable", "income"):
+            Model = FinancePayable if source == "payable" else FinanceIncome
+            p = s.query(Model).filter_by(id=ref_id).first()
+            if not p:
+                raise HTTPException(status_code=404, detail="Item not found.")
+            rec = p.recurrence or "none"
+            occ = occurrence or p.due_date or ""
+            if rec == "none":
+                paid, paid_on = bool(p.paid), (p.paid_date or "")
+            else:
+                paid = occ in (p.paid_dates or [])
+                paid_on = (getattr(p, "payments", None) or {}).get(occ, "")
+            if source == "payable":
+                vname = ""
+                if p.vendor_id:
+                    vname, _ = _vendor_company(s, vendor_id=p.vendor_id)
+                who = p.counterparty or vname or p.description or "Payable"
+                bank, frm = _bank_of(p, swift_attr="__none__"), "payable"
+                if not bank and p.vendor_id:
+                    _, bank = _vendor_company(s, vendor_id=p.vendor_id)
+                    frm = "vendor"
+                if not bank:
+                    c = next((c for c in s.query(Consultant).all()
+                              if _same_name(c.name, p.counterparty)), None)
+                    bank = _bank_of(c, swift_attr="swift")
+                    frm = "consultant"
+                out.update({
+                    "direction": "out", "title": who, "category": p.category or "기타",
+                    "vat_amount": round(getattr(p, "vat_amount", None) or 0, 2),
+                    "bill_date": p.bill_date or "", "fx_rate": float(getattr(p, "fx_rate", None) or 0),
+                    "rfq_id": getattr(p, "rfq_id", None) or 0,
+                    "account": bank, "account_from": frm if bank else "",
+                    # 고치는 곳은 지금 보이는 계좌의 출처 — 지급 건 자체의 계좌가 기본이다.
+                    # 소개자 명부에서 온 계좌라도 이 지급 건에 따로 적어 덮어쓸 수 있다.
+                    "account_edit": ({"kind": "vendor", "name": vname} if bank and frm == "vendor"
+                                     else {"kind": "payable", "id": p.id}),
+                })
+            else:
+                customer_names = {c.id: c.name for c in s.query(Customer).all()}
+                who = p.counterparty or customer_names.get(p.customer_id, "") or p.description or "Income"
+                out.update({"direction": "in", "title": who, "category": p.category or "기타"})
+            amt = round(p.amount or 0, 2)
+            out.update({
+                "description": p.description or "", "currency": p.currency or "KRW",
+                "invoice_amount": amt, "paid_amount": amt if paid else 0.0,
+                "outstanding": 0.0 if paid else amt,
+                "due_date": occ, "paid": paid, "paid_on": paid_on,
+                "overdue": (not paid) and bool(occ) and occ < date.today().isoformat(),
+                "recurrence": rec, "recur_until": p.recur_until or "", "notes": p.notes or "",
+            })
+        else:
+            raise HTTPException(status_code=400, detail="source must be ar, income, payable or ap")
+
+        if out.get("direction") == "in":
+            prof = read_company_profile() or {}
+            ours = {k: (prof.get(k) or "").strip() for k in _BANK_KEYS}
+            out["account"] = ours if (ours["bank_account"] or ours["bank_name"]) else None
+            out["account_from"] = "company" if out["account"] else ""
+            out["account_edit"] = None   # 우리 계좌는 Settings › Company 에서 고친다
+        if out.get("rfq_id"):
+            out["project_no"] = _project_no_map(s).get(out["rfq_id"], "")
+        return out
+    finally:
+        s.close()
+
+
+class BankIn(_BaseModel):
+    bank_name: str | None = ""
+    bank_account: str | None = ""
+    bank_holder: str | None = ""
+    swift: str | None = ""
+
+
+class VendorBankIn(BankIn):
+    name: str
+
+
+@app.put("/api/admin/finance/payables/{row_id}/bank", dependencies=[Depends(require_token)])
+def save_payable_bank(row_id: int, body: BankIn):
+    """지급 건 하나의 수취 계좌. 반복 항목이면 모든 회차가 같은 계좌를 쓴다."""
+    s = get_session()
+    try:
+        p = s.query(FinancePayable).filter_by(id=row_id).first()
+        if not p:
+            raise HTTPException(status_code=404, detail="Payable not found.")
+        p.bank_name = (body.bank_name or "").strip()
+        p.bank_account = (body.bank_account or "").strip()
+        p.bank_holder = (body.bank_holder or "").strip()
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/finance/vendor-bank", dependencies=[Depends(require_token)])
+def save_vendor_bank(body: VendorBankIn):
+    """거래선 회사의 계좌 — 같은 이름의 담당자 줄 전부에 같은 값을 적는다(회사 단위 값)."""
+    s = get_session()
+    try:
+        rows = [v for v in s.query(Vendor).all() if _same_name(v.name, body.name)]
+        if not rows:
+            raise HTTPException(status_code=404, detail="Vendor not found.")
+        for v in rows:
+            v.bank_name = (body.bank_name or "").strip()
+            v.bank_account = (body.bank_account or "").strip()
+            v.bank_holder = (body.bank_holder or "").strip()
+            v.bank_swift = (body.swift or "").strip()
+        s.commit()
+        return {"ok": True, "updated": len(rows)}
+    finally:
+        s.close()

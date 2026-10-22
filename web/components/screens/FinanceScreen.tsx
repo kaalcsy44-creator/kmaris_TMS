@@ -9,6 +9,9 @@ import {
   fetchFinanceReceivables,
   fetchFinancePayables,
   fetchFinanceCalendar,
+  fetchFinanceCalendarItem,
+  saveFinancePayableBank,
+  saveVendorBank,
   fetchFinanceClaims,
   fetchFinanceClosing,
   fetchFinanceConsulting,
@@ -39,6 +42,8 @@ import type {
   FinanceCashflowRow,
   CashBucket,
   FinanceCalendarEvent,
+  FinanceCalendarItem,
+  BankAccount,
   MoneyByCurrency,
   FxQuote,
 } from "@/lib/types";
@@ -3251,38 +3256,9 @@ function CalendarTab() {
     return map;
   }, [data]);
 
-  // 프로젝트 단계에서 관리하는 청구·수금(AR/AP)은 캘린더에서 못 누른다 — 눌리는 것처럼
-  // 보이지 않게 커서·호버를 죽인다(수금은 원래 그랬고, 지급도 같은 규칙).
-  const readOnlyEvent = (e: FinanceCalendarEvent) =>
-    e.kind === "receivable" || e.source === "ap" || !can("finance", "edit");
-
-  // 납부 처리는 실제 납부일을 받아야 하므로 입력창을 띄운다(해제는 즉시).
-  const [payingEvent, setPayingEvent] = useState<FinanceCalendarEvent | null>(null);
-  const [paidOn, setPaidOn] = useState(todayStr());
-
-  async function togglePayable(e: FinanceCalendarEvent) {
-    if (e.kind !== "payable" || !can("finance", "edit")) return;
-    if (e.source === "ap") return;   // 매입(AP) 이벤트는 읽기전용(프로젝트 단계에서 관리)
-    if (!e.paid) {
-      setPaidOn(todayStr());
-      setPayingEvent(e);
-      return;
-    }
-    await payFinancePayable(e.ref_id, false, e.occurrence ?? undefined);
-    invalidateCache("finance:summary");
-    invalidateCache("finance:payables");
-    refresh();
-  }
-
-  async function confirmPay() {
-    const e = payingEvent;
-    if (!e) return;
-    await payFinancePayable(e.ref_id, true, e.occurrence ?? undefined, paidOn);
-    setPayingEvent(null);
-    invalidateCache("finance:summary");
-    invalidateCache("finance:payables");
-    refresh();
-  }
+  // 칸을 누르면 그 건의 상세(청구서·발주·프로젝트·계좌) 창이 뜬다. 수동 지급의 납부
+  // 처리·취소도 그 창 안에서 한다 — 예전처럼 누르자마자 납부 처리로 가지 않는다.
+  const [openEvent, setOpenEvent] = useState<FinanceCalendarEvent | null>(null);
 
   const monthLabel = new Date(month.y, month.m, 1).toLocaleDateString("en-US", { year: "numeric", month: "long" });
   const shift = (delta: number) => setMonth((cur) => {
@@ -3295,7 +3271,7 @@ function CalendarTab() {
     <button
       key={key}
       type="button"
-      className={`fin-ev fin-ev--${e.kind}${e.overdue ? " overdue" : ""}${e.paid ? " paid" : ""}${e.actual ? " actual" : ""}${readOnlyEvent(e) ? " readonly" : ""}`}
+      className={`fin-ev fin-ev--${e.kind}${e.overdue ? " overdue" : ""}${e.paid ? " paid" : ""}${e.actual ? " actual" : ""}`}
       title={
         e.actual
           // 수금은 '납부'가 아니라 '입금'이다 — 방향에 맞는 말로 표기.
@@ -3306,7 +3282,7 @@ function CalendarTab() {
               e.paid ? ` (paid${e.paid_on ? ` ${e.paid_on}` : ""})` : ""
             }${e.source === "ap" ? " — recorded in the project's stage 10 Payable (AP)" : ""}`
       }
-      onClick={() => togglePayable(e)}
+      onClick={() => setOpenEvent(e)}
     >
       {/* 실제 납부일 자리에 찍힌 이벤트는 체크+진한 칸으로 구분(예정일 이벤트는 옅은 칸에 취소선). */}
       <span className="fin-ev-title">{e.actual ? `✓ ${e.title}` : e.title}</span>
@@ -3385,25 +3361,18 @@ function CalendarTab() {
         )}
       </div>
       <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
-        Colour is the direction of the money — blue comes in, amber goes out — dark text is money still to move, faded text is money that has already moved (✓ marks the day it really moved), and a solid block is a scheduled date now overdue. Every item sits on its scheduled date until it settles, then it also appears on the day the money actually moved, as its own line even when that is the same day — the scheduled entry is struck through and the ✓ entry is the real date. Click one of your own costs to record its payment — you enter the date it was really paid, which may differ from the scheduled date (recurring items settle one occurrence at a time); click a paid one to undo. Customer invoices (AR) and vendor bills (AP) are managed from the project stages instead — both on stage 10, the Receivable tab for collections and the Payable tab for vendor payments.
+        Colour is the direction of the money — blue comes in, amber goes out — dark text is money still to move, faded text is money that has already moved (✓ marks the day it really moved), and a solid block is a scheduled date now overdue. Every item sits on its scheduled date until it settles, then it also appears on the day the money actually moved, as its own line even when that is the same day — the scheduled entry is struck through and the ✓ entry is the real date. Click any item to see its details and the bank account the money goes to (for money coming in, our own account). Your own costs are marked paid from that window — you enter the date it was really paid, which may differ from the scheduled date (recurring items settle one occurrence at a time). Customer invoices (AR) and vendor bills (AP) are managed from the project stages instead — both on stage 10, the Receivable tab for collections and the Payable tab for vendor payments.
       </p>
-      {payingEvent ? (
-        <Modal title="Record payment" onClose={() => setPayingEvent(null)} form maxWidth={340}>
-          <div className="fin-pay-form">
-            <div className="fin-pay-target">
-              {payingEvent.title} · {money(payingEvent.amount, payingEvent.currency)}
-            </div>
-            <div className="hint-inline">Scheduled {payingEvent.occurrence || payingEvent.date}</div>
-            <label className="form-field">
-              <span>Payment date</span>
-              <input type="date" value={paidOn} onChange={(ev) => setPaidOn(ev.target.value)} />
-            </label>
-          </div>
-          <div className="form-actions">
-            <button className="btn" onClick={() => setPayingEvent(null)}>Cancel</button>
-            <button className="btn primary" onClick={confirmPay} disabled={!paidOn}>Mark paid</button>
-          </div>
-        </Modal>
+      {openEvent ? (
+        <CalendarItemModal
+          ev={openEvent}
+          onClose={() => setOpenEvent(null)}
+          onChanged={() => {
+            invalidateCache("finance:summary");
+            invalidateCache("finance:payables");
+            refresh();
+          }}
+        />
       ) : null}
     </div>
   );
@@ -3431,4 +3400,235 @@ function buildMonthGrid(y: number, m: number) {
   // 이 달의 이야기만 한다) 그 날짜의 일정은 받아도 놓을 자리가 없다.
   const iso = (dt: Date) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
   return { days, start: iso(first), end: iso(last) };
+}
+
+// ── 캘린더 칸 상세 ───────────────────────────────────────────────────────────
+// 칸에는 이름과 금액뿐이라, 무슨 돈이고(청구서·발주·프로젝트) 어디로 보내는지(계좌)를 여기서
+// 읽는다. 계좌 출처를 함께 적는다 — 거래선 계좌를 고치면 그 거래선의 모든 청구에 따라가고,
+// 지급 건 계좌는 그 건(반복이면 모든 회차)에만 붙는다.
+const ACCOUNT_FROM: Record<string, string> = {
+  payable: "Saved on this payment",
+  vendor: "From the vendor record — used for every bill from this vendor",
+  consultant: "From the consultant record (Settings › Consultants)",
+  company: "Our account — Settings › Company",
+};
+const RECUR_LABEL: Record<string, string> = { monthly: "Monthly", quarterly: "Quarterly", yearly: "Yearly" };
+
+function CalendarItemModal({ ev, onClose, onChanged }: {
+  ev: FinanceCalendarEvent; onClose: () => void; onChanged: () => void;
+}) {
+  const source = ev.source && ev.source !== "manual" ? ev.source : "payable";
+  const occurrence = ev.occurrence || (ev.actual ? ev.scheduled : ev.date) || "";
+  const [item, setItem] = useState<FinanceCalendarItem | null>(null);
+  const [err, setErr] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [bank, setBank] = useState<BankAccount>({ bank_name: "", bank_account: "", bank_holder: "", swift: "" });
+  const [busy, setBusy] = useState(false);
+  const [paidOn, setPaidOn] = useState(todayStr());
+  const [paying, setPaying] = useState(false);
+  const [copied, setCopied] = useState("");
+  const canEdit = can("finance", "edit");
+
+  const load = () =>
+    fetchFinanceCalendarItem(source, ev.ref_id, source === "payable" || source === "income" ? occurrence : null)
+      .then((d) => { setItem(d); setErr(""); })
+      .catch((e: Error) => setErr(e.message));
+  useEffect(() => { load(); }, [ev]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  function startEdit() {
+    setBank(item?.account ?? { bank_name: "", bank_account: "", bank_holder: "", swift: "" });
+    setEditing(true);
+  }
+  async function saveBank() {
+    if (!item?.account_edit) return;
+    setBusy(true);
+    try {
+      if (item.account_edit.kind === "vendor") await saveVendorBank(item.account_edit.name, bank);
+      else await saveFinancePayableBank(item.account_edit.id, bank);
+      setEditing(false);
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function setPaid(paid: boolean) {
+    setBusy(true);
+    try {
+      await payFinancePayable(ev.ref_id, paid, occurrence || undefined, paid ? paidOn : undefined);
+      setPaying(false);
+      onChanged();
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  function copy(text: string, what: string) {
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(what);
+      setTimeout(() => setCopied(""), 1500);
+    }).catch(() => undefined);
+  }
+
+  const title = item?.title || ev.title;
+  if (!item) {
+    return (
+      <Modal title={title} onClose={onClose} form maxWidth={460}>
+        <div className={err ? "state error" : "state"}>{err ? `Could not load: ${err}` : "Loading…"}</div>
+      </Modal>
+    );
+  }
+
+  const cur = item.currency;
+  const isIn = item.direction === "in";
+  const partial = item.paid_amount > 0 && item.outstanding > 0;
+  const rows: [string, React.ReactNode][] = [];
+  const add = (label: string, v: React.ReactNode) => {
+    if (v !== "" && v !== null && v !== undefined && v !== 0) rows.push([label, v]);
+  };
+  add("Description", item.description);
+  add(item.doc_label || "Document", item.doc_no);
+  if (item.ci_no && item.ci_no !== item.doc_no) add("CI No.", item.ci_no);
+  add("Customer P/O", item.customer_po);
+  add("Vendor P/O", item.po_no);
+  add("For customer", item.end_customer && item.end_customer !== "—" ? item.end_customer : "");
+  add(isIn ? "Invoice date" : "Bill date", item.bill_date);
+  // 아직 안 끝난 건은 머리 띠가 'Due …'를 이미 말한다 — 끝난 건만 예정일을 따로 적는다.
+  if (item.paid) add("Due", item.due_date);
+  add(isIn ? "Received on" : "Paid on", item.paid_on);
+  if (item.recurrence && item.recurrence !== "none")
+    add("Repeats", `${RECUR_LABEL[item.recurrence] ?? item.recurrence}${item.recur_until ? ` until ${item.recur_until}` : ""}`);
+  if (partial || item.source === "ar" || item.source === "ap") {
+    add(isIn ? "Invoiced" : "Billed", money(item.invoice_amount, cur));
+    add(isIn ? "Received" : "Paid", item.paid_amount ? money(item.paid_amount, cur) : "");
+  }
+  add("VAT included", item.vat_amount ? money(item.vat_amount, cur) : "");
+  add("Credit note", item.credit_amount ? money(item.credit_amount, cur) : "");
+  add("Bank fee", item.bank_fee ? money(item.bank_fee, cur) : "");
+  add("FX rate", item.fx_rate ? `1 ${cur} = ${item.fx_rate.toLocaleString()} KRW` : "");
+  if (item.source === "ap")
+    add("Tax invoice", item.tax_received ? `Received${item.tax_invoice_no ? ` · ${item.tax_invoice_no}` : ""}` : "Not yet");
+  if (item.rfq_id || item.order_id)
+    add("Project", (
+      <ProjectDocLink rfqId={item.rfq_id} orderId={item.order_id} apPoId={item.po_id || undefined}
+        stage={10} label={item.project_no || "Open project"} />
+    ));
+  add("Notes", item.notes);
+
+  const statusText = item.paid
+    ? `${isIn ? "Received" : "Paid"}${item.paid_on ? ` ${item.paid_on}` : ""}`
+    : item.overdue ? `Overdue — due ${item.due_date}` : `Due ${item.due_date}`;
+  const big = item.paid ? item.invoice_amount : item.outstanding || item.invoice_amount;
+  const acc = item.account;
+  const canEditAccount = canEdit && !!item.account_edit;
+  const manualPayable = item.source === "payable";
+
+  return (
+    <Modal title={title} onClose={onClose} form maxWidth={480}>
+      <div className="fin-item">
+        <div className={`fin-item-head ${isIn ? "in" : "out"}`}>
+          <span className="fin-item-dir">{isIn ? "Money in" : "Money out"} · {item.category}</span>
+          <span className="fin-item-amt">{money(big, cur)}</span>
+          <span className={`fin-item-status${item.paid ? " paid" : item.overdue ? " overdue" : ""}`}>
+            {statusText}{partial ? ` · ${money(item.outstanding, cur)} left` : ""}
+          </span>
+        </div>
+
+        {rows.length > 0 && (
+          <table className="fin-item-tbl">
+            <tbody>
+              {rows.map(([k, v]) => (
+                <tr key={k}><th>{k}</th><td>{v}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        <div className="fin-item-acc">
+          <div className="fin-item-acc-h">
+            <span>{isIn ? "Customer pays to (our account)" : "Pay to"}</span>
+            {canEditAccount && !editing && (
+              <button className="btn xs" onClick={startEdit}>{acc ? "Edit" : "Add account"}</button>
+            )}
+          </div>
+          {editing ? (
+            <div className="fin-item-acc-form">
+              <label><span>Bank</span>
+                <input value={bank.bank_name} onChange={(e) => setBank({ ...bank, bank_name: e.target.value })} placeholder="e.g. 신한은행" /></label>
+              <label><span>Account No.</span>
+                <input value={bank.bank_account} onChange={(e) => setBank({ ...bank, bank_account: e.target.value })} placeholder="000-000-000000" /></label>
+              <label><span>Holder</span>
+                <input value={bank.bank_holder} onChange={(e) => setBank({ ...bank, bank_holder: e.target.value })} /></label>
+              {item.account_edit?.kind === "vendor" && (
+                <label><span>SWIFT</span>
+                  <input value={bank.swift} onChange={(e) => setBank({ ...bank, swift: e.target.value })} placeholder="for overseas transfer" /></label>
+              )}
+              <div className="hint-inline">
+                {item.account_edit?.kind === "vendor"
+                  ? `Saved on vendor “${item.account_edit.name}” — every bill from this vendor will show it.`
+                  : item.recurrence && item.recurrence !== "none"
+                    ? "Saved on this payment — all its recurring occurrences use it."
+                    : "Saved on this payment."}
+              </div>
+              <div className="fin-item-acc-btns">
+                <button className="btn sm" disabled={busy} onClick={() => setEditing(false)}>Cancel</button>
+                <button className="btn sm primary" disabled={busy} onClick={saveBank}>{busy ? "Saving…" : "Save"}</button>
+              </div>
+            </div>
+          ) : acc ? (
+            <>
+              <div className="fin-item-acc-body">
+                <div className="fin-item-bank">{acc.bank_name || "—"}</div>
+                <div className="fin-item-accno">
+                  <span>{acc.bank_account || "—"}</span>
+                  {acc.bank_account && (
+                    <button className="btn xs" onClick={() => copy(acc.bank_account, "acc")}>
+                      {copied === "acc" ? "Copied ✓" : "Copy"}
+                    </button>
+                  )}
+                </div>
+                {acc.bank_holder && <div className="fin-item-holder">Holder: {acc.bank_holder}</div>}
+                {acc.swift && <div className="fin-item-holder">SWIFT: {acc.swift}</div>}
+              </div>
+              <div className="fin-item-acc-src">{ACCOUNT_FROM[item.account_from] ?? ""}</div>
+            </>
+          ) : (
+            <div className="fin-item-acc-empty">
+              No account on file.{" "}
+              {isIn ? "Add our account in Settings › Company." : canEditAccount ? "Add it here so it is ready next time." : ""}
+            </div>
+          )}
+        </div>
+
+        {err && <div className="state error">{err}</div>}
+
+        {manualPayable && canEdit && (
+          <div className="fin-item-pay">
+            {item.paid ? (
+              <button className="btn sm" disabled={busy} onClick={() => setPaid(false)}>Undo payment</button>
+            ) : paying ? (
+              <>
+                <label className="form-field fin-item-paydate">
+                  <span>Payment date</span>
+                  <input type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
+                </label>
+                <button className="btn sm" disabled={busy} onClick={() => setPaying(false)}>Cancel</button>
+                <button className="btn sm primary" disabled={busy || !paidOn} onClick={() => setPaid(true)}>Mark paid</button>
+              </>
+            ) : (
+              <button className="btn sm primary" onClick={() => { setPaidOn(todayStr()); setPaying(true); }}>Mark paid…</button>
+            )}
+          </div>
+        )}
+        {(item.source === "ar" || item.source === "ap") && (
+          <div className="hint-inline">
+            {`${item.source === "ar" ? "Collections" : "Vendor payments"} are recorded on the project's stage 10.`}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
 }

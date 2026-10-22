@@ -182,6 +182,12 @@ class Vendor(Base):
     note           = Column(Text)
     payment_terms  = Column(String(200))  # 기본 결제조건(견적 작성 시 기본값으로 사용)
     logo           = Column(Text)          # 회사 로고 이미지(data URL, 캡쳐 붙여넣기)
+    # 대금을 보낼 계좌(회사 단위 — 같은 이름의 담당자 줄 전부에 같은 값). 매입 청구(AP)를
+    # 지급할 때 Finance 캘린더의 상세 창이 보여 주고, 그 창에서 고친다.
+    bank_name      = Column(String(120))
+    bank_account   = Column(String(120))
+    bank_holder    = Column(String(120))   # 예금주(회사명과 다를 수 있다)
+    bank_swift     = Column(String(40))    # 해외 송금용 SWIFT/BIC
     created_at     = Column(DateTime, default=datetime.utcnow)
 
 
@@ -942,6 +948,11 @@ class FinancePayable(Base):
     # 금액을 고르게 나눠 싣는다(비우면 청구일 한 달에 통째로 선다).
     accrual_from = Column(String(7))
     accrual_to   = Column(String(7))
+    # 이 지급을 보낼 계좌 — 임차료·급여·세금 가상계좌처럼 거래선 명부에 없는 수취인이
+    # 대부분이라 지급 건에 직접 둔다. 비어 있으면 연결 거래선(vendor_id)의 계좌를 쓴다.
+    bank_name    = Column(String(120))
+    bank_account = Column(String(120))
+    bank_holder  = Column(String(120))
     notes        = Column(Text)
     owner_id     = Column(Integer, ForeignKey("users.id"), nullable=True)  # 등록자
     created_at   = Column(DateTime, default=datetime.utcnow)

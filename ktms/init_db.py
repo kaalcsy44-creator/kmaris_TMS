@@ -75,6 +75,11 @@ _MIGRATIONS = {
         "bad_emails": "JSON",
     },
     "vendors": {
+        # 대금을 보낼 계좌(회사 단위) — 매입 청구(AP) 지급용. Finance 캘린더 상세 창에서 편집.
+        "bank_name": "VARCHAR(120)",
+        "bank_account": "VARCHAR(120)",
+        "bank_holder": "VARCHAR(120)",
+        "bank_swift": "VARCHAR(40)",
         "website": "VARCHAR(300)",
         "contact_phone": "VARCHAR(50)",
         "payment_terms": "VARCHAR(200)",
@@ -225,6 +230,10 @@ _MIGRATIONS = {
         "kind":            "VARCHAR(10) DEFAULT 'main'",
     },
     "finance_payables": {
+        # 이 지급을 보낼 계좌(수취인 은행·계좌·예금주) — Finance 캘린더 상세 창에서 편집.
+        "bank_name":       "VARCHAR(120)",
+        "bank_account":    "VARCHAR(120)",
+        "bank_holder":     "VARCHAR(120)",
         # 실제 납부일 {회차일: 납부일} — 예정일과 다른 날 납부한 경우를 남긴다.
         "payments":        "JSON",
         # 청구서·고지서 발행일(선택) — 벤더 청구서(ap_records.bill_date)와 같은 뜻.

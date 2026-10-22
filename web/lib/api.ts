@@ -976,6 +976,25 @@ export function payFinancePayable(
     paid_on: paidOn ?? null,
   });
 }
+// 캘린더 칸 하나의 상세 — source 는 이벤트의 source(수동 지급은 비어 있어 "payable").
+export function fetchFinanceCalendarItem(
+  source: string, refId: number, occurrence?: string | null,
+): Promise<import("./types").FinanceCalendarItem> {
+  const occ = occurrence ? `&occurrence=${encodeURIComponent(occurrence)}` : "";
+  return get(`/api/admin/finance/calendar/item?source=${encodeURIComponent(source)}&ref_id=${refId}${occ}`);
+}
+// 지급 건 하나의 수취 계좌 / 거래선 회사의 계좌(같은 이름의 담당자 줄 전부).
+export function saveFinancePayableBank(
+  id: number, bank: Omit<import("./types").BankAccount, "swift">,
+): Promise<{ ok: boolean }> {
+  return put(`/api/admin/finance/payables/${id}/bank`, bank);
+}
+export function saveVendorBank(
+  name: string, bank: import("./types").BankAccount,
+): Promise<{ ok: boolean; updated: number }> {
+  return put("/api/admin/finance/vendor-bank", { name, ...bank });
+}
+
 export function fetchFinanceCalendar(start: string, end: string): Promise<{ rows: FinanceCalendarEvent[]; start: string; end: string }> {
   return get<{ rows: FinanceCalendarEvent[]; start: string; end: string }>(
     `/api/admin/finance/calendar?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`

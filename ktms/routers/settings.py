@@ -386,7 +386,7 @@ def _new_contact_like(Model, template, src):
     저쪽 명부가 적어 둔 것을 따르고, 사람 값만 이쪽에서 가져간다."""
     obj = Model(name=template.name)
     for f in ("address", "website", "specialization", "note", "logo", "payment_terms",
-              "country"):
+              "country", "bank_name", "bank_account", "bank_holder", "bank_swift"):
         if hasattr(obj, f):
             setattr(obj, f, getattr(template, f, None) or "")
     for f in ("addresses", "category_ids", "maker_ids"):

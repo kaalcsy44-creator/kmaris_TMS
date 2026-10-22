@@ -2801,3 +2801,48 @@ export type NetTrend = {
   fields: string[];
   series: ({ month: string } & Record<string, number>)[];
 };
+
+// Finance › Calendar 칸 하나의 상세(+ 계좌). account 는 방향에 따라 다르다 —
+// 나가는 돈은 받는 쪽 계좌, 들어오는 돈은 우리 계좌(회사 프로필).
+export type BankAccount = { bank_name: string; bank_account: string; bank_holder: string; swift: string };
+export type FinanceCalendarItem = {
+  source: "ar" | "ap" | "payable" | "income";
+  ref_id: number;
+  occurrence: string;
+  direction: "in" | "out";
+  title: string;
+  category: string;
+  description: string;
+  currency: string;
+  invoice_amount: number;
+  paid_amount: number;
+  outstanding: number;
+  vat_amount?: number;
+  credit_amount?: number;
+  bank_fee?: number;
+  fx_rate?: number;
+  doc_label?: string;
+  doc_no?: string;
+  ci_no?: string;
+  customer_po?: string;
+  po_no?: string;
+  end_customer?: string;
+  tax_invoice_no?: string;
+  tax_received?: boolean;
+  bill_date?: string;
+  due_date: string;
+  paid: boolean;
+  paid_on: string;
+  overdue: boolean;
+  status?: string;
+  recurrence?: string;
+  recur_until?: string;
+  notes?: string;
+  rfq_id: number;
+  order_id: number;
+  po_id: number;
+  project_no: string;
+  account: BankAccount | null;
+  account_from: "" | "payable" | "vendor" | "consultant" | "company";
+  account_edit: { kind: "payable"; id: number } | { kind: "vendor"; name: string } | null;
+};
