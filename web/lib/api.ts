@@ -983,6 +983,10 @@ export function fetchFinanceCalendarItem(
   const occ = occurrence ? `&occurrence=${encodeURIComponent(occurrence)}` : "";
   return get(`/api/admin/finance/calendar/item?source=${encodeURIComponent(source)}&ref_id=${refId}${occ}`);
 }
+// 프로젝트 요약 — 고객·선박·견적·P/O·품목·거래선·청구/수금·마진을 한 번에.
+export function fetchProjectSummary(rfqId: number): Promise<import("./types").ProjectSummary> {
+  return get(`/api/admin/finance/project-summary/${rfqId}`);
+}
 // 지급 건 하나의 수취 계좌 / 거래선 회사의 계좌(같은 이름의 담당자 줄 전부).
 export function saveFinancePayableBank(
   id: number, bank: Omit<import("./types").BankAccount, "swift">,

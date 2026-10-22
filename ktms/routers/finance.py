@@ -2995,3 +2995,196 @@ def save_vendor_bank(body: VendorBankIn):
         return {"ok": True, "updated": len(rows)}
     finally:
         s.close()
+
+
+# ── 프로젝트 요약(Finance 상세 창의 "Summary") ──────────────────────────────
+# 돈 한 건을 보다가 "이게 무슨 딜이었지"를 단계 창으로 넘어가지 않고 한 장에서 읽게 한다:
+# 고객·선박·견적·고객 P/O·품목·거래선(물은 곳/견적 온 곳/발주·청구·지급)·청구와 수금·대략의 마진.
+# 새로 적는 값은 없다 — 이미 있는 레코드를 모아 보여 줄 뿐이다.
+from _core import (  # noqa: E402
+    Vessel as _Vessel, VendorRFQ as _VendorRFQ, VendorQuote as _VendorQuote,
+    _pipeline_stage, _status_label, _orders_for_rfq, _first_rfq_iso, _enum_val, _counted_rows,
+)
+
+
+def _summary_items(items) -> list[dict]:
+    out = []
+    for it in _counted_rows(items or []):
+        qty = it.get("qty", 1) or 1
+        unit = it.get("unit_price", it.get("price"))
+        amt = it.get("amount")
+        try:
+            unit = float(unit) if unit not in (None, "") else None
+            amt = float(amt) if amt not in (None, "") else (unit * float(qty) if unit is not None else None)
+        except (TypeError, ValueError):
+            unit, amt = None, None
+        out.append({
+            "description": it.get("description") or "", "part_no": it.get("part_no") or "",
+            "maker": it.get("maker") or "", "model": it.get("model") or it.get("type") or "",
+            "qty": qty, "unit": it.get("unit") or "", "unit_price": unit, "amount": amt,
+        })
+    return out
+
+
+def _user_label(u) -> str:
+    if not u:
+        return ""
+    return (getattr(u, "name", None) or getattr(u, "full_name", None)
+            or getattr(u, "username", None) or "")
+
+
+@app.get("/api/admin/finance/project-summary/{rfq_id}", dependencies=[Depends(require_token)])
+def finance_project_summary(rfq_id: int):
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="Project not found.")
+        today = date.today().isoformat()
+        cust = s.query(Customer).filter_by(id=rfq.customer_id).first() if rfq.customer_id else None
+        orders = _orders_for_rfq(s, rfq_id)
+        vid = rfq.vessel_id or next((o.vessel_id for o in orders if o.vessel_id), None)
+        vessel = s.query(_Vessel).filter_by(id=vid).first() if vid else None
+        pic = s.query(User).filter_by(id=rfq.created_by).first() if rfq.created_by else None
+        cid = getattr(rfq, "consultant_id", None)
+        consultant = s.query(Consultant).filter_by(id=cid).first() if cid else None
+        stage = _pipeline_stage(s, rfq_id)
+        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        fx_seen: dict = {}
+
+        # 견적 — 마지막으로 만든 것(보통 보낸 것)
+        qtns = s.query(Quotation).filter_by(rfq_id=rfq_id).order_by(Quotation.created_at.asc()).all()
+        q = qtns[-1] if qtns else None
+        quote = None
+        if q:
+            quote = {"no": q.qtn_no or "", "date": q.date or "", "sent": q.sent_date or "",
+                     "valid_until": q.valid_until or "", "currency": (q.currency or "USD").upper(),
+                     "total": round(_total_amount(q.items) * (1 - (q.discount_pct or 0) / 100.0), 2),
+                     "count": len(qtns)}
+
+        order_rows = []
+        for o in orders:
+            cur = (o.currency or (q.currency if q else "") or "USD").upper()
+            terms = o.terms or {}
+            order_rows.append({
+                "id": o.id, "po_no": o.po_no or "", "date": o.date or "", "currency": cur,
+                "amount": round(_total_amount(o.items), 2), "trade_type": o.trade_type or "",
+                "promised_delivery": o.promised_delivery or "", "delivered_date": o.delivered_date or "",
+                "incoterms": " ".join(x for x in (terms.get("incoterms") or "", terms.get("delivery_place") or "") if x),
+                "payment_terms": terms.get("payment_terms") or "",
+            })
+
+        # 품목 — 고객 P/O 가 있으면 그것, 없으면 견적, 그것도 없으면 RFQ
+        if orders and any(_counted_rows(o.items or []) for o in orders):
+            items = [x for o in orders for x in _summary_items(o.items)]
+            items_src, items_cur = "Customer P/O", order_rows[0]["currency"]
+        elif q and _counted_rows(q.items or []):
+            items, items_src, items_cur = _summary_items(q.items), "Quotation", quote["currency"]
+        else:
+            items, items_src, items_cur = _summary_items(rfq.items), "RFQ", ""
+
+        # 거래선 — 물은 곳 · 견적 온 곳 · 발주 · 청구/지급
+        vend: dict[int, dict] = {}
+
+        def vrow(vid_: int) -> dict:
+            return vend.setdefault(vid_, {"name": vendor_names.get(vid_, "—"), "asked": False,
+                                          "quoted": False, "quote_total": None,
+                                          "quote_currency": "", "pos": []})
+
+        for vr in s.query(_VendorRFQ).filter_by(rfq_id=rfq_id).all():
+            if not vr.vendor_id:
+                continue
+            row = vrow(vr.vendor_id)
+            row["asked"] = True
+            for vq in s.query(_VendorQuote).filter_by(vendor_rfq_id=vr.id).all():
+                row["quoted"] = True
+                tot = _items_cost_total(vq.items)
+                if tot:
+                    row["quote_total"], row["quote_currency"] = round(tot, 2), (vq.currency or "USD").upper()
+
+        order_ids = [o.id for o in orders]
+        aps = s.query(APRecord).filter(APRecord.order_id.in_(order_ids)).all() if order_ids else []
+        pos = s.query(PurchaseOrder).filter(PurchaseOrder.order_id.in_(order_ids)).all() if order_ids else []
+        cost_krw = 0.0
+        for po in pos:
+            row = vrow(po.vendor_id or 0)
+            cur = (po.currency or "KRW").upper()
+            amt = round(_total_amount(po.items), 2)
+            ap = next((a for a in aps if a.po_id == po.id), None)
+            row["pos"].append({
+                "po_no": po.po_no or "", "date": po.date or "", "currency": cur, "amount": amt,
+                "billed": round(ap.invoice_amount or 0, 2) if ap else 0.0,
+                "paid": round(ap.paid_amount or 0, 2) if ap else 0.0,
+                "bill_currency": (ap.currency or cur).upper() if ap else cur,
+                "tax_received": bool(ap.tax_received) if ap else False,
+            })
+            # 원가: 벤더 청구가 있으면 그 공급가액, 없으면 발주 금액
+            if ap and ap.invoice_amount:
+                r_ = float(ap.vat_rate if ap.vat_rate is not None else 0.1)
+                cost_krw += _krw_in((ap.invoice_amount or 0) / (1 + r_), ap.currency or cur,
+                                    (ap.bill_date or po.date or today)[:7], fx_seen)
+            else:
+                cost_krw += _krw_in(amt, cur, (po.date or today)[:7], fx_seen)
+        for a in aps:   # 발주 없이 선 추가 매입
+            if a.po_id:
+                continue
+            row = vrow(a.vendor_id or 0)
+            cur = (a.currency or "KRW").upper()
+            row["pos"].append({"po_no": "(extra)", "date": a.bill_date or "", "currency": cur,
+                               "amount": 0.0, "billed": round(a.invoice_amount or 0, 2),
+                               "paid": round(a.paid_amount or 0, 2), "bill_currency": cur,
+                               "tax_received": bool(a.tax_received)})
+            r_ = float(a.vat_rate if a.vat_rate is not None else 0.1)
+            cost_krw += _krw_in((a.invoice_amount or 0) / (1 + r_), cur, (a.bill_date or today)[:7], fx_seen)
+        vendors = sorted(vend.values(), key=lambda v: (not v["pos"], not v["quoted"], v["name"]))
+
+        # 청구·수금
+        ord_map = {o.id: o for o in orders}
+        ars = s.query(ARRecord).filter(ARRecord.order_id.in_(order_ids)).all() if order_ids else []
+        ar_rows, sales_krw = [], 0.0
+        for r in ars:
+            cur = (r.currency or "USD").upper()
+            left = round((r.invoice_amount or 0) - (r.paid_amount or 0) - (r.credit_amount or 0), 2)
+            ar_rows.append({"invoice_no": r.invoice_no or r.ci_no or "", "date": r.invoice_date or "",
+                            "currency": cur, "amount": round(r.invoice_amount or 0, 2),
+                            "paid": round(r.paid_amount or 0, 2), "outstanding": max(left, 0.0),
+                            "due": r.due_date or "", "paid_date": r.paid_date or "",
+                            "kind": r.kind or "main"})
+            pd = _ar_period_date(r) or today
+            sales_krw += _krw_in(_ar_supply(r, ord_map.get(r.order_id)), cur, pd[:7], fx_seen)
+        sales_basis = "Customer invoices (net of VAT)"
+        if not ars:
+            sales_basis = "Customer P/O"
+            for o in order_rows:
+                sales_krw += _krw_in(o["amount"], o["currency"], (o["date"] or today)[:7], fx_seen)
+            if not orders and quote:
+                sales_basis = "Quotation"
+                sales_krw = _krw_in(quote["total"], quote["currency"], (quote["date"] or today)[:7], fx_seen)
+        margin = sales_krw - cost_krw if (sales_krw and cost_krw) else None
+
+        return {
+            "rfq_id": rfq_id, "project_no": _project_no_map(s).get(rfq_id, ""),
+            "title": rfq.project_title or "",
+            "work_type": _enum_val(rfq.work_type) if rfq.work_type else "",
+            "stage": stage, "stage_label": _status_label(stage, rfq.work_type),
+            "closed": bool(rfq.closed_at), "closed_at": rfq.closed_at or "",
+            "received_at": _first_rfq_iso(rfq), "customer_rfq_no": rfq.customer_rfq_no or "",
+            "pic": _user_label(pic), "consultant": consultant.name if consultant else "",
+            "customer": {"name": cust.name if cust else "—",
+                         "contact": rfq.contact_person or ((cust.contact or "") if cust else ""),
+                         "email": (cust.email or "") if cust else "",
+                         "country": (cust.country or "") if cust else ""},
+            "vessel": ({"name": vessel.name or "", "imo": vessel.imo or "", "type": vessel.vessel_type or "",
+                        "flag": vessel.ais_flag or "", "hull_no": vessel.hull_no or "",
+                        "engine": vessel.engine_type or ""} if vessel else None),
+            "quote": quote, "orders": order_rows,
+            "items": items, "items_source": items_src, "items_currency": items_cur,
+            "vendors": vendors, "ar": ar_rows,
+            "money": {"sales_krw": round(sales_krw), "cost_krw": round(cost_krw),
+                      "margin_krw": round(margin) if margin is not None else None,
+                      "margin_pct": (round(margin / sales_krw * 100, 1)
+                                     if margin is not None and sales_krw else None),
+                      "sales_basis": sales_basis},
+        }
+    finally:
+        s.close()

@@ -19666,3 +19666,34 @@ select.compose-tpl-version {
 .fin-item-vat.none { color: #1d5fa8; }
 .fin-item-vat.unrecorded { color: #8a95a5; font-weight: 600; }
 .pane-tab-done { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #1d7a46; background: #e3f5ea; border: 1px solid #b8e2c8; vertical-align: 1px; }
+/* 프로젝트 요약 창 */
+.fin-item-proj { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.psum { display: flex; flex-direction: column; gap: 16px; font-size: 13px; color: #1f2b3d; width: 100%; }
+.psum h4 { margin: 0 0 6px; font-size: 12px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: #45526a; }
+.psum h4 small { font-weight: 600; text-transform: none; letter-spacing: 0; color: #8a95a5; margin-left: 6px; }
+.psum-band { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 10px 12px; border-radius: 10px; background: #eef4fc; color: #34445e; font-size: 12.5px; }
+.psum-stage { font-weight: 800; color: #fff; background: var(--blue, #1d5fa8); padding: 2px 10px; border-radius: 999px; }
+.psum-stage.closed { background: #8a95a5; }
+.psum-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.psum-kv { width: 100%; border-collapse: collapse; }
+.psum-kv th { text-align: left; font-weight: 600; color: #6b778a; width: 120px; padding: 4px 8px 4px 0; vertical-align: top; white-space: nowrap; }
+.psum-kv td { padding: 4px 0; border-bottom: 1px solid #eef1f5; }
+.psum-money { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 8px; }
+.psum-money > div { border: 1px solid var(--line-strong, #d6dde8); border-radius: 10px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; }
+.psum-money span { font-size: 11px; font-weight: 700; color: #6b778a; text-transform: uppercase; letter-spacing: 0.04em; }
+.psum-money b { font-size: 17px; color: #0b1d3a; }
+.psum-money small { font-size: 11px; color: #8a95a5; }
+.psum-money .neg b { color: #c0392b; }
+.psum-scroll { max-height: 260px; overflow: auto; }
+.psum-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.psum-table th { text-align: left; font-size: 11px; font-weight: 700; color: #6b778a; padding: 5px 8px; border-bottom: 1px solid var(--line-strong, #d6dde8); background: #f7f9fc; position: sticky; top: 0; }
+.psum-table td { padding: 5px 8px; border-bottom: 1px solid #eef1f5; vertical-align: top; }
+.psum-table .num { text-align: right; white-space: nowrap; }
+.psum-desc { white-space: pre-line; }
+.psum-muted { color: #8a95a5; }
+.psum-due { color: #b5651d; font-weight: 700; }
+.psum-none { color: #8a95a5; font-size: 12.5px; padding: 4px 0; }
+.psum-foot { margin: 0; font-size: 11px; color: #8a95a5; }
+@media (max-width: 640px) {
+  .psum-grid, .psum-money { grid-template-columns: 1fr; }
+}

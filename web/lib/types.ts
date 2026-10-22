@@ -2856,3 +2856,46 @@ export type FinanceCalendarItem = {
   account_from: "" | "payable" | "vendor" | "consultant" | "company";
   account_edit: { kind: "payable"; id: number } | { kind: "vendor"; name: string } | null;
 };
+
+/** 프로젝트 요약(GET /finance/project-summary/{rfq_id}) — Finance 상세 창의 Summary. */
+export type ProjectSummary = {
+  rfq_id: number;
+  project_no: string;
+  title: string;
+  work_type: string;
+  stage: number;
+  stage_label: string;
+  closed: boolean;
+  closed_at: string;
+  received_at: string;
+  customer_rfq_no: string;
+  pic: string;
+  consultant: string;
+  customer: { name: string; contact: string; email: string; country: string };
+  vessel: { name: string; imo: string; type: string; flag: string; hull_no: string; engine: string } | null;
+  quote: { no: string; date: string; sent: string; valid_until: string; currency: string; total: number; count: number } | null;
+  orders: {
+    id: number; po_no: string; date: string; currency: string; amount: number; trade_type: string;
+    promised_delivery: string; delivered_date: string; incoterms: string; payment_terms: string;
+  }[];
+  items: {
+    description: string; part_no: string; maker: string; model: string;
+    qty: number; unit: string; unit_price: number | null; amount: number | null;
+  }[];
+  items_source: string;
+  items_currency: string;
+  vendors: {
+    name: string; asked: boolean; quoted: boolean; quote_total: number | null; quote_currency: string;
+    pos: {
+      po_no: string; date: string; currency: string; amount: number;
+      billed: number; paid: number; bill_currency: string; tax_received: boolean;
+    }[];
+  }[];
+  ar: {
+    invoice_no: string; date: string; currency: string; amount: number; paid: number;
+    outstanding: number; due: string; paid_date: string; kind: string;
+  }[];
+  money: {
+    sales_krw: number; cost_krw: number; margin_krw: number | null; margin_pct: number | null; sales_basis: string;
+  };
+};

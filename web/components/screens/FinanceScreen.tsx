@@ -49,6 +49,7 @@ import type {
 } from "@/lib/types";
 import { can } from "@/lib/auth";
 import Modal from "@/components/common/Modal";
+import ProjectSummaryModal from "@/components/common/ProjectSummaryModal";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import { HeadTh, useHeadMenu, type HeadCol } from "@/components/common/tableHeadMenu";
 import { amountInputValue, parseAmountInput } from "@/components/common/itemTable";
@@ -3493,6 +3494,8 @@ function CalendarItemModal({ ev, onClose, onChanged }: {
   // 메시지 글 — 카톡·메일로 그대로 보내는 요약. 열면 글이 만들어지고, 보내기 전 손볼 수 있다.
   const [msgLang, setMsgLang] = useState<MsgLang | null>(null);
   const [msgText, setMsgText] = useState("");
+  // 프로젝트 요약 창 — 단계 창으로 가는 링크는 그대로 두고, 그 옆 단추로 이 딜의 요약을 겹쳐 연다.
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const canEdit = can("finance", "edit");
 
   const load = () =>
@@ -3582,8 +3585,13 @@ function CalendarItemModal({ ev, onClose, onChanged }: {
     add("Tax invoice", item.tax_received ? `Received${item.tax_invoice_no ? ` · ${item.tax_invoice_no}` : ""}` : "Not yet");
   if (item.rfq_id || item.order_id)
     add("Project", (
-      <ProjectDocLink rfqId={item.rfq_id} orderId={item.order_id} apPoId={item.po_id || undefined}
-        stage={10} label={item.project_no || "Open project"} />
+      <span className="fin-item-proj">
+        <ProjectDocLink rfqId={item.rfq_id} orderId={item.order_id} apPoId={item.po_id || undefined}
+          stage={10} label={item.project_no || "Open project"} />
+        {item.rfq_id ? (
+          <button type="button" className="btn sm" onClick={() => setSummaryOpen(true)}>Summary</button>
+        ) : null}
+      </span>
     ));
   add("Notes", item.notes);
 
@@ -3600,6 +3608,7 @@ function CalendarItemModal({ ev, onClose, onChanged }: {
   };
 
   return (
+    <>
     <Modal title={title} onClose={onClose} form maxWidth={480}>
       <div className="fin-item">
         <div className={`fin-item-head ${isIn ? "in" : "out"}`}>
@@ -3735,5 +3744,9 @@ function CalendarItemModal({ ev, onClose, onChanged }: {
         )}
       </div>
     </Modal>
+    {summaryOpen && item.rfq_id ? (
+      <ProjectSummaryModal rfqId={item.rfq_id} onClose={() => setSummaryOpen(false)} />
+    ) : null}
+    </>
   );
 }

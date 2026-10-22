@@ -28,12 +28,17 @@ export default function Modal({
   children: React.ReactNode;
 }) {
   const backdropMouseDown = useRef(false);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const resize = useResizable();
 
   useEffect(() => {
     if (inline) return; // 임베드 모드에선 ESC 닫기 비활성(닫을 오버레이가 없음)
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      // 창 위에 창이 겹쳐 떴을 때(상세 창 → 프로젝트 요약) ESC 는 맨 위 창 하나만 닫는다.
+      const all = document.querySelectorAll(".pl-modal-backdrop");
+      if (all.length > 1 && all[all.length - 1] !== backdropRef.current) return;
+      onClose();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -58,6 +63,7 @@ export default function Modal({
 
   return (
     <div
+      ref={backdropRef}
       className="pl-modal-backdrop"
       onMouseDown={onBackdropMouseDown}
       onClick={onBackdropClick}
