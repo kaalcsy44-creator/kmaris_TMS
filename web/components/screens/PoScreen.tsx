@@ -3,7 +3,7 @@
 import AmountInput from "@/components/common/AmountInput";
 import { filenameFromDisposition } from "@/lib/download";
 import DecimalsSelect from "@/components/common/DecimalsSelect";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { useResizable } from "@/lib/useResizable";
@@ -1020,6 +1020,7 @@ function PoDocFields({
   vendorId,
   onVendorId,
   vendorChoices,
+  quotedFrom,
   poNoField,
   date,
   onDate,
@@ -1035,6 +1036,8 @@ function PoDocFields({
   vendorId: number | "";
   onVendorId: (id: number | "") => void;
   vendorChoices: VendorOption[];
+  /** 이 프로젝트에서 받은 공급사 견적 — Supplier 목록을 견적 준 업체로 좁힌다. */
+  quotedFrom?: VendorQuoteForImport[];
   // K-Maris PO No. 칸 — 신규(자동채번 토글)와 편집(직접 입력)의 생김새가 달라 주입받는다.
   poNoField: React.ReactNode;
   date: string;
@@ -1049,6 +1052,24 @@ function PoDocFields({
   projectTitle?: string;
 }) {
   const vendor = vendorChoices.find((v) => v.id === vendorId);
+  // Supplier 목록 — 발주는 견적을 준 업체에 내는 것이라 그 업체들만 보인다(같은 회사의
+  // 담당자 레코드가 여럿이면 견적을 보낸 사람 하나). 받은 견적이 없거나 예외로 다른 업체에
+  // 내야 하면 "All vendors" 로 전체를 연다. 이미 고른 업체는 목록 밖이어도 남긴다.
+  const [showAllVendors, setShowAllVendors] = useState(false);
+  const quotedChoices = useMemo(() => {
+    const key = (n?: string) => (n || "").trim().toLowerCase();
+    const byCompany = new Map<string, VendorOption>();
+    for (const q of quotedFrom || []) {
+      const v =
+        vendorChoices.find((x) => q.vendor_id != null && x.id === q.vendor_id) ||
+        vendorChoices.find((x) => key(x.name) === key(q.vendor));
+      if (v && !byCompany.has(key(v.name))) byCompany.set(key(v.name), v);
+    }
+    const out = [...byCompany.values()];
+    if (vendor && !out.some((v) => v.id === vendor.id)) out.push(vendor);
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }, [quotedFrom, vendorChoices, vendor]);
+  const limitToQuoted = !showAllVendors && quotedChoices.length > 0;
   const set = (patch: Partial<QuotationTerms>) => onTerms({ ...terms, ...patch });
 
   // 같은 회사 = 같은 이름의 벤더 레코드(레코드 1건 = 담당자 1명). 그 담당자들의
@@ -1164,8 +1185,25 @@ function PoDocFields({
       <div className="form-section-title">2. Supplier information</div>
       <div className="form-grid">
         <div className="form-field">
-          <label>Supplier</label>
-          <VendorSelect value={vendorId} options={vendorChoices} onChange={changeVendor} />
+          <label>
+            Supplier
+            {quotedChoices.length > 0 ? (
+              <button
+                type="button"
+                className="po-vendor-scope"
+                onClick={() => setShowAllVendors((v) => !v)}
+                title={limitToQuoted ? "Pick a vendor that did not quote on this project" : "Back to vendors that quoted"}
+              >
+                {limitToQuoted ? "All vendors" : "Quoted only"}
+              </button>
+            ) : null}
+          </label>
+          <VendorSelect
+            value={vendorId}
+            options={limitToQuoted ? quotedChoices : vendorChoices}
+            onChange={changeVendor}
+            placeholder={limitToQuoted ? "Select a quoted vendor…" : "Select…"}
+          />
         </div>
         <div className="form-field">
           <label>Contact</label>
@@ -1230,7 +1268,8 @@ function VendorPoDetailModal({
   // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다.
   const { editing: canWriteNow, readMode, fieldsetProps } = useEditGate(canEditThis);
 
-  // Vendor 드롭다운은 모든 벤더를 노출(견적 제출 벤더로 제한하지 않음).
+  // 벤더 전체 — 담당자 칸이 같은 회사 레코드를 찾는 데 쓴다. Supplier 목록 자체는
+  // PoDocFields 가 받은 견적(quotedFrom)의 업체로 좁힌다.
   const vendorChoices = options.vendors;
 
   useEffect(() => {
@@ -1335,6 +1374,7 @@ function VendorPoDetailModal({
             vendorId={vendorId}
             onVendorId={setVendorId}
             vendorChoices={vendorChoices}
+            quotedFrom={vendorQuotes}
             poNoField={
               <div className="form-field">
                 <label>K-Maris PO No.</label>
@@ -1827,7 +1867,8 @@ function VendorPoCreate({
   const [tab, setTab] = useState<DetailTab>("edit");
 
   const order = options.orders.find((o) => o.id === orderId);
-  // Vendor 드롭다운은 모든 벤더를 노출(견적 제출 벤더로 제한하지 않음).
+  // 벤더 전체 — 담당자 칸이 같은 회사 레코드를 찾는 데 쓴다. Supplier 목록 자체는
+  // PoDocFields 가 받은 견적(quotedFrom)의 업체로 좁힌다.
   const vendorChoices = options.vendors;
 
   // 상단 P/O 선택기에서 대상 오더가 바뀌면 폼도 그 오더로 맞춘다.
@@ -1931,6 +1972,7 @@ function VendorPoCreate({
         vendorId={vendorId}
         onVendorId={setVendorId}
         vendorChoices={vendorChoices}
+        quotedFrom={vendorQuotes}
         poNoField={
           <div className="form-field">
             <label>K-Maris PO No.</label>

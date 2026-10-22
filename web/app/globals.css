@@ -19697,3 +19697,16 @@ select.compose-tpl-version {
 @media (max-width: 640px) {
   .psum-grid, .psum-money { grid-template-columns: 1fr; }
 }
+
+/* P/O Supplier 라벨 옆 — 견적 준 업체만 / 전체 벤더 전환. */
+.po-vendor-scope {
+  margin-left: 8px;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--blue);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+}
