@@ -30,7 +30,7 @@ export const DEFAULT_TERMS = {
   incoterms: "EXW (Ex Works)",
   delivery_place: "Busan, Republic of Korea",
   payment_terms: "100% T/T in advance",
-  warranty: "6 months from delivery",
+  warranty: "6 months from the date of delivery",
 } satisfies QuotationTerms;
 
 // 저장된 terms 에 기본값을 채워 반환한다. 이미 값이 있는 필드는 그대로 두고,
@@ -64,8 +64,16 @@ export const TERM_PRESETS = {
   payment_terms: PAYMENT_TERMS_PRESETS,
   packing: ["Standard export packing", "Seaworthy export packing", "Wooden case packing"],
   delivery_place: ["Busan, Republic of Korea", "Incheon, Republic of Korea", "named port of destination"],
-  warranty: ["Manufacturer's standard warranty", "12 months from delivery", "6 months from delivery", "No warranty"],
+  warranty: ["Manufacturer's standard warranty", "12 months from the date of delivery", "6 months from the date of delivery", "No warranty"],
 } as const;
+
+// 보증 문장 — "Warranty: 6 months from the date of delivery." 옛 견적에 저장된
+// "N months from delivery" 도 같은 문구로 찍는다(서버 _warranty_clause 와 짝).
+function warrantyClause(w?: string): string {
+  const v = (w || "6 months from the date of delivery").trim()
+    .replace(/from delivery/i, "from the date of delivery").replace(/\.$/, "");
+  return /^no warranty$/i.test(v) ? "No warranty." : `Warranty: ${v}.`;
+}
 
 // 견적서(QUOTATION / COSTING SHEET) 하단에 찍히는 표준 Terms & Conditions 문장.
 // 서버의 quotation_clause_catalog(ktms/services/kmaris_docs.py)와 id·문구가 짝이다 —
@@ -111,7 +119,7 @@ export const QUOTATION_CLAUSES: readonly {
   { id: "buyer_check", text: () => "Buyer to confirm part number, description, quantity, equipment model, and technical suitability before order." },
   { id: "certificates", text: () => "Certificates are excluded unless specifically stated." },
   { id: "cancellation", text: () => "Cancellation or return may not be accepted after order confirmation, especially for specially ordered or non-stock items." },
-  { id: "warranty", text: (t) => `Warranty follows ${t.warranty || "6 months from delivery"}.` },
+  { id: "warranty", text: (t) => warrantyClause(t.warranty) },
   { id: "complete_order", text: () => "Unit prices are based on the complete order quantity and may be subject to change for partial orders." },
 ];
 

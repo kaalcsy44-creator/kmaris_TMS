@@ -2097,6 +2097,14 @@ def quotation_validity_text(valid_until: str = "", quote_date: str = "", default
     return f"Quotation validity: {default_days} days from quotation date."
 
 
+def _warranty_clause(w: str) -> str:
+    """보증 문장 — "Warranty: 6 months from the date of delivery." 옛 견적에 저장된
+    "N months from delivery" 도 같은 문구로 찍는다(웹 terms.ts warrantyClause 와 짝)."""
+    v = re.sub(r"from delivery", "from the date of delivery", (w or "").strip(),
+               flags=re.I).rstrip(".")
+    return "No warranty." if v.lower() == "no warranty" else f"Warranty: {v}."
+
+
 def quotation_clause_catalog(terms: Dict[str, Any], validity_days: int = 30,
                              valid_until: str = "", quote_date: str = "") -> List[tuple]:
     """QUOTATION / COSTING SHEET 표준 Terms & Conditions 문장 목록 [(id, 문장)].
@@ -2107,7 +2115,7 @@ def quotation_clause_catalog(terms: Dict[str, Any], validity_days: int = 30,
     거래조건 필드(Incoterms·결제·보증)는 문장에 그때그때 끼워 넣어 항상 최신값으로 찍힌다."""
     incoterms = terms.get("incoterms") or "EXW (Ex Works)"
     place = terms.get("delivery_place") or "Busan, Republic of Korea"
-    warranty = terms.get("warranty") or "6 months from delivery"
+    warranty = terms.get("warranty") or "6 months from the date of delivery"
     return [
         ("validity", quotation_validity_text(valid_until, quote_date, validity_days)),
         ("confirmation", "Price, availability, and delivery time are subject to final confirmation upon order placement."),
@@ -2118,7 +2126,7 @@ def quotation_clause_catalog(terms: Dict[str, Any], validity_days: int = 30,
         ("buyer_check", "Buyer to confirm part number, description, quantity, equipment model, and technical suitability before order."),
         ("certificates", "Certificates are excluded unless specifically stated."),
         ("cancellation", "Cancellation or return may not be accepted after order confirmation, especially for specially ordered or non-stock items."),
-        ("warranty", f"Warranty follows {warranty}."),
+        ("warranty", _warranty_clause(warranty)),
         ("complete_order", "Unit prices are based on the complete order quantity and may be subject to change for partial orders."),
     ]
 
