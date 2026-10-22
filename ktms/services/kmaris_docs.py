@@ -647,7 +647,7 @@ def _totals_table(data: Dict[str, Any], doc_type: str | None = None):
     if base.get("discount_pct"):
         rows.append(
             [
-                _p(f"Discount ({_num(base['discount_pct']):g}%)", s["base"]),
+                _p(f"Discount ({round(_num(base['discount_pct']), 2):g}%)", s["base"]),
                 _p(f"-{_money(discount, currency)}", s["right"]),
             ]
         )
@@ -2306,7 +2306,7 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     disc_rows: List[int] = []
     if discount_pct:
         disc, final = quotation_discount(total, discount_pct)
-        for label, amt in ((f"Discount ({discount_pct:g}%)", f"-{_qnum(disc, dec)}"),
+        for label, amt in ((f"Discount ({round(discount_pct, 2):g}%)", f"-{_qnum(disc, dec)}"),
                            ("Final Total", _qnum(final, dec))):
             disc_rows.append(len(rows))
             rows.append([

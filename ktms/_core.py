@@ -2689,7 +2689,7 @@ def _quotation_total(items, discount_pct: float = 0.0) -> float:
         disc = float(discount_pct or 0)
     except (TypeError, ValueError):
         disc = 0.0
-    return amt * (1 - disc / 100.0)
+    return round(amt * (1 - disc / 100.0), 2)
 
 
 def _same_person(a: str, b: str) -> bool:

@@ -1039,7 +1039,7 @@ def make_document_xlsx(
     trow = HROW + len(items) + 1
     lines = [("Subtotal", totals.get("subtotal", 0))]
     if totals.get("discount_pct"):
-        lines.append((f"Discount ({_num(totals['discount_pct']):g}%)", -totals.get("discount", 0)))
+        lines.append((f"Discount ({round(_num(totals['discount_pct']), 2):g}%)", -totals.get("discount", 0)))
     lines.append(("VAT", totals.get("vat", 0)))
     lines.append(("Total", totals.get("total", 0)))
     for i, (lab, val) in enumerate(lines):
@@ -1406,7 +1406,7 @@ def make_quotation_costing_xlsx(
     discount_pct = _num(data.get("discount_pct", 0))
     if discount_pct:
         tot_row = trow
-        for label, val in ((f"Discount ({discount_pct:g}%)", f"=-ROUND(J{tot_row}*{discount_pct!r}/100,0)"),
+        for label, val in ((f"Discount ({round(discount_pct, 2):g}%)", f"=-ROUND(J{tot_row}*{discount_pct!r}/100,0)"),
                            ("Final Total", f"=J{tot_row}+J{tot_row + 1}")):
             trow += 1
             merge(trow, 1, trow, 5)
