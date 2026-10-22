@@ -1546,7 +1546,7 @@ def make_purchase_order_xlsx(
     bdr = Border(top=thin, bottom=thin, left=thin, right=thin)
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
     left = Alignment(horizontal="left", vertical="center", wrap_text=True)
-    left_top = Alignment(horizontal="left", vertical="top", wrap_text=True)
+    # 세로는 모든 칸 가운데 — 여러 줄 칸(주소·Description)과 한 줄 칸이 한 행에서 높이가 맞게.
     right = Alignment(horizontal="right", vertical="center")
 
     # PDF 품목표와 같은 열 구성(Origin 열 없음 — 미리보기와 동일).
@@ -1613,8 +1613,8 @@ def make_purchase_order_xlsx(
 
     logo = _find_asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg")
     if logo:
-        # 로고 상자 = A·B 열 폭 × 1~3행 높이(58pt ≈ 77px).
-        add_image_fit(logo, "A1", 130, 74)
+        # 로고는 B 열 안(폭 15 ≈ 110px) × 1~3행 높이(58pt ≈ 77px) — 회사명(C~G) 바로 왼쪽.
+        add_image_fit(logo, "B1", 108, 74)
     GRAYTX = "404040"
     addr = company.get("address_en") or company.get("address") or ""
     bits = []
@@ -1635,7 +1635,7 @@ def make_purchase_order_xlsx(
     merge(1, 8, 3, NCOL)
     put(1, 8, (company.get("tagline", "") or "").replace(". ", ".\n", 1),
         font=Font(name="Calibri", italic=True, size=9, color="0055A8"),
-        align=Alignment(horizontal="right", vertical="center", wrap_text=True))
+        align=Alignment(horizontal="left", vertical="center", wrap_text=True))
     for row, height in ((1, 30), (2, 14), (3, 14), (4, 6)):
         ws.row_dimensions[row].height = height
     for col in range(1, NCOL + 1):
@@ -1682,7 +1682,7 @@ def make_purchase_order_xlsx(
         ):
             merge(r, c1, r, c2)
             put(r, c1, value, fill=gray if is_label else None,
-                font=boldsm if is_label else normal, align=left if is_label else left_top)
+                font=boldsm if is_label else normal, align=left)
         box(r, 1, r, NCOL)
         # 주소처럼 긴 값은 여러 줄로 접히므로 행 높이를 내용 길이에 맞춘다(최대 3줄).
         lines = max(1, -(-len(str(left_rows[i][1] or "")) // 44), -(-len(str(right_rows[i][1] or "")) // 44))
@@ -1713,7 +1713,7 @@ def make_purchase_order_xlsx(
             elif ci in (1, 5):                      # No. · Unit
                 cell.alignment = center
             else:
-                cell.alignment = left_top
+                cell.alignment = left
         desc = str(it.get("description", "") or "")
         dl = sum(max(1, -(-len(x) // 33)) for x in desc.split("\n")) if desc else 1
         ll = sum(max(1, -(-len(x) // 12)) for x in lead.split("\n")) if lead else 1
@@ -1774,7 +1774,8 @@ def make_purchase_order_xlsx(
     # ── 합계 문장(우측 정렬) ────────────────────────────────────────────
     r = trow + 1
     merge(r, 1, r, NCOL)
-    put(r, 1, f"Total: {_money(total, currency, po_dec)}", font=bold, align=right)
+    # 발주 금액은 공급가(부가세 별도) — 공급사가 VAT 포함으로 읽지 않게 못박는다.
+    put(r, 1, f"Total: {_money(total, currency, po_dec)} (VAT Excluded)", font=bold, align=right)
     ws.row_dimensions[r].height = 18
 
     def section_bar(row, title):
