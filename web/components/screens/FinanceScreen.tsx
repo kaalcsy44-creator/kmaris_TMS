@@ -3414,6 +3414,58 @@ const ACCOUNT_FROM: Record<string, string> = {
 };
 const RECUR_LABEL: Record<string, string> = { monthly: "Monthly", quarterly: "Quarterly", yearly: "Yearly" };
 
+// 상세 창 내용을 메시지 글로 — 지급 요청(나가는 돈)·입금 안내(들어오는 돈)·완료 알림.
+// 창에 보이는 값만 쓴다(새로 묻지 않는다). 빈 칸은 줄째 뺀다.
+type MsgLang = "ko" | "en";
+function calendarItemMessage(item: FinanceCalendarItem, lang: MsgLang): string {
+  const ko = lang === "ko";
+  const isIn = item.direction === "in";
+  const cur = item.currency;
+  const head = isIn
+    ? (item.paid ? (ko ? "입금 확인" : "Payment received") : (ko ? "입금 안내" : "Payment due"))
+    : (item.paid ? (ko ? "지급 완료" : "Payment made") : (ko ? "지급 요청" : "Payment request"));
+  const amount = item.paid ? item.invoice_amount : (item.outstanding || item.invoice_amount);
+  const L = (k: string, e: string) => (ko ? k : e);
+  const lines: string[] = [`[${head}] ${item.title}`];
+  const add = (label: string, v?: string | number | null) => {
+    if (v !== undefined && v !== null && v !== "" && v !== 0) lines.push(`${label}: ${v}`);
+  };
+  add(L("금액", "Amount"), money(amount, cur));
+  if (item.paid_amount > 0 && item.outstanding > 0)
+    add(L("청구 / 기지급", "Billed / paid"), `${money(item.invoice_amount, cur)} / ${money(item.paid_amount, cur)}`);
+  if (item.paid) add(isIn ? L("입금일", "Received on") : L("지급일", "Paid on"), item.paid_on);
+  else add(isIn ? L("입금 예정일", "Due date") : L("지급 예정일", "Due date"),
+    `${item.due_date}${item.overdue ? L(" (기한 지남)", " (overdue)") : ""}`);
+  const KO_CAT: Record<string, string> = { "Vendor bill (AP)": "매입 대금(AP)", "Sales (AR)": "매출 대금(AR)" };
+  add(L("구분", "Type"), ko ? (KO_CAT[item.category] ?? item.category) : item.category);
+  add(L("내역", "Description"), item.description);
+  add(item.doc_label === "Invoice No." ? L("인보이스 번호", "Invoice No.") : L("청구서 번호", "Bill No."), item.doc_no);
+  if (item.ci_no && item.ci_no !== item.doc_no) add("CI No.", item.ci_no);
+  add(L("고객 P/O", "Customer P/O"), item.customer_po);
+  add(L("발주 번호", "Vendor P/O"), item.po_no);
+  add(L("고객", "Customer"), item.end_customer && item.end_customer !== "—" ? item.end_customer : "");
+  add(isIn ? L("청구일", "Invoice date") : L("청구일", "Bill date"), item.bill_date);
+  add(L("부가세 포함", "VAT included"), item.vat_amount ? money(item.vat_amount, cur) : "");
+  if (item.source === "ap")
+    add(L("세금계산서", "Tax invoice"), item.tax_received
+      ? `${L("수취", "Received")}${item.tax_invoice_no ? ` (${item.tax_invoice_no})` : ""}`
+      : L("미수취", "Not yet received"));
+  add(L("프로젝트", "Project"), item.project_no);
+  const a = item.account;
+  if (a && (a.bank_account || a.bank_name)) {
+    lines.push("");
+    lines.push(isIn ? L("입금 계좌", "Pay to (our account)") : L("입금 계좌", "Pay to"));
+    lines.push([a.bank_name, a.bank_account].filter(Boolean).join(" "));
+    if (a.bank_holder) lines.push(`${L("예금주", "Holder")}: ${a.bank_holder}`);
+    if (a.swift) lines.push(`SWIFT: ${a.swift}`);
+  }
+  if (item.notes) {
+    lines.push("");
+    lines.push(`${L("메모", "Note")}: ${item.notes}`);
+  }
+  return lines.join("\n");
+}
+
 function CalendarItemModal({ ev, onClose, onChanged }: {
   ev: FinanceCalendarEvent; onClose: () => void; onChanged: () => void;
 }) {
@@ -3427,6 +3479,9 @@ function CalendarItemModal({ ev, onClose, onChanged }: {
   const [paidOn, setPaidOn] = useState(todayStr());
   const [paying, setPaying] = useState(false);
   const [copied, setCopied] = useState("");
+  // 메시지 글 — 카톡·메일로 그대로 보내는 요약. 열면 글이 만들어지고, 보내기 전 손볼 수 있다.
+  const [msgLang, setMsgLang] = useState<MsgLang | null>(null);
+  const [msgText, setMsgText] = useState("");
   const canEdit = can("finance", "edit");
 
   const load = () =>
@@ -3525,6 +3580,10 @@ function CalendarItemModal({ ev, onClose, onChanged }: {
   const acc = item.account;
   const canEditAccount = canEdit && !!item.account_edit;
   const manualPayable = item.source === "payable";
+  const openMessage = (lang: MsgLang) => {
+    setMsgLang(lang);
+    setMsgText(calendarItemMessage(item, lang));
+  };
 
   return (
     <Modal title={title} onClose={onClose} form maxWidth={480}>
@@ -3623,6 +3682,33 @@ function CalendarItemModal({ ev, onClose, onChanged }: {
             )}
           </div>
         )}
+        {msgLang ? (
+          <div className="fin-item-msg">
+            <div className="fin-item-msg-h">
+              <span>Message text</span>
+              <span className="fin-item-msg-lang">
+                {(["ko", "en"] as MsgLang[]).map((l) => (
+                  <button key={l} className={msgLang === l ? "on" : ""} onClick={() => openMessage(l)}>
+                    {l === "ko" ? "한글" : "English"}
+                  </button>
+                ))}
+              </span>
+            </div>
+            <textarea value={msgText} onChange={(e) => setMsgText(e.target.value)}
+              rows={Math.min(14, msgText.split("\n").length + 1)} spellCheck={false} />
+            <div className="fin-item-acc-btns">
+              <button className="btn sm" onClick={() => setMsgLang(null)}>Close</button>
+              <button className="btn sm primary" onClick={() => copy(msgText, "msg")}>
+                {copied === "msg" ? "Copied ✓" : "Copy text"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="fin-item-msg-open">
+            <button className="btn sm" onClick={() => openMessage("ko")}>✉ Message text</button>
+          </div>
+        )}
+
         {(item.source === "ar" || item.source === "ap") && (
           <div className="hint-inline">
             {`${item.source === "ar" ? "Collections" : "Vendor payments"} are recorded on the project's stage 10.`}

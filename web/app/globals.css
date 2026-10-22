@@ -19654,3 +19654,10 @@ select.compose-tpl-version {
 .fin-item-acc-btns { display: flex; justify-content: flex-end; gap: 6px; }
 .fin-item-pay { display: flex; align-items: flex-end; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
 .fin-item-paydate { margin: 0 auto 0 0; }
+.fin-item-msg-open { display: flex; justify-content: flex-start; }
+.fin-item-msg { border: 1px solid var(--line-strong); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.fin-item-msg-h { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-weight: 800; color: #45526a; letter-spacing: 0.04em; text-transform: uppercase; }
+.fin-item-msg-lang { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; text-transform: none; letter-spacing: 0; }
+.fin-item-msg-lang button { border: 0; background: #fff; font-size: 11.5px; padding: 3px 10px; cursor: pointer; color: #34445e; font-weight: 600; }
+.fin-item-msg-lang button.on { background: var(--blue); color: #fff; }
+.fin-item-msg textarea { width: 100%; resize: vertical; font: inherit; font-size: 12.5px; line-height: 1.55; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: #fafcff; }
