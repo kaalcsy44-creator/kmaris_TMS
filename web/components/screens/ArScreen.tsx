@@ -225,6 +225,13 @@ export function ArOverview({
   const match = addingAr ? undefined : orderArs.find((r) => r.id === selArId) ?? orderArs[0];
   // 화면의 다른 곳(클레임·담당자 판정)은 본 청구서를 기준으로 삼는다.
   const mainAr = orderArs.find((r) => (r.kind ?? "main") !== "extra") ?? orderArs[0];
+  // 탭에 붙는 완료 표시 — 이 단계는 AR·AP 둘 다 끝나야 완료라, 어느 쪽이 끝났는지 탭에서 바로 읽게.
+  // AR = 이 오더의 청구서 전부가 (9) 세금계산서 발행 / (10) 수금 완료. AP 판정은 ApGate 와 같다.
+  const arDone = orderArs.length > 0 && orderArs.every((r) => (stageTab === 9 ? r.tax_issued : r.paid_done));
+  const apTotal = mainAr?.ap_total ?? 0;
+  const apDone = apTotal > 0 && (stageTab === 9
+    ? Math.min(mainAr?.ap_billed ?? 0, mainAr?.ap_tax ?? 0)
+    : mainAr?.ap_paid ?? 0) >= apTotal;
   // 9·10단계 모두 같은 대금청구서 편집기(ArAddForm)를 본문으로 쓴다 — P/O 간·단계 간 화면 일관성.
   // 레코드가 없으면 생성 폼, 있으면 편집 폼. 그 아래 9단계는 세금계산서 발행, 10단계는 수금
   // 완료 바(MilestoneBar)를 덧붙인다.
@@ -234,9 +241,11 @@ export function ArOverview({
       <div className="pane-tabs" role="tablist" aria-label="Receivable / Payable">
         <button className={docTab === "ar" ? "on" : ""} onClick={() => setDocTab("ar")}>
           Receivable · Customer (AR)
+          {arDone ? <span className="pane-tab-done" title={stageTab === 9 ? "Tax invoice issued" : "Payment received"}>✓ Done</span> : null}
         </button>
         <button className={docTab === "ap" ? "on" : ""} onClick={() => setDocTab("ap")}>
           Payable · Vendor (AP)
+          {apDone ? <span className="pane-tab-done" title={stageTab === 9 ? "Vendor bills + tax invoices received" : "Vendors paid"}>✓ Done</span> : null}
         </button>
         {/* 납품 후 클레임 — 파이프라인 단계가 아니라 딜에 딸린 예외 기록이라 여기 탭으로 둔다.
             상계할 청구서와 고객이 이미 이 화면의 맥락에 있어, 크레딧 노트를 여기서 끊는다. */}
