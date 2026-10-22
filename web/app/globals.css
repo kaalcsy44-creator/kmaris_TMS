@@ -11251,10 +11251,12 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   .pl-resize-h {
     display: none;
   }
-  /* 헤더 3줄 배치 — 위에서부터
-       1) Work/Overview · PIC · Close deal · ✕  (order:-1 로 맨 위로 끌어올린다)
-       2) ‹ › + 프로젝트 번호·업무유형          (방향 버튼이 번호 왼쪽에 붙는다)
+  /* 헤더 배치 — 위에서부터
+       1) Work/Overview · PIC · Close deal        (order:-2 로 맨 위로 끌어올린다)
+       2) ‹ › + 프로젝트 번호·업무유형 … ✕       (✕ 는 번호 줄 오른쪽 끝)
        3) 제목·선박명                            (2)줄에서 넘친 만큼 이어서 접힘)
+     예전엔 ✕ 까지 1)줄에 두었더니 폭이 모자라 ✕ 혼자 한 줄을 차지했다.
+     우측 묶음을 display:contents 로 풀어 ✕ 만 제목 뒤(DOM 순서)에 남긴다.
      DOM 순서(‹› → 제목 → 우측컨트롤)는 그대로 두고 flex order 로만 바꾼다. */
   .pl-modal-head {
     flex-wrap: wrap;
@@ -11264,10 +11266,26 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
     align-items: flex-start;
   }
   .pl-head-right {
+    display: contents;
+  }
+  .pl-head-right > :not(.pl-modal-close) {
+    order: -2;
+    align-self: center;
+  }
+  /* 1)줄 컨트롤은 오른쪽으로 모은다. */
+  .pl-head-right > :first-child {
+    margin-left: auto;
+  }
+  /* 1)줄과 2)줄 사이 강제 줄바꿈. */
+  .pl-modal-head::before {
+    content: "";
     order: -1;
-    flex: 1 1 100%;
-    justify-content: flex-end;
-    flex-wrap: wrap;
+    flex: 0 0 100%;
+    height: 0;
+    margin-top: -8px;
+  }
+  .pl-modal-head .pl-modal-close {
+    margin-left: 4px;
   }
   /* 번호와 같은 줄에 남도록 100% 를 풀고 남는 폭을 나눠 갖는다. */
   .pl-modal-head .intl-title {
