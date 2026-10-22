@@ -2733,3 +2733,60 @@ export type MailSyncResult = {
     { scanned?: number; stored?: number; skipped?: number; dup?: number; pending?: number; error?: string }
   >;
 };
+
+// ── Partners › Network (관계망) ─────────────────────────────────────────────
+export type NetHealth = "green" | "amber" | "red" | "early" | "idle";
+
+export type NetCustomer = {
+  id: string; kind: "customer"; name: string;
+  inquiries: number; won: number; lost: number; conv: number | null;
+  orders: number; revenue_usd: number;
+  mail_in: number; mail_out: number; mail: number;
+  last_contact: string; idle_days: number | null;
+  health: NetHealth; flags: string[]; cooling: boolean;
+  lost_reasons: Record<string, number>; top_lost_reason: string;
+  makers: Record<string, number>;
+};
+
+export type NetVendor = {
+  id: string; kind: "vendor"; name: string;
+  asked: number; answered: number; reply_rate: number | null; avg_reply_days: number | null;
+  pos: number; po_usd: number;
+  mail_in: number; mail_out: number; mail: number;
+  last_contact: string; idle_days: number | null;
+  health: NetHealth; flags: string[];
+  makers: string[];
+};
+
+export type NetMaker = {
+  id: string; kind: "maker"; name: string; registered: boolean;
+  demand: number; customers: string[]; suppliers: number; responders: number;
+  health: NetHealth; flags: string[];
+};
+
+export type NetIssue = {
+  node: string; kind: "customer" | "vendor" | "maker"; type: string; severity: number; name: string;
+  inquiries?: number; won?: number; reason?: string; idle_days?: number; last_contact?: string;
+  asked?: number; answered?: number; avg_reply_days?: number | null;
+  demand?: number; suppliers?: number; customers?: number;
+};
+
+export type PartnerNetwork = {
+  months: number; cutoff: string; today: string; fx: number;
+  thresholds: {
+    cooling_days: number; min_inq: number; low_conv: number; min_ask: number;
+    low_reply: number; mid_reply: number; slow_reply_days: number; min_demand: number;
+  };
+  kpi: {
+    customers_total: number; customers_active: number; inquiries: number; won: number; conv: number | null;
+    vendors_total: number; vendors_active: number; asked: number; answered: number;
+    reply_rate: number | null; avg_reply_days: number | null;
+    makers_demanded: number; makers_covered: number; makers_multi: number; coverage: number | null;
+    unregistered_makers: number; revenue_usd: number; top3_share: number | null;
+  };
+  customers: NetCustomer[];
+  vendors: NetVendor[];
+  makers: NetMaker[];
+  vendor_maker: { source: string; target: string; capable: boolean; asked: number; answered: number }[];
+  issues: NetIssue[];
+};

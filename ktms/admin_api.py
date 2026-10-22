@@ -23,4 +23,5 @@ from routers import (  # noqa: F401  (import side effect: registers routes)
     marketing,
     settings,
     notifications,
+    network,
 )

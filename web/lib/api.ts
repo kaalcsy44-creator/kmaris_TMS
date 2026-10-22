@@ -501,6 +501,11 @@ export function fetchDashboard(): Promise<DashboardData> {
   return get<DashboardData>("/api/admin/dashboard");
 }
 
+// Partners › Network — 고객·K-MARIS·거래선·메이커 관계망과 취약 신호.
+export function fetchPartnerNetwork(months = 12): Promise<import("./types").PartnerNetwork> {
+  return get(`/api/admin/partners/network?months=${months}`);
+}
+
 export function fetchStatistics(months = 12): Promise<StatisticsData> {
   return get<StatisticsData>(`/api/admin/statistics?months=${months}`);
 }

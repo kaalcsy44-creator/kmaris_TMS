@@ -1043,6 +1043,8 @@ export function MakersTab() {
   const catText = useCategoryText();
   const catNames = useCategoryNames();
   const [company, setCompany] = useState<CompanyNavCtx<SettingsMaker> | null>(null);
+  // ?company=<회사명> — 목록이 처음 불려 오면 그 회사 창을 연다(Network 탭 등에서 옴).
+  const deepCompany = useRef(useSearchParams().get("company") ?? "");
   const [reloadKey, setReloadKey] = useState(0);
   // 마지막으로 저장한 회사명 — 새 목록에서 열려 있는 창의 회사를 되찾는 열쇠다.
   // 이름째 바꿔 저장하면 창이 든 사진의 이름은 이미 옛것이라 그것으로는 못 찾는다.
@@ -1139,10 +1141,16 @@ export function MakersTab() {
         // 저장 뒤 새로 불려 온 목록을 열려 있는 창에 그대로 건넨다 — 안 그러면 창은
         // 열 때 찍은 사진을 계속 들고 있어, 옆 회사에 갔다 오는 순간 저장 전 값이
         // 되돌아온다(그 상태로 다시 저장하면 방금 적은 것이 진짜로 지워진다).
-        onRowsSync: (find) =>
+        onRowsSync: (find) => {
+          if (deepCompany.current) {
+            const hit = find(deepCompany.current);
+            deepCompany.current = "";
+            if (hit) { setCompany(hit); return; }
+          }
           setCompany((cur) => (cur
             ? find(savedName.current || cur.groups[cur.index]?.[0]?.name || "") ?? cur
-            : cur)),
+            : cur));
+        },
         newRow: (rs) => withCompanyDefaults(EMPTY_MAKER, rs, rs[0].name),
         summary: (g, n) => `${g} makers · ${n} contacts`,
       }}
@@ -1286,6 +1294,8 @@ export function CustomersTab() {
   const [company, setCompany] = useState<
     CompanyNavCtx<SettingsCustomer> | null
   >(null);
+  // ?company=<회사명> — 목록이 처음 불려 오면 그 회사 창을 연다(Network 탭 등에서 옴).
+  const deepCompany = useRef(useSearchParams().get("company") ?? "");
   const [reloadKey, setReloadKey] = useState(0);
   // 마지막으로 저장한 회사명 — 새 목록에서 열려 있는 창의 회사를 되찾는 열쇠다.
   // 이름째 바꿔 저장하면 창이 든 사진의 이름은 이미 옛것이라 그것으로는 못 찾는다.
@@ -1368,10 +1378,16 @@ export function CustomersTab() {
         // 저장 뒤 새로 불려 온 목록을 열려 있는 창에 그대로 건넨다 — 안 그러면 창은
         // 열 때 찍은 사진을 계속 들고 있어, 옆 회사에 갔다 오는 순간 저장 전 값이
         // 되돌아온다(그 상태로 다시 저장하면 방금 적은 것이 진짜로 지워진다).
-        onRowsSync: (find) =>
+        onRowsSync: (find) => {
+          if (deepCompany.current) {
+            const hit = find(deepCompany.current);
+            deepCompany.current = "";
+            if (hit) { setCompany(hit); return; }
+          }
           setCompany((cur) => (cur
             ? find(savedName.current || cur.groups[cur.index]?.[0]?.name || "") ?? cur
-            : cur)),
+            : cur));
+        },
         newRow: (rs) => withCompanyDefaults(EMPTY_CUSTOMER, rs, rs[0].name),
         summary: (g, n) => `${g} companies · ${n} contacts`,
       }}

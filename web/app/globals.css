@@ -19532,3 +19532,80 @@ select.compose-tpl-version {
 /* 선박 선택 아래의 제재 경고 — 한 행 전체를 쓰는 짧은 띠. */
 .vs-warn-row { grid-column: 1 / -1; }
 .vs-warn-row .vs-warn { margin: 0; }
+
+/* ── Partners › Network (관계망) ──────────────────────────────────────── */
+.net-screen { padding-top: 4px; }
+.net-kpis { grid-template-columns: repeat(5, minmax(170px, 1fr)); margin-bottom: 12px; }
+@media (max-width: 1100px) { .net-kpis { grid-template-columns: repeat(2, 1fr); } }
+.net-kpi-amber { border-left-color: #e08a00; }
+.net-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px;
+}
+.net-seg {
+  display: inline-flex; align-items: center; background: #fff; border: 1px solid var(--line-strong);
+  border-radius: 8px; padding: 2px; gap: 2px;
+}
+.net-seg-lbl { font-size: 11px; color: var(--muted); padding: 0 6px 0 6px; font-weight: 600; }
+.net-seg button {
+  border: 0; background: transparent; font-size: 12px; padding: 5px 10px; border-radius: 6px;
+  color: #34445e; cursor: pointer; font-weight: 600;
+}
+.net-seg button:hover { background: var(--hover); }
+.net-seg button.on { background: var(--blue); color: #fff; }
+.net-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #34445e; cursor: pointer; }
+.net-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-left: auto; font-size: 11px; color: #45526a; }
+.net-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.net-legend i { display: inline-block; width: 16px; height: 4px; border-radius: 2px; }
+.net-legend i.dash { height: 0; border-top: 2px dashed #8aa0bd; }
+.net-body { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+@media (max-width: 1200px) { .net-body { grid-template-columns: 1fr; } }
+.net-graph { overflow-x: auto; padding: 14px 16px 10px; }
+.net-svg { display: block; user-select: none; }
+.net-col { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; fill: #45526a; }
+.net-col tspan { fill: var(--muted); font-weight: 600; }
+.net-node { cursor: pointer; transition: opacity 0.15s; }
+.net-box { fill: #fff; stroke: var(--line-strong); stroke-width: 1; }
+.net-node:hover .net-box { stroke: var(--blue); fill: var(--hover); }
+.net-node.on .net-box { stroke: var(--blue); stroke-width: 2; fill: var(--sel); }
+.net-name { font-size: 12px; fill: var(--ink); font-weight: 600; }
+.net-val { font-size: 11px; fill: #45526a; font-variant-numeric: tabular-nums; }
+.net-svg path { transition: opacity 0.15s; }
+.net-hub rect { fill: var(--navy); }
+.net-hub { cursor: pointer; }
+.net-hub-t { fill: #fff; font-size: 14px; font-weight: 800; letter-spacing: 0.04em; }
+.net-hub-s { fill: #b9c7dc; font-size: 10px; }
+.net-more { cursor: pointer; }
+.net-more rect { fill: var(--zebra); stroke: var(--line-strong); stroke-dasharray: 3 2; }
+.net-more text { font-size: 11px; fill: var(--blue); font-weight: 700; }
+.net-more:hover rect { fill: var(--hover); }
+.net-foot { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+.net-side { position: sticky; top: 76px; max-height: calc(100vh - 100px); overflow-y: auto; padding: 14px 16px; }
+.net-side-h { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; color: var(--navy); margin-bottom: 8px; }
+.net-count { background: #fde8e8; color: #b42318; border-radius: 10px; padding: 1px 8px; font-size: 11px; }
+.net-empty { font-size: 12px; color: var(--muted); padding: 10px 0; }
+.net-issues { list-style: none; margin: 0; padding: 0; }
+.net-issues li {
+  display: flex; gap: 9px; padding: 9px 6px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: 6px;
+}
+.net-issues li:hover { background: var(--hover); }
+.net-dot { flex: 0 0 9px; width: 9px; height: 9px; border-radius: 50%; margin-top: 4px; }
+.net-i-name { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.net-kind { font-size: 10px; font-weight: 600; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+.net-i-what { font-size: 12px; color: #34445e; margin-top: 2px; }
+.net-i-todo { font-size: 11.5px; color: var(--blue); margin-top: 2px; font-weight: 600; }
+.net-all { margin-top: 8px; width: 100%; }
+.net-x { margin-left: auto; border: 0; background: transparent; font-size: 20px; line-height: 1; color: var(--muted); cursor: pointer; }
+.net-x:hover { color: var(--ink); }
+.net-d-sub { font-size: 11.5px; color: var(--muted); margin: -4px 0 10px 17px; }
+.net-d-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.net-d-tbl th { text-align: left; font-weight: 600; color: #45526a; padding: 4px 0; width: 46%; }
+.net-d-tbl td { text-align: right; padding: 4px 0; font-variant-numeric: tabular-nums; color: var(--ink); }
+.net-d-tbl tr + tr { border-top: 1px solid var(--line); }
+.net-flags { margin: 10px 0 0; padding: 8px 10px 8px 26px; background: #fff7e8; border: 1px solid #f6dfb1; border-radius: 8px; font-size: 12px; color: #7a4a00; }
+.net-d-block { margin-top: 12px; }
+.net-d-h { font-size: 11px; font-weight: 800; color: #45526a; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 5px; }
+.net-d-line { font-size: 12px; color: #34445e; padding: 2px 0; }
+.net-d-line.warn { color: #b42318; }
+.net-d-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.net-d-tags span { font-size: 11px; background: var(--zebra); border: 1px solid var(--line-strong); border-radius: 10px; padding: 1px 8px; }
+.net-d-actions { display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
