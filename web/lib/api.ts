@@ -506,6 +506,25 @@ export function fetchPartnerNetwork(months = 12): Promise<import("./types").Part
   return get(`/api/admin/partners/network?months=${months}`);
 }
 
+// 관계망 노드 하나의 월별 추이(상세 패널 그래프).
+export function fetchNetworkTrend(node: string, months = 12): Promise<import("./types").NetTrend> {
+  return get(`/api/admin/partners/network/trend?node=${encodeURIComponent(node)}&months=${months}`);
+}
+
+// 관계망 판정 기준값 — 조회/저장. 빈 객체를 저장하면 기본값으로 돌아간다.
+export function fetchNetworkThresholds(): Promise<{
+  values: import("./types").NetThresholds;
+  defaults: import("./types").NetThresholds;
+  ranges: Record<string, [number, number]>;
+}> {
+  return get("/api/admin/partners/network/thresholds");
+}
+export function saveNetworkThresholds(
+  values: Partial<import("./types").NetThresholds>,
+): Promise<{ values: import("./types").NetThresholds }> {
+  return put("/api/admin/partners/network/thresholds", values);
+}
+
 export function fetchStatistics(months = 12): Promise<StatisticsData> {
   return get<StatisticsData>(`/api/admin/statistics?months=${months}`);
 }

@@ -2773,10 +2773,8 @@ export type NetIssue = {
 
 export type PartnerNetwork = {
   months: number; cutoff: string; today: string; fx: number;
-  thresholds: {
-    cooling_days: number; min_inq: number; low_conv: number; min_ask: number;
-    low_reply: number; mid_reply: number; slow_reply_days: number; min_demand: number;
-  };
+  thresholds: NetThresholds;
+  threshold_defaults: NetThresholds;
   kpi: {
     customers_total: number; customers_active: number; inquiries: number; won: number; conv: number | null;
     vendors_total: number; vendors_active: number; asked: number; answered: number;
@@ -2789,4 +2787,17 @@ export type PartnerNetwork = {
   makers: NetMaker[];
   vendor_maker: { source: string; target: string; capable: boolean; asked: number; answered: number }[];
   issues: NetIssue[];
+};
+
+export type NetThresholds = {
+  cooling_days: number; min_inq: number; low_conv: number; min_ask: number;
+  low_reply: number; mid_reply: number; slow_reply_days: number;
+  no_po_after_quotes: number; min_demand: number;
+};
+
+export type NetTrend = {
+  node: string;
+  kind: "customer" | "vendor" | "maker";
+  fields: string[];
+  series: ({ month: string } & Record<string, number>)[];
 };

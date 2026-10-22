@@ -14,13 +14,20 @@
 // 함께 꺼내 세운다. 오른쪽 패널은 고른 것이 없으면 '개선 필요' 목록, 고르면 상세다.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchPartnerNetwork, closeReasonLabel } from "@/lib/api";
-import { useCachedData } from "@/lib/useCachedData";
+import {
+  ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
+} from "recharts";
+import {
+  fetchPartnerNetwork, fetchNetworkTrend, saveNetworkThresholds, closeReasonLabel,
+} from "@/lib/api";
+import { can } from "@/lib/auth";
+import { invalidateCache, useCachedData } from "@/lib/useCachedData";
 import type {
   NetCustomer,
   NetHealth,
   NetIssue,
   NetMaker,
+  NetThresholds,
   NetVendor,
   PartnerNetwork,
 } from "@/lib/types";
@@ -124,7 +131,8 @@ export default function PartnerNetworkScreen() {
   const [sel, setSel] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const [showAllIssues, setShowAllIssues] = useState(false);
-  const { data, error, loading } = useCachedData<PartnerNetwork>(
+  const [editTh, setEditTh] = useState(false);
+  const { data, error, loading, refresh } = useCachedData<PartnerNetwork>(
     `partners:network:${months}`,
     () => fetchPartnerNetwork(months),
     60_000,
@@ -320,6 +328,9 @@ export default function PartnerNetworkScreen() {
           <input type="checkbox" checked={weakOnly} onChange={(e) => setWeakOnly(e.target.checked)} />
           Weak spots only
         </label>
+        <button className="btn sm" onClick={() => setEditTh(true)} title="Rules that decide green / amber / red">
+          ⚙ Thresholds
+        </button>
         <div className="net-legend">
           {(["green", "amber", "red", "early"] as NetHealth[]).map((h) => (
             <span key={h}><i style={{ background: HEALTH_COLOR[h] }} />{HEALTH_LABEL[h]}</span>
@@ -403,7 +414,7 @@ export default function PartnerNetworkScreen() {
         {/* 오른쪽 패널 */}
         <aside className="panel net-side">
           {selNode ? (
-            <NodeDetail n={selNode} data={data} onClose={() => setSel(null)} />
+            <NodeDetail n={selNode} data={data} months={months} onClose={() => setSel(null)} />
           ) : (
             <>
               <div className="net-side-h">
@@ -437,6 +448,18 @@ export default function PartnerNetworkScreen() {
           )}
         </aside>
       </div>
+      {editTh && (
+        <ThresholdDialog
+          values={data.thresholds}
+          defaults={data.threshold_defaults}
+          onClose={() => setEditTh(false)}
+          onSaved={() => {
+            invalidateCache("partners:");
+            refresh();
+            setEditTh(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -466,7 +489,9 @@ const FLAG_TEXT: Record<string, string> = {
   no_response: "Suppliers exist but none quoted back",
 };
 
-function NodeDetail({ n, data, onClose }: { n: Node; data: PartnerNetwork; onClose: () => void }) {
+function NodeDetail({ n, data, months, onClose }: {
+  n: Node; data: PartnerNetwork; months: number; onClose: () => void;
+}) {
   const rows: [string, string][] = [];
   if (n.kind === "customer") {
     rows.push(
@@ -518,6 +543,7 @@ function NodeDetail({ n, data, onClose }: { n: Node; data: PartnerNetwork; onClo
           ))}
         </tbody>
       </table>
+      <TrendChart node={n.id} kind={n.kind} months={months} />
       {n.flags.length > 0 && (
         <ul className="net-flags">
           {n.flags.map((f) => <li key={f}>{FLAG_TEXT[f] ?? f}</li>)}
@@ -554,6 +580,187 @@ function NodeDetail({ n, data, onClose }: { n: Node; data: PartnerNetwork; onClo
         {n.kind === "maker" && (
           <a className="btn sm" href="/partners?side=vendors">Find vendors</a>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── 월별 추이(상세 패널) ───────────────────────────────────────────────────
+// 막대 = 이 관계의 주 흐름(문의·수주 / 물음·회신·발주 / 요청·RFQ·회신), 점선 = 메일 왕래.
+// 그래프 밑 한 줄은 '최근 3개월 vs 그 앞 3개월' — 관계가 데워지는지 식는지를 숫자로 말한다.
+const TREND_SPEC: Record<Node["kind"], { bars: [string, string, string][]; line?: [string, string] }> = {
+  customer: {
+    bars: [["inquiries", "Inquiries", "#8aa0bd"], ["won", "Won", "#16a34a"]],
+    line: ["mail", "Mail"],
+  },
+  vendor: {
+    bars: [["asked", "Asked", "#8aa0bd"], ["answered", "Quoted back", "#16a34a"], ["pos", "P/Os", "#0b1d3a"]],
+    line: ["mail", "Mail"],
+  },
+  maker: {
+    bars: [["demand", "Requested", "#e08a00"], ["asked", "Vendor RFQs", "#8aa0bd"], ["quoted", "Quoted back", "#16a34a"]],
+  },
+};
+
+function TrendChart({ node, kind, months }: { node: string; kind: Node["kind"]; months: number }) {
+  // 3개월 창은 막대 셋이라 추이가 안 보인다 — 최소 6개월, 최대 24개월로 그린다.
+  const span = Math.max(6, Math.min(months, 24));
+  const { data, error } = useCachedData(
+    `partners:trend:${node}:${span}`,
+    () => fetchNetworkTrend(node, span),
+    60_000,
+  );
+  const spec = TREND_SPEC[kind];
+  const rows = useMemo(
+    () => (data?.series ?? []).map((r) => ({
+      ...r,
+      label: r.month.slice(2).replace("-", "."),
+      mail: (r.mail_in ?? 0) + (r.mail_out ?? 0),
+    })),
+    [data],
+  );
+  if (error) return <div className="net-trend net-empty">Trend unavailable.</div>;
+  if (!data) return <div className="net-trend net-empty">Loading trend…</div>;
+
+  const main = spec.bars[0];
+  const total = (list: typeof rows) =>
+    list.reduce((a, r) => a + (Number((r as Record<string, unknown>)[main[0]]) || 0), 0);
+  const recent3 = total(rows.slice(-3));
+  const prior3 = total(rows.slice(-6, -3));
+  const dir = recent3 > prior3 ? "up" : recent3 < prior3 ? "down" : "flat";
+
+  return (
+    <div className="net-trend">
+      <div className="net-d-h">Monthly trend · last {span} mo</div>
+      <ResponsiveContainer width="100%" height={150}>
+        <ComposedChart data={rows} margin={{ top: 6, right: 4, bottom: 0, left: -22 }}>
+          <CartesianGrid stroke="#eef2f7" vertical={false} />
+          <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#8a95a5" }} tickLine={false} axisLine={false}
+            interval={span > 12 ? 2 : 1} />
+          <YAxis yAxisId="l" allowDecimals={false} tick={{ fontSize: 10, fill: "#8a95a5" }} tickLine={false} axisLine={false} />
+          {spec.line && <YAxis yAxisId="r" orientation="right" hide />}
+          <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} labelFormatter={(l) => `20${String(l).replace(".", "-")}`} />
+          <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+          {spec.bars.map(([k, name, color]) => (
+            <Bar key={k} yAxisId="l" dataKey={k} name={name} fill={color} radius={[2, 2, 0, 0]} maxBarSize={10} />
+          ))}
+          {spec.line && (
+            <Line yAxisId="r" dataKey={spec.line[0]} name={spec.line[1]} stroke="#0055a8" strokeWidth={1.5}
+              strokeDasharray="4 3" dot={false} />
+          )}
+        </ComposedChart>
+      </ResponsiveContainer>
+      <div className={`net-trend-cmp ${dir}`}>
+        {main[1]}: last 3 mo <b>{recent3}</b> vs prior 3 mo <b>{prior3}</b>{" "}
+        {dir === "up" ? "▲" : dir === "down" ? "▼" : "—"}
+      </div>
+    </div>
+  );
+}
+
+// ── 판정 기준값 설정 ────────────────────────────────────────────────────────
+// 서버(network.py DEFAULT_THRESHOLDS)가 같은 키와 허용 범위를 가진다 — 저장값은 서버가 범위로 자른다.
+const TH_FIELDS: { group: string; key: keyof NetThresholds; label: string; unit: "d" | "%" | "n" }[] = [
+  { group: "All partners", key: "cooling_days", label: "Cooling after no contact for", unit: "d" },
+  { group: "Customer", key: "min_inq", label: "Judge conversion once inquiries reach", unit: "n" },
+  { group: "Customer", key: "low_conv", label: "Low conversion below", unit: "%" },
+  { group: "Vendor", key: "min_ask", label: "Judge quote-back once projects asked reach", unit: "n" },
+  { group: "Vendor", key: "low_reply", label: "Weak (red) quote-back below", unit: "%" },
+  { group: "Vendor", key: "mid_reply", label: "Needs attention (amber) below", unit: "%" },
+  { group: "Vendor", key: "slow_reply_days", label: "Slow reply when average exceeds", unit: "d" },
+  { group: "Vendor", key: "no_po_after_quotes", label: "Flag \u2018no P/O\u2019 after quotes received", unit: "n" },
+  { group: "Maker", key: "min_demand", label: "Flag supply gaps once requested in", unit: "n" },
+];
+const UNIT_TEXT = { d: "days", "%": "%", n: "" } as const;
+
+function toForm(v: NetThresholds): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const f of TH_FIELDS) {
+    const x = v[f.key];
+    out[f.key] = f.unit === "%" ? String(Math.round(x * 1000) / 10) : String(x);
+  }
+  return out;
+}
+
+function ThresholdDialog({ values, defaults, onClose, onSaved }: {
+  values: NetThresholds; defaults: NetThresholds; onClose: () => void; onSaved: () => void;
+}) {
+  const editable = can("settings", "edit");
+  const [form, setForm] = useState<Record<string, string>>(() => toForm(values));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const defForm = toForm(defaults);
+
+  async function save(reset: boolean) {
+    setBusy(true);
+    setErr("");
+    try {
+      const body: Partial<NetThresholds> = {};
+      if (!reset) {
+        for (const f of TH_FIELDS) {
+          const raw = (form[f.key] ?? "").trim();
+          if (raw === "") continue;
+          const n = Number(raw);
+          if (!Number.isFinite(n)) throw new Error(`${f.label}: not a number`);
+          body[f.key] = f.unit === "%" ? n / 100 : n;
+        }
+      }
+      await saveNetworkThresholds(body);
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  let lastGroup = "";
+  return (
+    <div className="close-reason-backdrop" role="presentation"
+      onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
+      <div className="close-reason-modal net-th-modal" role="dialog" aria-modal="true" aria-label="Network thresholds"
+        onMouseDown={(e) => e.stopPropagation()}>
+        <div className="close-reason-title">Thresholds</div>
+        <div className="net-th-sub">
+          Rules that colour the network green / amber / red and fill &ldquo;Needs improvement&rdquo;. Shared by everyone.
+        </div>
+        <div className="net-th-grid">
+          {TH_FIELDS.map((f) => {
+            const head = f.group !== lastGroup ? f.group : "";
+            lastGroup = f.group;
+            const changed = form[f.key] !== defForm[f.key];
+            return (
+              <div key={f.key}>
+                {head && <div className="net-th-group">{head}</div>}
+                <label className="net-th-row">
+                  <span>{f.label}</span>
+                  <span className="net-th-in">
+                    <input type="number" step={f.key === "slow_reply_days" ? 0.5 : 1}
+                      value={form[f.key] ?? ""} disabled={!editable || busy}
+                      className={changed ? "changed" : ""}
+                      onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))} />
+                    <em>{UNIT_TEXT[f.unit]}</em>
+                  </span>
+                  <small>default {defForm[f.key]}{f.unit === "%" ? "%" : ""}</small>
+                </label>
+              </div>
+            );
+          })}
+        </div>
+        {!editable && <div className="net-th-note">You can view these rules; changing them needs Settings edit permission.</div>}
+        {err && <div className="net-th-err">{err}</div>}
+        <div className="net-th-foot">
+          {editable && (
+            <button className="btn sm" disabled={busy} onClick={() => save(true)}>Reset to defaults</button>
+          )}
+          <span style={{ flex: 1 }} />
+          <button className="btn sm" disabled={busy} onClick={onClose}>Cancel</button>
+          {editable && (
+            <button className="btn sm primary" disabled={busy} onClick={() => save(false)}>
+              {busy ? "Saving…" : "Save"}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

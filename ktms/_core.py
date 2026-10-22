@@ -543,6 +543,9 @@ def _route_module(path: str) -> str | None:
         return "marketing"
     if path.startswith("/api/admin/settings"):
         return "settings"
+    # Partners › Network — 상대처 명부와 같은 권한(조회는 아래에서 열람 검사 제외, 기준값 저장은 settings edit).
+    if path.startswith("/api/admin/partners"):
+        return "settings"
     return None
 
 

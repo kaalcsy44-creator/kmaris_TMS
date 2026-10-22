@@ -21,6 +21,9 @@ from datetime import date as _date, datetime as _dt, timedelta as _td
 
 from sqlalchemy import func
 
+from fastapi import Body, HTTPException
+
+from db.models import AppSetting
 from _core import (
     Customer,
     Depends,
@@ -45,15 +48,49 @@ from _core import (
 )
 
 # ── 판정 임계값 ──────────────────────────────────────────────────────────────
-COOLING_DAYS = 90          # 마지막 접촉 후 이만큼 지나면 '식어 가는 관계'
-MIN_INQ_FOR_JUDGE = 3      # 고객: 문의가 이만큼은 돼야 전환율로 판정한다(적으면 '이르다')
-LOW_CONV = 0.15            # 고객: 문의→수주 이 아래면 저조
-MIN_ASK_FOR_JUDGE = 3      # 거래선: 물어본 프로젝트가 이만큼은 돼야 회신률로 판정
-LOW_REPLY = 0.4            # 거래선: 회신률 이 아래면 빨강
-MID_REPLY = 0.7            # 거래선: 회신률 이 아래면 주황
-SLOW_REPLY_DAYS = 5.0      # 거래선: 평균 회신 일수가 이보다 길면 주황
-NO_PO_AFTER_QUOTES = 3     # 거래선: 견적은 이만큼 받았는데 발주 0 → 가격 경쟁력 확인
-MIN_DEMAND = 2             # 메이커: 이만큼 찾았어야 공급 공백을 문제 삼는다
+# 기본값이다. 화면(Network › Thresholds)에서 바꾸면 app_settings 의 THRESHOLD_KEY 에
+# 저장되고, 집계는 매번 기본값 위에 저장값을 덮어 쓴다(빠진 키는 기본값 그대로).
+THRESHOLD_KEY = "partner_network_thresholds"
+DEFAULT_THRESHOLDS = {
+    "cooling_days": 90,        # 마지막 접촉 후 이만큼 지나면 '식어 가는 관계'
+    "min_inq": 3,              # 고객: 문의가 이만큼은 돼야 전환율로 판정한다(적으면 '이르다')
+    "low_conv": 0.15,          # 고객: 문의→수주 이 아래면 저조
+    "min_ask": 3,              # 거래선: 물어본 프로젝트가 이만큼은 돼야 회신률로 판정
+    "low_reply": 0.4,          # 거래선: 회신률 이 아래면 빨강
+    "mid_reply": 0.7,          # 거래선: 회신률 이 아래면 주황
+    "slow_reply_days": 5.0,    # 거래선: 평균 회신 일수가 이보다 길면 주황
+    "no_po_after_quotes": 3,   # 거래선: 견적은 이만큼 받았는데 발주 0 → 가격 경쟁력 확인
+    "min_demand": 2,           # 메이커: 이만큼 찾았어야 공급 공백을 문제 삼는다
+}
+# 받아 줄 수 있는 범위(min, max) — 엉뚱한 값(음수·100% 초과)이 판정을 망가뜨리지 않게.
+_THRESHOLD_RANGE = {
+    "cooling_days": (7, 730), "min_inq": (1, 50), "low_conv": (0.0, 1.0),
+    "min_ask": (1, 50), "low_reply": (0.0, 1.0), "mid_reply": (0.0, 1.0),
+    "slow_reply_days": (0.5, 60.0), "no_po_after_quotes": (1, 50), "min_demand": (1, 50),
+}
+
+
+def _clean_thresholds(raw) -> dict:
+    out = dict(DEFAULT_THRESHOLDS)
+    for k, dv in DEFAULT_THRESHOLDS.items():
+        v = (raw or {}).get(k) if isinstance(raw, dict) else None
+        if v is None or v == "":
+            continue
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            continue
+        lo, hi = _THRESHOLD_RANGE[k]
+        v = min(max(v, lo), hi)
+        out[k] = int(round(v)) if isinstance(dv, int) else round(v, 3)
+    if out["mid_reply"] < out["low_reply"]:
+        out["mid_reply"] = out["low_reply"]
+    return out
+
+
+def load_thresholds(s) -> dict:
+    row = s.query(AppSetting).filter_by(key=THRESHOLD_KEY).first()
+    return _clean_thresholds(row.value if row else None)
 
 
 def _ckey(name) -> str:
@@ -143,7 +180,6 @@ def partners_network(months: int = 12):
     months = max(1, min(int(months or 12), 60))
     today = (_dt.utcnow() + _td(hours=9)).date()
     cutoff = (today - _td(days=round(months * 30.44))).isoformat()
-    cool_cut = (today - _td(days=COOLING_DAYS)).isoformat()
     rate = usd_krw_rate() or 1.0
 
     def usd(amount: float, cur: str | None) -> float:
@@ -151,6 +187,16 @@ def partners_network(months: int = 12):
 
     s = get_session()
     try:
+        T = load_thresholds(s)
+        COOLING_DAYS = T["cooling_days"]
+        MIN_INQ_FOR_JUDGE = T["min_inq"]
+        LOW_CONV = T["low_conv"]
+        MIN_ASK_FOR_JUDGE = T["min_ask"]
+        LOW_REPLY = T["low_reply"]
+        MID_REPLY = T["mid_reply"]
+        SLOW_REPLY_DAYS = T["slow_reply_days"]
+        NO_PO_AFTER_QUOTES = T["no_po_after_quotes"]
+        MIN_DEMAND = T["min_demand"]
         # ── 명부: id → 회사 키 ────────────────────────────────────────────────
         cust_key: dict[int, str] = {}
         cust_name: dict[str, str] = {}
@@ -538,11 +584,180 @@ def partners_network(months: int = 12):
     issues.sort(key=lambda x: -x["severity"])
     return {
         "months": months, "cutoff": cutoff, "today": today.isoformat(), "fx": rate,
-        "thresholds": {"cooling_days": COOLING_DAYS, "min_inq": MIN_INQ_FOR_JUDGE,
-                       "low_conv": LOW_CONV, "min_ask": MIN_ASK_FOR_JUDGE,
-                       "low_reply": LOW_REPLY, "mid_reply": MID_REPLY,
-                       "slow_reply_days": SLOW_REPLY_DAYS, "min_demand": MIN_DEMAND},
+        "thresholds": T, "threshold_defaults": DEFAULT_THRESHOLDS,
         "kpi": kpi,
         "customers": customers, "vendors": vendors, "makers": makers,
         "vendor_maker": vm_edges, "issues": issues,
     }
+
+
+# ── 판정 기준값(Thresholds) ──────────────────────────────────────────────────
+@app.get("/api/admin/partners/network/thresholds", dependencies=[Depends(require_token)])
+def partners_network_thresholds():
+    s = get_session()
+    try:
+        return {"values": load_thresholds(s), "defaults": DEFAULT_THRESHOLDS,
+                "ranges": _THRESHOLD_RANGE}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/partners/network/thresholds", dependencies=[Depends(require_token)])
+def save_partners_network_thresholds(body: dict = Body(...)):
+    """저장값은 범위로 잘라 넣는다. 빈 몸통({})이면 기본값으로 되돌린 것과 같다."""
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="JSON object expected")
+    values = _clean_thresholds(body)
+    s = get_session()
+    try:
+        row = s.query(AppSetting).filter_by(key=THRESHOLD_KEY).first()
+        if row:
+            row.value = values
+            row.updated_at = _dt.utcnow()
+        else:
+            s.add(AppSetting(key=THRESHOLD_KEY, value=values, updated_at=_dt.utcnow()))
+        s.commit()
+        return {"values": values}
+    finally:
+        s.close()
+
+
+# ── 노드 하나의 월별 추이 ────────────────────────────────────────────────────
+def _month_list(months: int, today: _date) -> list[str]:
+    y, m = today.year, today.month
+    out = []
+    for _ in range(months):
+        out.append(f"{y:04d}-{m:02d}")
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+    return out[::-1]
+
+
+@app.get("/api/admin/partners/network/trend", dependencies=[Depends(require_token)])
+@cached_aggregate()
+def partners_network_trend(node: str, months: int = 12):
+    """관계망 노드 하나(c:/v:/m: + 회사 키)의 달별 왕래 — 상세 패널의 추이 그래프.
+
+    달은 이번 달을 끝으로 한 달력 달 months 개다(관계망의 '최근 N개월'과 같은 길이).
+    날짜를 고르는 규칙은 관계망 집계와 같다(_day·_vrfq_sent_iso·_vquote_recv_iso)."""
+    months = max(3, min(int(months or 12), 36))
+    kind, _, key = (node or "").partition(":")
+    if kind not in ("c", "v", "m") or not key:
+        raise HTTPException(status_code=400, detail="bad node id")
+    today = (_dt.utcnow() + _td(hours=9)).date()
+    keys = _month_list(months, today)
+    first = keys[0] + "-01"
+    rows = {k: {"month": k} for k in keys}
+    rate = usd_krw_rate() or 1.0
+
+    def bump(day: str, field: str, n: float = 1):
+        mk = (day or "")[:7]
+        if mk in rows:
+            rows[mk][field] = rows[mk].get(field, 0) + n
+
+    def to_usd(amount: float, cur: str | None) -> float:
+        return amount / rate if (cur or "USD").upper() == "KRW" else amount
+
+    def mail(s, col, ids):
+        for sent, direction in (s.query(EmailMessage.sent_at, EmailMessage.direction)
+                                .filter(col.in_(ids), EmailMessage.sent_at >= first).all()):
+            bump(sent, "mail_in" if direction == "in" else "mail_out")
+
+    s = get_session()
+    try:
+        if kind == "c":
+            fields = ["inquiries", "won", "lost", "mail_in", "mail_out", "revenue_usd"]
+            ids = [i for i, n in s.query(Customer.id, Customer.name).all() if _ckey(n) == key]
+            if ids:
+                rfqs = s.query(RFQ.id, RFQ.date, RFQ.received_at, RFQ.created_at, RFQ.status).filter(
+                    RFQ.customer_id.in_(ids)).all()
+                rids = [r[0] for r in rfqs]
+                ordered = ({r[0] for r in s.query(Order.rfq_id).filter(Order.rfq_id.in_(rids)).all()}
+                           if rids else set())
+                for rid, d, recv, created, status in rfqs:
+                    day = _day(d, recv, created)
+                    bump(day, "inquiries")
+                    if rid in ordered:
+                        bump(day, "won")
+                    elif _enum_val(status) == "실주":
+                        bump(day, "lost")
+                for d, created, cur, items in s.query(
+                        Order.date, Order.created_at, Order.currency, Order.items).filter(
+                        Order.customer_id.in_(ids)).all():
+                    bump(_day(d, created), "revenue_usd", to_usd(_total_amount(items), cur))
+                mail(s, EmailMessage.customer_id, ids)
+        elif kind == "v":
+            fields = ["asked", "answered", "pos", "mail_in", "mail_out", "po_usd"]
+            ids = [i for i, n in s.query(Vendor.id, Vendor.name).all() if _ckey(n) == key]
+            if ids:
+                vrs = s.query(VendorRFQ.id, VendorRFQ.rfq_id, VendorRFQ.sent_at,
+                              VendorRFQ.created_at, VendorRFQ.sent_date).filter(
+                    VendorRFQ.vendor_id.in_(ids)).all()
+                quoted = ({q[0] for q in s.query(VendorQuote.vendor_rfq_id).filter(
+                    VendorQuote.vendor_rfq_id.in_([v.id for v in vrs])).all()} if vrs else set())
+                # 관계망과 같은 기준 — 건수가 아니라 프로젝트 수로 센다.
+                asked: dict[str, set] = {}
+                answered: dict[str, set] = {}
+                for vr in vrs:
+                    if not vr.rfq_id:
+                        continue
+                    mk = (_vrfq_sent_iso(vr) or _day(vr.sent_date))[:7]
+                    asked.setdefault(mk, set()).add(vr.rfq_id)
+                    if vr.id in quoted:
+                        answered.setdefault(mk, set()).add(vr.rfq_id)
+                for mk in rows:
+                    rows[mk]["asked"] = len(asked.get(mk, ()))
+                    rows[mk]["answered"] = len(answered.get(mk, ()))
+                for d, created, cur, items in s.query(
+                        PurchaseOrder.date, PurchaseOrder.created_at, PurchaseOrder.currency,
+                        PurchaseOrder.items).filter(PurchaseOrder.vendor_id.in_(ids)).all():
+                    day = _day(d, created)
+                    bump(day, "pos")
+                    bump(day, "po_usd", to_usd(_total_amount(items), cur))
+                mail(s, EmailMessage.vendor_id, ids)
+        else:
+            fields = ["demand", "asked", "quoted"]
+            names: dict[str, str] = {}
+            for _mid, n in s.query(Maker.id, Maker.name).all():
+                k = _mkey(n)
+                if k:
+                    names.setdefault(k, (n or "").strip())
+            matcher = _MakerMatcher(names)
+
+            def is_this(raw: str) -> bool:
+                hit = matcher.match(raw)
+                if hit:
+                    return hit == key
+                return key.startswith("raw:") and "raw:" + (_mkey(raw) or raw.lower()) == key
+
+            lids_of: dict[int, set] = {}
+            for rid, d, recv, created, items in s.query(
+                    RFQ.id, RFQ.date, RFQ.received_at, RFQ.created_at, RFQ.items).all():
+                mine = {lid or "_" for lid, raw in _item_makers(items) if is_this(raw)}
+                if mine:
+                    lids_of[rid] = mine
+                    bump(_day(d, recv, created), "demand")
+            if lids_of:
+                vrs = s.query(VendorRFQ.id, VendorRFQ.rfq_id, VendorRFQ.sent_at,
+                              VendorRFQ.created_at, VendorRFQ.sent_date, VendorRFQ.items).filter(
+                    VendorRFQ.rfq_id.in_(list(lids_of))).all()
+                quoted = ({q[0] for q in s.query(VendorQuote.vendor_rfq_id).filter(
+                    VendorQuote.vendor_rfq_id.in_([v.id for v in vrs])).all()} if vrs else set())
+                for vr in vrs:
+                    lids = {str(it.get("lid") or "") for it in (vr.items or []) if isinstance(it, dict)}
+                    lids.discard("")
+                    want = lids_of[vr.rfq_id]
+                    # 라인ID 로 그 메이커 줄을 물었는지 본다. 라인ID 가 없는 옛 RFQ 는 딜 단위로 센다.
+                    if lids and want != {"_"} and not (lids & want):
+                        continue
+                    day = _vrfq_sent_iso(vr) or _day(vr.sent_date)
+                    bump(day, "asked")
+                    if vr.id in quoted:
+                        bump(day, "quoted")
+    finally:
+        s.close()
+
+    series = [{"month": k, **{f: round(rows[k].get(f, 0), 2) for f in fields}} for k in keys]
+    return {"node": node, "kind": {"c": "customer", "v": "vendor", "m": "maker"}[kind],
+            "fields": fields, "series": series}
