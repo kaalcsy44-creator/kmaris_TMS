@@ -2823,6 +2823,11 @@ export type FinanceCalendarItem = {
   paid_amount: number;
   outstanding: number;
   vat_amount?: number;
+  /** 금액이 부가세를 포함하는가 — included(포함, 공급가액·부가세로 가를 수 있음) /
+   *  none(세율 0: 영세율·면세) / unrecorded(지급 건에 부가세를 적지 않음) / 없음(기타수입). */
+  vat_basis?: "included" | "none" | "unrecorded";
+  vat_rate?: number;
+  supply_amount?: number;
   credit_amount?: number;
   bank_fee?: number;
   fx_rate?: number;

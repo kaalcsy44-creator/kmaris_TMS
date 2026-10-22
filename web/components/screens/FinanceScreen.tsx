@@ -3414,6 +3414,16 @@ const ACCOUNT_FROM: Record<string, string> = {
 };
 const RECUR_LABEL: Record<string, string> = { monthly: "Monthly", quarterly: "Quarterly", yearly: "Yearly" };
 
+// 금액 옆에 붙는 부가세 표기 — 포함(세율) / 없음(영세율·면세) / 미기재. 기타수입은 표기 없음.
+function vatTag(item: FinanceCalendarItem, lang: MsgLang): string {
+  const ko = lang === "ko";
+  const pct = item.vat_rate ? `${Math.round(item.vat_rate * 1000) / 10}%` : "";
+  if (item.vat_basis === "included") return ko ? `VAT 포함${pct ? ` ${pct}` : ""}` : `VAT incl.${pct ? ` ${pct}` : ""}`;
+  if (item.vat_basis === "none") return ko ? "VAT 없음 · 영세율/면세" : "No VAT (0%)";
+  if (item.vat_basis === "unrecorded") return ko ? "VAT 미기재" : "VAT not recorded";
+  return "";
+}
+
 // 상세 창 내용을 메시지 글로 — 지급 요청(나가는 돈)·입금 안내(들어오는 돈)·완료 알림.
 // 창에 보이는 값만 쓴다(새로 묻지 않는다). 빈 칸은 줄째 뺀다.
 type MsgLang = "ko" | "en";
@@ -3430,7 +3440,9 @@ function calendarItemMessage(item: FinanceCalendarItem, lang: MsgLang): string {
   const add = (label: string, v?: string | number | null) => {
     if (v !== undefined && v !== null && v !== "" && v !== 0) lines.push(`${label}: ${v}`);
   };
-  add(L("금액", "Amount"), money(amount, cur));
+  add(L("금액", "Amount"), `${money(amount, cur)}${vatTag(item, lang) ? ` (${vatTag(item, lang)})` : ""}`);
+  if (item.vat_basis === "included" && item.vat_amount)
+    add(L("공급가액 / 부가세", "Net / VAT"), `${money(item.supply_amount ?? 0, cur)} / ${money(item.vat_amount, cur)}`);
   if (item.paid_amount > 0 && item.outstanding > 0)
     add(L("청구 / 기지급", "Billed / paid"), `${money(item.invoice_amount, cur)} / ${money(item.paid_amount, cur)}`);
   if (item.paid) add(isIn ? L("입금일", "Received on") : L("지급일", "Paid on"), item.paid_on);
@@ -3445,7 +3457,6 @@ function calendarItemMessage(item: FinanceCalendarItem, lang: MsgLang): string {
   add(L("발주 번호", "Vendor P/O"), item.po_no);
   add(L("고객", "Customer"), item.end_customer && item.end_customer !== "—" ? item.end_customer : "");
   add(isIn ? L("청구일", "Invoice date") : L("청구일", "Bill date"), item.bill_date);
-  add(L("부가세 포함", "VAT included"), item.vat_amount ? money(item.vat_amount, cur) : "");
   if (item.source === "ap")
     add(L("세금계산서", "Tax invoice"), item.tax_received
       ? `${L("수취", "Received")}${item.tax_invoice_no ? ` (${item.tax_invoice_no})` : ""}`
@@ -3560,7 +3571,10 @@ function CalendarItemModal({ ev, onClose, onChanged }: {
     add(isIn ? "Invoiced" : "Billed", money(item.invoice_amount, cur));
     add(isIn ? "Received" : "Paid", item.paid_amount ? money(item.paid_amount, cur) : "");
   }
-  add("VAT included", item.vat_amount ? money(item.vat_amount, cur) : "");
+  if (item.vat_basis === "included" && item.vat_amount) {
+    add("Net amount", money(item.supply_amount ?? 0, cur));
+    add(`VAT${item.vat_rate ? ` (${Math.round(item.vat_rate * 1000) / 10}%)` : ""}`, money(item.vat_amount, cur));
+  }
   add("Credit note", item.credit_amount ? money(item.credit_amount, cur) : "");
   add("Bank fee", item.bank_fee ? money(item.bank_fee, cur) : "");
   add("FX rate", item.fx_rate ? `1 ${cur} = ${item.fx_rate.toLocaleString()} KRW` : "");
@@ -3590,7 +3604,12 @@ function CalendarItemModal({ ev, onClose, onChanged }: {
       <div className="fin-item">
         <div className={`fin-item-head ${isIn ? "in" : "out"}`}>
           <span className="fin-item-dir">{isIn ? "Money in" : "Money out"} · {item.category}</span>
-          <span className="fin-item-amt">{money(big, cur)}</span>
+          <span className="fin-item-amt">
+            {money(big, cur)}
+            {vatTag(item, "en") && (
+              <small className={`fin-item-vat ${item.vat_basis}`}>{vatTag(item, "en")}</small>
+            )}
+          </span>
           <span className={`fin-item-status${item.paid ? " paid" : item.overdue ? " overdue" : ""}`}>
             {statusText}{partial ? ` · ${money(item.outstanding, cur)} left` : ""}
           </span>

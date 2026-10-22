@@ -2789,6 +2789,18 @@ from services.company_profile import read_company_profile  # noqa: E402
 _BANK_KEYS = ("bank_name", "bank_account", "bank_holder", "swift")
 
 
+def _vat_split(total: float, rate) -> dict:
+    """청구 총액(공급가액+VAT)을 세율로 가른다 — AR·AP 청구서는 총액과 세율을 저장한다.
+    세율 0 = 영세율·면세(수출 등) — 부가세 없음."""
+    r = float(rate if rate is not None else 0.1)
+    if r <= 0:
+        return {"vat_basis": "none", "vat_rate": 0.0, "vat_amount": 0.0,
+                "supply_amount": round(total, 2)}
+    vat = round(total * r / (1 + r), 2)
+    return {"vat_basis": "included", "vat_rate": r, "vat_amount": vat,
+            "supply_amount": round(total - vat, 2)}
+
+
 def _same_name(a, b) -> bool:
     return " ".join((a or "").split()).lower() == " ".join((b or "").split()).lower()
 
@@ -2832,6 +2844,8 @@ def finance_calendar_item(source: str, ref_id: int, occurrence: str = ""):
             if not r:
                 raise HTTPException(status_code=404, detail="Receivable not found.")
             o = s.query(Order).filter_by(id=r["order_id"]).first() if r["order_id"] else None
+            ar = s.query(ARRecord).filter_by(id=ref_id).first()
+            out.update(_vat_split(r["invoice_amount"], getattr(ar, "vat_rate", None)))
             out.update({
                 "direction": "in", "title": r["customer"], "category": "Sales (AR)",
                 "description": "", "currency": r["currency"],
@@ -2851,6 +2865,7 @@ def finance_calendar_item(source: str, ref_id: int, occurrence: str = ""):
                 raise HTTPException(status_code=404, detail="Vendor bill not found.")
             ap = s.query(APRecord).filter_by(id=ref_id).first()
             vname, bank = _vendor_company(s, vendor_id=getattr(ap, "vendor_id", None))
+            out.update(_vat_split(r["invoice_amount"], getattr(ap, "vat_rate", None)))
             out.update({
                 "direction": "out", "title": r["vendor"], "category": "Vendor bill (AP)",
                 "description": "", "currency": r["currency"],
@@ -2891,9 +2906,13 @@ def finance_calendar_item(source: str, ref_id: int, occurrence: str = ""):
                               if _same_name(c.name, p.counterparty)), None)
                     bank = _bank_of(c, swift_attr="swift")
                     frm = "consultant"
+                vat = round(getattr(p, "vat_amount", None) or 0, 2)
                 out.update({
                     "direction": "out", "title": who, "category": p.category or "기타",
-                    "vat_amount": round(getattr(p, "vat_amount", None) or 0, 2),
+                    "vat_amount": vat,
+                    "vat_basis": "included" if vat > 0 else "unrecorded",
+                    "vat_rate": round(vat / ((p.amount or 0) - vat), 3) if vat > 0 and (p.amount or 0) > vat else 0.0,
+                    "supply_amount": round((p.amount or 0) - vat, 2),
                     "bill_date": p.bill_date or "", "fx_rate": float(getattr(p, "fx_rate", None) or 0),
                     "rfq_id": getattr(p, "rfq_id", None) or 0,
                     "account": bank, "account_from": frm if bank else "",

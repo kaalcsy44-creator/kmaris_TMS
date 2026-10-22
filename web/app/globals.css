@@ -19661,3 +19661,7 @@ select.compose-tpl-version {
 .fin-item-msg-lang button { border: 0; background: #fff; font-size: 11.5px; padding: 3px 10px; cursor: pointer; color: #34445e; font-weight: 600; }
 .fin-item-msg-lang button.on { background: var(--blue); color: #fff; }
 .fin-item-msg textarea { width: 100%; resize: vertical; font: inherit; font-size: 12.5px; line-height: 1.55; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: #fafcff; }
+.fin-item-amt { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+.fin-item-vat { font-size: 11px; font-weight: 700; color: #45526a; margin-top: 3px; }
+.fin-item-vat.none { color: #1d5fa8; }
+.fin-item-vat.unrecorded { color: #8a95a5; font-weight: 600; }
