@@ -42,6 +42,7 @@ from _core import (
     _kst_iso,
     _latest_ci,
     _latest_pi,
+    ar_from_pi,
     _latest_pl,
     _latest_sa,
     _latest_tax,
@@ -306,6 +307,8 @@ def save_proforma_invoice(order_id: int, body: ProformaInvoiceSave):
         rfq = _rfq_for_order(s, order)
         pi = _apply_pi(s, _latest_pi(s, order_id), body,
                        order_id=order.id, rfq_id=rfq.id if rfq else None)
+        s.flush()
+        ar_from_pi(s, order, pi)   # PI = 청구 — 9단계 AR 을 함께 세운다
         s.commit()
         return {"ok": True, "id": pi.id, "pi_no": pi.pi_no}
     finally:
@@ -429,6 +432,9 @@ def save_project_proforma_invoice(rfq_id: int, body: ProformaInvoiceSave):
         order = _order_for_rfq(s, rfq_id)
         pi = _apply_pi(s, _project_pi(s, rfq_id), body,
                        order_id=order.id if order else None, rfq_id=rfq_id)
+        s.flush()
+        if order is not None and pi.order_id == order.id:
+            ar_from_pi(s, order, pi)   # PI = 청구 — 9단계 AR 을 함께 세운다
         s.commit()
         return {"ok": True, "id": pi.id, "pi_no": pi.pi_no}
     finally:

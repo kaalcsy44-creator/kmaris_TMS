@@ -1177,6 +1177,8 @@ export type ArRow = {
   tax_issued_date: string;
   /** 프로포마 인보이스로 갈음한 발행 — 수동 완료 표시가 아니라 PI 존재가 근거다. */
   tax_covered_by_pi?: boolean;
+  /** 해외 고객(수출) — 국내 전자세금계산서 발행 대상이 아니라 9단계 고객측 세금계산서를 건너뛴다. */
+  tax_not_required?: boolean;
   tax_pi_no?: string;
   paid_done: boolean;
   paid_date: string;

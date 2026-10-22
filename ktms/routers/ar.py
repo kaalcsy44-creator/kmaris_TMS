@@ -103,6 +103,7 @@ def ar_overview():
             sd = manual_stage_dates(rfq, o)
             # 세금계산서 발행 = 수동 완료 또는 PI 발행(둘 중 먼저 있는 쪽이 완료 일시).
             pi = pi_by_order.get(r.order_id)
+            tax_nr = bool(o) and (o.trade_type or "수출") != "내수"
             rows.append({
                 "id": r.id,
                 # 본 청구(main) / 추가 청구(extra) — 한 오더에 청구서가 여럿일 때
@@ -139,7 +140,9 @@ def ar_overview():
                 "bill_to_phone": r.bill_to_phone or "",
                 # 세금계산서 발행 = 9단계 안의 표시(stage_dates["tax"]), 수금 완료 = 10단계.
                 # (2026-10 옛 10단계 Tax Invoice 를 9단계로 흡수 — 11→10.)
-                "tax_issued": bool(sd.get("tax")) or pi is not None,
+                "tax_issued": bool(sd.get("tax")) or pi is not None or tax_nr,
+                # 해외 고객(수출) — 국내 전자세금계산서 발행 대상이 아니다.
+                "tax_not_required": tax_nr and not sd.get("tax") and pi is None,
                 "tax_issued_date": sd.get("tax", "") or (pi.date or "" if pi else ""),
                 # PI 로 갈음한 건 — 화면에서 "무엇으로 갈음했는지" 를 보여주고,
                 # 되돌릴 수동 완료가 없다는 것도 함께 알려야 한다(Undo 가 먹지 않는다).

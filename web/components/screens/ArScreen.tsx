@@ -1189,6 +1189,8 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: StageTab; 
   // PI 로 갈음한 발행 — 되돌릴 수동 완료 기록이 없으므로 Undo 를 내밀면 안 된다
   // (눌러도 아무 변화가 없다). 대신 "무엇이 대신했는지" 를 적어 준다.
   const byPi = stage === 9 && !!row.tax_covered_by_pi;
+  // 해외 고객(수출) — 세금계산서를 끊지 않는다. PI 와 같이 되돌릴 수동 기록이 없다.
+  const notRequired = stage === 9 && !!row.tax_not_required;
   // 발행 일시 칸의 초기값. PI 로 갈음한 건은 PI 발행일이 곧 세금계산서 발행일은 아니므로
   // 그 날짜를 넣지 않는다 — 이 칸은 "전자세금계산서도 따로 끊었을 때만" 채우는 자리다.
   const [issuedAt, setIssuedAt] = useState(
@@ -1253,7 +1255,8 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: StageTab; 
         <span className={`ar-badge${done ? "" : " overdue"}`}>
           {stage === 9
             ? (row.tax_issued
-                ? (byPi ? `Covered by Proforma Invoice${row.tax_pi_no ? ` ${row.tax_pi_no}` : ""}` : `Issued (${row.tax_issued_date || "done"})`)
+                ? (notRequired ? "Not required — overseas customer (export)"
+                  : byPi ? `Covered by Proforma Invoice${row.tax_pi_no ? ` ${row.tax_pi_no}` : ""}` : `Issued (${row.tax_issued_date || "done"})`)
                 : "Not issued")
             : (row.paid_done ? `Paid (${row.paid_date || "done"})` : "Pending")}
         </span>
@@ -1311,6 +1314,12 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: StageTab; 
               : ""}
           </p>
         ) : null}
+        {notRequired ? (
+          <p className="hint-inline" style={{ display: "block", margin: "6px 0 0" }}>
+            Export deals (overseas customer, zero-rated) need no domestic e-Tax invoice, so this step is skipped.
+            Only fill this in if you issue one anyway.
+          </p>
+        ) : null}
         {byPi ? (
           <p className="hint-inline" style={{ display: "block", margin: "6px 0 0" }}>
             This deal is billed on a Proforma Invoice, so there is no domestic e-Tax invoice to issue — the stage
@@ -1328,7 +1337,7 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: StageTab; 
                 ? (stage === 9 ? "Save issued date" : "Save paid date")
                 : (stage === 9 ? "Complete tax invoice issuance" : "Complete payment")}
             </button>
-            {done && !byPi ? (
+            {done && !byPi && !notRequired ? (
               <button className="btn" disabled={busy} onClick={() => complete(false)}>
                 {stage === 9 ? "Undo issuance" : "Undo completion"}
               </button>

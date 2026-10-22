@@ -902,7 +902,8 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
             if ci and tax:
                 ar_billed = True
 
-        ar_billed = ar_billed or bool(ars)
+        # PI 도 청구서다 — PI 번호가 서면 고객 청구는 끝난 것으로 본다(AR 레코드는 ar_from_pi 가 세운다).
+        ar_billed = ar_billed or bool(ars) or pi is not None
         ar_paid = any(_enum_val(a.status) == "완납" for a in ars)
 
     # 수동 완료(완료 버튼/POD)로 표시된 단계를 반영.
@@ -928,9 +929,11 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
     # 프로포마 인보이스로 청구한 건은 국내 전자세금계산서를 따로 끊지 않는다 — PI 발행을
     # 세금계산서 발행으로 본다(수동 표시 불필요). 다만 PI 는 보통 7단계(선적 전)에 나가므로
     # 청구가 시작된 뒤에만 적용한다(아니면 출고도 안 한 건의 세금계산서가 끝나 보인다).
-    pi_covers_tax = pi is not None and billed
+    pi_covers_tax = pi is not None
+    # 해외 고객(수출, 영세율)은 국내 전자세금계산서를 끊지 않는다 — 고객측 세금계산서는 해당 없음.
+    tax_not_required = bool(order) and (getattr(order, "trade_type", "수출") or "수출") != "내수"
     # 고객 세금계산서 발행일은 stage_dates["tax"] — 단계 번호가 아니라 9단계 안의 표시다.
-    tax_issued = bool(sd.get("tax")) or pi_covers_tax
+    tax_issued = bool(sd.get("tax")) or pi_covers_tax or tax_not_required
     s9 = billed and tax_issued and ap_all_tax
     # 10) 수금 — 매출(AR) 수금과 매입(AP) 지급이 모두 끝나야 완료다.
     s10 = (bool(sd.get("10")) or ar_paid) and ap_all_paid
@@ -3138,6 +3141,66 @@ def adopt_project_pi(session, order: Order) -> None:
               .order_by(ProformaInvoice.id.desc()).first())
     if orphan is not None:
         orphan.order_id = order.id
+        ar_from_pi(session, order, orphan)
+
+
+# ── Proforma Invoice → 고객 청구(AR) 자동 연동 ────────────────────────────────
+# PI 도 청구서다 — PI 번호가 서면 고객에게 청구한 것이다. 9단계 AR 탭에 같은 내용을
+# 다시 적게 하지 않고, 이 오더에 본 청구(AR)가 아직 없으면 PI 로 하나 세운다.
+# 자동으로 세운 청구는 notes 에 표식을 달아 두고, 수금이 아직 없을 때만 PI 를 고치면
+# 따라 고친다. 사람이 손댄(표식을 지운) 청구나 이미 돈이 들어온 청구는 건드리지 않는다.
+PI_AR_MARK = "Auto from Proforma Invoice"
+
+
+def _pi_charges(pi) -> dict:
+    t = pi.terms or {}
+    out = {}
+    for k in ("freight", "packing", "insurance"):
+        try:
+            v = float(t.get(k) or 0)
+        except (TypeError, ValueError):
+            v = 0.0
+        if v:
+            out[k] = v
+    return out
+
+
+def ar_from_pi(session, order, pi):
+    """오더에 본 청구(AR)가 없으면 PI 로 세우고, PI 로 세운 청구는 PI 와 맞춘다. 세운/맞춘 AR 을 돌려준다."""
+    if order is None or pi is None or not getattr(order, "id", None):
+        return None
+    rfq = _rfq_for_order(session, order)
+    if rfq is not None and getattr(rfq, "closed_at", None):
+        return None   # 종결(취소·실주)한 딜에는 받을 돈을 세우지 않는다
+    items = [it for it in (pi.items or []) if isinstance(it, dict)]
+    subtotal = _total_amount(items)
+    if not subtotal and not items:
+        return None
+    charges = _pi_charges(pi)
+    rate = float(pi.vat_rate or 0)
+    if rate > 1:          # PI 는 퍼센트(10)로 저장되기도 한다 — AR 은 분수(0.1).
+        rate /= 100.0
+    total = round((subtotal + sum(charges.values())) * (1 + rate), 2)
+    mains = (session.query(ARRecord).filter_by(order_id=order.id)
+             .filter((ARRecord.kind == None) | (ARRecord.kind != "extra")).all())  # noqa: E711
+    mark = f"{PI_AR_MARK} {pi.pi_no or ''}".strip()
+    if mains:
+        ar = next((a for a in mains if (a.notes or "").startswith(PI_AR_MARK)), None)
+        if ar is None or (ar.paid_amount or 0) > 0:
+            return None
+    else:
+        ar = ARRecord(order_id=order.id, kind="main", paid_amount=0.0, status=ARStatus.OUTSTANDING)
+        session.add(ar)
+    ar.invoice_no = pi.pi_no or ""
+    ar.invoice_date = pi.date or ""
+    ar.due_date = ar.due_date or pi.date or ""
+    ar.currency = pi.currency or order.currency or "USD"
+    ar.vat_rate = rate
+    ar.items = items
+    ar.charges = charges
+    ar.invoice_amount = total
+    ar.notes = mark
+    return ar
 
 
 def _project_quotation(session, rfq_id: int):
