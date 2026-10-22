@@ -12,29 +12,24 @@ export type ViewMode = "read" | "edit";
 type Ctx = {
   mode: ViewMode;
   setMode: (m: ViewMode) => void;
-  /** 읽기모드에서 값이 빈 항목을 화면에서 아예 빼고 채워진 것만 보여준다. */
-  hideEmpty: boolean;
 };
 
 // 기본값 edit — 프로바이더 밖(목록 모달 등)에서 쓰이는 편집기는 지금까지처럼 동작한다.
 const ViewModeCtx = createContext<Ctx>({
   mode: "edit",
   setMode: () => undefined,
-  hideEmpty: false,
 });
 
 export function ViewModeProvider({
   mode,
   setMode,
-  hideEmpty = false,
   children,
 }: {
   mode: ViewMode;
   setMode: (m: ViewMode) => void;
-  hideEmpty?: boolean;
   children: React.ReactNode;
 }) {
-  const value = useMemo(() => ({ mode, setMode, hideEmpty }), [mode, setMode, hideEmpty]);
+  const value = useMemo(() => ({ mode, setMode }), [mode, setMode]);
   return <ViewModeCtx.Provider value={value}>{children}</ViewModeCtx.Provider>;
 }
 
@@ -202,7 +197,7 @@ function widenLongFields(root: HTMLElement | null, on: boolean, reset = false) {
  *  readMode 는 '권한은 있는데 읽기모드라서 잠긴' 상태 — 권한 부족 안내문과 구분해야 해서 따로 준다.
  *  fieldsetProps 는 <fieldset {...fieldsetProps}> 로 그대로 펼쳐 쓴다. */
 export function useEditGate(canEdit: boolean) {
-  const { mode, hideEmpty } = useViewMode();
+  const { mode } = useViewMode();
   const readMode = mode === "read";
   const editing = canEdit && !readMode;
   const ref = useRef<HTMLFieldSetElement>(null);
@@ -241,8 +236,7 @@ export function useEditGate(canEdit: boolean) {
     readMode,
     fieldsetProps: {
       ref,
-      className:
-        "form-fieldset" + (readMode ? " vm-read" : "") + (readMode && hideEmpty ? " vm-hide-empty" : ""),
+      className: "form-fieldset" + (readMode ? " vm-read" : ""),
       disabled: !editing,
     },
   };
