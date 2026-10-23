@@ -206,6 +206,23 @@ export function stageSegOn(
   return total === INTERNAL_STAGE_COUNT && !!r?.stage_done?.includes(i + 1);
 }
 
+/** 단계 바 한 칸의 class — "seg", 끝났으면 " on", 9·10단계에서 AR·AP 중 한쪽만 끝났으면
+ *  " half"(칸의 왼쪽 절반만 채움 — 단계 카드의 반쪽 채움과 같은 사실). */
+export function stageSegClass(
+  r: { stage_done?: number[]; money_split?: PipelineRow["money_split"] } | null | undefined,
+  i: number,
+  stage: number,
+  total: number,
+): string {
+  if (stageSegOn(r, i, stage, total)) return "seg on";
+  const no = i + 1;
+  if (total === INTERNAL_STAGE_COUNT && (no === 9 || no === 10)) {
+    const sp = r?.money_split?.[no === 9 ? "9" : "10"];
+    if (sp && (sp.ar || sp.ap)) return "seg half";
+  }
+  return "seg";
+}
+
 /** 단계의 표시 일시: 수동 저장값 우선, 없으면 자동 동기화값, 둘 다 없으면 "". */
 export function stageDateOf(r: PipelineRow, stage: number): string {
   return r.stage_dates?.[String(stage)] ?? r.stage_auto?.[String(stage)] ?? "";

@@ -19801,3 +19801,14 @@ select.compose-tpl-version {
 .pj-foot { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); }
 .pl-modal-head--drag .pj-pop { touch-action: auto; }
 .pl-modal-head--drag .pj-pop input { cursor: text; }
+
+/* 단계 바 반쪽 칸(9·10단계 AR·AP 중 한쪽만 끝남) — 칸의 왼쪽 절반만 채운다. 바탕색은 각
+   바의 .seg 규칙 그대로 두고, 채움만 그 위에 얹는다. */
+.pl-stage-segs .seg.half,
+.pl-card-bar .seg.half {
+  background-image: linear-gradient(to right, var(--blue) 50%, transparent 50%);
+}
+.pl-card.service .pl-card-bar .seg.half,
+table.pipeline tbody tr.service .pl-stage-segs .seg.half {
+  background-image: linear-gradient(to right, #16a05a 50%, transparent 50%);
+}

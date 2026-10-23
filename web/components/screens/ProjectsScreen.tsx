@@ -34,7 +34,7 @@ import {
   resolveSteps,
   fmtStageDate,
   stageDateOf,
-  stageSegOn,
+  stageSegClass,
   INTERNAL_STAGE_COUNT,
   buildStageChain,
   joinDot,
@@ -410,7 +410,7 @@ function StageBar({
               <span key={p.label} className="seg-group" style={{ flexGrow: p.count }} title={p.label}>
                 {Array.from({ length: p.count }).map((_, k) => {
                   const gi = start + k;
-                  return <span key={gi} className={`seg${stageSegOn(row, gi, filled, total) ? " on" : ""}`} />;
+                  return <span key={gi} className={stageSegClass(row, gi, filled, total)} />;
                 })}
               </span>
             );
@@ -419,7 +419,7 @@ function StageBar({
       ) : (
         <span className="pl-stage-segs">
           {Array.from({ length: total }).map((_, i) => (
-            <span key={i} className={`seg${stageSegOn(row, i, filled, total) ? " on" : ""}`} />
+            <span key={i} className={stageSegClass(row, i, filled, total)} />
           ))}
         </span>
       )}
@@ -1971,7 +1971,7 @@ function BoardCard({
         </div>
         <div className="pl-card-bar" title={barTitle}>
           {Array.from({ length: total }).map((_, i) => (
-            <span key={i} className={`seg${stageSegOn(r, i, filled, total) ? " on" : ""}`} />
+            <span key={i} className={stageSegClass(r, i, filled, total)} />
           ))}
         </div>
         {vendorOf(r) ? (
@@ -2018,7 +2018,7 @@ function BoardCard({
       ) : null}
       <div className="pl-card-bar" title={barTitle}>
         {Array.from({ length: total }).map((_, i) => (
-          <span key={i} className={`seg${stageSegOn(r, i, filled, total) ? " on" : ""}`} />
+          <span key={i} className={stageSegClass(r, i, filled, total)} />
         ))}
       </div>
       <div className="pl-card-stageline">
