@@ -950,6 +950,15 @@ function ApAddForm({
 
   return (
     <fieldset {...fieldsetProps} style={{ border: 0, padding: 0, margin: 0 }}>
+      {/* 아직 저장 안 된 청구서 — 칸은 발주서에서 채운 초안이라 읽기 모드에선 저장된 청구서와
+          똑같아 보였다(P-051: 화면엔 청구서가 있는데 지급대장·캘린더엔 없었다). */}
+      {!ap && !extra ? (
+        <div className="ap-draft-note" role="status">
+          <b>Not saved yet</b> — this bill is a draft filled from the vendor P/O. It won&apos;t show in
+          Finance (Outflow · Calendar) or count toward stage 9 until you{" "}
+          {readMode ? <>switch to <b>Edit</b> and </> : null}press <b>Save</b>.
+        </div>
+      ) : null}
       <div className="form-grid">
         {isExtraRow ? (
           <label className="form-field">

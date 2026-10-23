@@ -19812,3 +19812,15 @@ select.compose-tpl-version {
 table.pipeline tbody tr.service .pl-stage-segs .seg.half {
   background-image: linear-gradient(to right, #16a05a 50%, transparent 50%);
 }
+
+/* AP 청구서가 아직 저장 전(발주서에서 채운 초안)임을 알리는 띠. */
+.ap-draft-note {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid #f0c674;
+  border-left: 4px solid #d97706;
+  border-radius: 6px;
+  background: #fff8e8;
+  color: #7a4a06;
+  font-size: 12.5px;
+}
