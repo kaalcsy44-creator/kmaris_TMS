@@ -4965,6 +4965,62 @@ function seedPaymentTerms(
   return { ...t, payment_terms: fallback || "" };
 }
 
+/** 문서 번호 칸 — 자동채번 번호가 미리 들어가 있고 바로 고칠 수 있다. ▾ 를 누르면
+ *  자동 번호와 추천(개정 번호 등)이 펼쳐진다. 자동 번호 그대로면 옆에 (auto) 표시. */
+function DocNoField({
+  value,
+  onChange,
+  autoNo,
+  suggestions,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  autoNo: string;
+  suggestions: { qtn_no: string; note: string }[];
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const isAuto = !!autoNo && value.trim() === autoNo;
+  const opts = [
+    ...(autoNo ? [{ qtn_no: autoNo, note: "next number (auto)" }] : []),
+    ...suggestions.filter((x) => x.qtn_no !== autoNo),
+  ];
+  return (
+    <div className="docno-field" onBlur={(e) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
+    }}>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        onKeyDown={(e) => { if (e.key === "ArrowDown") setOpen(true); if (e.key === "Escape") setOpen(false); }}
+      />
+      {isAuto ? <span className="docno-auto" title="Assigned when saved — the next free number at that moment">auto</span> : null}
+      {opts.length ? (
+        <button type="button" className="docno-toggle" aria-label="Suggested numbers" onClick={() => setOpen((o) => !o)}>▾</button>
+      ) : null}
+      {open && opts.length ? (
+        <ul className="docno-menu" role="listbox">
+          {opts.map((o) => (
+            <li key={o.qtn_no}>
+              <button
+                type="button"
+                className={o.qtn_no === value.trim() ? "on" : ""}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { onChange(o.qtn_no); setOpen(false); }}
+              >
+                <b>{o.qtn_no}</b>
+                <span>{o.note}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function CustomerQuoteAction({
   rfqId,
   onDone,
@@ -4974,10 +5030,12 @@ function CustomerQuoteAction({
   onDone: () => void;
   onCancel?: () => void;
 }) {
+  // Quotation No. — 자동채번 번호가 미리 들어가 있고 그대로 고칠 수 있다. 자동 번호를
+  // 손대지 않고 저장하면 빈 값을 보내 서버가 그 순간의 다음 번호를 매긴다(그사이 누가
+  // 같은 번호를 가져가도 겹치지 않게). 드롭다운에는 이 딜 기존 견적의 개정 번호 추천.
   const [qtnNo, setQtnNo] = useState("");
-  // Quotation No. 채번 방식: auto(자동 KMS-QUO-yymm-nnn) / manual(직접 입력).
-  const [noMode, setNoMode] = useState<"auto" | "manual">("auto");
   const [autoNo, setAutoNo] = useState(""); // 자동채번 미리보기(다음 KMS-QUO 번호)
+  const [noSuggest, setNoSuggest] = useState<{ qtn_no: string; note: string }[]>([]);
   const [currency, setCurrency] = useState(DEFAULT_SALE_CURRENCY);
   const [costCurrency, setCostCurrency] = useState(DEFAULT_COST_CURRENCY);
   const [roundDigits, setRoundDigits] = useState<number>(DEFAULT_ROUND_DIGITS);
@@ -5015,8 +5073,14 @@ function CustomerQuoteAction({
 
   // 자동채번 미리보기(다음 Quotation No.) 로드.
   useEffect(() => {
-    fetchNextQuotationNo().then((r) => setAutoNo(r.qtn_no)).catch(() => setAutoNo(""));
-  }, []);
+    fetchNextQuotationNo(rfqId || undefined)
+      .then((r) => {
+        setAutoNo(r.qtn_no);
+        setNoSuggest(r.suggestions ?? []);
+        setQtnNo((cur) => cur || r.qtn_no);
+      })
+      .catch(() => setAutoNo(""));
+  }, [rfqId]);
 
   // RFQ 품목 정보로 기본 seed (cost 없음) — 공급사 견적을 불러오면 cost 가 채워진다.
   useEffect(() => {
@@ -5150,7 +5214,7 @@ function CustomerQuoteAction({
     setMsg(null);
     setErr(null);
     try {
-      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, withCostFx(terms, costCurrency, costFx, costFxMode), qtnNo, sentAt, costCurrency, roundDigits, discountPct, fxRate, docSourceId(items, importVqId === "" ? null : importVqId), defaultMargin);
+      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, withCostFx(terms, costCurrency, costFx, costFxMode), qtnNo.trim() === autoNo ? "" : qtnNo.trim(), sentAt, costCurrency, roundDigits, discountPct, fxRate, docSourceId(items, importVqId === "" ? null : importVqId), defaultMargin);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
       setMsg(`Sent — ${r.qtn_no}`);
       onDone();
@@ -5224,20 +5288,13 @@ function CustomerQuoteAction({
       <div className="form-grid quote-meta-grid quote-meta-grid--3">
         <div className="form-field">
           <label>Quotation No.</label>
-          {noMode === "auto" ? (
-            <select
-              value="auto"
-              onChange={(e) => { if (e.target.value === "manual") { setNoMode("manual"); setQtnNo(""); } }}
-            >
-              <option value="auto">{autoNo ? `${autoNo} (auto)` : "Auto-generate"}</option>
-              <option value="manual">Manual entry…</option>
-            </select>
-          ) : (
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input value={qtnNo} onChange={(e) => setQtnNo(e.target.value)} placeholder="KMS-QUO-…" autoFocus style={{ flex: 1 }} />
-              <button type="button" className="btn sm" onClick={() => { setNoMode("auto"); setQtnNo(""); }} title="Use auto number">auto</button>
-            </div>
-          )}
+          <DocNoField
+            value={qtnNo}
+            onChange={setQtnNo}
+            autoNo={autoNo}
+            suggestions={noSuggest}
+            placeholder="KMS-QUO-yymm-nnn"
+          />
         </div>
         <div className="form-field">
           <label>Sent at</label>

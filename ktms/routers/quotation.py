@@ -1,6 +1,8 @@
 """K-Maris TMS — quotation routes (split from admin_api.py; behavior unchanged)."""
 from __future__ import annotations
 
+import re
+
 from _core import (
     Customer,
     CustomerQuoteCreate,
@@ -115,14 +117,60 @@ def term_values():
 
 
 @app.get("/api/admin/quotation/next-no", dependencies=[Depends(require_token)])
-def next_quotation_no_endpoint():
+def next_quotation_no_endpoint(rfq_id: int | None = None):
     """자동채번 미리보기 — 다음에 생성될 Quotation No.(KMS-QUO-yymm-nnn). 할당하지 않음.
-    ('/quotation/{...}' 라우트보다 먼저 등록해 경로 충돌을 피한다.)"""
+    ('/quotation/{...}' 라우트보다 먼저 등록해 경로 충돌을 피한다.)
+
+    rfq_id 를 주면 번호 칸 드롭다운에 띄울 추천도 함께 돌려준다 — 이 딜에 이미 낸 견적의
+    개정본("KMS-QUO-2610-020 revised"). 번호 체계를 손으로 치다 흐트러뜨리지 않게 하려는 것."""
     s = get_session()
     try:
-        return {"qtn_no": _next_kmaris_quotation_no(s)}
+        auto = _next_kmaris_quotation_no(s)
+        out = {"qtn_no": auto}
+        if rfq_id:
+            out["suggestions"] = _revised_qtn_suggestions(s, rfq_id, auto)
+        return out
     finally:
         s.close()
+
+
+_REV_TAIL = re.compile(r"\s*(?:revised|rev\.?)\s*\d*\s*$", re.I)
+_QTN_NO = re.compile(r"^KMS-QUO-(\d{4})-(\d+)$", re.I)
+
+
+def _revised_qtn_suggestions(s, rfq_id: int, auto: str) -> list[dict]:
+    """딜의 기존 견적마다 개정 번호 추천. 이미 쓰인 번호는 건너뛰어 'revised 2'·'revised 3'…
+    번호의 yymm 이 이번 달과 다르면 이번 달 yymm 으로 바꾼 것도 함께(기존 순번은 유지)."""
+    cur_yymm = auto[len("KMS-QUO-"):len("KMS-QUO-") + 4]
+    taken = {str(n or "").strip().upper() for (n,) in s.query(Quotation.qtn_no).all() if n}
+    out: list[dict] = []
+    seen: set[str] = set()
+
+    def revised(base: str) -> str:
+        cand = f"{base} revised"
+        n = 2
+        while cand.upper() in taken:
+            cand = f"{base} revised {n}"
+            n += 1
+        return cand
+
+    rows = (s.query(Quotation.qtn_no).filter(Quotation.rfq_id == rfq_id)
+            .order_by(Quotation.id.desc()).all())
+    for (no,) in rows:
+        base = _REV_TAIL.sub("", str(no or "").strip())
+        if not base:
+            continue
+        bases = [base]
+        m = _QTN_NO.match(base)
+        if m and m.group(1) != cur_yymm:
+            bases.append(f"KMS-QUO-{cur_yymm}-{m.group(2)}")
+        for b in bases:
+            v = revised(b)
+            if v.upper() in seen:
+                continue
+            seen.add(v.upper())
+            out.append({"qtn_no": v, "note": f"revision of {no}"})
+    return out
 
 
 @app.get("/api/admin/quotation-overview", dependencies=[Depends(require_token)])

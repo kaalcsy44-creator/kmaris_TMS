@@ -367,8 +367,11 @@ export function fetchNextRfqNo(): Promise<{ rfq_no: string }> {
 }
 
 // 자동채번 미리보기 — 다음에 생성될 Quotation No.(KMS-QUO-yymm-nnn, 할당하지 않음).
-export function fetchNextQuotationNo(): Promise<{ qtn_no: string }> {
-  return get(`/api/admin/quotation/next-no?_=${Date.now()}`);
+// rfqId 를 주면 이 딜의 기존 견적 개정 번호 추천(suggestions)도 함께 온다.
+export function fetchNextQuotationNo(
+  rfqId?: number
+): Promise<{ qtn_no: string; suggestions?: { qtn_no: string; note: string }[] }> {
+  return get(`/api/admin/quotation/next-no?${rfqId ? `rfq_id=${rfqId}&` : ""}_=${Date.now()}`);
 }
 
 // 자동채번 미리보기 — 다음에 생성될 K-Maris (Vendor) P/O No.(KMS-ORD-yymm-nnn, 할당하지 않음).

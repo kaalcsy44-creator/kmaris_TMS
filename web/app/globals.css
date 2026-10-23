@@ -19721,3 +19721,30 @@ select.compose-tpl-version {
   cursor: pointer;
   text-decoration: underline;
 }
+
+/* 문서 번호 칸(DocNoField) — 자동채번 번호가 미리 들어간 입력칸 + 추천 드롭다운. */
+.docno-field { position: relative; display: flex; align-items: center; }
+.docno-field input { flex: 1; padding-right: 76px; }
+.docno-auto {
+  position: absolute; right: 34px; top: 50%; transform: translateY(-50%);
+  font-size: 11px; color: var(--muted); background: var(--sel, #eef4fb);
+  border-radius: 8px; padding: 1px 6px; pointer-events: none;
+}
+.docno-toggle {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  border: 0; background: transparent; cursor: pointer; font-size: 13px;
+  color: var(--muted); padding: 4px 8px; border-radius: 6px;
+}
+.docno-toggle:hover { background: var(--sel, #eef4fb); color: inherit; }
+.docno-menu {
+  position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: 30;
+  list-style: none; margin: 0; padding: 4px; background: var(--card, #fff);
+  border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+}
+.docno-menu button {
+  display: flex; width: 100%; justify-content: space-between; gap: 12px; align-items: baseline;
+  border: 0; background: transparent; text-align: left; padding: 6px 8px; border-radius: 6px; cursor: pointer;
+}
+.docno-menu button:hover, .docno-menu button.on { background: var(--sel, #eef4fb); }
+.docno-menu button b { font-weight: 600; }
+.docno-menu button span { font-size: 11px; color: var(--muted); }
