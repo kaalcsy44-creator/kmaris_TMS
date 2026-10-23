@@ -10,6 +10,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PipelineRow } from "@/lib/types";
+import ProjectNo from "@/components/common/ProjectNo";
+import CustomerName from "@/components/common/CustomerName";
 
 export default function ProjectJumpMenu({
   listed,
@@ -111,13 +113,21 @@ export default function ProjectJumpMenu({
                   onMouseEnter={() => setHi(i)}
                   onClick={() => pick(r)}
                 >
-                  <b className="pj-no">{r.project_no || r.kmaris_rfq_no || `#${r.rfq_id}`}</b>
+                  <span className="pj-no">
+                    {r.project_no ? <ProjectNo value={r.project_no} /> : <b>{r.kmaris_rfq_no || `#${r.rfq_id}`}</b>}
+                  </span>
                   <span className="pj-title">
-                    {r.project_title || r.first_item || "—"}
-                    <small>
-                      {[r.customer && r.customer !== "—" ? r.customer : "", (r.vessels || r.vessel || "").split("\n")[0]]
-                        .filter(Boolean).join(" · ")}
-                    </small>
+                    <span className="pj-name">
+                      <b>{r.project_title || r.first_item || "—"}</b>
+                      {r.vessels || r.vessel ? (
+                        <span className="pj-vessel">
+                          {" · "}{(r.vessels || r.vessel).split("\n").filter(Boolean).join(" · ")}
+                        </span>
+                      ) : null}
+                    </span>
+                    {r.customer && r.customer !== "—" ? (
+                      <span className="pj-cust"><CustomerName name={r.customer} /></span>
+                    ) : null}
                   </span>
                   <span className="pj-stage">
                     {r.cancelled ? "Closed" : `Stage ${r.stage}`}
