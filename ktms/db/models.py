@@ -129,6 +129,10 @@ class Customer(Base):
     # 정보라 Company info 창에서 같은 회사 전 레코드에 한 번에 반영한다.
     note       = Column(Text)
     logo       = Column(Text)          # 회사 로고 이미지(data URL, 캡쳐 붙여넣기)
+    # 이 회사가 배에 대해 어떤 자리에 있나 — "Owner"·"Ship manager"·"Operator"·
+    # "Agent / Broker"·"Other" 중 여럿(선주이면서 직접 관리하는 곳이 흔하다). 회사 단위
+    # 값이라 Company info 창에서 같은 회사 전 레코드에 한 번에 넣는다. NULL = 아직 분류 전.
+    roles      = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

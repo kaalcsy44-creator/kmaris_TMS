@@ -3959,6 +3959,8 @@ class CustomerCreate(BaseModel):
     # 회사 소개 요약(회사 단위 — Company info 창에서 편집). None = 건드리지 않음.
     note: str | None = None
     logo: str | None = ""    # 회사 로고 data URL(붙여넣기). None=변경 안 함(수정 시)
+    # 회사의 역할(Owner·Ship manager…, 회사 단위). None = 건드리지 않음.
+    roles: list[str] | None = None
     # 한 회사에 본사·지사가 여럿이고, 담당자 1명이 여러 이메일·연락처·지역을 가질 수 있어
     # 다중값. 첫 값=대표(문서·메일용).
     addresses: list[str] | None = None

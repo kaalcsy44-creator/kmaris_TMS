@@ -1586,7 +1586,18 @@ export type CompanyInfoSave = {
    *  값이 저장되는 자리는 여전히 거래선의 'Makers supplied'(maker_ids)다: 서버가 그
    *  칸을 이 목록에 맞춰 붙이고 뗀다. 보내지 않으면(undefined) 건드리지 않는다. */
   agencies?: string[];
+  /** 고객사의 역할(Owner·Ship manager…) — 고객 창에서만 보낸다. 안 보내면 건드리지 않는다. */
+  roles?: string[];
 };
+/** 선박 데이터(등록 선주·ISM 관리사)가 가리키지만 아직 안 붙은 고객사 역할. */
+export type CustomerRoleSuggestion = {
+  company: string;
+  current: string[];
+  suggest: { role: string; vessels: string[] }[];
+};
+export function fetchCustomerRoleSuggestions(): Promise<{ rows: CustomerRoleSuggestion[] }> {
+  return get<{ rows: CustomerRoleSuggestion[] }>("/api/admin/settings/customers/role-suggestions");
+}
 /** 이 회사가 실제로 다뤄 본 분류 — 태그의 첫 값을 제안하는 데 쓴다(거래 실적에서). */
 export type VendorCategorySuggestion = {
   company: string;

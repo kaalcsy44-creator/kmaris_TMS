@@ -134,6 +134,73 @@ def vendors():
         s.close()
 
 
+# ── 고객사 역할 제안(선박 데이터에서) ────────────────────────────────────────
+# 선박 마스터의 등록 선주·ISM 관리사(웹 조회로 채운 값) 이름이 우리 고객 회사와 맞으면,
+# 그 고객은 그 역할이다. 이름 맞대기 규칙은 화면의 web/lib/companyMatch.ts 와 같다 —
+# 법인 꼬리(LTD·CO·GROUP…)와 괄호를 떼고, 짧은 쪽 낱말이 긴 쪽 앞머리에 그대로 서는가.
+_CORP_TAIL = {
+    "LTD", "LIMITED", "CO", "COMPANY", "INC", "INCORPORATED", "LLC", "LLP", "PTE", "PLC",
+    "SA", "AS", "ASA", "AB", "BV", "NV", "GMBH", "AG", "SRL", "SPA", "KK", "CORP", "CORPORATION",
+    "GROUP", "HOLDINGS", "HOLDING", "THE",
+}
+
+
+def _company_tokens(name: str) -> list[str]:
+    import re as _re
+    t = _re.sub(r"\([^)]*\)", " ", (name or "").upper()).replace("&", " AND ")
+    return [w for w in _re.sub(r"[^A-Z0-9가-힣]+", " ", t).split() if w not in _CORP_TAIL]
+
+
+def _match_company(name: str, companies: dict[str, list[str]]) -> str | None:
+    """companies = {회사명: 그 토큰}. 가장 길게 맞는 회사명, 없으면 None."""
+    target = _company_tokens(name)
+    if not target:
+        return None
+    best, best_len = None, 0
+    for cname, core in companies.items():
+        if not core or len("".join(core)) < 3:
+            continue
+        short, long_ = (core, target) if len(core) <= len(target) else (target, core)
+        if len("".join(short)) >= 3 and long_[:len(short)] == short and len(core) > best_len:
+            best, best_len = cname, len(core)
+    return best
+
+
+@app.get("/api/admin/settings/customers/role-suggestions", dependencies=[Depends(require_token)])
+def customer_role_suggestions():
+    """{rows:[{company, current:[역할], suggest:[{role, vessels:[선박명]}]}]} — 아직 안 붙은 역할만.
+
+    ISM 관리사로 이름이 오른 배가 있으면 Ship manager, 등록 선주로 오르면 Owner. 저장하지
+    않는다 — 화면이 보여 주고 사람이 넣는다(웹에서 찾은 이름이라 틀릴 수 있다)."""
+    s = get_session()
+    try:
+        current: dict[str, list[str]] = {}
+        for c in s.query(Customer).all():
+            nm = (c.name or "").strip()
+            if nm:
+                current.setdefault(nm, [])
+                for r in (c.roles or []):
+                    if r not in current[nm]:
+                        current[nm].append(r)
+        toks = {nm: _company_tokens(nm) for nm in current}
+        found: dict[str, dict[str, list[str]]] = {}
+        for v in s.query(Vessel).all():
+            for field, role in (("ism_manager", "Ship manager"), ("registered_owner", "Owner")):
+                who = (getattr(v, field, None) or "").strip()
+                hit = _match_company(who, toks) if who else None
+                if hit:
+                    found.setdefault(hit, {}).setdefault(role, []).append(v.name or "")
+        rows = []
+        for nm, by_role in sorted(found.items()):
+            sug = [{"role": r, "vessels": sorted(set(vs))}
+                   for r, vs in by_role.items() if r not in current.get(nm, [])]
+            if sug:
+                rows.append({"company": nm, "current": current.get(nm, []), "suggest": sug})
+        return {"rows": rows}
+    finally:
+        s.close()
+
+
 @app.get("/api/admin/settings/customers", dependencies=[Depends(require_token)])
 def settings_customers():
     s = get_session()
@@ -151,6 +218,7 @@ def settings_customers():
                  "note": getattr(c, "note", None) or "",
                  "payment_terms": getattr(c, "payment_terms", None) or "",
                  "logo": getattr(c, "logo", None) or "",
+                 "roles": [str(x) for x in (getattr(c, "roles", None) or []) if str(x).strip()],
                  "addresses": _multi_out(getattr(c, "addresses", None), c.address),
                  "emails": _multi_out(getattr(c, "emails", None), c.email),
                  "phones": _multi_out(getattr(c, "phones", None), getattr(c, "contact_phone", None)),
@@ -259,7 +327,8 @@ def create_customer(body: CustomerCreate):
                      specialization=body.specialization or "",
                      website=body.website or "", note=body.note or "",
                      payment_terms=body.payment_terms or "",
-                     logo=body.logo or "")
+                     logo=body.logo or "",
+                     roles=_clean_roles(body.roles) if body.roles is not None else None)
         s.add(c)
         # 다중 주소·이메일·연락처·지역 저장 + 첫 값(대표)을 flat 컬럼에 미러링.
         _apply_multi(c, body.emails, body.phones, body.regions, body.addresses)
@@ -300,6 +369,17 @@ class CompanyInfoSave(BaseModel):
     # 이 제조사를 대 주는 거래선(회사 이름) — 메이커 창에서만 보낸다. None = 건드리지 않음.
     # 값이 저장되는 자리는 여전히 거래선의 'Makers supplied'(Vendor.maker_ids)다.
     agencies: list[str] | None = None
+    # 고객사의 역할(Owner·Ship manager…) — 고객 창에서만 보낸다. None = 건드리지 않음.
+    roles: list[str] | None = None
+
+
+CUSTOMER_ROLES = ("Owner", "Ship manager", "Operator", "Agent / Broker", "Other")
+
+
+def _clean_roles(vals) -> list[str]:
+    """정해 둔 이름만, 정해 둔 차례로 — 화면 칩 순서와 필터 값이 늘 같게."""
+    got = {str(v).strip() for v in (vals or [])}
+    return [r for r in CUSTOMER_ROLES if r in got]
 
 
 # 명부를 건너 함께 고치는 값 — 어느 명부에 서든 **같은 사실**인 것만 둔다.
@@ -489,6 +569,9 @@ def update_customer_company(body: CompanyInfoSave):
         rows = _company_rows(s, Customer, body.name)
         if not rows:
             raise HTTPException(status_code=404, detail="해당 회사로 등록된 고객사가 없습니다.")
+        if body.roles is not None:
+            for r in rows:
+                r.roles = _clean_roles(body.roles)
         name = _apply_company_info(
             rows, body,
             ("tax_id", "tax_invoice_email", "specialization", "website", "note",
@@ -517,6 +600,8 @@ def update_customer(row_id: int, body: CustomerCreate):
         c.tax_id = body.tax_id or ""
         c.tax_invoice_email = body.tax_invoice_email or ""
         c.specialization = body.specialization or ""
+        if body.roles is not None:
+            c.roles = _clean_roles(body.roles)
         if body.website is not None:
             c.website = body.website
         if body.note is not None:

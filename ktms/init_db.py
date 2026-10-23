@@ -66,6 +66,9 @@ _MIGRATIONS = {
         "tax_invoice_email": "VARCHAR(200)",
         # 회사 소개 요약(Company info 창에서 회사 단위로 편집).
         "note": "TEXT",
+        # 고객사의 역할(Owner·Ship manager…, 다중). vendors 에는 쓰지 않지만 같은 목록을
+        # 타므로 함께 생긴다 — 비어 있는 칸일 뿐 해가 없다.
+        "roles": "JSON",
         # 무엇을 사는 곳인가 — 벤더의 취급품목과 같은 자리(목록에서 나란히 읽히게).
         "specialization": "VARCHAR(200)",
         "website": "VARCHAR(300)",

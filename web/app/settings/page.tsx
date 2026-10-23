@@ -37,6 +37,7 @@ import {
   parseBusinessCard,
   updateCompanyProfile,
   updateCustomerCompanyInfo,
+  fetchCustomerRoleSuggestions,
   updateVendorCompanyInfo,
   updateSettingsCustomer,
   updateSettingsItem,
@@ -70,7 +71,8 @@ import {
   previewEmailSignature,
 } from "@/lib/api";
 import type { SettingsMaker } from "@/lib/types";
-import type { SanctionsStatus, VesselLookupResult } from "@/lib/api";
+import type { SanctionsStatus, VesselLookupResult, CustomerRoleSuggestion } from "@/lib/api";
+import { CUSTOMER_ROLES, RoleBadges, RolePicker, mergeRoles } from "@/components/common/CustomerRoles";
 import type {
   PermissionsConfig,
   RolePermRow,
@@ -995,6 +997,7 @@ function MyPasswordChange() {
 const EMPTY_CUSTOMER: SettingsCustomer = {
   id: 0, name: "", contact: "", duty: "", contact_phone: "", email: "", country: "", address: "",
   tax_id: "", tax_invoice_email: "", specialization: "", website: "", note: "", payment_terms: "", logo: "",
+  roles: [],
   addresses: [], emails: [], phones: [], regions: [], bad_emails: [],
 };
 
@@ -1300,6 +1303,36 @@ export function CustomersTab() {
   // 마지막으로 저장한 회사명 — 새 목록에서 열려 있는 창의 회사를 되찾는 열쇠다.
   // 이름째 바꿔 저장하면 창이 든 사진의 이름은 이미 옛것이라 그것으로는 못 찾는다.
   const savedName = useRef("");
+  // 선박 데이터(등록 선주·ISM 관리사)가 가리키는 역할 중 아직 안 붙은 것 — 회사명 → 제안.
+  // 목록이 다시 불릴 때마다 함께 새로 받는다(방금 넣은 역할은 제안에서 빠져야 한다).
+  const [roleSugg, setRoleSugg] = useState<Record<string, CustomerRoleSuggestion>>({});
+  useEffect(() => {
+    let live = true;
+    fetchCustomerRoleSuggestions()
+      .then((d) => { if (live) setRoleSugg(Object.fromEntries(d.rows.map((r) => [r.company, r]))); })
+      .catch(() => { if (live) setRoleSugg({}); });
+    return () => { live = false; };
+  }, [reloadKey]);
+  const [roleBusy, setRoleBusy] = useState(false);
+  async function applyAllRoleSuggestions() {
+    const rows = Object.values(roleSugg);
+    if (!rows.length) return;
+    const lines = rows.map((r) => `• ${r.company}: ${r.suggest.map((s) => `${s.role} (${s.vessels.length} vessel${s.vessels.length === 1 ? "" : "s"})`).join(", ")}`);
+    if (!confirm(`Add these roles from vessel data (registered owner / ISM manager)?\n\n${lines.join("\n")}\n\n`
+      + `Existing roles are kept. Owner / manager names come from public ship pages — check any that look wrong.`)) return;
+    setRoleBusy(true);
+    try {
+      for (const r of rows) {
+        await updateCustomerCompanyInfo({ name: r.company, roles: mergeRoles(r.current, r.suggest.map((s) => s.role)) });
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setRoleBusy(false);
+      setReloadKey((k) => k + 1);
+    }
+  }
+  const roleSuggCount = Object.keys(roleSugg).length;
 
   return (
     <>
@@ -1309,6 +1342,10 @@ export function CustomersTab() {
         key={company.groups[company.index]?.[0]?.name ?? company.index}
         rows={company.groups[company.index] ?? []}
         projects="customers"
+        roles={{
+          initial: companyRoles(company.groups[company.index] ?? []),
+          suggest: roleSugg[company.groups[company.index]?.[0]?.name ?? ""]?.suggest,
+        }}
         stats={["Inquiries → Orders", (
           <CustomerWinBadge
             inquiries={sumBy(company.groups[company.index] ?? [], (r) => r.inquiries)}
@@ -1358,6 +1395,7 @@ export function CustomersTab() {
         by: (r) => r.name,
         cells: (rs, open) => [
           <GroupNameCell key="n" rows={rs} open={open} />,
+          <RoleBadges key="role" roles={companyRoles(rs)} suggested={roleSugg[rs[0]?.name ?? ""]?.suggest} />,
           <span key="r" className="ms-group-sub">{regionSummary(rs)}</span>,
           <span key="c" className="ms-group-sub">{nameSummary(rs)}</span>,
           <span key="w" className="ms-group-sub"><SiteCell value={companySite(rs)} /></span>,
@@ -1398,6 +1436,12 @@ export function CustomersTab() {
       remove={deleteSettingsCustomer}
       onSaved={invalidateCustomerLogos}
       transfer={{ kind: "customers", nameOf: (r) => r.name, onDone: invalidatePartnerCaches }}
+      toolbarExtra={roleSuggCount ? (
+        <button type="button" className="btn sm" disabled={roleBusy} onClick={applyAllRoleSuggestions}
+                title="Companies named as registered owner / ISM manager in the vessel list but not yet given that role">
+          {roleBusy ? "Saving roles…" : `Roles from vessels (${roleSuggCount})`}
+        </button>
+      ) : undefined}
       columns={[
         ["name", "Company name", (r) => (
           <span className="cust-name">
@@ -1405,6 +1449,7 @@ export function CustomersTab() {
             <span className="cust-name-text">{r.name || "—"}</span>
           </span>
         )],
+        ["roles", "Role", (r) => <RoleBadges roles={r.roles ?? []} />, "ms-role"],
         ["country", "Region", (r) => <MultiCell values={r.regions} flat={r.country} />, "ms-region"],
         // 담당자 이름 옆의 반송 꼬리표 — 이 사람 주소로 보낸 메일이 되돌아왔다는 표시다.
         // 명부를 훑다가 바로 보여야 한다: 주소는 접혀 있어도 이름은 늘 이 자리에 있다.
@@ -1443,6 +1488,7 @@ export function CustomersTab() {
         ["note", "About this company"],
         // 여기서부터는 사람의 것 — 회사가 이미 정해진 창(담당자 추가·수정)에서는
         // 위의 회사 칸이 통째로 빠지고 이 아래만 남는다.
+        ["roles", "Role"],
         ["contact", "Contact name"],
         ["duty", "In charge of"],
       ]}
@@ -1511,6 +1557,9 @@ export function CustomersTab() {
         if (key === "logo") {
           return <LogoPasteField value={form.logo} onChange={(logo) => setForm({ ...form, logo })} />;
         }
+        if (key === "roles") {
+          return <RolePicker value={form.roles ?? []} onChange={(roles) => setForm({ ...form, roles })} />;
+        }
         // 취급품목·회사 소개는 문장으로 적는 칸이다 — 한 줄 칸에 넣으면 앞머리만
         // 보여, 적어 둔 값을 확인하려면 캐럿을 끝까지 밀어야 한다(회사 정보 창과 같다).
         if (key === "specialization" || key === "note") {
@@ -1537,7 +1586,7 @@ export function CustomersTab() {
       // 정해진 창에서는 이 칸들이 통째로 빠지고, 회사를 새로 만드는 + New 에서만
       // 선다 — 그때는 회사도 함께 만들어지는 중이라서다.
       companyFields={["name", "address", "tax_id", "tax_invoice_email", "website",
-                      "payment_terms", "logo", "specialization", "note"]}
+                      "payment_terms", "logo", "specialization", "note", "roles"]}
       extraForm={(form, setForm) => (
         <>
           <MultiValueField label="Email" placeholder="name@company.com" values={form.emails} onChange={(emails) => setForm({ ...form, emails })} />
@@ -1601,6 +1650,11 @@ function CountBadge({ total, hit, tone, title, sub = false }: {
 
 /** "1 inquiry" / "20 inquiries" — 복수형이 -s 가 아닌 낱말은 두 번째 인자로 준다. */
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** 회사의 역할 — 담당자 줄마다 같은 값을 들고 있지만, 옛 줄이 비어 있을 수 있어 모은다. */
+function companyRoles(rows: { roles?: string[] }[]): string[] {
+  return mergeRoles(rows.flatMap((r) => r.roles ?? []), []);
+}
 
 /** 회사 줄의 합계 — 담당자 행들의 값을 더한다(빈 값은 0). */
 function sumBy<T>(rows: T[], pick: (row: T) => number | undefined): number {
@@ -1861,6 +1915,7 @@ function CompanyInfoModal<
   scan,
   title = "🏢 Company info",
   paymentTerms = true,
+  roles,
 }: {
   rows: T[];
   fields: [keyof T & keyof CompanyInfoSave, string][];
@@ -1914,6 +1969,9 @@ function CompanyInfoModal<
   /** 홈페이지를 읽어 태그 후보를 내미는 칸. 안 주면 그 칸이 아예 없다(고객사 창은
    *  분류도 제조사도 쓰지 않아 읽어 봐야 넣을 자리가 없다). */
   scan?: { kind: "vendor" | "maker" };
+  /** 고객사의 역할(Owner·Ship manager…). suggest = 선박 데이터가 가리키지만 아직 안 붙은 것.
+   *  안 주면 칸이 아예 없다(거래선·메이커 창). */
+  roles?: { initial: string[]; suggest?: { role: string; vessels: string[] }[] };
 }) {
   // 저장 뒤에도 창이 남으므로 회사명을 상태로 든다. 이름을 바꿔 저장하면 제목·읽기
   // 화면이 새 이름이 되어야 하고, 그 다음 저장의 조회 키도 새 이름이어야 한다.
@@ -1942,6 +2000,23 @@ function CompanyInfoModal<
   const [catIds, setCatIds] = useState<number[]>(() => [...(tags?.initial ?? [])]);
   const [makerIds, setMakerIds] = useState<number[]>(() => [...(makerTags?.initial ?? [])]);
   const [agencyNames, setAgencyNames] = useState<string[]>(() => [...(agencies?.initial ?? [])]);
+  const [roleVals, setRoleVals] = useState<string[]>(() => [...(roles?.initial ?? [])]);
+  const [roleBusy, setRoleBusy] = useState(false);
+  // 읽기 화면의 제안 Add — 그 역할 하나만 곧바로 저장한다(편집으로 들어가지 않아도 되게).
+  async function addRole(role: string) {
+    setRoleBusy(true);
+    setErr("");
+    try {
+      const next = mergeRoles(roleVals, [role]);
+      await save({ name: origName, roles: next });
+      setRoleVals(next);
+      onSaved(origName);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setRoleBusy(false);
+    }
+  }
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   // 방금 저장이 저쪽 명부까지 닿았다는 한 줄. 이 창의 저장은 보고 있는 명부 밖으로도
@@ -2125,6 +2200,8 @@ function CompanyInfoModal<
       // 대리점 칸이 없는 창(고객·거래선)은 이 키를 아예 보내지 않는다 — 보내면 서버가
       // 빈 목록으로 읽어 그 제조사의 대리점 표시를 전부 떼어 낸다.
       if (agencies) body.agencies = agencyNames;
+      // 역할 칸이 없는 창(거래선·메이커)은 보내지 않는다.
+      if (roles) body.roles = roleVals;
       if (name.trim() && name.trim() !== origName) body.rename = name.trim();
       const res = await save(body);
       const hit = Object.entries(res?.synced ?? {}).filter(([, n]) => Number(n) > 0);
@@ -2156,8 +2233,24 @@ function CompanyInfoModal<
   }
 
   if (!editing) {
+    const roleSuggest = (roles?.suggest ?? []).filter((s) => !roleVals.includes(s.role));
     const shown: [string, React.ReactNode][] = [
       ["Company name", origName],
+      // 역할 — 이 회사가 배에 대해 어떤 자리인가. 선박 데이터가 가리키는 것이 있으면 그 자리에서 Add.
+      ...(roles ? [["Role", (roleVals.length || roleSuggest.length) ? (
+        <span className="cr-row">
+          {roleVals.length ? <RoleBadges roles={roleVals} /> : null}
+          {roleSuggest.map((s) => (
+            <span key={s.role} className="cr-sugg-line">
+              <span title={s.vessels.join(", ")}>
+                Suggested <b>{s.role}</b> — named on {s.vessels.length} vessel{s.vessels.length === 1 ? "" : "s"}
+                {" "}({s.vessels.slice(0, 3).join(", ")}{s.vessels.length > 3 ? "…" : ""})
+              </span>
+              <button type="button" className="btn xs" disabled={roleBusy} onClick={() => addRole(s.role)}>Add</button>
+            </span>
+          ))}
+        </span>
+      ) : null] as [string, React.ReactNode]] : []),
       ["Address", addresses.length
         ? <span className="co-lines">{addresses.map((a, i) => <span key={i}>{a}</span>)}</span>
         : null],
@@ -2513,6 +2606,7 @@ function CompanyInfoModal<
         ) : null}
         {makerTags ? <MakerTagPicker value={makerIds} onChange={setMakerIds} /> : null}
         {agencies ? <AgencyTagPicker value={agencyNames} onChange={setAgencyNames} /> : null}
+        {roles ? <RolePicker value={roleVals} onChange={setRoleVals} /> : null}
         {twinKinds.length ? (
           <label className="form-field co-sync">
             <span>Also listed as</span>
@@ -2622,6 +2716,11 @@ function withCompanyDefaults<T extends { name: string }>(form: T, rows: T[], nam
   if ("category_ids" in rec && !((rec.category_ids as number[]) ?? []).length) {
     const tagged = (mates as { category_ids?: number[] }[]).find((r) => (r.category_ids ?? []).length);
     if (tagged) rec.category_ids = [...(tagged.category_ids ?? [])];
+  }
+  // 고객사 역할도 회사 단위 — 담당자를 더했다고 역할이 비면 안 된다.
+  if ("roles" in rec && !((rec.roles as string[]) ?? []).length) {
+    const all = companyRoles(mates as { roles?: string[] }[]);
+    if (all.length) rec.roles = all;
   }
   // 대 줄 수 있는 제조사도 회사 단위 — 담당자를 더했다고 그 명단이 비면 안 된다.
   if ("maker_ids" in rec && !((rec.maker_ids as number[]) ?? []).length) {
@@ -3571,6 +3670,11 @@ function relationState(total: number, hit: number, kind: "reply" | "win"): strin
 /** 고객 목록의 머리 칸 정렬·필터 규칙. 표에 그리는 열(columns)과 key 로 짝지어진다. */
 const customerHeadCols: HeadCol<SettingsCustomer>[] = [
   { key: "name", text: (r) => r.name || "" },
+  // 역할은 여럿일 수 있다 — 하나하나를 고르는 값으로 내민다("Ship manager" 를 고르면
+  // 선주이면서 관리도 하는 회사까지 함께 걸린다).
+  { key: "roles", text: (r) => (r.roles ?? []).join(" · "), filter: "facet",
+    facetValues: (r) => (r.roles?.length ? r.roles : [""]), emptyLabel: "Unclassified",
+    sortValue: (r) => (r.roles?.length ? CUSTOMER_ROLES.indexOf(r.roles[0] as typeof CUSTOMER_ROLES[number]) : 99) },
   { key: "country", text: (r) => r.country || "", filter: "facet",
     facetValues: partyRegions, emptyLabel: "No region" },
   { key: "contact", text: (r) => r.contact || "", emptyLabel: "No contact" },

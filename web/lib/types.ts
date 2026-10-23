@@ -69,6 +69,8 @@ export type SettingsCustomer = {
   note: string;      // 회사 소개 요약(회사 단위 — Company info 창에서 편집)
   payment_terms: string;
   logo: string;
+  /** 회사의 역할(Owner·Ship manager·Operator·Agent / Broker·Other, 회사 단위·다중). */
+  roles?: string[];
   addresses: string[];   // 본사·지사 주소(첫 값=대표)
   emails: string[];
   phones: string[];
