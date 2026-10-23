@@ -61,6 +61,7 @@ import { useCustomerLogo } from "@/lib/customerLogos";
 import VendorName from "@/components/common/VendorName";
 import VendorMonograms from "@/components/common/VendorMonograms";
 import ProjectNo from "@/components/common/ProjectNo";
+import ProjectJumpMenu from "@/components/common/ProjectJumpMenu";
 import PrepaidTag from "@/components/common/PrepaidTag";
 import RfqActionTabs from "@/components/RfqActionTabs";
 import NewRfqForm from "@/components/screens/NewRfqForm";
@@ -990,6 +991,13 @@ function PipelineTable({
     },
     [shownRows]
   );
+  // ▾ 바로가기 — ‹ › 와 같은 집합·순서(지금 목록, 번호순). 검색은 전체 딜에서.
+  const jumpListed = useMemo(() => [...shownRows].sort(byProjectNo), [shownRows]);
+  const jumpAll = useMemo(() => [...rows].sort(byProjectNo), [rows]);
+  const jumpTo = useCallback((id: number) => {
+    setSelectedId(id);
+    setDeepStage(null);
+  }, []);
 
   /**
    * 헤더 클릭 시 뜨는 컬럼 메뉴: 정렬 + 필터.
@@ -1357,6 +1365,7 @@ function PipelineTable({
           initialOrderId={deepOrderId}
           initialView={initialModalView}
           onNavigate={navigateSelected}
+          jump={{ listed: jumpListed, all: jumpAll, onPick: jumpTo }}
           onClose={() => {
             setSelectedId(null);
             setDeepStage(null);
@@ -2405,6 +2414,7 @@ export function PipelineModal({
   onChanged,
   onClose,
   onNavigate,
+  jump,
   isNew,
   initialStage = null,
   initialVrfqId = null,
@@ -2422,6 +2432,8 @@ export function PipelineModal({
   // 인접 프로젝트로 전환(-1=이전, +1=다음). 부모가 "현재 보이는 목록 순서"로 이웃을 계산해
   // selectedId 를 바꾼다. 주면 ←/→ 방향키와 헤더의 ‹ › 버튼이 활성화된다. 신규 등록 모드엔 없다.
   onNavigate?: (dir: -1 | 1) => void;
+  /** 머리의 ▾ — 번호·제목으로 다른 딜에 바로 건너간다. */
+  jump?: { listed: PipelineRow[]; all: PipelineRow[]; onPick: (rfqId: number) => void };
   // isNew: 신규 RFQ 등록 모드 — 저장된 프로젝트가 없으므로 좌측/딜 액션은 안내로 대체하고
   // 우측 상세 자리에 신규 RFQ 기본정보 입력 폼(NewRfqForm)을 넣는다.
   isNew?: boolean;
@@ -2889,6 +2901,9 @@ export function PipelineModal({
               >
                 ›
               </button>
+              {jump ? (
+                <ProjectJumpMenu listed={jump.listed} all={jump.all} currentId={r.rfq_id} onPick={jump.onPick} />
+              ) : null}
             </span>
           ) : null}
           {isNewProject ? (

@@ -19767,3 +19767,34 @@ select.compose-tpl-version {
 .project-stage-tabs .st-split i.ok { background: var(--blue); border-color: var(--blue); color: #fff; }
 .pl-modal.service .project-stage-tabs .st-split i.ok { background: #16a05a; border-color: #16a05a; }
 .project-stage-tabs-row.collapsed .project-stage-tabs .st-split { display: none; }
+
+/* 프로젝트 팝업 ▾ 바로가기(ProjectJumpMenu) — 번호·제목으로 다른 딜로 건너간다. */
+.pj-jump { position: relative; display: inline-flex; }
+.pj-toggle { font-size: 12px; }
+.pj-toggle.on { background: var(--sel, #eef4fb); border-color: var(--blue); color: var(--blue); }
+.pj-pop {
+  position: absolute; left: 0; top: calc(100% + 6px); z-index: 60;
+  width: min(520px, 86vw); background: var(--card, #fff);
+  border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(11, 29, 58, 0.22); padding: 8px; cursor: default;
+}
+.pj-pop input { width: 100%; margin-bottom: 6px; }
+.pj-pop ul { list-style: none; margin: 0; padding: 0; max-height: min(420px, 60vh); overflow-y: auto; }
+.pj-pop li button {
+  display: grid; grid-template-columns: 92px 1fr auto; gap: 10px; align-items: center;
+  width: 100%; border: 0; background: transparent; text-align: left;
+  padding: 6px 8px; border-radius: 6px; cursor: pointer; color: inherit;
+}
+.pj-pop li button.hi { background: var(--sel, #eef4fb); }
+.pj-pop li button.cur .pj-no { color: var(--blue); }
+.pj-pop li button.cur { box-shadow: inset 3px 0 0 var(--blue); }
+.pj-no { font-weight: 800; font-size: 13px; white-space: nowrap; }
+.pj-title { min-width: 0; font-size: 12.5px; overflow: hidden; }
+.pj-title, .pj-title small { white-space: nowrap; text-overflow: ellipsis; }
+.pj-title small { display: block; overflow: hidden; color: var(--muted); font-size: 11px; }
+.pj-stage { font-size: 11px; color: var(--muted); text-align: right; white-space: nowrap; }
+.pj-stage small { display: block; color: #b5751a; }
+.pj-empty { padding: 10px 8px; color: var(--muted); font-size: 12px; }
+.pj-foot { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); }
+.pl-modal-head--drag .pj-pop { touch-action: auto; }
+.pl-modal-head--drag .pj-pop input { cursor: text; }
