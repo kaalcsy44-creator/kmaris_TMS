@@ -2081,6 +2081,13 @@ export type PipelineRow = {
   stage_done?: number[];
   /** 선입금 딜 — 돈 단계(9~11)가 7·8 보다 먼저 끝났다. */
   prepaid?: boolean;
+  /** 9·10단계의 매출(AR)·매입(AP) 쪽별 완료 — 둘 다 끝나야 단계 완료라, 한쪽만 끝난
+   *  것을 단계 카드가 반쯤 채워 보인다. ap_na = 벤더 P/O 가 없어 매입측 해당 없음. */
+  money_split?: {
+    "9": { ar: boolean; ap: boolean };
+    "10": { ar: boolean; ap: boolean };
+    ap_na: boolean;
+  } | null;
   /** 결제조건(Payment Terms)이 선금이다. 화면에는 쓰지 않는다 — "in advance" 가 사실상
    *  기본 조건이라 딜 대부분이 참이다(선입금 표시는 prepaid 로만). */
   advance_terms?: boolean;

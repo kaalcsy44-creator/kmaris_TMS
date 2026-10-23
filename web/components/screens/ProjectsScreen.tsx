@@ -3039,9 +3039,15 @@ export function PipelineModal({
           <div className="project-stage-tabs" role="tablist" aria-label="Project stages" ref={stageStripRef}>
           {chain.map((c) => {
             const no = c.no;
+            const isDoneStage = no <= r.stage || !!r.stage_done?.includes(no);
+            // 9·10 은 AR·AP 둘 다 끝나야 완료 — 한쪽만 끝났으면 그쪽 절반(위=AR, 아래=AP)을
+            // 채우고 AR/AP 칩으로 어느 쪽인지 밝힌다.
+            const sp = (no === 9 || no === 10) && !c.skip ? r.money_split?.[no === 9 ? "9" : "10"] : undefined;
+            const half = sp && !isDoneStage && (sp.ar || sp.ap) ? (sp.ar ? "half-ar" : "half-ap") : "";
             const cls = [
               selectedStage === no ? "on" : "",
-              no <= r.stage || r.stage_done?.includes(no) ? "done" : "",
+              isDoneStage ? "done" : "",
+              half ? `half ${half}` : "",
               no === r.stage ? "current" : "",
               c.skip ? "skip" : "",
             ]
@@ -3061,7 +3067,14 @@ export function PipelineModal({
                   <span className="st-no">{no}</span>
                   <b className="st-label">{c.label}</b>
                 </span>
-                <em className="st-val">{c.skip ? "N/A" : c.value || ""}</em>
+                {half && sp ? (
+                  <span className="st-split" aria-label={`Receivable ${sp.ar ? "done" : "open"}, payable ${sp.ap ? "done" : "open"}`}>
+                    <i className={sp.ar ? "ok" : ""} title={sp.ar ? "Customer side (AR) done" : "Customer side (AR) not done yet"}>AR {sp.ar ? "✓" : "·"}</i>
+                    <i className={sp.ap ? "ok" : ""} title={sp.ap ? "Vendor side (AP) done" : "Vendor side (AP) not done yet"}>AP {sp.ap ? "✓" : "·"}</i>
+                  </span>
+                ) : (
+                  <em className="st-val">{c.skip ? "N/A" : c.value || ""}</em>
+                )}
                 <time className="st-at">{c.at ? fmtStageDate(c.at) : ""}</time>
               </button>
             );

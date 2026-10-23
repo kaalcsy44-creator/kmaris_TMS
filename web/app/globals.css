@@ -19748,3 +19748,22 @@ select.compose-tpl-version {
 .docno-menu button:hover, .docno-menu button.on { background: var(--sel, #eef4fb); }
 .docno-menu button b { font-weight: 600; }
 .docno-menu button span { font-size: 11px; color: var(--muted); }
+
+/* 9·10단계 반쪽 완료 — AR·AP 둘 다 끝나야 완료(파란 반전)인데, 한쪽만 끝났으면 그쪽 절반만
+   옅은 테마색으로 채운다(위=AR, 아래=AP). 글자는 미완료 카드 그대로 읽히는 농도. */
+.project-stage-tabs button.half { --st-half: color-mix(in srgb, var(--blue) 24%, #fff); }
+.pl-modal.service .project-stage-tabs button.half { --st-half: color-mix(in srgb, #16a05a 24%, #fff); }
+.project-stage-tabs button.half-ar { background: linear-gradient(to bottom, var(--st-half) 50%, #fff 50%); }
+.project-stage-tabs button.half-ap { background: linear-gradient(to top, var(--st-half) 50%, #fff 50%); }
+.project-stage-tabs button.half.on:not(.done).half-ar { background: linear-gradient(to bottom, var(--st-half) 50%, #eef4fc 50%); }
+.project-stage-tabs button.half.on:not(.done).half-ap { background: linear-gradient(to top, var(--st-half) 50%, #eef4fc 50%); }
+.project-stage-tabs button.half .st-label { color: var(--navy); }
+.project-stage-tabs .st-split { display: flex; gap: 4px; margin-top: auto; min-height: 12px; }
+.project-stage-tabs .st-split i {
+  font-style: normal; font-size: 9.5px; font-weight: 700; line-height: 1;
+  padding: 2px 5px; border-radius: 999px;
+  border: 1px solid var(--line); background: #fff; color: var(--muted);
+}
+.project-stage-tabs .st-split i.ok { background: var(--blue); border-color: var(--blue); color: #fff; }
+.pl-modal.service .project-stage-tabs .st-split i.ok { background: #16a05a; border-color: #16a05a; }
+.project-stage-tabs-row.collapsed .project-stage-tabs .st-split { display: none; }

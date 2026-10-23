@@ -943,6 +943,13 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
     # 10) 수금 — 매출(AR) 수금과 매입(AP) 지급이 모두 끝나야 완료다.
     s10 = (bool(sd.get("10")) or ar_paid) and ap_all_paid
     money_done = [n for n, ok in ((9, s9), (10, s10)) if ok]
+    # 9·10 은 매출(AR)·매입(AP) 둘 다 끝나야 완료다 — 단계 카드가 한쪽만 끝난 것을 보이게
+    # 쪽마다 따로 담는다. ap_na = 벤더 P/O 가 없어 매입측은 따질 것이 없다.
+    money_split = {
+        "9": {"ar": bool(order) and ar_billed and tax_issued, "ap": bool(order) and ap_all_billed and ap_all_tax},
+        "10": {"ar": bool(sd.get("10")) or ar_paid, "ap": bool(order) and ap_all_paid},
+        "ap_na": not pos,
+    }
     # 옛 규칙의 값(최고 도달 단계) — 바뀐 규칙으로 자리가 달라지는 딜을 세어 볼 때 쓴다.
     legacy_stage = max([stage, *money_done])
     if stage >= 8:
@@ -1009,7 +1016,7 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
     if _dd is None:
         _dd = s._deal_done_cache = {}
     _dd[_dp_key] = {"done": done, "prepaid": prepaid, "advance_terms": advance_terms,
-                    "legacy_stage": legacy_stage}
+                    "legacy_stage": legacy_stage, "money_split": money_split}
     return result
 
 

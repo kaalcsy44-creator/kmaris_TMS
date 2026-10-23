@@ -734,6 +734,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 # 선입금 딜에서만 그 뒤로 9~11 이 건너뛰어 붙는다(7·8 은 아직).
                 "stage_done": _done["done"],
                 "prepaid": _done["prepaid"],
+                "money_split": _done.get("money_split"),
                 "advance_terms": _done["advance_terms"],
                 "status": _status_label(stage, r.work_type),
                 # 종결(취소/실주) 여부 — 보드에서 진행 컬럼 대신 Cancelled 존으로 분류한다.
