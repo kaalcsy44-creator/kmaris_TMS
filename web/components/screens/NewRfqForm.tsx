@@ -23,6 +23,7 @@ import { imageFromClipboard } from "@/lib/imagePaste";
 import { useEditGate } from "@/lib/viewMode";
 import CustomerName from "@/components/common/CustomerName";
 import CustomerSelect from "@/components/common/CustomerSelect";
+import VesselOwnerRow from "@/components/common/VesselOwnerRow";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import CategoryCell from "@/components/common/CategoryCell";
 import MakerCell from "@/components/common/MakerCell";
@@ -894,6 +895,21 @@ export default function NewRfqForm({
               ))}
             </select>
           </Field>
+          {/* 고른 배의 등록 선주·ISM 관리사 — 비어 있으면 IMO 로 찾아 보고, 그중 우리 고객이 있으면
+              (고객이 아직 비었을 때) 고객으로 제안한다. 한 행 전체를 쓰는 띠. */}
+          {(() => {
+            const v = vessels.find((x) => x.id === vesselId);
+            return v ? (
+              <VesselOwnerRow
+                vessel={v}
+                companies={companyOptions}
+                companyName={companyName}
+                editable={canEditThis}
+                onPickCompany={pickCompany}
+                onVesselSaved={async () => { await reloadVessels(); }}
+              />
+            ) : null;
+          })()}
           {/* 제재 명부(US OFAC · UK)에 오른 배 — 경고만 하고 진행은 막지 않는다. 좁은 Vessel
               칸 안에 넣으면 세로로 길게 접혀, 그 아래 한 행 전체를 쓰는 띠로 세운다. */}
           {vessels.find((v) => v.id === vesselId)?.sanctions?.length ? (
