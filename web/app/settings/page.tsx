@@ -3212,17 +3212,18 @@ export function VesselsTab() {
   useEffect(() => {
     fetchSanctionsStatus().then(setSanc).catch(() => setSanc(null));
   }, []);
-  // 일괄 채우기 — 선종·기국이 빈 배만, 빈 칸만 채운다(사람이 적은 값은 덮지 않는다).
+  // 일괄 채우기 — 선종·기국·선주·관리사 중 빈 칸이 있는 배만, 빈 칸만 채운다(사람이 적은 값은 덮지 않는다).
   const [fill, setFill] = useState<{ done: number; total: number; filled: number; failed: number; error?: string } | null>(null);
   async function fillEmpty() {
     const all = await fetchSettingsVessels();
-    const todo = all.filter((v) => /\d{7}/.test(v.imo || "") && (!v.vessel_type || !v.ais_flag));
+    const todo = all.filter((v) => /\d{7}/.test(v.imo || "")
+      && (!v.vessel_type || !v.ais_flag || !v.registered_owner || !v.ism_manager));
     if (!todo.length) {
-      alert("Every vessel with an IMO number already has a type and flag.");
+      alert("Every vessel with an IMO number already has type, flag, owner and manager.");
       return;
     }
-    if (!confirm(`Look up ${todo.length} vessel(s) on the web and fill only their empty Vessel type / AIS Flag?\n`
-      + `About 15 seconds each. Values come from public ship pages — spot-check them afterwards.`)) return;
+    if (!confirm(`Look up ${todo.length} vessel(s) on the web and fill only their empty Vessel type / AIS Flag / Owner / ISM manager?\n`
+      + `About 20 seconds each. Values come from public ship pages — spot-check them afterwards (Equasis is the authoritative source).`)) return;
     const st: { done: number; total: number; filled: number; failed: number; error?: string } =
       { done: 0, total: todo.length, filled: 0, failed: 0 };
     setFill({ ...st });
@@ -3232,9 +3233,15 @@ export function VesselsTab() {
         const r = await lookupVessel(v.imo, v.name);
         const vessel_type = v.vessel_type || r.vessel_type || "";
         const ais_flag = v.ais_flag || r.flag || "";
-        if (vessel_type !== v.vessel_type || ais_flag !== v.ais_flag) {
+        const registered_owner = v.registered_owner || r.registered_owner || "";
+        const ism_manager = v.ism_manager || r.ism_manager || "";
+        const ownerNew = registered_owner !== (v.registered_owner || "") || ism_manager !== (v.ism_manager || "");
+        if (vessel_type !== v.vessel_type || ais_flag !== v.ais_flag || ownerNew) {
           const { customer: _c, sanctions: _s, id: _id, ...rest } = v;
-          await updateSettingsVessel(v.id, { ...rest, vessel_type, ais_flag });
+          await updateSettingsVessel(v.id, {
+            ...rest, vessel_type, ais_flag, registered_owner, ism_manager,
+            owner_checked: ownerNew ? todayYmd() : (v.owner_checked || ""),
+          });
           st.filled++;
         }
         streak = 0;
@@ -3261,14 +3268,13 @@ export function VesselsTab() {
   return (
     <MasterSection<SettingsVessel>
       title="Vessel Management"
-      // 한 줄에 다섯 칸뿐이라 넓은 화면에서는 표 오른쪽이 통째로 비고 목록만 길어진다 —
-      // 좌우 2열로 나눠 그 빈칸을 목록의 뒷부분으로 채운다(고객·거래선 표와 같은 규칙).
-      twoCol
+      // 예전엔 다섯 칸뿐이라 좌우 2열로 나눴다. 선주·ISM 관리사가 붙어 한 줄이 길어져
+      // 이제 한 열로 둔다.
       // 칸마다 값이 한 낱말(IMO·선종·선적·고객)이라, 남는 폭을 이름 칸에 몰아주는 기본
       // 배분은 이 표에 맞지 않는다 — 칸마다 내용에 비례해 나눠 갖게 한다.
       tableClass="ms-table--even"
       headCols={vesselHeadCols}
-      empty={{ id: 0, name: "", imo: "", vessel_type: "", ais_flag: "", engine_type: "", hull_no: "", customer_id: null, customer: "" }}
+      empty={{ id: 0, name: "", imo: "", vessel_type: "", ais_flag: "", registered_owner: "", ism_manager: "", owner_checked: "", engine_type: "", hull_no: "", customer_id: null, customer: "" }}
       load={fetchSettingsVessels}
       reloadKey={reloadKey}
       create={(body) => {
@@ -3292,12 +3298,12 @@ export function VesselsTab() {
             </span>
           ) : null}
           <button type="button" className="btn sm" disabled={!!fill && fill.done < fill.total} onClick={fillEmpty}
-                  title="Look up every vessel that has an IMO but no type or flag, and fill only the empty fields">
+                  title="Look up every vessel that has an IMO but a missing type, flag, owner or ISM manager, and fill only the empty fields">
             {fill && fill.done < fill.total
               ? `Filling… ${fill.done}/${fill.total}`
               : fill
                 ? `Filled ${fill.filled}/${fill.total}${fill.failed ? ` · ${fill.failed} failed` : ""}`
-                : "Fill type & flag"}
+                : "Fill vessel info"}
           </button>
           {fill?.error && fill.done >= fill.total ? <span className="action-err">{fill.error}</span> : null}
         </>
@@ -3309,11 +3315,16 @@ export function VesselsTab() {
             name={form.name}
             onResult={(r) => {
               setLookup(r);
+              const gotOwner = !!(r.registered_owner || r.ism_manager);
               setForm({
                 ...form,
                 vessel_type: r.vessel_type || form.vessel_type,
                 ais_flag: r.flag || form.ais_flag,
                 name: form.name || r.name || "",
+                // 조회는 지금 값이라 선주·관리사는 찾은 값으로 갈아 끼운다(저장은 사람이 한다).
+                registered_owner: r.registered_owner || form.registered_owner || "",
+                ism_manager: r.ism_manager || form.ism_manager || "",
+                owner_checked: gotOwner ? todayYmd() : form.owner_checked || "",
               });
             }}
           />
@@ -3327,12 +3338,19 @@ export function VesselsTab() {
         ["imo", "IMO"],
         ["vessel_type", "Vessel type"],
         ["ais_flag", "AIS Flag"],
+        ["registered_owner", "Registered owner", (r) => r.registered_owner || <span className="dash">—</span>],
+        ["ism_manager", "ISM manager", (r) => r.ism_manager
+          ? <span title={r.owner_checked ? `Checked ${r.owner_checked}` : undefined}>{r.ism_manager}</span>
+          : <span className="dash">—</span>],
         ["customer", "Customer"],
       ]}
+      searchText={(r) => [r.name, r.imo, r.vessel_type, r.ais_flag, r.registered_owner, r.ism_manager, r.customer].join(" ")}
       fields={[
         ["name", "Vessel *"],
         ["imo", "IMO No."],
         ["ais_flag", "AIS Flag (flag state)"],
+        ["registered_owner", "Registered owner"],
+        ["ism_manager", "ISM manager (technical)"],
         ["engine_type", "Main Engine Type"],
         ["hull_no", "Hull No."],
       ]}
@@ -3354,7 +3372,7 @@ export function VesselsTab() {
             </datalist>
           </label>
           <label className="form-field">
-            <span>Owner Customer</span>
+            <span>Customer</span>
             <select
               value={form.customer_id ?? ""}
               onChange={(e) => setForm({ ...form, customer_id: e.target.value ? Number(e.target.value) : null })}
@@ -3452,6 +3470,12 @@ function ConsultantsTab() {
   );
 }
 
+/** 오늘 날짜(YYYY-MM-DD, 현지 시각) — 선주·관리사 확인일. */
+function todayYmd(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 const VESSEL_TYPES = [
   "Container Ship",
   "Crude Oil Tanker",
@@ -3519,6 +3543,9 @@ const vesselHeadCols: HeadCol<SettingsVessel>[] = [
   { key: "vessel_type", text: (r) => r.vessel_type || "", filter: "facet",
     emptyLabel: "Unspecified" },
   { key: "ais_flag", text: (r) => r.ais_flag || "", filter: "facet", emptyLabel: "Unspecified" },
+  // 선주는 대개 1척짜리 회사라 고르는 목록이 배 수만큼 길어진다 — 정렬만. 관리사는 몇 곳으로 모인다.
+  { key: "registered_owner", text: (r) => r.registered_owner || "", emptyLabel: "Not looked up" },
+  { key: "ism_manager", text: (r) => r.ism_manager || "", filter: "facet", emptyLabel: "Not looked up" },
   { key: "customer", text: (r) => r.customer || "", filter: "facet", emptyLabel: "No customer" },
 ];
 

@@ -1916,6 +1916,9 @@ def settings_vessels():
         return [{"id": v.id, "name": v.name, "imo": v.imo or "",
                  "vessel_type": getattr(v, "vessel_type", None) or "",
                  "ais_flag": getattr(v, "ais_flag", None) or "",
+                 "registered_owner": v.registered_owner or "",
+                 "ism_manager": v.ism_manager or "",
+                 "owner_checked": v.owner_checked or "",
                  "engine_type": v.engine_type or "", "hull_no": v.hull_no or "",
                  "customer_id": v.customer_id, "customer": cust_names.get(v.customer_id, "") if v.customer_id else "",
                  # 제재 명부(US OFAC · UK)에 오른 IMO 면 그 지정 내역 — 경고용(services/sanctions.py).
@@ -1932,7 +1935,7 @@ class VesselLookupIn(BaseModel):
 
 @app.post("/api/admin/settings/vessels/lookup", dependencies=[Depends(require_token)])
 def vessel_lookup(body: VesselLookupIn):
-    """IMO → 선종·기국(Claude 웹 검색, 출처 포함) + 제재 명부 확인. 저장하지 않는다 —
+    """IMO → 선종·기국·등록 선주·ISM 관리사(Claude 웹 검색, 출처 포함) + 제재 명부 확인. 저장하지 않는다 —
     화면이 칸에 채워 보여 주고 사람이 저장한다."""
     imo = _sanctions._norm_imo(body.imo)
     if not imo:
@@ -1988,7 +1991,10 @@ def create_vessel(body: VesselCreate):
                    ais_flag=body.ais_flag or "",
                    customer_id=body.customer_id,
                    engine_type=body.engine_type or "",
-                   hull_no=body.hull_no or "")
+                   hull_no=body.hull_no or "",
+                   registered_owner=(body.registered_owner or "").strip(),
+                   ism_manager=(body.ism_manager or "").strip(),
+                   owner_checked=body.owner_checked or "")
         s.add(v)
         s.commit()
         return {"ok": True, "id": v.id}
@@ -2010,6 +2016,12 @@ def update_vessel(row_id: int, body: VesselCreate):
         v.customer_id = body.customer_id
         v.engine_type = body.engine_type or ""
         v.hull_no = body.hull_no or ""
+        if body.registered_owner is not None:
+            v.registered_owner = body.registered_owner.strip()
+        if body.ism_manager is not None:
+            v.ism_manager = body.ism_manager.strip()
+        if body.owner_checked is not None:
+            v.owner_checked = body.owner_checked
         s.commit()
         return {"ok": True, "id": v.id}
     finally:

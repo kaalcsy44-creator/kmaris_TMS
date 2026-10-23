@@ -4106,6 +4106,10 @@ class VesselCreate(BaseModel):
     customer_id: int | None = None
     engine_type: str | None = ""
     hull_no: str | None = ""
+    # None = 이 칸을 건드리지 않는다(선주·관리사를 모르는 옛 화면이 저장해도 지워지지 않게).
+    registered_owner: str | None = None
+    ism_manager: str | None = None
+    owner_checked: str | None = None
 
 
 class ItemMasterSave(BaseModel):

@@ -37,7 +37,7 @@ export function SanctionWarning({ hits }: { hits?: VesselSanction[] }) {
   );
 }
 
-/** IMO 로 선종·기국을 찾는 단추 — 결과를 넘겨줄 뿐 저장하지 않는다(채운 칸을 사람이 저장). */
+/** IMO 로 선종·기국·선주·관리사를 찾는 단추 — 결과를 넘겨줄 뿐 저장하지 않는다(채운 칸을 사람이 저장). */
 export function VesselLookupButton({
   imo,
   name,
@@ -67,7 +67,7 @@ export function VesselLookupButton({
         type="button"
         className="btn sm"
         disabled={!ok || busy}
-        title={ok ? "Find vessel type and flag on the web, and check the sanctions lists" : "Enter the 7-digit IMO number first"}
+        title={ok ? "Find vessel type, flag, registered owner and ISM manager on the web, and check the sanctions lists" : "Enter the 7-digit IMO number first"}
         onClick={run}
       >
         {busy ? "Looking up… (~15s)" : "🔍 Look up by IMO"}
@@ -96,6 +96,13 @@ export function LookupNote({ r }: { r: VesselLookupResult | null }) {
         )}
         {!r.sanctions.length ? <span className="vs-clear">✓ Not on US OFAC / UK lists</span> : null}
       </div>
+      {r.registered_owner || r.ism_manager ? (
+        <div className="vs-owner">
+          {r.registered_owner ? <>Owner: <b>{r.registered_owner}</b></> : null}
+          {r.registered_owner && r.ism_manager ? " · " : null}
+          {r.ism_manager ? <>ISM manager: <b>{r.ism_manager}</b></> : null}
+        </div>
+      ) : null}
       {r.note ? <div className="muted">{r.note}</div> : null}
       {r.sources.length ? (
         <div className="vs-src">

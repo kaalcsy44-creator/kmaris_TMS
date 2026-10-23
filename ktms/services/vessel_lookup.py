@@ -1,4 +1,7 @@
-"""IMO 번호로 선종(Vessel type)과 기국(AIS Flag)을 찾는다 — Claude 웹 검색.
+"""IMO 번호로 선종(Vessel type)·기국(AIS Flag)·등록 선주·ISM 관리사를 찾는다 — Claude 웹 검색.
+
+선주·관리사의 정본은 Equasis 지만 약관상 자동 수집이 안 된다 — 공개 선박 페이지가 옮겨
+적은 값을 읽는다. 그래서 틀리거나 옛 값일 수 있고, 사람이 확인하는 것을 전제로 한다.
 
 IMO 로 선박 정보를 무료로 정확히 주는 공식 창구가 없다(MarineTraffic 같은 곳은 유료 API).
 그래서 Claude 에게 웹 검색으로 그 IMO 의 공개 선박 페이지를 찾아 읽게 하고, 찾은 출처를
@@ -28,21 +31,25 @@ Report the ship's CURRENT details:
 - name: the current ship name
 - vessel_type: use one of {VESSEL_TYPES} when one fits; otherwise a short English ship type
 - flag: the current flag state as an English country name (e.g. "Liberia", "Marshall Islands", "Hong Kong")
+- registered_owner: the current registered owner company (often a one-ship company)
+- ism_manager: the current ISM manager / technical manager (the company that runs the ship day to day).
+  If a page only gives one "Manager", use it here. Give company names as written, without the address.
 
 Only report facts found for IMO {imo} itself. If a page is about a different IMO, ignore it.
 If you cannot find the ship, use null for the fields you could not confirm.
 
 Reply with ONLY this JSON object, no other text:
 {{"name": string|null, "vessel_type": string|null, "flag": string|null,
+  "registered_owner": string|null, "ism_manager": string|null,
   "confidence": "high"|"medium"|"low", "note": string}}
 "note" is one short English sentence (e.g. which sites agreed, or why nothing was found)."""
 
 
 def lookup_vessel(imo: str, name: str = "") -> dict:
-    """{name, vessel_type, flag, confidence, note, sources:[{title,url}]}."""
+    """{name, vessel_type, flag, registered_owner, ism_manager, confidence, note, sources:[{title,url}]}."""
     client = _anthropic_client()
     messages: list = [{"role": "user", "content": _prompt(imo, name)}]
-    tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 4}]
+    tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 6}]
     sources: list[dict] = []
     seen: set[str] = set()
     resp = None
@@ -67,7 +74,8 @@ def lookup_vessel(imo: str, name: str = "") -> dict:
         raise ValueError(_api_error_message(exc)) from exc
 
     if resp is None or resp.stop_reason == "refusal":
-        return {"name": None, "vessel_type": None, "flag": None, "confidence": "low",
+        return {"name": None, "vessel_type": None, "flag": None,
+                "registered_owner": None, "ism_manager": None, "confidence": "low",
                 "note": "The lookup was declined.", "sources": []}
     # 답(JSON)은 마지막 텍스트 블록들에 있다 — 검색 중간의 짧은 말과 섞이지 않게 끝에서부터 잇는다.
     text = "".join(b.text for b in resp.content if b.type == "text")
@@ -88,6 +96,8 @@ def lookup_vessel(imo: str, name: str = "") -> dict:
         "name": clean(data.get("name")),
         "vessel_type": clean(data.get("vessel_type")),
         "flag": clean(data.get("flag")),
+        "registered_owner": clean(data.get("registered_owner")),
+        "ism_manager": clean(data.get("ism_manager")),
         "confidence": data.get("confidence") if data.get("confidence") in ("high", "medium", "low") else "low",
         "note": clean(data.get("note")) or "",
         "sources": sources[:4],

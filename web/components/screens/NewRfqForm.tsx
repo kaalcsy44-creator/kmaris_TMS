@@ -1375,6 +1375,11 @@ function QuickVesselCreate({
         engine_type: engine,
         hull_no: hull,
         customer_id: ownerId === "" ? undefined : ownerId,
+        // 조회한 IMO 그대로일 때만 — 번호를 고친 뒤면 다른 배의 선주가 된다.
+        ...(lookup && lookup.imo === imo.replace(/\D/g, "") && (lookup.registered_owner || lookup.ism_manager)
+          ? { registered_owner: lookup.registered_owner || "", ism_manager: lookup.ism_manager || "",
+              owner_checked: new Date().toLocaleDateString("sv-SE") }
+          : {}),
       });
       await onCreated(r.id);
     } catch (e) {
@@ -1422,7 +1427,7 @@ function QuickVesselCreate({
         <Field label="Hull No.">
           <input value={hull} onChange={(e) => setHull(e.target.value)} />
         </Field>
-        <Field label="Owner (Customer)">
+        <Field label="Customer">
           <select
             value={ownerId}
             onChange={(e) => setOwnerId(e.target.value === "" ? "" : Number(e.target.value))}

@@ -104,6 +104,10 @@ _MIGRATIONS = {
     "vessels": {
         "vessel_type": "VARCHAR(60)",
         "ais_flag": "VARCHAR(60)",
+        # 등록 선주·ISM 관리사와 그 확인일. 기존 행은 NULL = 아직 조회 전.
+        "registered_owner": "VARCHAR(200)",
+        "ism_manager": "VARCHAR(200)",
+        "owner_checked": "VARCHAR(10)",
     },
     "email_templates": {
         # 같은 종류·언어의 여러 판을 가르는 이름. 기존 행은 빈 이름 = 기본 판이다.

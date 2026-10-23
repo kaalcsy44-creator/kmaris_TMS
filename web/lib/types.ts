@@ -170,6 +170,12 @@ export type SettingsVessel = {
   imo: string;
   vessel_type: string;
   ais_flag: string;
+  /** 등록 선주 — 대개 1척짜리 SPV. IMO 웹 조회로 채운다. */
+  registered_owner?: string;
+  /** ISM(기술) 관리사 — 실제로 배를 굴리고 부품을 사는 곳. */
+  ism_manager?: string;
+  /** 선주·관리사를 확인한 날(YYYY-MM-DD) — 매각·관리 변경으로 바뀌는 값이라. */
+  owner_checked?: string;
   engine_type: string;
   hull_no: string;
   customer_id: number | null;

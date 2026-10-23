@@ -1703,6 +1703,9 @@ export function createSettingsVessel(body: {
   customer_id?: number;
   engine_type?: string;
   hull_no?: string;
+  registered_owner?: string;
+  ism_manager?: string;
+  owner_checked?: string;
 }): Promise<{ ok: boolean; id: number }> {
   return post("/api/admin/settings/vessels", body);
 }
@@ -1713,12 +1716,14 @@ export function updateSettingsVessel(
   return put(`/api/admin/settings/vessels/${id}`, body);
 }
 
-/** IMO → 선종·기국(Claude 웹 검색, 출처 포함) + 제재 명부 확인. 저장하지 않는다. */
+/** IMO → 선종·기국·등록 선주·ISM 관리사(Claude 웹 검색, 출처 포함) + 제재 명부 확인. 저장하지 않는다. */
 export type VesselLookupResult = {
   imo: string;
   name: string | null;
   vessel_type: string | null;
   flag: string | null;
+  registered_owner?: string | null;
+  ism_manager?: string | null;
   confidence: "high" | "medium" | "low";
   note: string;
   sources: { title: string; url: string }[];

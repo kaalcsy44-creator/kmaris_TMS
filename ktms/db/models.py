@@ -300,6 +300,13 @@ class Vessel(Base):
     imo         = Column(String(20))
     vessel_type = Column(String(60))   # 선박 타입 (Container Ship, Bulk Carrier 등)
     ais_flag    = Column(String(60))   # AIS Flag (기국)
+    # 등록 선주와 ISM(기술) 관리사 — IMO 로 웹에서 찾아 채운다(services/vessel_lookup.py).
+    # 고객(customer_id)과 다른 정보다: 고객은 "이 배 건으로 우리와 거래하는 곳"이고 중개·
+    # 대리점일 수도 있다. 선주는 대개 1척짜리 SPV 라 실제로 부품을 사는 곳은 관리사다.
+    # 매각·관리 계약 변경으로 바뀌므로 언제 확인했는지(owner_checked, YYYY-MM-DD)를 함께 둔다.
+    registered_owner = Column(String(200))
+    ism_manager      = Column(String(200))
+    owner_checked    = Column(String(10))
     engine_type = Column(String(200))
     hull_no     = Column(String(100))
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
