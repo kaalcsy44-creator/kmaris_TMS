@@ -19781,7 +19781,7 @@ select.compose-tpl-version {
 .pj-pop input { width: 100%; margin-bottom: 6px; }
 .pj-pop ul { list-style: none; margin: 0; padding: 0; max-height: min(420px, 60vh); overflow-y: auto; }
 .pj-pop li button {
-  display: grid; grid-template-columns: 140px 1fr auto; gap: 12px; align-items: center;
+  display: grid; grid-template-columns: 140px 1fr auto; gap: 12px; align-items: baseline; /* 번호·프로젝트명·단계를 첫 줄 글자선에 맞춘다 */
   width: 100%; border: 0; background: transparent; text-align: left;
   padding: 6px 8px; border-radius: 6px; cursor: pointer; color: inherit;
 }
