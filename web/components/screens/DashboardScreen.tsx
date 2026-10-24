@@ -930,15 +930,6 @@ function DeltaChip({ cur, prev }: { cur: number; prev: number }) {
 const GRID = "#eef1f5";
 const AXIS_TICK = { fontSize: 10.5, fill: "#6b7686" };
 
-// 프로젝트 단계별 색상 — hue=단계, 채도(진/연)=매출/매입.
-const STAGE_KEYS = ["Quoted", "PO", "Invoiced"] as const;
-type StageKey = (typeof STAGE_KEYS)[number];
-const STAGE_COLORS: Record<StageKey, { sales: string; purchase: string }> = {
-  Quoted:   { sales: "#e8830c", purchase: "#f6c489" },  // 주황
-  PO:       { sales: "#0055a8", purchase: "#9cc0e6" },  // 파랑
-  Invoiced: { sales: "#1a7a4a", purchase: "#96caae" },  // 초록
-};
-
 // 파이프라인 4개 중분류(phase) 순서형 파랑 램프(light→dark) — dataviz 검증 통과.
 // 단계는 순서형이므로 임의 카테고리색이 아니라 단일 색조 심도로 진행감을 준다.
 const PHASE_RAMP = ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#0d366b"];
@@ -956,8 +947,6 @@ function StatisticsTab() {
   const [cur, setCur] = useState<StatCurKey>("USD");
   // 금액 KPI 월 이동 — null 이면 최신(이번 달). 절대 인덱스로 저장하고 로드 후 clamp.
   const [monthIdx, setMonthIdx] = useState<number | null>(null);
-  // 프로젝트 Sales/Purchase 차트 단계 필터.
-  const [marginStage, setMarginStage] = useState<"All" | StageKey>("All");
   // 관리자 전용 금액 KPI 감사 패널(행 단위 내역). 필요할 때만 온디맨드 로드.
   const [audit, setAudit] = useState<StatDebugData | null>(null);
   const [auditOpen, setAuditOpen] = useState(false);
@@ -1049,15 +1038,14 @@ function StatisticsTab() {
   // 실제로 쓴 매매기준율(stat.fx)을 그대로 써야 KPI·랭킹과 같은 환율 위에 선다.
   const fxRate = cur === "KRWC" ? (stat.fx?.rate || stat.usd_krw_rate) : stat.usd_krw_rate;
   const toCur = (usd: number) => (cur === "USD" ? usd : usd * fxRate);
-  const marginData = stat.project_margin.map((p) => ({
-    ...p,
-    name: p.project_no,
-    sales: Math.round(toCur(p.sales_usd)),
-    purchase: Math.round(toCur(p.purchase_usd)),
-  }));
-  const marginFiltered = marginStage === "All" ? marginData : marginData.filter((p) => p.stage === marginStage);
-  const stageColor = (stg: string, kind: "sales" | "purchase") =>
-    (STAGE_COLORS[stg as StageKey] ?? STAGE_COLORS.PO)[kind];
+  // 수주 건 마진 — 발주 전(매입 미확정) 건은 합계에서 뺀다.
+  const won = stat.won_margin;
+  const wonDone = won.filter((w) => w.margin_usd != null);
+  const wonSales = wonDone.reduce((s, w) => s + w.sales_usd, 0);
+  const wonMarginSum = wonDone.reduce((s, w) => s + (w.margin_usd ?? 0), 0);
+  const wonPct = wonSales ? Math.round((wonMarginSum / wonSales) * 1000) / 10 : null;
+  const pctMax = Math.max(1, ...wonDone.map((w) => Math.abs(w.margin_pct ?? 0)));
+  const qm = stat.quoted_margin;
   const funnelData = [
     { stage: "RFQ", count: stat.funnel.rfq, rate: 100, label: "" },
     { stage: "Quote", count: stat.funnel.quote, rate: stat.funnel.quote_rate, label: "Quote / RFQ" },
@@ -1070,7 +1058,6 @@ function StatisticsTab() {
     count,
     phase: phaseOfStage(i + 1),
   }));
-  const marginDisp = (usd: number) => `${curUnit(cur)} ${money(toCur(usd))}`;
 
   // 커스텀 호버 툴팁(상세내역) --------------------------------------------
   // RFQ 툴팁 — 번호 나열 대신 고객사별 건수 상위 3 + 기타, 그리고 견적·발주 전환.
@@ -1102,49 +1089,6 @@ function StatisticsTab() {
           </>
         )}
       </div>
-    );
-  }
-  function MarginTip({ active, payload }: { active?: boolean; payload?: { payload: typeof marginData[number] }[] }) {
-    if (!active || !payload?.length) return null;
-    const p = payload[0].payload;
-    return (
-      <div className="stat-tip">
-        <div className="stat-tip-h">{p.project_no} · {p.customer} <span className={`stat-tip-badge stage-${p.stage.toLowerCase()}`}>{p.stage}</span></div>
-        {p.project_title ? <div className="stat-tip-row muted">{p.project_title}</div> : null}
-        <div className="stat-tip-row">Sales: {marginDisp(p.sales_usd)}</div>
-        <div className="stat-tip-row">Purchase: {marginDisp(p.purchase_usd)}</div>
-        <div className="stat-tip-row"><b>Margin: {marginDisp(p.margin_usd)} ({p.margin_pct}%)</b></div>
-      </div>
-    );
-  }
-  // X축 라벨: 프로젝트 번호 + 프로젝트명(없으면 고객명, 2줄·-30° 회전) --------
-  function MarginTick({ x, y, payload }: { x?: number; y?: number; payload?: { value: string; index: number } }) {
-    const p = marginFiltered[payload?.index ?? -1];
-    const name = (p?.project_title || p?.customer || "").trim();
-    const short = name.length > 16 ? `${name.slice(0, 15)}…` : name;
-    return (
-      <g transform={`translate(${x},${y})`}>
-        <text x={0} y={0} dy={4} textAnchor="end" transform="rotate(-30)" fontSize={10} fill="#374151">
-          <tspan x={0}>{payload?.value}</tspan>
-          {short ? <tspan x={0} dy={12} fill="#8a94a6" fontSize={9}>{short}</tspan> : null}
-        </text>
-      </g>
-    );
-  }
-  // 각 프로젝트 상단 마진율 라벨 — Sales·Purchase 두 막대 쌍의 중앙, 더 높은 막대 위 -
-  function MarginPctLabel(props: { x?: number; y?: number; width?: number; height?: number; index?: number }) {
-    const p = marginFiltered[props.index ?? -1];
-    if (!p) return null;
-    const x = props.x ?? 0, y = props.y ?? 0, w = props.width ?? 0, h = props.height ?? 0;
-    const bottom = y + h;                                  // 값 0 지점(막대 밑)
-    const ppv = p.sales > 0 ? h / p.sales : 0;             // 픽셀/금액 환산
-    const purchaseTop = ppv ? bottom - p.purchase * ppv : y;
-    const top = Math.min(y, purchaseTop);                  // 더 높은(=위) 막대의 상단
-    const color = p.margin_pct < 0 ? "#dc2626" : "#059669";
-    return (
-      <text x={x + w} y={top - 12} textAnchor="middle" fontSize={10} fontWeight={700} fill={color}>
-        {p.margin_pct}%
-      </text>
     );
   }
   function FunnelTip({ active, payload }: { active?: boolean; payload?: { payload: typeof funnelData[number] }[] }) {
@@ -1391,6 +1335,52 @@ function StatisticsTab() {
           ) : null}
         </div>
 
+        {/* 수주 건 마진 — 최신순. 매출=오더, 매입=발주(발주 전이면 '—'). 줄 클릭 → 프로젝트.
+            견적 건은 예상치라 프로젝트별로 늘어놓지 않고 아래 한 줄 요약만 둔다. */}
+        <div className="stat-chart">
+          <SubHead title="Won Deals Margin" sub={`${curLabel(cur)} · latest first`} />
+          {won.length === 0 ? (
+            <div className="state">No won deals yet.</div>
+          ) : (
+            <div className="stat-mg">
+              <div className="stat-mg-row h">
+                <span>Project</span><span className="r">Sales</span><span className="r">Margin</span><span>Margin %</span>
+              </div>
+              <div className="stat-mg-body">
+                {won.map((w) => (
+                  <div key={w.rfq_id} className="stat-mg-row" role="button"
+                    onClick={() => router.push(`/project?rfq=${w.rfq_id}`)}
+                    title={`${w.project_no} · ${w.customer}${w.project_title ? ` · ${w.project_title}` : ""} · ${w.date}`}>
+                    <span className="p"><b>{w.project_no}</b><i>{w.project_title || w.customer}</i></span>
+                    <span className="r">{compact(toCur(w.sales_usd))}</span>
+                    <span className="r">{w.margin_usd == null ? "—" : compact(toCur(w.margin_usd))}</span>
+                    {w.margin_pct == null ? (
+                      <span className="pct muted">No PO yet</span>
+                    ) : (
+                      <span className="pct">
+                        <i className={w.margin_pct < 0 ? "neg" : ""}
+                          style={{ width: Math.round((Math.abs(w.margin_pct) / pctMax) * 70) }} />
+                        <b className={w.margin_pct < 0 ? "neg" : ""}>{w.margin_pct}%</b>
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="stat-mg-row t">
+                <span>Total ({wonDone.length})</span>
+                <span className="r">{compact(toCur(wonSales))}</span>
+                <span className="r">{compact(toCur(wonMarginSum))}</span>
+                <span className="pct"><b>{wonPct == null ? "—" : `${wonPct}%`}</b></span>
+              </div>
+            </div>
+          )}
+          {qm.count ? (
+            <div className="stat-mg-quoted" title="Open quotes: latest customer quote vs awarded (else lowest) vendor price, per line">
+              Quoted (est.) <b>{qm.margin_pct}%</b> avg · range {qm.min_pct}–{qm.max_pct}% · {qm.count} deals
+            </div>
+          ) : null}
+        </div>
+
         <div className="stat-chart">
           <SubHead title="Top 10 Customers" sub="by revenue" />
           <ResponsiveContainer width="100%" height={200}>
@@ -1399,76 +1389,6 @@ function StatisticsTab() {
               <YAxis type="category" dataKey="name" width={140} interval={0} tick={AXIS_TICK} tickLine={false} axisLine={false} />
               <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
               <Bar dataKey="amount" name="Revenue" fill="#0055a8" radius={[0, 2, 2, 0]}>
-                <LabelList dataKey="amount" position="right" formatter={(v) => compact(Number(v) || 0)}
-                  style={{ fontSize: 10, fill: "#45526a" }} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* 프로젝트별 Sales/Purchase — 세로 그룹 막대. hue=단계, 채도=매출/매입. */}
-        <div className="stat-chart stat-chart--wide">
-          <SubHead title="Project Sales vs Purchase" sub={curLabel(cur)} />
-          <div className="stat-margin-controls">
-            <div className="stat-cur-toggle sm">
-              {(["All", ...STAGE_KEYS] as const).map((sname) => (
-                <button key={sname} className={marginStage === sname ? "on" : ""} onClick={() => setMarginStage(sname)}>
-                  {sname === "All" ? "All" : sname}
-                  {sname !== "All" ? ` (${marginData.filter((p) => p.stage === sname).length})` : ` (${marginData.length})`}
-                </button>
-              ))}
-            </div>
-            <div className="stat-margin-legend">
-              {STAGE_KEYS.map((sname) => (
-                <span key={sname} className="lg"><i style={{ background: STAGE_COLORS[sname].sales }} />{sname}</span>
-              ))}
-              <span className="muted">· Dark = Sales, Light = Purchase</span>
-            </div>
-          </div>
-          {marginFiltered.length === 0 ? (
-            <div className="state">No projects at this stage.</div>
-          ) : (
-            /* 프로젝트 하나에 최소 56px(막대 둘 + 꼬리표 "29.4%")을 준다. 화면이 그보다 좁으면
-               욱여넣지 않고 이 상자 안에서 옆으로 민다 — 폰에서 스무 건이 한 화면에 눌려 막대와
-               꼬리표, 아래 이름이 서로 겹쳤다. 넓은 화면에선 전과 같이 폭을 채운다. */
-            <div className="stat-hscroll">
-            <div style={{
-              width: `${Math.min(100, Math.max(30, marginFiltered.length * 5))}%`,
-              minWidth: marginFiltered.length * 56 + 70,
-            }}>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={marginFiltered} margin={{ top: 28, right: 16, bottom: 64, left: 0 }}
-                  barGap={0} barCategoryGap="45%">
-                  <CartesianGrid vertical={false} stroke={GRID} />
-                  <XAxis dataKey="name" interval={0} height={78} tick={<MarginTick />} tickLine={false} axisLine={{ stroke: GRID }} />
-                  <YAxis tickFormatter={compact} tick={AXIS_TICK} width={44} tickLine={false} axisLine={false} />
-                  <Tooltip content={<MarginTip />} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
-                  <Bar dataKey="sales" name="Sales" radius={[3, 3, 0, 0]} barSize={16}>
-                    {marginFiltered.map((p, i) => <Cell key={i} fill={stageColor(p.stage, "sales")} />)}
-                    <LabelList dataKey="sales" position="top" formatter={(v) => compact(Number(v) || 0)}
-                      style={{ fontSize: 9, fill: "#374151" }} />
-                    <LabelList dataKey="margin_pct" content={<MarginPctLabel />} />
-                  </Bar>
-                  <Bar dataKey="purchase" name="Purchase" radius={[3, 3, 0, 0]} barSize={16}>
-                    {marginFiltered.map((p, i) => <Cell key={i} fill={stageColor(p.stage, "purchase")} />)}
-                    <LabelList dataKey="purchase" position="top" formatter={(v) => compact(Number(v) || 0)}
-                      style={{ fontSize: 9, fill: "#9ca3af" }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            </div>
-          )}
-        </div>
-
-        <div className="stat-chart">
-          <SubHead title="Top 10 Items" sub="by invoiced amount" />
-          <ResponsiveContainer width="100%" height={stageRows.length * 22 + 8}>
-            <BarChart data={itemTop} layout="vertical" margin={{ top: 0, right: 48, bottom: 0, left: 0 }} barCategoryGap={3}>
-              <XAxis type="number" hide />
-              <YAxis type="category" dataKey="name" width={170} interval={0} tick={{ ...AXIS_TICK, fontSize: 10 }} tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
-              <Bar dataKey="amount" name="Revenue" fill="#2e8b57" radius={[0, 2, 2, 0]}>
                 <LabelList dataKey="amount" position="right" formatter={(v) => compact(Number(v) || 0)}
                   style={{ fontSize: 10, fill: "#45526a" }} />
               </Bar>
@@ -1502,6 +1422,21 @@ function StatisticsTab() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+        <div className="stat-chart stat-chart--wide">
+          <SubHead title="Top 10 Items" sub="by invoiced amount" />
+          <ResponsiveContainer width="100%" height={230}>
+            <BarChart data={itemTop} layout="vertical" margin={{ top: 0, right: 48, bottom: 0, left: 0 }} barCategoryGap={3}>
+              <XAxis type="number" hide />
+              <YAxis type="category" dataKey="name" width={260} interval={0} tick={{ ...AXIS_TICK, fontSize: 10 }} tickLine={false} axisLine={false} />
+              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
+              <Bar dataKey="amount" name="Revenue" fill="#2e8b57" radius={[0, 2, 2, 0]}>
+                <LabelList dataKey="amount" position="right" formatter={(v) => compact(Number(v) || 0)}
+                  style={{ fontSize: 10, fill: "#45526a" }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
       </div>
     </>
   );

@@ -5306,6 +5306,38 @@ table.mini.items-edit td.row-tools {
 .stat-chart .recharts-wrapper:focus,
 .stat-chart .recharts-surface:focus,
 .stat-chart svg *:focus { outline: none; }
+/* 수주 건 마진 표 — 프로젝트 · 매출 · 마진 · 마진율 막대 */
+.stat-mg { font-size: 11.5px; }
+.stat-mg-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 52px 52px 120px;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 2px;
+  border-bottom: 1px solid #f1f4f8;
+}
+.stat-mg-body .stat-mg-row { cursor: pointer; }
+.stat-mg-body .stat-mg-row:hover { background: #f4f8fd; }
+.stat-mg-body { max-height: 196px; overflow-y: auto; }
+.stat-mg-row.h { font-size: 10.5px; font-weight: 700; color: var(--muted); }
+.stat-mg-row.t { border-top: 1px solid var(--line); border-bottom: none; font-weight: 800; color: var(--navy); }
+.stat-mg-row .r { text-align: right; font-variant-numeric: tabular-nums; }
+.stat-mg-row .p { display: flex; gap: 6px; min-width: 0; }
+.stat-mg-row .p b { color: var(--navy); white-space: nowrap; }
+.stat-mg-row .p i { font-style: normal; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-mg-row .pct { display: flex; align-items: center; gap: 6px; }
+.stat-mg-row .pct i { display: block; height: 9px; min-width: 2px; border-radius: 2px; background: #2e8b57; flex: none; }
+.stat-mg-row .pct i.neg { background: #c0392b; }
+.stat-mg-row .pct b { font-variant-numeric: tabular-nums; }
+.stat-mg-row .pct b.neg { color: #c0392b; }
+.stat-mg-quoted {
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #fff8ee;
+  color: #8a5a12;
+  font-size: 11.5px;
+}
 /* RFQ 차트 아래 선택 월 목록 */
 .stat-rfq-toggle {
   margin: 4px 0 2px;
@@ -5357,27 +5389,6 @@ table.mini.items-edit td.row-tools {
   color: var(--muted);
   font-style: italic;
 }
-.stat-tip-badge {
-  display: inline-block;
-  margin-left: 4px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  vertical-align: middle;
-}
-.stat-tip-badge.stage-quoted { background: #fff2e0; color: #b5670a; }
-.stat-tip-badge.stage-po { background: #e7f0fb; color: #0055a8; }
-.stat-tip-badge.stage-invoiced { background: #e7f5ec; color: #1a7a4a; }
-/* 프로젝트 차트 단계 필터 + 범례 */
-.stat-margin-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 2px 0 10px;
-}
 .stat-cur-toggle.sm button {
   padding: 4px 10px;
   font-size: 12px;
@@ -5392,26 +5403,6 @@ table.mini.items-edit td.row-tools {
     padding: 4px 8px;
     font-size: 11.5px;
   }
-}
-.stat-margin-legend {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  font-size: 11.5px;
-  color: #45526a;
-}
-.stat-margin-legend .lg {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-weight: 600;
-}
-.stat-margin-legend .lg i {
-  width: 11px;
-  height: 11px;
-  border-radius: 3px;
-  display: inline-block;
 }
 @media (max-width: 1100px) {
   .stat-charts { grid-template-columns: 1fr; }

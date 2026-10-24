@@ -7,6 +7,7 @@ from _core import (
     ARRecord,
     ARStatus,
     CommercialInvoice,
+    DealLineAward,
     TaxInvoiceData,
     Customer,
     Depends,
@@ -1468,62 +1469,121 @@ def statistics(months: int = 12):
             "revenue_rate": round(n_rev / n_order * 100, 1) if n_order else 0.0,   # Revenue/PO
         }
 
-        # ── 프로젝트별 마진(매출-매입, USD 환산) — 오더+발주가 있는 프로젝트만 ──
-        # 매출(sales) = 오더 있으면 오더 합, 없으면 고객 견적 합.
-        # 매입(purchase) = 발주(PO) 있으면 발주 합, 없으면 벤더 견적 합.
-        # → 견적만 낸 건·PO 받은 건·Invoiced 건을 모두 포함(단계 라벨 stage 로 구분).
+        # ── 마진 — 수주 건(실적)은 프로젝트별, 견적 건(예상)은 요약 한 줄 ─────────────
+        # 예전엔 둘을 한 그래프에 섞고, 견적 건 매출=고객 견적 전부의 합·매입=벤더 견적
+        # 전부의 합으로 셌다. 리비전·경쟁 견적이 겹쳐 더해져 마진이 -99% 로 뒤집혔다.
         proj_no_map = _project_no_map(s)
-        project_margin = []
-        for r in period_rfqs:
-            # 고객 견적 합(USD)
-            cust_usd = 0.0
-            for q in qtns_by_rfq.get(r.id, []):
-                qc = (getattr(q, "currency", None) or "USD").upper()
-                qt = _quotation_total(q.items or [], getattr(q, "discount_pct", 0) or 0)
-                cust_usd += (qt / usd_krw_rate()) if qc == "KRW" else qt
-            # 벤더 견적 합(USD)
-            vend_usd = 0.0
-            _vqs = vqs_by_rfq.get(r.id, [])
-            for vq in _vqs:
-                vc = (getattr(vq, "currency", None) or "USD").upper()
-                vend_usd += (_items_cost_total(vq.items or []) / usd_krw_rate()) if vc == "KRW" \
-                    else _items_cost_total(vq.items or [])
-            # 오더/발주(있으면 견적 대신 확정치 사용)
-            prj_orders = orders_by_rfq.get(r.id, [])
-            order_sales_usd = 0.0
-            po_purchase_usd = 0.0
+        _fx = usd_krw_rate()
+
+        def _usd(v: float, cur: str | None) -> float:
+            return v / _fx if (cur or "USD").upper() == "KRW" else v
+
+        # 견적 건 계산에만 RFQ.items(딜 라인) 가 필요하다 — 해당 RFQ 만 골라 읽는다.
+        quoted_rids = [r.id for r in period_rfqs
+                       if r.id not in ordered_ids
+                       and any(q.status != QuotationStatus.DRAFT for q in qtns_by_rfq.get(r.id, []))]
+        rfq_items = dict(s.query(RFQ.id, RFQ.items).filter(RFQ.id.in_(quoted_rids)).all()) if quoted_rids else {}
+        awards_by_rfq: dict[int, dict] = {}
+        if quoted_rids:
+            for a in s.query(DealLineAward).filter(DealLineAward.rfq_id.in_(quoted_rids)).all():
+                awards_by_rfq.setdefault(a.rfq_id, {})[a.lid] = a
+        vq_by_id = {v.id: v for v in all_vqs}
+
+        def _quoted_estimate(r) -> tuple[float, float] | None:
+            """견적 건 예상 (매출, 매입) USD — 줄 단위로 맞춘다.
+            매출 = 최신 고객 견적의 그 줄(대안 옵션은 첫 줄만), 매입 = 채택 벤더 단가,
+            채택 전이면 그 줄에 들어온 벤더 단가 중 최저. 매입가가 없는 줄은 양쪽에서 뺀다
+            (한쪽만 세면 마진이 부풀거나 줄어든다)."""
+            base = [it for it in (rfq_items.get(r.id) or []) if isinstance(it, dict) and not is_option_row(it)]
+            qs = [q for q in qtns_by_rfq.get(r.id, []) if q.status != QuotationStatus.DRAFT]
+            if not base or not qs:
+                return None
+            q = max(qs, key=lambda x: (str(getattr(x, "sent_at", None) or x.sent_date or x.date or ""), x.id))
+            disc = 1 - float(getattr(q, "discount_pct", 0) or 0) / 100.0
+            sales_by = index_doc_by_line(base, q.items or [])
+            vqs = vqs_by_rfq.get(r.id, [])
+            cost_by = [(vq, index_doc_by_line(base, vq.items or [])) for vq in vqs]
+            awards = awards_by_rfq.get(r.id, {})
+            keys = [line_id_of(b) or f"#{i + 1}" for i, b in enumerate(base)]
+            sales = purchase = 0.0
+            for k, b in zip(keys, base):
+                sv = _line_sales(sales_by.get(k))
+                if not sv:
+                    continue
+                qty = float(b.get("qty") or 1)
+                cost = None
+                a = awards.get(k)
+                if a is not None:
+                    vq = vq_by_id.get(a.vendor_quote_id)
+                    unit = a.unit_cost if a.unit_cost is not None else _line_cost(
+                        index_doc_by_line(base, vq.items or []).get(k) if vq else None)
+                    if unit is not None:
+                        cost = _usd(unit * qty, (vq.currency if vq else None) or a.currency)
+                if cost is None:
+                    cands = []
+                    for vq, idx_ in cost_by:
+                        unit = _line_cost(idx_.get(k))
+                        if unit:
+                            cands.append(_usd(unit * qty, vq.currency))
+                    cost = min(cands) if cands else None
+                if cost is None:
+                    continue
+                sales += _usd(sv * disc, q.currency)
+                purchase += cost
+            return (sales, purchase) if sales > 0 else None
+
+        # 수주 건 — 매출=오더 합, 매입=발주 합(발주 전이면 None → 화면에 '발주 전').
+        won_margin = []
+        for rid in ordered_ids:
+            r = rfq_map.get(rid)
+            prj_orders = orders_by_rfq.get(rid, [])
+            if not r or not prj_orders:
+                continue
+            sales = purchase = 0.0
             has_po = False
             for oo in prj_orders:
-                oc = (getattr(oo, "currency", None) or "USD").upper()
-                st = _total_amount(oo.items or [])
-                order_sales_usd += (st / usd_krw_rate()) if oc == "KRW" else st
+                sales += _usd(_total_amount(oo.items or []), getattr(oo, "currency", None))
                 for vp in pos_by_order.get(oo.id, []):
                     has_po = True
                     pt = _total_amount(vp.items or []) or _items_cost_total(vp.items or [])
-                    pc = (getattr(vp, "currency", None) or oc or "USD").upper()
-                    po_purchase_usd += (pt / usd_krw_rate()) if pc == "KRW" else pt
-
-            sales_usd = order_sales_usd if prj_orders else cust_usd
-            purchase_usd = po_purchase_usd if has_po else vend_usd
-            if sales_usd <= 0 and purchase_usd <= 0:
-                continue   # 매출·매입 근거가 전혀 없으면(견적 전) 제외
-
-            stage = ("Invoiced" if r.id in invoiced_ids
-                     else "PO" if r.id in ordered_ids
-                     else "Quoted")
-            margin_usd = sales_usd - purchase_usd
-            project_margin.append({
-                "project_no": proj_no_map.get(r.id, "") or _rfq_no_disp(r.rfq_no),
+                    purchase += _usd(pt, getattr(vp, "currency", None) or getattr(oo, "currency", None))
+            if sales <= 0:
+                continue
+            od = max((str(oo.date or (oo.created_at.isoformat() if oo.created_at else "")) for oo in prj_orders), default="")
+            margin = sales - purchase if has_po else None
+            won_margin.append({
+                "rfq_id": rid,
+                "project_no": proj_no_map.get(rid, "") or _rfq_no_disp(r.rfq_no),
                 "project_title": getattr(r, "project_title", None) or "",
                 "customer": cust_names.get(r.customer_id, "—"),
-                "stage": stage,
-                "sales_usd": round(sales_usd, 2),
-                "purchase_usd": round(purchase_usd, 2),
-                "margin_usd": round(margin_usd, 2),
-                "margin_pct": round(margin_usd / sales_usd * 100, 1) if sales_usd else 0.0,
+                "date": od[:10],
+                "stage": "Invoiced" if rid in invoiced_ids else "PO",
+                "sales_usd": round(sales, 2),
+                "purchase_usd": round(purchase, 2) if has_po else None,
+                "margin_usd": round(margin, 2) if margin is not None else None,
+                "margin_pct": round(margin / sales * 100, 1) if margin is not None else None,
             })
-        project_margin.sort(key=lambda x: -x["sales_usd"])
-        project_margin = project_margin[:20]
+        won_margin.sort(key=lambda x: (x["date"], x["rfq_id"]), reverse=True)
+
+        q_sales = q_purchase = 0.0
+        q_pcts: list[float] = []
+        for rid in quoted_rids:
+            est = _quoted_estimate(rfq_map[rid])
+            if not est:
+                continue
+            sl, pu = est
+            q_sales += sl
+            q_purchase += pu
+            q_pcts.append((sl - pu) / sl * 100)
+        quoted_margin = {
+            "count": len(q_pcts),
+            "total": len(quoted_rids),          # 견적 낸 건 수(매입가 없는 건 포함)
+            "sales_usd": round(q_sales, 2),
+            "margin_usd": round(q_sales - q_purchase, 2),
+            "margin_pct": round((q_sales - q_purchase) / q_sales * 100, 1) if q_sales else None,
+            "min_pct": round(min(q_pcts), 1) if q_pcts else None,
+            "max_pct": round(max(q_pcts), 1) if q_pcts else None,
+        }
 
         # ── Top 10 채우기 후보(매출 0) ──────────────────────────────────────────
         # 거래처: 올해 RFQ 를 준 곳 먼저(최근 수신 순), 그래도 모자라면 등록된 거래처.
@@ -1555,7 +1615,8 @@ def statistics(months: int = 12):
             "rfq_count": [rfq_count[mo] for mo in month_labels],
             "rfq_detail": [rfq_detail[mo] for mo in month_labels],
             "funnel": funnel,
-            "project_margin": project_margin,
+            "won_margin": won_margin,
+            "quoted_margin": quoted_margin,
             "usd_krw_rate": usd_krw_rate(),
             # KRW 환산에 실제로 쓴 환율 — 고시를 못 받아 고정환율로 내려갔는지까지 밝힌다.
             "fx": {"rate": round(fx_rate, 4), "date": fx_date,

@@ -2501,9 +2501,16 @@ export type StatFunnel = {
   rfq: number; quote: number; order: number; revenue: number;
   quote_rate: number; order_rate: number; revenue_rate: number;
 };
-export type StatProjectMargin = {
-  project_no: string; project_title: string; customer: string; stage: string;   // Quoted | PO | Invoiced
-  sales_usd: number; purchase_usd: number; margin_usd: number; margin_pct: number;
+// 수주 건 마진 — 매출=오더, 매입=발주. 발주 전이면 purchase/margin 이 null.
+export type StatWonMargin = {
+  rfq_id: number; project_no: string; project_title: string; customer: string;
+  date: string; stage: "PO" | "Invoiced";
+  sales_usd: number; purchase_usd: number | null; margin_usd: number | null; margin_pct: number | null;
+};
+// 견적 건 예상 마진 — 최신 고객 견적 vs 채택(없으면 최저) 벤더 단가, 줄 단위.
+export type StatQuotedMargin = {
+  count: number; total: number; sales_usd: number; margin_usd: number;
+  margin_pct: number | null; min_pct: number | null; max_pct: number | null;
 };
 export type StatisticsData = {
   months: string[];                    // 그래프 가로축 = 올해 1~12월
@@ -2513,7 +2520,8 @@ export type StatisticsData = {
   rfq_count: number[];                 // 월간 RFQ 수신 건수(months 순서)
   rfq_detail: StatRfqDetailRow[][];    // 월별 RFQ 상세(호버용, months 순서)
   funnel: StatFunnel;                  // RFQ→Quote→PO→Revenue 전환
-  project_margin: StatProjectMargin[]; // 프로젝트별 마진(USD 환산)
+  won_margin: StatWonMargin[];         // 수주 건 마진(USD 환산, 최신순)
+  quoted_margin: StatQuotedMargin;     // 견적 건 예상 마진 요약
   usd_krw_rate: number;                // 마진 KRW 환산용 고정환율
   fx?: { rate: number; date: string; source: "exim" | "fixed" };  // KRW 환산에 쓴 매매기준율
   customer_top: StatCustomerTop;
