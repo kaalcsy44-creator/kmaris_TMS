@@ -5246,7 +5246,7 @@ table.mini.items-edit td.row-tools {
 .stat-charts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
   margin-bottom: 20px;
 }
 .stat-chart {
@@ -5255,9 +5255,8 @@ table.mini.items-edit td.row-tools {
   min-width: 0;
   background: #fff;
   border: 1px solid #e3eaf3;
-  border-radius: 12px;
-  padding: 12px 14px 8px;
-  box-shadow: 0 2px 10px rgba(11, 29, 58, 0.05);
+  border-radius: 10px;
+  padding: 10px 12px 6px;
 }
 /* 프로젝트 마진 등 항목이 많은 차트는 2열 폭 전체를 사용. */
 .stat-chart--wide {
@@ -5346,24 +5345,98 @@ table.mini.items-edit td.row-tools {
   border-radius: 3px;
   display: inline-block;
 }
-.stat-alerts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
-.stat-alert {
-  background: #fff;
-  border: 1px solid #e3eaf3;
-  border-radius: 12px;
-  padding: 10px 12px;
-  box-shadow: 0 2px 10px rgba(11, 29, 58, 0.05);
-}
-.stat-alert .alert-card {
-  cursor: pointer;
-}
 @media (max-width: 1100px) {
   .stat-charts { grid-template-columns: 1fr; }
-  .stat-alerts { grid-template-columns: 1fr; }
+}
+/* 통계 머리줄 — 월 이동 · 감사 아이콘 · 환율 각주 · 통화 전환 한 줄 */
+.stat-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin: 4px 0 10px;
+}
+.stat-audit-icon {
+  width: 26px;
+  height: 26px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 7px;
+  background: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.stat-audit-icon:hover,
+.stat-audit-icon.on {
+  border-color: var(--blue);
+  background: #eef4fb;
+}
+/* 숫자 띠 — 카드 8장 대신 4열×2줄 한 상자. 윗줄=선택 월 실적, 아랫줄=지금 상태. */
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  background: #fff;
+  border: 1px solid #e3eaf3;
+  border-radius: 10px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.stat-cell {
+  min-width: 0;
+  padding: 8px 14px;
+  border-right: 1px solid #eef1f5;
+  border-bottom: 1px solid #eef1f5;
+}
+.stat-cell:nth-child(4n) { border-right: none; }
+.stat-cell:nth-last-child(-n + 4) { border-bottom: none; }
+/* 윗줄(선택 월)은 옅게 깔아 아랫줄(현재 상태)과 구분 */
+.stat-cell:nth-child(-n + 4) { background: #fafcfe; }
+.stat-cell-l {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.stat-cell-v {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin-top: 1px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+.stat-cell.red .stat-cell-v > span:first-child { color: #c0392b; }
+.stat-cell.amber .stat-cell-v > span:first-child { color: #b5670a; }
+.stat-delta {
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.stat-delta.up { color: #1a7a4a; }
+.stat-delta.down { color: #c0392b; }
+.stat-flag {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 0 6px;
+  border-radius: 999px;
+}
+.stat-flag.red { background: #fdecec; color: #c0392b; }
+.stat-flag.amber { background: #fff4e0; color: #b5670a; }
+.stat-charts .dash-subhead {
+  margin: 0 0 6px;
+  padding-bottom: 4px;
+  border-bottom: none;
+}
+@media (max-width: 720px) {
+  .stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-cell { padding: 7px 10px; }
+  .stat-cell:nth-child(4n) { border-right: 1px solid #eef1f5; }
+  .stat-cell:nth-child(2n) { border-right: none; }
+  .stat-cell:nth-last-child(-n + 4) { border-bottom: 1px solid #eef1f5; }
+  .stat-cell:nth-last-child(-n + 2) { border-bottom: none; }
+  .stat-cell-v { font-size: 14px; }
 }
 .kpi-card {
   background: #fff;

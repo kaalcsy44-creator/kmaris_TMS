@@ -23,7 +23,7 @@ import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import { can, canEditDeal, getUser, isAdmin } from "@/lib/auth";
 import type {
   QtnRow, PipelineRow, ArRow, PoRow, MarketingRow, MarketingOverview,
-  ScheduleRow, CustomerOption, StatisticsData, StatAlertRow, CurrencyKey, StatCurKey,
+  ScheduleRow, CustomerOption, StatisticsData, CurrencyKey, StatCurKey,
   StatDebugData,
 } from "@/lib/types";
 import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen";
@@ -32,8 +32,8 @@ import { MarketingForm, emptyForm as emptyMarketingForm } from "@/components/scr
 import { ReplyBadge, FollowUpCell } from "@/components/common/MarketingBadges";
 import { REPLY_STATUSES, replyText } from "@/lib/marketing";
 import {
-  ResponsiveContainer, LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, Tooltip, CartesianGrid, Legend, Cell, LabelList,
+  ResponsiveContainer, ComposedChart, Line, BarChart, Bar,
+  XAxis, YAxis, Tooltip, CartesianGrid, Legend, Cell, LabelList, ReferenceArea,
 } from "recharts";
 import { tr } from "@/lib/labels";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
@@ -914,20 +914,21 @@ function fmtMoney(cur: StatCurKey, n: number): string {
   return `${curUnit(cur)} ${Math.round(n).toLocaleString()}`;
 }
 
-/* 전월 대비 증감 배지. prev=0 이면 표시 안 함. */
+/* 전월 대비 증감 꼬리표. prev=0 이면 표시 안 함. */
 function DeltaChip({ cur, prev }: { cur: number; prev: number }) {
   if (!prev) return null;
   const pct = ((cur - prev) / Math.abs(prev)) * 100;
   const up = pct >= 0;
   return (
-    <span className={`kc-chip ${up ? "blue" : "red"}`}>
-      {up ? "▲" : "▼"} {Math.abs(Math.round(pct))}% MoM
+    <span className={`stat-delta ${up ? "up" : "down"}`} title="vs previous month">
+      {up ? "▲" : "▼"}{Math.abs(Math.round(pct))}%
     </span>
   );
 }
 
-const CHART_COLORS = ["#0055a8", "#2e8b57", "#e8830c", "#8e44ad", "#16a085",
-  "#c0392b", "#2980b9", "#d35400", "#27ae60", "#7f8c8d"];
+// 통계 차트 공통 — 옅은 가로 격자 · 작은 축 글씨.
+const GRID = "#eef1f5";
+const AXIS_TICK = { fontSize: 10.5, fill: "#6b7686" };
 
 // 프로젝트 단계별 색상 — hue=단계, 채도(진/연)=매출/매입.
 const STAGE_KEYS = ["Quoted", "PO", "Invoiced"] as const;
@@ -990,15 +991,21 @@ function StatisticsTab() {
   // 축은 1~12월 전체지만, 아직 오지 않은 달은 0 이 아니라 "값 없음"(null)으로 둔다.
   // 0 으로 그리면 추이선이 연말까지 바닥을 기어 실적이 떨어진 것처럼 보인다.
   const future = (i: number) => lastIdx >= 0 && i > lastIdx;
-  const trendData = stat.months.map((m, i) => ({
-    month: monthLabel(m),
-    revenue: future(i) ? null : stat.series.revenue[cur][i],
-  }));
-  const quoteVsOrder = stat.months.map((m, i) => ({
+  // 금액 추이 한 장 — Quoted·Won 막대 + Revenue 선(따로 있던 두 차트를 합침).
+  const moneyTrend = stat.months.map((m, i) => ({
     month: monthLabel(m),
     quote: future(i) ? null : stat.series.quote[cur][i],
     order: future(i) ? null : stat.series.order[cur][i],
+    revenue: future(i) ? null : stat.series.revenue[cur][i],
   }));
+  // 선택 월을 추이 차트에 띠로 칠해 위 숫자와 같은 달을 가리킨다. 칸을 누르면 그 달로 이동.
+  const selLabel = monthLabel(selMonth);
+  const pickMonth = (s: { activeTooltipIndex?: number | string | null } | null | undefined) => {
+    const i = Number(s?.activeTooltipIndex);
+    if (s?.activeTooltipIndex != null && Number.isFinite(i) && i >= 0 && i <= lastIdx) setMonthIdx(i);
+  };
+  const mRfq = stat.rfq_count[idx] || 0, mRfqPrev = idx > 0 ? stat.rfq_count[idx - 1] || 0 : 0;
+  const arOut = data.kpi.ar_outstanding?.[cur] ?? (cur === "USD" ? data.kpi.ar_outstanding_usd : 0);
   const custTop = stat.customer_top[cur].map((r) => ({ name: r.name, amount: r.amount }));
   const itemTop = stat.item_top[cur].map((r) => ({
     name: r.part_no + (r.description ? ` · ${r.description.slice(0, 20)}` : ""),
@@ -1050,9 +1057,15 @@ function StatisticsTab() {
   const funnelData = [
     { stage: "RFQ", count: stat.funnel.rfq, rate: 100, label: "" },
     { stage: "Quote", count: stat.funnel.quote, rate: stat.funnel.quote_rate, label: "Quote / RFQ" },
-    { stage: "Order (PO)", count: stat.funnel.order, rate: stat.funnel.order_rate, label: "PO / Quote" },
+    { stage: "PO", count: stat.funnel.order, rate: stat.funnel.order_rate, label: "PO / Quote" },
     { stage: "Revenue", count: stat.funnel.revenue, rate: stat.funnel.revenue_rate, label: "Revenue / PO" },
-  ];
+  ].map((d) => ({ ...d, tag: d.label ? `${d.count} · ${d.rate}%` : String(d.count) }));
+  // 파이프라인 10단계 분포 — 색은 5개 중분류(phase).
+  const stageRows = data.stage_distribution.map((count, i) => ({
+    name: `${i + 1}. ${data.steps[i] ?? ""}`,
+    count,
+    phase: phaseOfStage(i + 1),
+  }));
   const marginDisp = (usd: number) => `${curUnit(cur)} ${money(toCur(usd))}`;
 
   // 커스텀 호버 툴팁(상세내역) --------------------------------------------
@@ -1126,22 +1139,8 @@ function StatisticsTab() {
 
   return (
     <>
-      {/* 환산 중일 때만 어떤 환율로 옮겼는지 밝힌다 — 합계가 환율에 따라 달라지므로,
-          숫자만 두면 검산할 근거가 없다. */}
-      {cur === "KRWC" ? (
-        <div className="stat-toolbar">
-          <span className="stat-fx-note">
-            USD → KRW {fxRate.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-            {stat.fx?.source === "exim"
-              ? ` · base rate${stat.fx.date ? ` (posted ${stat.fx.date})` : ""}`
-              : " · fixed rate (quote lookup failed)"}
-          </span>
-        </div>
-      ) : null}
-
-      {/* ① 금액 KPI 스트립 — 월 앞뒤 이동으로 과거 실적 확인(월별 시계열 기반) ---- */}
-      <div className="dash-subhead stat-monthhead">
-        <span className="t">Monthly</span>
+      {/* ① 머리줄 — 월 이동 · (관리자)감사 · 통화 전환 ------------------------- */}
+      <div className="stat-head">
         <span className="stat-monthnav">
           <button
             type="button" className="stat-mnav-btn"
@@ -1157,8 +1156,21 @@ function StatisticsTab() {
             aria-label="Next month" title="Next month"
           >›</button>
         </span>
-        {/* 통화 전환 — 따로 한 줄을 차지하던 것을 월 이동 줄 끝으로 옮겼다. 이 줄 끝에
-            있던 통화 이름(회색 "USD")은 토글이 곧 그 말이라 뺐다. */}
+        {/* 관리자 전용 감사 — 한 줄을 차지하던 토글을 아이콘으로 줄였다. */}
+        {showAudit ? (
+          <button type="button" className={`stat-audit-icon${auditOpen ? " on" : ""}`} onClick={loadAudit}
+            title="Audit money KPIs — trace Orders Won / Quoted / Revenue rows">🔍</button>
+        ) : null}
+        {/* 환산 중일 때만 어떤 환율로 옮겼는지 밝힌다 — 합계가 환율에 따라 달라지므로,
+            숫자만 두면 검산할 근거가 없다. */}
+        {cur === "KRWC" ? (
+          <span className="stat-fx-note">
+            USD → KRW {fxRate.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            {stat.fx?.source === "exim"
+              ? ` · base rate${stat.fx.date ? ` (posted ${stat.fx.date})` : ""}`
+              : " · fixed rate (quote lookup failed)"}
+          </span>
+        ) : null}
         <div className="stat-cur-toggle sm stat-cur-inline">
           {STAT_CUR_KEYS.map((c) => (
             <button key={c} className={cur === c ? "on" : ""} onClick={() => setCur(c)}>
@@ -1167,137 +1179,165 @@ function StatisticsTab() {
           ))}
         </div>
       </div>
-      <div className="kpi-row">
-        <Kpi label="Revenue" value={fmtMoney(cur, mRevenue)} sub="Tax-invoiced"
-          chipNode={<DeltaChip cur={mRevenue} prev={mRevenuePrev} />} />
-        <Kpi label="Orders Won" value={fmtMoney(cur, mOrder)} sub="Order value" accent="#2e8b57"
-          chipNode={<DeltaChip cur={mOrder} prev={mOrderPrev} />} />
-        <Kpi label="Quoted" value={fmtMoney(cur, mQuote)} sub="Quote value" accent="#e8830c"
-          chipNode={<DeltaChip cur={mQuote} prev={mQuotePrev} />} />
+
+      {/* ② 숫자 띠 — 윗줄은 선택 월 실적, 아랫줄은 지금 상태(월 이동과 무관). ---- */}
+      <div className="stat-strip">
+        <StatCell label="Revenue" value={fmtMoney(cur, mRevenue)} tip="Tax-invoiced in the selected month"
+          extra={<DeltaChip cur={mRevenue} prev={mRevenuePrev} />} />
+        <StatCell label="Orders Won" value={fmtMoney(cur, mOrder)} tip="Order value in the selected month"
+          extra={<DeltaChip cur={mOrder} prev={mOrderPrev} />} />
+        <StatCell label="Quoted" value={fmtMoney(cur, mQuote)} tip="Quote value in the selected month"
+          extra={<DeltaChip cur={mQuote} prev={mQuotePrev} />} />
+        <StatCell label="RFQs" value={mRfq} tip="RFQs received in the selected month"
+          extra={<DeltaChip cur={mRfq} prev={mRfqPrev} />} />
+        <StatCell label="Gross Margin" value={`${perf.gross_margin_pct}%`} tip="Current gross margin %" />
+        <StatCell label="AR Outstanding" value={`${curUnit(cur)} ${num(Math.round(arOut))}`}
+          tip={`Outstanding receivables (${curLabel(cur)})`}
+          extra={ops.overdue ? <span className="stat-flag red">Overdue {ops.overdue}</span> : null} />
+        <StatCell label="Delivery Delays" value={stat.delivery_delays} tip="Past promised date"
+          tone={stat.delivery_delays ? "red" : undefined} />
+        <StatCell label="Urgent" value={ops.urgent} tip="Level A · expiring"
+          tone={ops.urgent ? "amber" : undefined}
+          extra={ops.expiring ? <span className="stat-flag amber">Expiring {ops.expiring}</span> : null} />
       </div>
 
-      {/* ② 운영 스냅샷 — 현재 상태(월 이동과 무관한 실시간 지표) ---------------- */}
-      <SubHead title="Operations" sub="Current status" />
-      <div className="kpi-row">
-        <Kpi label="Hit Rate" value={`${perf.hit_rate}%`} sub="PO conversion" accent="#8e44ad" />
-        <Kpi label="Gross Margin" value={`${perf.gross_margin_pct}%`} sub="Gross margin %" accent="#1a7a4a" />
-        <Kpi label="AR Outstanding"
-          value={`${curUnit(cur)} ${num(Math.round(data.kpi.ar_outstanding?.[cur] ?? (cur === "USD" ? data.kpi.ar_outstanding_usd : 0)))}`}
-          sub={`Outstanding (${curLabel(cur)})`}
-          accent={ops.overdue ? "#dc3545" : "#0055a8"}
-          chip={{ text: `Overdue ${ops.overdue}`, tone: ops.overdue ? "red" : "gray" }} />
-        <Kpi label="Delivery Delays" value={stat.delivery_delays} sub="Past promised date"
-          accent={stat.delivery_delays ? "#dc3545" : "#0055a8"} />
-        <Kpi label="Urgent" value={ops.urgent} sub="Level A · expiring"
-          accent={ops.urgent ? "#e8830c" : "#0055a8"}
-          chip={{ text: `Expiring ${ops.expiring}`, tone: ops.expiring ? "amber" : "gray" }} />
-      </div>
-
-      {/* 관리자 전용 감사 — 금액 KPI 가 어떤 오더·견적·AR 에서 왔는지 행 단위로 확인.
+      {/* 관리자 전용 감사 패널 — 금액 KPI 가 어떤 오더·견적·AR 에서 왔는지 행 단위로 확인.
           통화 오염(예: KRW 금액이 USD 로 계상) 원인을 화면에서 바로 특정한다. */}
-      {showAudit ? (
+      {showAudit && auditOpen ? (
         <div className="stat-audit">
-          <button type="button" className="stat-audit-toggle" onClick={loadAudit}>
-            {auditOpen ? "▾" : "▸"} 🔍 Audit money KPIs — trace Orders Won / Quoted / Revenue rows
-          </button>
-          {auditOpen ? (
-            auditBusy ? (
-              <div className="state">Loading breakdown…</div>
-            ) : auditErr ? (
-              <div className="state error">{auditErr}</div>
-            ) : audit ? (
-              <div className="stat-audit-body">
-                <p className="stat-audit-note">
-                  Month <b>{audit.month}</b>. Amounts are shown in the currency bucket each row lands in.
-                  Rows marked <span className="stat-audit-flag">⚠ suspect</span> are large amounts counted as USD —
-                  the likely cross-currency contamination.
-                </p>
+          {auditBusy ? (
+            <div className="state">Loading breakdown…</div>
+          ) : auditErr ? (
+            <div className="state error">{auditErr}</div>
+          ) : audit ? (
+            <div className="stat-audit-body">
+              <p className="stat-audit-note">
+                Month <b>{audit.month}</b>. Amounts are shown in the currency bucket each row lands in.
+                Rows marked <span className="stat-audit-flag">⚠ suspect</span> are large amounts counted as USD —
+                the likely cross-currency contamination.
+              </p>
 
-                <div className="stat-audit-tbl">
-                  <div className="stat-audit-h">
-                    Orders Won → USD {money(audit.orders_won.total.USD)} · KRW {money(audit.orders_won.total.KRW)}
-                  </div>
-                  <table className="mini wide">
-                    <thead><tr><th>Ref</th><th>Customer</th><th>Date</th><th>Bucket</th><th style={{ textAlign: "right" }}>Amount</th><th>Source</th></tr></thead>
-                    <tbody>
-                      {audit.orders_won.rows.length === 0 ? (
-                        <tr><td colSpan={6} className="muted">No orders this month.</td></tr>
-                      ) : audit.orders_won.rows.map((r, i) => (
-                        <tr key={i} className={r.suspect ? "stat-audit-suspect" : ""}>
-                          <td>{r.ref}</td><td>{r.customer}</td><td>{r.date || "—"}</td>
-                          <td>{r.bucket}{r.suspect ? " ⚠" : ""}</td>
-                          <td style={{ textAlign: "right" }}>{money(r.amount)}</td>
-                          <td className="muted">{r.source}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              <div className="stat-audit-tbl">
+                <div className="stat-audit-h">
+                  Orders Won → USD {money(audit.orders_won.total.USD)} · KRW {money(audit.orders_won.total.KRW)}
                 </div>
-
-                <div className="stat-audit-tbl">
-                  <div className="stat-audit-h">
-                    Quoted → USD {money(audit.quoted.total.USD)} · KRW {money(audit.quoted.total.KRW)}
-                  </div>
-                  <table className="mini wide">
-                    <thead><tr><th>Ref</th><th>Bucket</th><th>Raw currency</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
-                    <tbody>
-                      {audit.quoted.rows.length === 0 ? (
-                        <tr><td colSpan={4} className="muted">No quotes this month.</td></tr>
-                      ) : audit.quoted.rows.map((r, i) => (
-                        <tr key={i}>
-                          <td>{r.ref}</td><td>{r.bucket}</td>
-                          <td className="muted">{r.raw_currency ?? "(null)"}</td>
-                          <td style={{ textAlign: "right" }}>{money(r.amount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="stat-audit-tbl">
-                  <div className="stat-audit-h">
-                    Revenue → USD {money(audit.revenue.total.USD)} · KRW {money(audit.revenue.total.KRW)}
-                    <span className="muted"> (only rows with a tax-invoice month = {audit.month} are counted)</span>
-                  </div>
-                  <table className="mini wide">
-                    <thead><tr><th>Ref</th><th>Tax-invoice month</th><th>Bucket</th><th style={{ textAlign: "right" }}>Amount</th><th>Counted</th></tr></thead>
-                    <tbody>
-                      {audit.revenue.rows.length === 0 ? (
-                        <tr><td colSpan={5} className="muted">No AR records.</td></tr>
-                      ) : audit.revenue.rows.map((r, i) => (
-                        <tr key={i} className={r.counted ? "" : "muted"}>
-                          <td>{r.ref}</td><td>{r.issue_month}</td><td>{r.bucket}</td>
-                          <td style={{ textAlign: "right" }}>{money(r.amount)}</td>
-                          <td>{r.counted ? "✓" : "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <table className="mini wide">
+                  <thead><tr><th>Ref</th><th>Customer</th><th>Date</th><th>Bucket</th><th style={{ textAlign: "right" }}>Amount</th><th>Source</th></tr></thead>
+                  <tbody>
+                    {audit.orders_won.rows.length === 0 ? (
+                      <tr><td colSpan={6} className="muted">No orders this month.</td></tr>
+                    ) : audit.orders_won.rows.map((r, i) => (
+                      <tr key={i} className={r.suspect ? "stat-audit-suspect" : ""}>
+                        <td>{r.ref}</td><td>{r.customer}</td><td>{r.date || "—"}</td>
+                        <td>{r.bucket}{r.suspect ? " ⚠" : ""}</td>
+                        <td style={{ textAlign: "right" }}>{money(r.amount)}</td>
+                        <td className="muted">{r.source}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ) : null
+
+              <div className="stat-audit-tbl">
+                <div className="stat-audit-h">
+                  Quoted → USD {money(audit.quoted.total.USD)} · KRW {money(audit.quoted.total.KRW)}
+                </div>
+                <table className="mini wide">
+                  <thead><tr><th>Ref</th><th>Bucket</th><th>Raw currency</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
+                  <tbody>
+                    {audit.quoted.rows.length === 0 ? (
+                      <tr><td colSpan={4} className="muted">No quotes this month.</td></tr>
+                    ) : audit.quoted.rows.map((r, i) => (
+                      <tr key={i}>
+                        <td>{r.ref}</td><td>{r.bucket}</td>
+                        <td className="muted">{r.raw_currency ?? "(null)"}</td>
+                        <td style={{ textAlign: "right" }}>{money(r.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="stat-audit-tbl">
+                <div className="stat-audit-h">
+                  Revenue → USD {money(audit.revenue.total.USD)} · KRW {money(audit.revenue.total.KRW)}
+                  <span className="muted"> (only rows with a tax-invoice month = {audit.month} are counted)</span>
+                </div>
+                <table className="mini wide">
+                  <thead><tr><th>Ref</th><th>Tax-invoice month</th><th>Bucket</th><th style={{ textAlign: "right" }}>Amount</th><th>Counted</th></tr></thead>
+                  <tbody>
+                    {audit.revenue.rows.length === 0 ? (
+                      <tr><td colSpan={5} className="muted">No AR records.</td></tr>
+                    ) : audit.revenue.rows.map((r, i) => (
+                      <tr key={i} className={r.counted ? "" : "muted"}>
+                        <td>{r.ref}</td><td>{r.issue_month}</td><td>{r.bucket}</td>
+                        <td style={{ textAlign: "right" }}>{money(r.amount)}</td>
+                        <td>{r.counted ? "✓" : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           ) : null}
         </div>
       ) : null}
 
-      {/* ② 추이·구성 차트 (2열) ------------------------------------------- */}
+      {/* ③ 차트 (2열) — 선택 월은 추이 차트에 띠로 칠하고, 칸을 누르면 그 달로 옮긴다. */}
       <div className="stat-charts">
+        {/* 금액 추이 — Quoted·Won 막대 + Revenue 선. 따로 있던 두 차트를 합쳤다. */}
+        <div className="stat-chart">
+          <SubHead title="Quoted · Won · Revenue" sub={curLabel(cur)} />
+          <ResponsiveContainer width="100%" height={210}>
+            <ComposedChart data={moneyTrend} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}
+              onClick={pickMonth} style={{ cursor: "pointer" }}>
+              <CartesianGrid vertical={false} stroke={GRID} />
+              <ReferenceArea x1={selLabel} x2={selLabel} fill="#0055a8" fillOpacity={0.07} />
+              <XAxis dataKey="month" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: GRID }} />
+              <YAxis tickFormatter={compact} tick={AXIS_TICK} width={40} tickLine={false} axisLine={false} />
+              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} />
+              <Legend wrapperStyle={{ fontSize: 11 }} iconSize={9} />
+              <Bar dataKey="quote" fill="#e8830c" name="Quoted" radius={[2, 2, 0, 0]} />
+              <Bar dataKey="order" fill="#2e8b57" name="Won" radius={[2, 2, 0, 0]} />
+              <Line type="monotone" dataKey="revenue" stroke="#0055a8" strokeWidth={2} dot={{ r: 2 }} name="Revenue" />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* 전환 퍼널 — 막대 옆에 건수와 앞 단계 대비 전환율을 함께 적는다(Hit Rate 카드 대체). */}
+        <div className="stat-chart">
+          <SubHead title="Conversion" sub="RFQ → Quote → PO → Revenue" />
+          <ResponsiveContainer width="100%" height={210}>
+            <BarChart data={funnelData} layout="vertical" margin={{ top: 4, right: 70, bottom: 0, left: 0 }}>
+              <XAxis type="number" hide />
+              <YAxis type="category" dataKey="stage" width={80} tick={AXIS_TICK} tickLine={false} axisLine={false} />
+              <Tooltip content={<FunnelTip />} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
+              <Bar dataKey="count" name="Count" radius={[0, 3, 3, 0]} barSize={26}>
+                {funnelData.map((_, i) => <Cell key={i} fill={PHASE_RAMP[i % PHASE_RAMP.length]} />)}
+                <LabelList dataKey="tag" position="right" style={{ fontSize: 11, fill: "#45526a", fontWeight: 600 }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
         {/* 월간 RFQ 수신 건수 — 호버 시 해당 월 RFQ 목록 표시 */}
         <div className="stat-chart">
-          <SubHead title="Monthly RFQ Received" sub="RFQ count received · hover for detail" />
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={rfqData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={32} />
-              <Tooltip content={<RfqTip />} />
-              <Bar dataKey="count" fill="#0055a8" name="RFQ" radius={[3, 3, 0, 0]}>
+          <SubHead title="RFQs Received" />
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={rfqData} margin={{ top: 14, right: 8, bottom: 0, left: 0 }}
+              onClick={pickMonth} style={{ cursor: "pointer" }}>
+              <CartesianGrid vertical={false} stroke={GRID} />
+              <ReferenceArea x1={selLabel} x2={selLabel} fill="#0055a8" fillOpacity={0.07} />
+              <XAxis dataKey="month" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: GRID }} />
+              <YAxis allowDecimals={false} tick={AXIS_TICK} width={28} tickLine={false} axisLine={false} />
+              <Tooltip content={<RfqTip />} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
+              <Bar dataKey="count" fill="#0055a8" name="RFQ" radius={[2, 2, 0, 0]}>
                 {/* 축이 1~12월 고정이라 수신 없는 달이 여럿 생긴다 — 0 은 라벨을 지워
                     바닥에 0 이 줄줄이 찍히지 않게 한다(툴팁에는 "수신 없음"으로 안내). */}
                 <LabelList
                   dataKey="count"
                   position="top"
-                  style={{ fontSize: 11, fill: "#45526a" }}
+                  style={{ fontSize: 10, fill: "#45526a" }}
                   formatter={(v) => (Number(v) > 0 ? String(v) : "")}
                 />
               </Bar>
@@ -1305,18 +1345,16 @@ function StatisticsTab() {
           </ResponsiveContainer>
         </div>
 
-        {/* Hit-rate 퍼널 — RFQ→Quote→PO→Revenue 전환. 호버 시 전환율 */}
         <div className="stat-chart">
-          <SubHead title="Conversion Funnel" sub="RFQ → Quote → PO → Revenue" />
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={funnelData} layout="vertical" margin={{ top: 4, right: 40, bottom: 0, left: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
-              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
-              <YAxis type="category" dataKey="stage" width={92} tick={{ fontSize: 11 }} />
-              <Tooltip content={<FunnelTip />} />
-              <Bar dataKey="count" name="Count" radius={[0, 3, 3, 0]}>
-                {funnelData.map((_, i) => <Cell key={i} fill={PHASE_RAMP[i % PHASE_RAMP.length]} />)}
-                <LabelList dataKey="count" position="right" style={{ fontSize: 11, fill: "#45526a" }} />
+          <SubHead title="Top 10 Customers" sub="by revenue" />
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={custTop} layout="vertical" margin={{ top: 0, right: 48, bottom: 0, left: 0 }} barCategoryGap={3}>
+              <XAxis type="number" hide />
+              <YAxis type="category" dataKey="name" width={140} interval={0} tick={AXIS_TICK} tickLine={false} axisLine={false} />
+              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
+              <Bar dataKey="amount" name="Revenue" fill="#0055a8" radius={[0, 2, 2, 0]}>
+                <LabelList dataKey="amount" position="right" formatter={(v) => compact(Number(v) || 0)}
+                  style={{ fontSize: 10, fill: "#45526a" }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -1324,7 +1362,7 @@ function StatisticsTab() {
 
         {/* 프로젝트별 Sales/Purchase — 세로 그룹 막대. hue=단계, 채도=매출/매입. */}
         <div className="stat-chart stat-chart--wide">
-          <SubHead title="Project Sales vs Purchase" sub={`Sales · purchase by project (${curLabel(cur)}) · hover for detail`} />
+          <SubHead title="Project Sales vs Purchase" sub={curLabel(cur)} />
           <div className="stat-margin-controls">
             <div className="stat-cur-toggle sm">
               {(["All", ...STAGE_KEYS] as const).map((sname) => (
@@ -1352,12 +1390,12 @@ function StatisticsTab() {
               width: `${Math.min(100, Math.max(30, marginFiltered.length * 5))}%`,
               minWidth: marginFiltered.length * 56 + 70,
             }}>
-              <ResponsiveContainer width="100%" height={340}>
-                <BarChart data={marginFiltered} margin={{ top: 28, right: 16, bottom: 64, left: 8 }}
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={marginFiltered} margin={{ top: 28, right: 16, bottom: 64, left: 0 }}
                   barGap={0} barCategoryGap="45%">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
-                  <XAxis dataKey="name" interval={0} height={78} tick={<MarginTick />} />
-                  <YAxis tickFormatter={compact} tick={{ fontSize: 11 }} width={48} />
+                  <CartesianGrid vertical={false} stroke={GRID} />
+                  <XAxis dataKey="name" interval={0} height={78} tick={<MarginTick />} tickLine={false} axisLine={{ stroke: GRID }} />
+                  <YAxis tickFormatter={compact} tick={AXIS_TICK} width={44} tickLine={false} axisLine={false} />
                   <Tooltip content={<MarginTip />} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
                   <Bar dataKey="sales" name="Sales" radius={[3, 3, 0, 0]} barSize={16}>
                     {marginFiltered.map((p, i) => <Cell key={i} fill={stageColor(p.stage, "sales")} />)}
@@ -1378,223 +1416,72 @@ function StatisticsTab() {
         </div>
 
         <div className="stat-chart">
-          <SubHead title="Monthly Revenue" sub="Tax-invoiced trend" />
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={trendData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tickFormatter={compact} tick={{ fontSize: 11 }} width={44} />
-              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} />
-              <Line type="monotone" dataKey="revenue" stroke="#0055a8" strokeWidth={2} dot={{ r: 2 }} name="Revenue" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="stat-chart">
-          <SubHead title="Quote vs Order" sub="Monthly value" />
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={quoteVsOrder} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tickFormatter={compact} tick={{ fontSize: 11 }} width={44} />
-              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="quote" fill="#e8830c" name="Quoted" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="order" fill="#2e8b57" name="Won" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="stat-chart">
-          <SubHead title="Top 10 Customers" sub="By revenue" />
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={custTop} layout="vertical" margin={{ top: 4, right: 24, bottom: 0, left: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
-              <XAxis type="number" tickFormatter={compact} tick={{ fontSize: 11 }} />
-              <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} />
-              <Bar dataKey="amount" name="Revenue" radius={[0, 3, 3, 0]}>
-                {custTop.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+          <SubHead title="Top 10 Items" sub="by invoiced amount" />
+          <ResponsiveContainer width="100%" height={stageRows.length * 22 + 8}>
+            <BarChart data={itemTop} layout="vertical" margin={{ top: 0, right: 48, bottom: 0, left: 0 }} barCategoryGap={3}>
+              <XAxis type="number" hide />
+              <YAxis type="category" dataKey="name" width={170} interval={0} tick={{ ...AXIS_TICK, fontSize: 10 }} tickLine={false} axisLine={false} />
+              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
+              <Bar dataKey="amount" name="Revenue" fill="#2e8b57" radius={[0, 2, 2, 0]}>
+                <LabelList dataKey="amount" position="right" formatter={(v) => compact(Number(v) || 0)}
+                  style={{ fontSize: 10, fill: "#45526a" }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
 
+        {/* 파이프라인 10단계 분포 — 지금 각 단계에 머문 딜 수. 색은 5개 중분류(phase). */}
         <div className="stat-chart">
-          <SubHead title="Top 10 Items" sub="By invoiced amount" />
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={itemTop} layout="vertical" margin={{ top: 4, right: 24, bottom: 0, left: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f5" />
-              <XAxis type="number" tickFormatter={compact} tick={{ fontSize: 11 }} />
-              <YAxis type="category" dataKey="name" width={160} tick={{ fontSize: 10 }} />
-              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} />
-              <Bar dataKey="amount" name="Revenue" radius={[0, 3, 3, 0]}>
-                {itemTop.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+          <SubHead title="Deals by Stage" sub="current" />
+          <ResponsiveContainer width="100%" height={stageRows.length * 22 + 8}>
+            <BarChart data={stageRows} layout="vertical" margin={{ top: 0, right: 32, bottom: 0, left: 0 }} barCategoryGap={3}>
+              <XAxis type="number" hide allowDecimals={false} />
+              <YAxis type="category" dataKey="name" width={150} interval={0} tick={AXIS_TICK} tickLine={false} axisLine={false} />
+              <Tooltip
+                cursor={{ fill: "rgba(42,120,214,0.06)" }}
+                formatter={(v) => [`${Number(v) || 0} deals`, "Count"]}
+              />
+              <Bar dataKey="count" radius={[0, 2, 2, 0]} background={{ fill: "#f4f7fb" }}>
+                {stageRows.map((d, i) => <Cell key={i} fill={PHASE_RAMP[d.phase]} />)}
+                <LabelList
+                  dataKey="count"
+                  position="right"
+                  formatter={(v) => {
+                    const n = Number(v) || 0;
+                    return n ? String(n) : "";
+                  }}
+                  style={{ fontSize: 10, fontWeight: 700, fill: "#111827" }}
+                />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
-
-      {/* ③ 파이프라인 12단계 분포(퍼널) ------------------------------------ */}
-      <SubHead title="Pipeline Distribution" sub="Deals currently at each stage" />
-      {(() => {
-        const steps = data.steps;
-        const funnelData = data.stage_distribution.map((count, i) => ({
-          name: `${i + 1}. ${steps[i] ?? ""}`,
-          count,
-          phase: phaseOfStage(i + 1),
-        }));
-        const rowH = 26;
-        return (
-          <>
-            {/* phase 범례 — 색이 나타내는 4개 중분류 */}
-            <div className="funnel-legend">
-              {PHASE_LABELS.map((lb, i) => (
-                <span key={lb} className="funnel-legend-item">
-                  <span className="sw" style={{ background: PHASE_RAMP[i] }} />
-                  {lb}
-                </span>
-              ))}
-            </div>
-            <ResponsiveContainer width="100%" height={funnelData.length * rowH + 36}>
-              <BarChart
-                data={funnelData}
-                layout="vertical"
-                margin={{ top: 4, right: 44, bottom: 4, left: 8 }}
-                barCategoryGap={4}
-              >
-                <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#eef1f5" />
-                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={176}
-                  interval={0}
-                  tick={{ fontSize: 11 }}
-                />
-                <Tooltip
-                  cursor={{ fill: "rgba(42,120,214,0.06)" }}
-                  formatter={(v) => [`${Number(v) || 0} deals`, "Count"]}
-                />
-                <Bar dataKey="count" radius={[0, 3, 3, 0]} background={{ fill: "#f1f5fb" }}>
-                  {funnelData.map((d, i) => (
-                    <Cell key={i} fill={PHASE_RAMP[d.phase]} />
-                  ))}
-                  <LabelList
-                    dataKey="count"
-                    position="right"
-                    formatter={(v) => {
-                      const n = Number(v) || 0;
-                      return n ? String(n) : "";
-                    }}
-                    style={{ fontSize: 11, fontWeight: 700, fill: "#111827" }}
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </>
-        );
-      })()}
-
-      {/* ④ 업무 알림 (6) --------------------------------------------------- */}
-      <SubHead title="Action Items" sub="Follow-ups & exceptions" />
-      <div className="stat-alerts">
-        <AlertCard title="Due Today" rows={stat.alerts.today_delivery} kind="delivery" />
-        <AlertCard title="Delivery This Week" rows={stat.alerts.week_delivery} kind="delivery" />
-        <AlertCard title="Unanswered Quotes" rows={stat.alerts.unanswered_quotes} kind="quote" />
-        <AlertCard title="Vendor PO Not Received" rows={stat.alerts.unreceived_po} kind="po" />
-        <AlertCard title="Uninvoiced (Delivered)" rows={stat.alerts.uninvoiced} kind="doc" />
-        <AlertCard title="Long Overdue AR" rows={stat.alerts.long_overdue_ar} kind="ar" danger />
       </div>
     </>
   );
 }
 
-/* 업무 알림 카드 — 행 클릭 시 관련 페이지로 이동. */
-function AlertCard({
-  title,
-  rows,
-  kind,
-  danger,
-}: {
-  title: string;
-  rows: StatAlertRow[];
-  kind: "delivery" | "quote" | "po" | "doc" | "ar";
-  danger?: boolean;
-}) {
-  const router = useRouter();
-  function go(r: StatAlertRow) {
-    // 모든 단계 작업은 진행현황(Progress) 프로젝트 팝업으로 통합됨 → 딥링크로 해당 단계를 연다.
-    if (kind === "quote" && r.rfq_id) router.push(`/project?rfq=${r.rfq_id}&stage=4`);
-    else if (kind === "ar" && r.order_id) router.push(`/project?order=${r.order_id}&stage=10`);
-    else if (r.rfq_id) router.push(`/project?rfq=${r.rfq_id}`);
-    else if (r.order_id) router.push(`/project?order=${r.order_id}`);
-    else router.push("/project");
-  }
-  return (
-    <div className="stat-alert">
-      <div className="dash-subhead"><span className="t">{title}</span><span className="s">{rows.length}</span></div>
-      {rows.length === 0 ? (
-        <div className="alert-ok">Nothing here. 🎉</div>
-      ) : (
-        rows.slice(0, 6).map((r, i) => (
-          <div
-            className={`alert-card${danger ? " danger" : ""}`}
-            key={i}
-            role="button"
-            onClick={() => go(r)}
-          >
-            <div>
-              <div className="a-main">
-                <CustomerName name={r.customer || "—"} />
-              </div>
-              <div className="a-sub">
-                {r.project_no || r.qtn_no || r.ci_no || r.po_no || ""}
-                {r.status ? ` · ${tr(r.status)}` : ""}
-              </div>
-            </div>
-            <div className="a-right">
-              {r.outstanding != null && r.currency
-                ? <DualCurrencyAmount value={r.outstanding} currency={r.currency} />
-                : (r.date ? r.date.slice(0, 10) : "")}
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  );
-}
-
-type Chip = { text: string; tone: "red" | "amber" | "blue" | "gray" };
-
-function Kpi({
+/* 숫자 띠 한 칸 — 라벨 · 값 · (선택) 증감/경고 꼬리표. 설명은 툴팁으로만 둔다. */
+function StatCell({
   label,
   value,
-  sub,
-  accent = "#0055a8",
-  chip,
-  chipNode,
+  tip,
+  tone,
+  extra,
 }: {
   label: string;
   value: string | number;
-  sub: string;
-  accent?: string;
-  chip?: Chip;
-  chipNode?: React.ReactNode;
+  tip?: string;
+  tone?: "red" | "amber";
+  extra?: React.ReactNode;
 }) {
   return (
-    <div className="kpi-card" style={{ borderLeftColor: accent }}>
-      <div className="kpi-label">{label}</div>
-      <div className="kpi-value">{value}</div>
-      <div className="kpi-sub">{sub}</div>
-      {chipNode ? (
-        <div className="kc-foot">{chipNode}</div>
-      ) : chip ? (
-        <div className="kc-foot">
-          <span className={`kc-chip ${chip.tone}`}>{chip.text}</span>
-        </div>
-      ) : null}
+    <div className={`stat-cell${tone ? ` ${tone}` : ""}`} title={tip}>
+      <div className="stat-cell-l">{label}</div>
+      <div className="stat-cell-v">
+        <span>{value}</span>
+        {extra}
+      </div>
     </div>
   );
 }
