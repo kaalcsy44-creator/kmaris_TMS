@@ -1530,7 +1530,7 @@ def statistics(months: int = 12):
                     continue
                 sales += _usd(sv * disc, q.currency)
                 purchase += cost
-            return (sales, purchase) if sales > 0 else None
+            return (sales, purchase, q) if sales > 0 else None
 
         # 수주 건 — 매출=오더 합, 매입=발주 합(발주 전이면 None → 화면에 '발주 전').
         won_margin = []
@@ -1565,16 +1565,37 @@ def statistics(months: int = 12):
             })
         won_margin.sort(key=lambda x: (x["date"], x["rfq_id"]), reverse=True)
 
+        # 견적 건(미수주) — 프로젝트별 예상 마진. 실주·만료는 표시만 하고 요약 평균에서는 뺀다
+        # (이미 놓친 건이 진행 중 견적의 평균을 흔들지 않게).
         q_sales = q_purchase = 0.0
         q_pcts: list[float] = []
+        quoted_list = []
         for rid in quoted_rids:
-            est = _quoted_estimate(rfq_map[rid])
+            r = rfq_map[rid]
+            est = _quoted_estimate(r)
             if not est:
                 continue
-            sl, pu = est
+            sl, pu, lq = est
+            lost = (r.status == RFQStatus.LOST
+                    or lq.status in (QuotationStatus.LOST, QuotationStatus.EXPIRED))
+            pct = (sl - pu) / sl * 100
+            quoted_list.append({
+                "rfq_id": rid,
+                "project_no": proj_no_map.get(rid, "") or _rfq_no_disp(r.rfq_no),
+                "project_title": getattr(r, "project_title", None) or "",
+                "customer": cust_names.get(r.customer_id, "—"),
+                "date": str(getattr(lq, "sent_at", None) or lq.sent_date or lq.date or "")[:10],
+                "status": "Lost" if lost else "Open",
+                "sales_usd": round(sl, 2),
+                "margin_usd": round(sl - pu, 2),
+                "margin_pct": round(pct, 1),
+            })
+            if lost:
+                continue
             q_sales += sl
             q_purchase += pu
-            q_pcts.append((sl - pu) / sl * 100)
+            q_pcts.append(pct)
+        quoted_list.sort(key=lambda x: (x["date"], x["rfq_id"]), reverse=True)
         quoted_margin = {
             "count": len(q_pcts),
             "total": len(quoted_rids),          # 견적 낸 건 수(매입가 없는 건 포함)
@@ -1583,6 +1604,7 @@ def statistics(months: int = 12):
             "margin_pct": round((q_sales - q_purchase) / q_sales * 100, 1) if q_sales else None,
             "min_pct": round(min(q_pcts), 1) if q_pcts else None,
             "max_pct": round(max(q_pcts), 1) if q_pcts else None,
+            "rows": quoted_list,
         }
 
         # ── Top 10 채우기 후보(매출 0) ──────────────────────────────────────────

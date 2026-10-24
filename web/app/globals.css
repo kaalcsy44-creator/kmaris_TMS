@@ -5328,16 +5328,19 @@ table.mini.items-edit td.row-tools {
 .stat-mg-row .pct { display: flex; align-items: center; gap: 6px; }
 .stat-mg-row .pct i { display: block; height: 9px; min-width: 2px; border-radius: 2px; background: #2e8b57; flex: none; }
 .stat-mg-row .pct i.neg { background: #c0392b; }
+.stat-mg-row .pct i.est { background: #e8a33c; }
+/* 마진 표 제목 줄 — 제목 왼쪽, Won/Quoted/Lost 탭 오른쪽 */
+.stat-mg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.stat-mg-head .dash-subhead { margin: 0; }
 .stat-mg-row .pct b { font-variant-numeric: tabular-nums; }
 .stat-mg-row .pct b.neg { color: #c0392b; }
-.stat-mg-quoted {
-  margin-top: 8px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: #fff8ee;
-  color: #8a5a12;
-  font-size: 11.5px;
-}
 /* RFQ 차트 아래 선택 월 목록 */
 .stat-rfq-toggle {
   margin: 4px 0 2px;

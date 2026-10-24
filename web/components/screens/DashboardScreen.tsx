@@ -926,6 +926,9 @@ function DeltaChip({ cur, prev }: { cur: number; prev: number }) {
   );
 }
 
+const MG_TABS = ["won", "quoted", "lost"] as const;
+type MgTab = (typeof MG_TABS)[number];
+
 // 통계 차트 공통 — 옅은 가로 격자 · 작은 축 글씨.
 const GRID = "#eef1f5";
 const AXIS_TICK = { fontSize: 10.5, fill: "#6b7686" };
@@ -954,6 +957,8 @@ function StatisticsTab() {
   const [auditErr, setAuditErr] = useState<string | null>(null);
   // RFQ 차트 아래 선택 월 RFQ 목록 펼침 여부(막대 클릭 시 열림).
   const [rfqListOpen, setRfqListOpen] = useState(false);
+  // 프로젝트 마진 표 탭.
+  const [mgTab, setMgTab] = useState<MgTab>("won");
   const router = useRouter();
 
   if (error && !data) {
@@ -1038,14 +1043,16 @@ function StatisticsTab() {
   // 실제로 쓴 매매기준율(stat.fx)을 그대로 써야 KPI·랭킹과 같은 환율 위에 선다.
   const fxRate = cur === "KRWC" ? (stat.fx?.rate || stat.usd_krw_rate) : stat.usd_krw_rate;
   const toCur = (usd: number) => (cur === "USD" ? usd : usd * fxRate);
-  // 수주 건 마진 — 발주 전(매입 미확정) 건은 합계에서 뺀다.
-  const won = stat.won_margin;
-  const wonDone = won.filter((w) => w.margin_usd != null);
-  const wonSales = wonDone.reduce((s, w) => s + w.sales_usd, 0);
-  const wonMarginSum = wonDone.reduce((s, w) => s + (w.margin_usd ?? 0), 0);
-  const wonPct = wonSales ? Math.round((wonMarginSum / wonSales) * 1000) / 10 : null;
-  const pctMax = Math.max(1, ...wonDone.map((w) => Math.abs(w.margin_pct ?? 0)));
-  const qm = stat.quoted_margin;
+  // 프로젝트 마진 표 — 탭별 줄. 매입 미확정(발주 전) 건은 합계에서 뺀다.
+  const mgRowsOf = (k: MgTab) =>
+    k === "won" ? stat.won_margin
+      : stat.quoted_margin.rows.filter((r) => (k === "lost" ? r.status === "Lost" : r.status === "Open"));
+  const mgRows = mgRowsOf(mgTab);
+  const mgDone = mgRows.filter((w) => w.margin_usd != null);
+  const mgSales = mgDone.reduce((s, w) => s + w.sales_usd, 0);
+  const mgMarginSum = mgDone.reduce((s, w) => s + (w.margin_usd ?? 0), 0);
+  const mgPct = mgSales ? Math.round((mgMarginSum / mgSales) * 1000) / 10 : null;
+  const mgPctMax = Math.max(1, ...mgDone.map((w) => Math.abs(w.margin_pct ?? 0)));
   const funnelData = [
     { stage: "RFQ", count: stat.funnel.rfq, rate: 100, label: "" },
     { stage: "Quote", count: stat.funnel.quote, rate: stat.funnel.quote_rate, label: "Quote / RFQ" },
@@ -1335,19 +1342,29 @@ function StatisticsTab() {
           ) : null}
         </div>
 
-        {/* 수주 건 마진 — 최신순. 매출=오더, 매입=발주(발주 전이면 '—'). 줄 클릭 → 프로젝트.
-            견적 건은 예상치라 프로젝트별로 늘어놓지 않고 아래 한 줄 요약만 둔다. */}
+        {/* 프로젝트 마진 — Won(실적: 오더 vs 발주) / Quoted(진행 중 견적 예상) / Lost(실주·만료).
+            최신순, 줄 클릭 → 프로젝트. 견적 건 예상 = 최신 고객 견적 vs 채택(없으면 최저) 벤더 단가. */}
         <div className="stat-chart">
-          <SubHead title="Won Deals Margin" sub={`${curLabel(cur)} · latest first`} />
-          {won.length === 0 ? (
-            <div className="state">No won deals yet.</div>
+          <div className="stat-mg-head">
+            <SubHead title="Project Margin" sub={`${curLabel(cur)} · latest first`} />
+            <div className="stat-cur-toggle sm">
+              {MG_TABS.map((k) => (
+                <button key={k} className={mgTab === k ? "on" : ""} onClick={() => setMgTab(k)}>
+                  {k === "won" ? "Won" : k === "quoted" ? "Quoted" : "Lost"} ({mgRowsOf(k).length})
+                </button>
+              ))}
+            </div>
+          </div>
+          {mgRows.length === 0 ? (
+            <div className="state">No deals here.</div>
           ) : (
             <div className="stat-mg">
               <div className="stat-mg-row h">
-                <span>Project</span><span className="r">Sales</span><span className="r">Margin</span><span>Margin %</span>
+                <span>Project</span><span className="r">Sales</span><span className="r">Margin</span>
+                <span>Margin %{mgTab === "won" ? "" : " (est.)"}</span>
               </div>
               <div className="stat-mg-body">
-                {won.map((w) => (
+                {mgRows.map((w) => (
                   <div key={w.rfq_id} className="stat-mg-row" role="button"
                     onClick={() => router.push(`/project?rfq=${w.rfq_id}`)}
                     title={`${w.project_no} · ${w.customer}${w.project_title ? ` · ${w.project_title}` : ""} · ${w.date}`}>
@@ -1358,8 +1375,8 @@ function StatisticsTab() {
                       <span className="pct muted">No PO yet</span>
                     ) : (
                       <span className="pct">
-                        <i className={w.margin_pct < 0 ? "neg" : ""}
-                          style={{ width: Math.round((Math.abs(w.margin_pct) / pctMax) * 70) }} />
+                        <i className={w.margin_pct < 0 ? "neg" : mgTab === "won" ? "" : "est"}
+                          style={{ width: Math.round((Math.abs(w.margin_pct) / mgPctMax) * 70) }} />
                         <b className={w.margin_pct < 0 ? "neg" : ""}>{w.margin_pct}%</b>
                       </span>
                     )}
@@ -1367,18 +1384,13 @@ function StatisticsTab() {
                 ))}
               </div>
               <div className="stat-mg-row t">
-                <span>Total ({wonDone.length})</span>
-                <span className="r">{compact(toCur(wonSales))}</span>
-                <span className="r">{compact(toCur(wonMarginSum))}</span>
-                <span className="pct"><b>{wonPct == null ? "—" : `${wonPct}%`}</b></span>
+                <span>Total ({mgDone.length})</span>
+                <span className="r">{compact(toCur(mgSales))}</span>
+                <span className="r">{compact(toCur(mgMarginSum))}</span>
+                <span className="pct"><b>{mgPct == null ? "—" : `${mgPct}%`}</b></span>
               </div>
             </div>
           )}
-          {qm.count ? (
-            <div className="stat-mg-quoted" title="Open quotes: latest customer quote vs awarded (else lowest) vendor price, per line">
-              Quoted (est.) <b>{qm.margin_pct}%</b> avg · range {qm.min_pct}–{qm.max_pct}% · {qm.count} deals
-            </div>
-          ) : null}
         </div>
 
         <div className="stat-chart">

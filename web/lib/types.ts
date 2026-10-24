@@ -2510,7 +2510,13 @@ export type StatWonMargin = {
 // 견적 건 예상 마진 — 최신 고객 견적 vs 채택(없으면 최저) 벤더 단가, 줄 단위.
 export type StatQuotedMargin = {
   count: number; total: number; sales_usd: number; margin_usd: number;
-  margin_pct: number | null; min_pct: number | null; max_pct: number | null;
+  margin_pct: number | null; min_pct: number | null; max_pct: number | null;   // 진행 중(Open)만
+  rows: StatQuotedRow[];               // 프로젝트별(최신순) — Open + Lost(실주·만료)
+};
+export type StatQuotedRow = {
+  rfq_id: number; project_no: string; project_title: string; customer: string;
+  date: string; status: "Open" | "Lost";
+  sales_usd: number; margin_usd: number | null; margin_pct: number | null;
 };
 export type StatisticsData = {
   months: string[];                    // 그래프 가로축 = 올해 1~12월
