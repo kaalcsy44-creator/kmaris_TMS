@@ -1182,7 +1182,7 @@ function StatisticsTab() {
 
       {/* ② 숫자 띠 — 윗줄은 선택 월 실적, 아랫줄은 지금 상태(월 이동과 무관). ---- */}
       <div className="stat-strip">
-        <StatCell label="Revenue" value={fmtMoney(cur, mRevenue)} tip="Tax-invoiced in the selected month"
+        <StatCell label="Revenue" value={fmtMoney(cur, mRevenue)} tip="Tax-invoice month (domestic) or AR invoice date (export · PI)"
           extra={<DeltaChip cur={mRevenue} prev={mRevenuePrev} />} />
         <StatCell label="Orders Won" value={fmtMoney(cur, mOrder)} tip="Order value in the selected month"
           extra={<DeltaChip cur={mOrder} prev={mOrderPrev} />} />
@@ -1261,10 +1261,10 @@ function StatisticsTab() {
               <div className="stat-audit-tbl">
                 <div className="stat-audit-h">
                   Revenue → USD {money(audit.revenue.total.USD)} · KRW {money(audit.revenue.total.KRW)}
-                  <span className="muted"> (only rows with a tax-invoice month = {audit.month} are counted)</span>
+                  <span className="muted"> (counted by tax-invoice month, else AR invoice date = {audit.month})</span>
                 </div>
                 <table className="mini wide">
-                  <thead><tr><th>Ref</th><th>Tax-invoice month</th><th>Bucket</th><th style={{ textAlign: "right" }}>Amount</th><th>Counted</th></tr></thead>
+                  <thead><tr><th>Ref</th><th>Revenue month</th><th>Bucket</th><th style={{ textAlign: "right" }}>Amount</th><th>Counted</th></tr></thead>
                   <tbody>
                     {audit.revenue.rows.length === 0 ? (
                       <tr><td colSpan={5} className="muted">No AR records.</td></tr>

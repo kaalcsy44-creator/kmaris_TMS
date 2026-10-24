@@ -1233,13 +1233,16 @@ def statistics(months: int = 12):
                 _tax_date_by_ci[t.ci_id] = t.date
 
         def _issue_month(a) -> str:
+            # 매출 인식월: 세금계산서가 있으면(국내 고객) 그 발행월, 없으면 AR 청구일.
+            # 수출 영세율·선입금 건은 PI/CI 로 청구하고 입금으로 끝나 세금계산서를 안 끊는
+            # 일이 많다 — 예전엔 세금계산서만 봐서 이런 건이 영영 매출에서 빠졌다.
             ci = _ci_by_no.get(a.ci_no) or _ci_by_order.get(a.order_id)
             if ci and _tax_date_by_ci.get(ci.id):
                 return _month_key(_tax_date_by_ci[ci.id])
-            # 폴백: 수동 '세금계산서 발행' 표시일(9단계 안의 "tax" — 옛 10단계)
+            # 수동 '세금계산서 발행' 표시일(9단계 안의 "tax" — 옛 10단계)
             o = order_map.get(a.order_id)
             sd = manual_stage_dates(_rfq_of(o), o)
-            return _month_key(sd.get("tax") or "")
+            return _month_key(sd.get("tax") or (str(a.invoice_date) if a.invoice_date else ""))
 
         # ── 매출(세금계산서 발행 기준) + 고객사 랭킹 ─────────────────────────────
         for a in all_ars:
@@ -1440,7 +1443,7 @@ def statistics(months: int = 12):
                 ordered_ids.add(rr.id)
         invoiced_ids = set()
         for a in all_ars:
-            if _issue_month(a):   # 세금계산서 발행일이 있는(=매출 인식) AR
+            if _issue_month(a):   # 매출 인식월(세금계산서 또는 청구일)이 있는 AR
                 o = order_map.get(a.order_id)
                 rr = _rfq_of(o)
                 if rr and rr.id in rfq_ids_period:
@@ -1583,7 +1586,7 @@ def statistics_debug(month: str | None = None):
         cust = {c.id: c.name for c in s.query(Customer).all()}
         order_map = {o.id: o for o in s.query(Order).all()}
 
-        # 세금계산서 발행월 — statistics() 와 동일하게 TaxInvoiceData.date 기준(폴백 stage 10).
+        # 매출 인식월 — statistics() 와 동일: 세금계산서 발행일 → 수동 표시일 → AR 청구일.
         _all_ci = s.query(CommercialInvoice).all()
         _ci_by_no = {c.ci_no: c for c in _all_ci if c.ci_no}
         _ci_by_order: dict = {}
@@ -1600,7 +1603,8 @@ def statistics_debug(month: str | None = None):
                 return _month_key(_tax_date_by_ci[ci.id])
             o = order_map.get(a.order_id)
             sd = manual_stage_dates(_rfq_for_order(s, o) if o else None, o)
-            return _month_key(sd.get("tax") or "")   # 세금계산서 발행 표시(옛 10단계)
+            # 세금계산서 발행 표시(옛 10단계) → 없으면 AR 청구일
+            return _month_key(sd.get("tax") or (str(a.invoice_date) if a.invoice_date else ""))
 
         # ── Orders Won — statistics() order_series 와 동일 로직 ──
         won = {"USD": 0.0, "KRW": 0.0}
