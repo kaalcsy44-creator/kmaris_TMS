@@ -1426,7 +1426,11 @@ def statistics(months: int = 12):
             if mo in month_set:
                 period_rfqs.append(r)
                 rfq_count[mo] += 1
+                recv = (getattr(r, "received_at", None) or r.date
+                        or (r.created_at.isoformat() if r.created_at else ""))
                 rfq_detail[mo].append({
+                    "rfq_id": r.id,
+                    "date": str(recv)[:10],
                     "rfq_no": _rfq_no_disp(r.rfq_no),
                     "customer": cust_names.get(r.customer_id, "—"),
                     "work_type": _enum_val(getattr(r, "work_type", None)) if getattr(r, "work_type", None) else "",
@@ -1448,6 +1452,13 @@ def statistics(months: int = 12):
                 rr = _rfq_of(o)
                 if rr and rr.id in rfq_ids_period:
                     invoiced_ids.add(rr.id)
+        # 월별 RFQ 목록에 진행 상태를 붙인다 — 툴팁 요약(견적·발주 전환)과 펼침 목록용.
+        for rows in rfq_detail.values():
+            for d in rows:
+                rid = d["rfq_id"]
+                d["status"] = ("Invoiced" if rid in invoiced_ids else "PO" if rid in ordered_ids
+                               else "Quoted" if rid in quoted_ids else "Open")
+            rows.sort(key=lambda d: d["date"], reverse=True)
         n_rfq, n_quote = len(rfq_ids_period), len(quoted_ids)
         n_order, n_rev = len(ordered_ids), len(invoiced_ids)
         funnel = {

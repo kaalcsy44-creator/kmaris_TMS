@@ -963,6 +963,9 @@ function StatisticsTab() {
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditBusy, setAuditBusy] = useState(false);
   const [auditErr, setAuditErr] = useState<string | null>(null);
+  // RFQ 차트 아래 선택 월 RFQ 목록 펼침 여부(막대 클릭 시 열림).
+  const [rfqListOpen, setRfqListOpen] = useState(false);
+  const router = useRouter();
 
   if (error && !data) {
     return <div className="state error">API error: {error.message}</div>;
@@ -1041,6 +1044,7 @@ function StatisticsTab() {
   const rfqData = stat.months.map((m, i) => ({
     month: monthLabel(m), count: stat.rfq_count[i] || 0, detail: stat.rfq_detail[i] || [],
   }));
+  const selRfqs = stat.rfq_detail[idx] || [];
   // 프로젝트 마진은 USD 로 정규화돼 오므로 화면 통화로 되돌린다. 'KRW 환산'은 서버가
   // 실제로 쓴 매매기준율(stat.fx)을 그대로 써야 KPI·랭킹과 같은 환율 위에 선다.
   const fxRate = cur === "KRWC" ? (stat.fx?.rate || stat.usd_krw_rate) : stat.usd_krw_rate;
@@ -1069,17 +1073,34 @@ function StatisticsTab() {
   const marginDisp = (usd: number) => `${curUnit(cur)} ${money(toCur(usd))}`;
 
   // 커스텀 호버 툴팁(상세내역) --------------------------------------------
+  // RFQ 툴팁 — 번호 나열 대신 고객사별 건수 상위 3 + 기타, 그리고 견적·발주 전환.
+  // 전체 목록은 막대를 눌러 차트 아래에 펼친다.
   function RfqTip({ active, payload }: { active?: boolean; payload?: { payload: typeof rfqData[number] }[] }) {
     if (!active || !payload?.length) return null;
     const p = payload[0].payload;
+    const byCust = new Map<string, number>();
+    p.detail.forEach((d) => byCust.set(d.customer, (byCust.get(d.customer) ?? 0) + 1));
+    const ranked = [...byCust.entries()].sort((a, b) => b[1] - a[1]);
+    const top = ranked.slice(0, 3);
+    const rest = ranked.slice(3);
+    const restN = rest.reduce((s, [, n]) => s + n, 0);
+    const quoted = p.detail.filter((d) => d.status !== "Open").length;
+    const po = p.detail.filter((d) => d.status === "PO" || d.status === "Invoiced").length;
     return (
       <div className="stat-tip">
         <div className="stat-tip-h">{p.month} · RFQ {p.count}</div>
-        {p.detail.slice(0, 12).map((d, i) => (
-          <div key={i} className="stat-tip-row"><b>{d.rfq_no}</b> {d.customer}{d.work_type ? ` · ${d.work_type}` : ""}</div>
-        ))}
-        {p.detail.length > 12 ? <div className="stat-tip-more">+{p.detail.length - 12} more…</div> : null}
-        {p.count === 0 ? <div className="stat-tip-row muted">None received</div> : null}
+        {p.count === 0 ? <div className="stat-tip-row muted">None received</div> : (
+          <>
+            {top.map(([c, n]) => (
+              <div key={c} className="stat-tip-kv"><span>{c}</span><b>{n}</b></div>
+            ))}
+            {restN ? <div className="stat-tip-kv muted"><span>Others ({rest.length} co.)</span><b>{restN}</b></div> : null}
+            <div className="stat-tip-foot">
+              Quoted {quoted} ({Math.round((quoted / p.count) * 100)}%) · PO {po}
+            </div>
+            <div className="stat-tip-more">Click to list</div>
+          </>
+        )}
       </div>
     );
   }
@@ -1325,7 +1346,14 @@ function StatisticsTab() {
           <SubHead title="RFQs Received" />
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={rfqData} margin={{ top: 14, right: 8, bottom: 0, left: 0 }}
-              onClick={pickMonth} style={{ cursor: "pointer" }}>
+              onClick={(st) => {
+                const i = Number(st?.activeTooltipIndex);
+                if (st?.activeTooltipIndex == null || !Number.isFinite(i) || i > lastIdx) return;
+                // 같은 달을 다시 누르면 목록을 닫는다.
+                setRfqListOpen(!(rfqListOpen && i === idx));
+                setMonthIdx(i);
+              }}
+              style={{ cursor: "pointer" }}>
               <CartesianGrid vertical={false} stroke={GRID} />
               <ReferenceArea x1={selLabel} x2={selLabel} fill="#0055a8" fillOpacity={0.07} />
               <XAxis dataKey="month" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: GRID }} />
@@ -1343,6 +1371,24 @@ function StatisticsTab() {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+          {/* 선택 월 RFQ 목록 — 접힌 채로는 한 줄. 줄을 누르면 프로젝트 팝업. */}
+          <button type="button" className="stat-rfq-toggle" onClick={() => setRfqListOpen(!rfqListOpen)}
+            disabled={!selRfqs.length}>
+            {rfqListOpen ? "▾" : "▸"} {selMonth} RFQs ({selRfqs.length})
+          </button>
+          {rfqListOpen && selRfqs.length ? (
+            <div className="stat-rfq-list">
+              {selRfqs.map((d) => (
+                <div key={d.rfq_id} className="stat-rfq-row" role="button"
+                  onClick={() => router.push(`/project?rfq=${d.rfq_id}`)}>
+                  <span className="d">{d.date.slice(5)}</span>
+                  <span className="no">{d.rfq_no}</span>
+                  <span className="c">{d.customer}</span>
+                  <span className={`st st-${d.status.toLowerCase()}`}>{d.status}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="stat-chart">

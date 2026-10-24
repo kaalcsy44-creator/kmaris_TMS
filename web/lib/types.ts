@@ -2493,7 +2493,10 @@ export type StatAlertRow = {
   currency?: CurrencyKey;
   outstanding?: number;
 };
-export type StatRfqDetailRow = { rfq_no: string; customer: string; work_type: string };
+export type StatRfqDetailRow = {
+  rfq_id: number; date: string; rfq_no: string; customer: string; work_type: string;
+  status: "Open" | "Quoted" | "PO" | "Invoiced";   // 가장 많이 진행된 단계
+};
 export type StatFunnel = {
   rfq: number; quote: number; order: number; revenue: number;
   quote_rate: number; order_rate: number; revenue_rate: number;
