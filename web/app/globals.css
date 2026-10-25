@@ -19987,3 +19987,18 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
   color: #7a4a06;
   font-size: 12.5px;
 }
+
+/* ── 기국 국기(Vessel 목록 AIS Flag) ─────────────────────────────────────── */
+.flag-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.flag-img {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 14px;
+  object-fit: cover;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+}

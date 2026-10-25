@@ -127,6 +127,7 @@ import type { VendorTagSuggestion } from "@/lib/types";
 import RegionCombo from "@/components/common/RegionPicker";
 // 목록의 상대처는 다른 화면과 같은 모양(로고 + 이름)으로 — 같은 회사를 두 표기로 읽지 않도록.
 import CustomerName from "@/components/common/CustomerName";
+import FlagName from "@/components/common/FlagName";
 import { BounceBadge, MailAddress, hasBounced, isBounced } from "@/components/common/BouncedEmail";
 import VendorName from "@/components/common/VendorName";
 import ProjectNo from "@/components/common/ProjectNo";
@@ -3433,15 +3434,15 @@ export function VesselsTab() {
         </div>
       )}
       columns={[
-        ["name", "Vessel", (r) => <>{r.name}<SanctionBadge hits={r.sanctions} /></>],
+        ["name", "Vessel", (r) => <><strong>{r.name}</strong><SanctionBadge hits={r.sanctions} /></>],
         ["imo", "IMO"],
         ["vessel_type", "Vessel type"],
-        ["ais_flag", "AIS Flag"],
+        ["ais_flag", "AIS Flag", (r) => <FlagName name={r.ais_flag} />],
         ["registered_owner", "Registered owner", (r) => r.registered_owner || <span className="dash">—</span>],
         ["ism_manager", "ISM manager", (r) => r.ism_manager
           ? <span title={r.owner_checked ? `Checked ${r.owner_checked}` : undefined}>{r.ism_manager}</span>
           : <span className="dash">—</span>],
-        ["customer", "Customer"],
+        ["customer", "Customer", (r) => <CustomerName name={r.customer} />],
       ]}
       searchText={(r) => [r.name, r.imo, r.vessel_type, r.ais_flag, r.registered_owner, r.ism_manager, r.customer].join(" ")}
       fields={[
