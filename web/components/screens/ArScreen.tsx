@@ -49,7 +49,7 @@ import {
   itemRowClass,
   MoveRowsButtons,
 } from "@/components/common/itemTable";
-import { useItemGrid, ItemGridStyle, ItemTh, ItemColsButton, type ItemCol } from "@/components/common/itemGrid";
+import { useItemGrid, ItemGridStyle, ItemTh, ItemColsButton, igSpan, grandFootSegments, type ItemCol } from "@/components/common/itemGrid";
 import { useEditGate } from "@/lib/viewMode";
 import RecordStrip from "@/components/common/RecordStrip";
 import ClaimPanel from "@/components/screens/ClaimPanel";
@@ -1019,8 +1019,8 @@ function ApAddForm({
           </div>
         </div>
         <div className="table-wrap item-box">
-          <ItemGridStyle grid={grid} />
-          <table className={`mini wide lead-tools ${grid.tableClass}`}>
+          <ItemGridStyle grid={grid} spans={grandFootSegments(grid).map((s) => s.keys)} />
+          <table className={`mini wide lead-tools doc-charge-foot ${grid.tableClass}`}>
             <thead>
               <tr>
                 <ItemSelectHeaderCell count={form.items.length} sel={sel} />
@@ -1051,7 +1051,7 @@ function ApAddForm({
             </tbody>
             {/* Freight/Packing/Insurance 는 입력칸(부대비용) — 소계에 더해 VAT 를 매긴다. */}
             <tfoot>
-              <tr>
+              <tr className="foot-strong">
                 <td /><td /><td /><td /><td />
                 <td className="total-label">Subtotal</td>
                 <td className="num total-value">{subtotal.toLocaleString()}</td>
@@ -1075,9 +1075,17 @@ function ApAddForm({
                 <td className="num total-value">{Math.round(vat).toLocaleString()}</td>
               </tr>
               <tr className="foot-grand">
-                <td /><td /><td /><td /><td />
-                <td className="total-label">Total</td>
-                <td className="num total-value">{total.toLocaleString()}</td>
+                {/* 최종 합계 — 라벨 칸을 1열~Unit Price 까지 한 셀로 합친다(숨긴 컬럼은 빼고 센다). */}
+                {grandFootSegments(grid).map((s) => (
+                  <td
+                    key={s.role}
+                    className={`ig-foot${s.role === "label" ? " total-label" : s.role === "value" ? " num total-value" : ""}`}
+                    colSpan={s.keys.length}
+                    {...igSpan(s.keys)}
+                  >
+                    {s.role === "label" ? "Total" : s.role === "value" ? total.toLocaleString() : null}
+                  </td>
+                ))}
               </tr>
             </tfoot>
           </table>
@@ -1810,8 +1818,8 @@ function ArAddForm({
           </div>
         </div>
         <div className="table-wrap item-box">
-          <ItemGridStyle grid={grid} />
-          <table className={`mini wide lead-tools ${grid.tableClass}`}>
+          <ItemGridStyle grid={grid} spans={grandFootSegments(grid).map((s) => s.keys)} />
+          <table className={`mini wide lead-tools doc-charge-foot ${grid.tableClass}`}>
             <thead>
               <tr>
                 <ItemSelectHeaderCell count={form.items.length} sel={sel} />
@@ -1844,7 +1852,7 @@ function ArAddForm({
             {/* 합계행 — 컬럼당 1셀(폭조절/숨김 정렬 유지). 라벨=Unit Price열, 값=Amount열.
                 Freight/Packing/Insurance 는 입력칸(부대비용) — 소계에 더해 VAT 를 매긴다. */}
             <tfoot>
-              <tr>
+              <tr className="foot-strong">
                 <td /><td /><td /><td /><td />
                 <td className="total-label">Subtotal</td>
                 <td className="num total-value">{subtotal.toLocaleString()}</td>
@@ -1868,9 +1876,17 @@ function ArAddForm({
                 <td className="num total-value">{Math.round(vat).toLocaleString()}</td>
               </tr>
               <tr className="foot-grand">
-                <td /><td /><td /><td /><td />
-                <td className="total-label">Total</td>
-                <td className="num total-value">{total.toLocaleString()}</td>
+                {/* 최종 합계 — 라벨 칸을 1열~Unit Price 까지 한 셀로 합친다(숨긴 컬럼은 빼고 센다). */}
+                {grandFootSegments(grid).map((s) => (
+                  <td
+                    key={s.role}
+                    className={`ig-foot${s.role === "label" ? " total-label" : s.role === "value" ? " num total-value" : ""}`}
+                    colSpan={s.keys.length}
+                    {...igSpan(s.keys)}
+                  >
+                    {s.role === "label" ? "Total" : s.role === "value" ? total.toLocaleString() : null}
+                  </td>
+                ))}
               </tr>
             </tfoot>
           </table>

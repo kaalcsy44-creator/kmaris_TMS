@@ -35,6 +35,24 @@ export function igSpan(keys: string[]) {
   return { "data-ig-span": keys.join(",") };
 }
 
+/** 최종 합계행 칸 나누기 — [값 컬럼 앞까지 라벨 한 칸] [값] [뒤 컬럼 빈칸]. 숨긴 컬럼은 빼고 센다.
+ *  각 칸은 colSpan={keys.length} · className "ig-foot" · igSpan(keys) 로 그리고,
+ *  keys 목록은 ItemGridStyle spans 로 넘긴다. */
+export type FootSeg = { role: "label" | "value" | "empty"; keys: string[] };
+export function grandFootSegments(grid: ItemGridApi, valueKey = "amount"): FootSeg[] {
+  const segs: FootSeg[] = [];
+  let seenValue = false;
+  for (const c of grid.cols) {
+    if (!c.fixed && grid.layout.hidden.has(c.key)) continue;
+    const role = c.key === valueKey ? "value" : seenValue ? "empty" : "label";
+    if (role === "value") seenValue = true;
+    const last = segs[segs.length - 1];
+    if (last && last.role === role && role !== "value") last.keys.push(c.key);
+    else segs.push({ role, keys: [c.key] });
+  }
+  return segs;
+}
+
 export type ItemGridApi = {
   layout: ColumnLayout;
   /** 숨김 메뉴에 노출할(=fixed 아님) 컬럼. */

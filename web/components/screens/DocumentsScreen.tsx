@@ -66,6 +66,7 @@ import {
   ItemGridStyle,
   ItemColsButton,
   igSpan,
+  grandFootSegments,
   type ItemCol,
 } from "@/components/common/itemGrid";
 
@@ -2779,16 +2780,7 @@ function ItemEditor({
   // 포장 합계·부대비용처럼 직접 입력하는 칸이 있는 합계행은 그대로 둔다.
   const grid = useItemGrid(tableId, cols, { phoneHideFoot: !packing && !footerRows });
   // 최종 합계행(footerRows 의 grand) 칸 나누기 — [1열~Unit Price 라벨] [Amount 값] [Remark 빈칸].
-  const grandSegs: { role: "label" | "value" | "empty"; keys: string[] }[] = [];
-  if (footerRows?.some((r) => r.grand)) {
-    for (const c of grid.cols) {
-      if (!c.fixed && grid.layout.hidden.has(c.key)) continue;
-      const role = c.key === "amount" ? "value" : c.key === "remark" ? "empty" : "label";
-      const last = grandSegs[grandSegs.length - 1];
-      if (last && last.role === role) last.keys.push(c.key);
-      else grandSegs.push({ role, keys: [c.key] });
-    }
-  }
+  const grandSegs = footerRows?.some((r) => r.grand) ? grandFootSegments(grid) : [];
   // fields 순서 = 아래 keys.cell(i, …) 열 번호. Packing List 와 금액 문서는 중간 컬럼 구성이
   // 통째로 달라 열 번호도 갈린다(공통 0..4 뒤가 갈리고 Remark 는 11 또는 7).
   const keys = useItemGridKeys<DocumentWorkItem>({
