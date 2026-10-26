@@ -65,6 +65,7 @@ import {
   ItemTh,
   ItemGridStyle,
   ItemColsButton,
+  igSpan,
   type ItemCol,
 } from "@/components/common/itemGrid";
 
@@ -2777,6 +2778,17 @@ function ItemEditor({
   // 합계행이 "Total" 한 줄뿐인 문서만 폰에서 합계행을 내린다(총액은 하단 바에 있다).
   // 포장 합계·부대비용처럼 직접 입력하는 칸이 있는 합계행은 그대로 둔다.
   const grid = useItemGrid(tableId, cols, { phoneHideFoot: !packing && !footerRows });
+  // 최종 합계행(footerRows 의 grand) 칸 나누기 — [1열~Unit Price 라벨] [Amount 값] [Remark 빈칸].
+  const grandSegs: { role: "label" | "value" | "empty"; keys: string[] }[] = [];
+  if (footerRows?.some((r) => r.grand)) {
+    for (const c of grid.cols) {
+      if (!c.fixed && grid.layout.hidden.has(c.key)) continue;
+      const role = c.key === "amount" ? "value" : c.key === "remark" ? "empty" : "label";
+      const last = grandSegs[grandSegs.length - 1];
+      if (last && last.role === role) last.keys.push(c.key);
+      else grandSegs.push({ role, keys: [c.key] });
+    }
+  }
   // fields 순서 = 아래 keys.cell(i, …) 열 번호. Packing List 와 금액 문서는 중간 컬럼 구성이
   // 통째로 달라 열 번호도 갈린다(공통 0..4 뒤가 갈리고 Remark 는 11 또는 7).
   const keys = useItemGridKeys<DocumentWorkItem>({
@@ -2836,8 +2848,8 @@ function ItemEditor({
         ))}
       </datalist>
       <div className="table-wrap item-box">
-        <ItemGridStyle grid={grid} />
-        <table className={`mini wide lead-tools ${grid.tableClass}`}>
+        <ItemGridStyle grid={grid} spans={grandSegs.map((s) => s.keys)} />
+        <table className={`mini wide lead-tools ${grid.tableClass}${footerRows ? " doc-charge-foot" : ""}`}>
           <thead>
             <tr>
               <ItemSelectHeaderCell count={items.length} sel={sel} />
@@ -2905,19 +2917,19 @@ function ItemEditor({
                 // grand(최종 합계)행은 좌측 셀(1~8열)을 하나로 합쳐 라벨을 넓게 표기.
                 footerRows.map((r, idx) =>
                   r.grand ? (
-                    // 최종 합계행 — 다른 합계행과 똑같이 컬럼당 1셀(라벨=Unit Price 8열, 값=Amount 9열).
-                    // colspan 을 쓰지 않아 폭/숨김 규칙이 그대로 적용되어 값이 항상 Amount 열에 정렬된다.
+                    // 최종 합계행 — 라벨 칸을 1열~Unit Price 까지 한 셀로 합친다. 숨긴 컬럼은 빼고 세어
+                    // colspan 을 잡고, .ig-foot 로 nth-child 폭/숨김 규칙에서 빼는 대신 igSpan 으로 폭을 고정.
                     <tr key={idx} className="foot-grand">
-                      <td></td>{/* 1 sel */}
-                      <td></td>{/* 2 No. */}
-                      <td></td>{/* 3 part_no */}
-                      <td></td>{/* 4 description */}
-                      <td></td>{/* 5 maker */}
-                      <td></td>{/* 6 qty */}
-                      <td></td>{/* 7 unit */}
-                      <td className="total-label">{r.label}</td>{/* 8 unit_price */}
-                      <td className="num total-value">{r.value}</td>{/* 9 amount */}
-                      <td></td>{/* 10 remark */}
+                      {grandSegs.map((s) => (
+                        <td
+                          key={s.role}
+                          className={`ig-foot${s.role === "label" ? " total-label" : s.role === "value" ? " num total-value" : ""}`}
+                          colSpan={s.keys.length}
+                          {...igSpan(s.keys)}
+                        >
+                          {s.role === "label" ? r.label : s.role === "value" ? r.value : null}
+                        </td>
+                      ))}
                     </tr>
                   ) : (
                     <tr key={idx}>
