@@ -760,9 +760,11 @@ def _terms_block(data: Dict[str, Any], doc_type: str):
 def doc_parties(data: Dict[str, Any]) -> tuple[Dict[str, str], Dict[str, str]]:
     """문서에 인쇄할 (수하인 CONSIGNEE, 매수인 BUYER).
 
-    수하인과 매수인은 다른 회사일 수 있어 문서(shipping)에 따로 담는다.
-      · 매수인 — buyer_* 를 적어 넣었으면 그 값, 비어 있으면 고객 마스터 값.
-      · 수하인 — 회사명(sm_consignee)이 있으면 consignee_* 값, 없으면 매수인과 같다.
+    수하인이 기본 입력이고, 매수인은 다를 때만 적는다(칸마다 따로 떨어진다).
+      · 수하인 — consignee_*(회사명은 sm_consignee)를 적었으면 그 값, 비어 있으면 고객 마스터 값.
+      · 매수인 — buyer_* 를 적었으면 그 값, 비어 있으면 수하인과 같은 값.
+    Proforma Invoice 처럼 수하인 칸이 없는 문서는 수하인 = 고객 마스터라 매수인도
+    예전처럼 "적은 값, 없으면 마스터"가 된다.
     """
     customer = data.get("customer", {}) or {}
     shipping = data.get("shipping", {}) or {}
@@ -770,19 +772,17 @@ def doc_parties(data: Dict[str, Any]) -> tuple[Dict[str, str], Dict[str, str]]:
     def pick(key: str, fallback: str) -> str:
         return (shipping.get(key) or "").strip() or fallback
 
-    buyer = {
-        "name": pick("buyer_name", customer.get("name", "") or ""),
-        "address": pick("buyer_address", customer.get("address", "") or ""),
-        "contact": pick("buyer_contact", customer.get("contact", "") or ""),
-        "email": pick("buyer_email", customer.get("email", "") or ""),
-    }
-    if not (shipping.get("sm_consignee") or "").strip():
-        return dict(buyer), buyer
     consignee = {
-        "name": (shipping.get("sm_consignee") or "").strip(),
-        "address": (shipping.get("consignee_address") or "").strip(),
-        "contact": (shipping.get("consignee_contact") or "").strip(),
-        "email": (shipping.get("consignee_email") or "").strip(),
+        "name": pick("sm_consignee", customer.get("name", "") or ""),
+        "address": pick("consignee_address", customer.get("address", "") or ""),
+        "contact": pick("consignee_contact", customer.get("contact", "") or ""),
+        "email": pick("consignee_email", customer.get("email", "") or ""),
+    }
+    buyer = {
+        "name": pick("buyer_name", consignee["name"]),
+        "address": pick("buyer_address", consignee["address"]),
+        "contact": pick("buyer_contact", consignee["contact"]),
+        "email": pick("buyer_email", consignee["email"]),
     }
     return consignee, buyer
 

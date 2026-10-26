@@ -1678,9 +1678,9 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       </div>
       <PartiesSection order={data.order} shipping={shipping} setShipping={setShipping} />
       <p className="hint-inline" style={{ marginTop: 6 }}>
-        Leave a buyer field empty to print the grey value — the contact registered for this deal on the RFQ, with the rest
-        from the customer master. Leave the consignee empty when the goods are consigned to the buyer. The consignee company
-        is shared with the Shipping Mark tab (C/O line).
+        Empty fields print the grey value. Consignee defaults to the contact registered for this deal on the RFQ, with the
+        rest from the customer master. Fill in the buyer only when it differs — empty buyer fields copy the consignee. The
+        consignee company is shared with the Shipping Mark tab (C/O line).
       </p>
       <div className="sub-h doc-sec-h">Shipping information</div>
       <div className="form-grid doc-form-grid">
@@ -2120,32 +2120,28 @@ function BankInfoSection({ currency }: { currency: string }) {
 
 /** CONSIGNEE · BUYER — 수하인(포워더·선사 대리점)과 매수인은 서로 다른 회사일 수 있어
  *  네 칸(회사명·주소·담당자·이메일)을 각각 따로 받는다.
- *  · 수하인: 문서에만 있는 정보라 여기서 직접 입력(비우면 매수인과 같은 것으로 인쇄).
- *  · 매수인: 고객 마스터 값이 기본이고, 이 문서에서만 다르게 찍을 때 덮어쓴다(비우면 마스터). */
+ *  · 수하인: 기본 입력. 고객 마스터 값이 기본이고, 이 문서에서만 다르게 찍을 때 덮어쓴다.
+ *  · 매수인: 다를 때만 적는다. 비운 칸은 수하인 값을 그대로 찍는다(백엔드 doc_parties).
+ *  Proforma Invoice 는 수하인 칸이 없어 매수인의 기본값이 곧 고객 마스터다. */
 // 칸 이름은 문서와 같게 — 어느 당사자인지는 좌우 블록 제목이 말해준다.
 // 배치는 한 블록 안에서 [회사명·담당자·이메일] 한 줄, [주소] 한 줄(wide) — 주소만 길다.
-// 매수인 주소는 고객사에 본사·지사가 여러 곳이면 그중에서 골라 찍는다(비우면 대표 주소).
-const BUYER_FIELDS: {
+// 주소는 고객사에 본사·지사가 여러 곳이면 그중에서 골라 찍는다(비우면 대표 주소).
+type PartyField = {
   key: string; label: string; wide?: boolean;
   master: (o: DocumentDetail["order"]) => string;
   options?: (o: DocumentDetail["order"]) => string[];
-}[] = [
-  { key: "buyer_name", label: "Company Name", master: (o) => o.customer || "" },
-  { key: "buyer_contact", label: "Contact", master: (o) => o.customer_contact || "" },
-  { key: "buyer_email", label: "e-mail", master: (o) => o.customer_email || "" },
-  {
-    key: "buyer_address", label: "Address", wide: true,
-    master: (o) => o.customer_address || "",
-    options: (o) => o.customer_addresses ?? [],
-  },
+};
+const PARTY_MASTER: Omit<PartyField, "key">[] = [
+  { label: "Company Name", master: (o) => o.customer || "" },
+  { label: "Contact", master: (o) => o.customer_contact || "" },
+  { label: "e-mail", master: (o) => o.customer_email || "" },
+  { label: "Address", wide: true, master: (o) => o.customer_address || "", options: (o) => o.customer_addresses ?? [] },
 ];
-// 수하인 — 회사명은 Shipping Mark 의 C/O 와 같은 값(sm_consignee)을 그대로 쓴다.
-const CONSIGNEE_FIELDS: { key: string; label: string; wide?: boolean }[] = [
-  { key: "sm_consignee", label: "Company Name" },
-  { key: "consignee_contact", label: "Contact" },
-  { key: "consignee_email", label: "e-mail" },
-  { key: "consignee_address", label: "Address", wide: true },
-];
+// 수하인 회사명은 Shipping Mark 의 C/O 와 같은 값(sm_consignee)을 그대로 쓴다.
+const CONSIGNEE_FIELDS: PartyField[] = ["sm_consignee", "consignee_contact", "consignee_email", "consignee_address"]
+  .map((key, i) => ({ key, ...PARTY_MASTER[i] }));
+const BUYER_FIELDS: PartyField[] = ["buyer_name", "buyer_contact", "buyer_email", "buyer_address"]
+  .map((key, i) => ({ key, ...PARTY_MASTER[i] }));
 
 /** 발행 문서처럼 수하인·매수인을 좌우 두 칸으로 나눠 세운다(각 칸은 독립된 당사자 블록). */
 function PartiesSection({
@@ -2165,32 +2161,28 @@ function PartiesSection({
   buyerOnly?: boolean;
 }) {
   const set = (key: string) => (v: string) => setShipping({ ...shipping, [key]: v });
-  const buyer = (
+  // 인쇄될 값 — 적은 값, 없으면 기본값(수하인: 고객 마스터 / 매수인: 수하인). 백엔드 doc_parties 와 같은 규칙.
+  const consigneeVal = CONSIGNEE_FIELDS.map(({ key, master }) => shipping[key] || master(order));
+  const fallback = (i: number) => (buyerOnly ? BUYER_FIELDS[i].master(order) : consigneeVal[i]);
+  const block = (title: string, fields: PartyField[], base: (i: number) => string, row?: boolean) => (
     <section className="doc-party">
-      <div className="sub-h">{buyerOnly ? "Buyer" : "Buyer (if different)"}</div>
-      <div className={`form-grid doc-party-grid${buyerOnly ? " doc-party-grid--row" : ""}`}>
-        {BUYER_FIELDS.map(({ key, label, wide, master, options }) => (
+      <div className="sub-h">{title}</div>
+      <div className={`form-grid doc-party-grid${row ? " doc-party-grid--row" : ""}`}>
+        {fields.map(({ key, label, wide, options }, i) => (
           readonly
-            ? <ReadonlyField key={key} label={label} value={shipping[key] || master(order)} wide={wide && !buyerOnly} />
-            : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} placeholder={master(order)} wide={wide && !buyerOnly} options={options?.(order)} />
+            ? <ReadonlyField key={key} label={label} value={shipping[key] || base(i)} wide={wide && !row} />
+            : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} placeholder={base(i)} wide={wide && !row} options={options?.(order)} />
         ))}
       </div>
     </section>
   );
-  if (buyerOnly) return <div className="doc-parties doc-parties--single">{buyer}</div>;
+  if (buyerOnly) {
+    return <div className="doc-parties doc-parties--single">{block("Buyer", BUYER_FIELDS, fallback, true)}</div>;
+  }
   return (
     <div className="doc-parties">
-      <section className="doc-party">
-        <div className="sub-h">Consignee</div>
-        <div className="form-grid doc-party-grid">
-          {CONSIGNEE_FIELDS.map(({ key, label, wide }) => (
-            readonly
-              ? <ReadonlyField key={key} label={label} value={shipping[key] || ""} wide={wide} />
-              : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} wide={wide} />
-          ))}
-        </div>
-      </section>
-      {buyer}
+      {block("Consignee", CONSIGNEE_FIELDS, (i) => CONSIGNEE_FIELDS[i].master(order))}
+      {block("Buyer (if different)", BUYER_FIELDS, fallback)}
     </div>
   );
 }
