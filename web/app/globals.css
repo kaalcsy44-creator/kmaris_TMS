@@ -20010,3 +20010,28 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
   border-radius: 2px;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
 }
+
+/* 서류(7단계 PI·CI·PL·SA) 읽기모드 — 라벨 칸 최소폭(84px)을 풀어 값이 라벨 바로 옆에서 시작하게.
+   "Carrier"·"ETD" 같은 짧은 라벨 뒤에 큰 빈칸이 남아 라벨과 값이 따로 놀았다. */
+.form-fieldset.vm-read :is(.doc-form-grid, .doc-party-grid) > .form-field {
+  column-gap: 8px;
+}
+.form-fieldset.vm-read :is(.doc-form-grid, .doc-party-grid) > .form-field > span:first-child {
+  min-width: 0;
+}
+/* 수하인·매수인 블록 — 라벨이 값 왼쪽으로 오면 3칸이 너무 좁아 회사명·이메일이 잘린다.
+   [회사명] 한 줄, [담당자 · 이메일] 한 줄, [주소] 한 줄로 다시 짠다. */
+.form-fieldset.vm-read .doc-party-grid:not(.doc-party-grid--row) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.form-fieldset.vm-read .doc-party-grid:not(.doc-party-grid--row) > .form-field:first-child {
+  grid-column: 1 / -1;
+}
+.form-fieldset.vm-read .doc-party-grid > .form-field > span:first-child {
+  white-space: nowrap;
+}
+@media (max-width: 620px) {
+  .form-fieldset.vm-read .doc-party-grid:not(.doc-party-grid--row) {
+    grid-template-columns: 1fr;
+  }
+}
