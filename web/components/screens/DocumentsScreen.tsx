@@ -1317,7 +1317,7 @@ function ProformaInvoiceTab({
         // Freight/Packing/Insurance/VAT 를 품목표 tfoot 안에 넣는다(참조 양식).
         // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT.
         footerRows={[
-          { label: "Subtotal", value: <DualCurrencyAmount value={subtotal} currency={currency} /> },
+          { label: "Subtotal", strong: true, value: <DualCurrencyAmount value={subtotal} currency={currency} /> },
           { label: "Freight", value: <AmountInput className="foot-charge-input" value={freight} onChange={(e) => setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
           { label: "Packing", value: <AmountInput className="foot-charge-input" value={packing} onChange={(e) => setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
           { label: "Insurance", value: <AmountInput className="foot-charge-input" value={insurance} onChange={(e) => setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
@@ -1712,7 +1712,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         // Freight/Packing/Insurance/VAT 를 품목표 tfoot 안(리스트 하단·Total 위)에 넣는다.
         // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT.
         footerRows={[
-          { label: "Subtotal", value: <DualCurrencyAmount value={subtotal} currency={currency} /> },
+          { label: "Subtotal", strong: true, value: <DualCurrencyAmount value={subtotal} currency={currency} /> },
           { label: "Freight", value: <AmountInput className="foot-charge-input" value={freight} onChange={(e) => setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
           { label: "Packing", value: <AmountInput className="foot-charge-input" value={packing} onChange={(e) => setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
           { label: "Insurance", value: <AmountInput className="foot-charge-input" value={insurance} onChange={(e) => setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
@@ -2700,7 +2700,7 @@ function ItemEditor({
   // 지정 시(금액 문서 전용) 기본 Total 합계행 대신 이 행들을 표 tfoot 에 렌더 —
   // Proforma Invoice 의 Subtotal/Freight/Packing/Insurance/VAT/Total invoice value 처럼
   // 품목 컬럼(Unit Price=라벨, Amount=값)에 정렬해 표 안에 넣는다.
-  footerRows?: { label: React.ReactNode; value: React.ReactNode; grand?: boolean }[];
+  footerRows?: { label: React.ReactNode; value: React.ReactNode; grand?: boolean; strong?: boolean }[];
 }) {
   // 단가·금액을 발행 자릿수로 반올림(금액 = 반올림 단가 × 수량을 다시 반올림). 안 고르면 0 자리.
   const decimals: number = decimalsProp ?? 0;
@@ -2932,7 +2932,7 @@ function ItemEditor({
                       ))}
                     </tr>
                   ) : (
-                    <tr key={idx}>
+                    <tr key={idx} className={r.strong ? "foot-strong" : undefined}>
                       <td></td>{/* 1 sel */}
                       <td></td>{/* 2 No. */}
                       <td></td>{/* 3 part_no */}

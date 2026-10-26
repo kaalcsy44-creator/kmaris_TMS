@@ -6398,12 +6398,15 @@ table.mini tfoot tr.foot-grand .total-value {
   background: var(--accent-soft, #eaf3ff);
   font-weight: 700;
 }
-/* PI·CI 품목표 — Subtotal~VAT 는 보통 굵기, 최종 합계(Total invoice value)만 굵게 2px 크게. */
-table.mini.doc-charge-foot tfoot tr:not(.foot-grand) :is(.total-label, .total-value, .total-value .dual-line) {
+/* PI·CI 품목표 — Freight~VAT 는 보통 굵기, Subtotal 은 굵게, 최종 합계(Total invoice value)는 굵게 1px 크게. */
+table.mini.doc-charge-foot tfoot tr:not(.foot-grand):not(.foot-strong) :is(.total-label, .total-value, .total-value .dual-line) {
   font-weight: 400;
 }
+table.mini.doc-charge-foot tfoot tr.foot-strong :is(.total-label, .total-value) {
+  font-weight: 700;
+}
 table.mini.doc-charge-foot tfoot tr.foot-grand :is(.total-label, .total-value) {
-  font-size: calc(1em + 2px);
+  font-size: calc(1em + 1px);
 }
 /* 좁은 창(정보 패널 펼침 등)에서는 좌우 2단을 위아래로 접는다. */
 @media (max-width: 1100px) {
