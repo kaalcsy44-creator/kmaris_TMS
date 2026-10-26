@@ -1135,7 +1135,7 @@ function PoDocFields({
       </div>
 
       <div className="form-section-title">1. Order information</div>
-      <div className="form-grid">
+      <div className="form-grid form-grid--cols6">
         <div className="form-field">
           <label>Requested date</label>
           <input
@@ -1183,7 +1183,7 @@ function PoDocFields({
       </div>
 
       <div className="form-section-title">2. Supplier information</div>
-      <div className="form-grid">
+      <div className="form-grid form-grid--cols4">
         <div className="form-field">
           <label>
             Supplier
@@ -1217,11 +1217,11 @@ function PoDocFields({
           <label>Email</label>
           <ComboBox value={email} onChange={(v) => set({ supplier_email: v })} options={emailOpts} placeholder="—" />
         </div>
-        <div className="form-field form-field--full">
+        <div className="form-field form-field--span2">
           <label>Address</label>
           <ComboBox value={address} onChange={(v) => set({ supplier_address: v })} options={addressOpts} placeholder="—" />
         </div>
-        <div className="form-field form-field--full">
+        <div className="form-field form-field--span2">
           <label>Delivery place</label>
           <ComboBox
             value={terms.delivery_place ?? ""}

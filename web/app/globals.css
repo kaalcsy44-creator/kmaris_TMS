@@ -5797,16 +5797,24 @@ a.btn.primary:hover {
 .form-grid--cols4 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
+/* 짧은 칸 6개(날짜·조건·선명·IMO·엔진·통화)를 한 줄에 — P/O Order information. */
+.form-grid--cols6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
 /* 좁은 창에서는 고정 열을 풀어 준다 — 4열을 끝까지 버티면 날짜 입력이 잘린다. */
 @media (max-width: 1180px) {
   .form-grid--cols4 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .form-grid--cols6 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 @media (max-width: 720px) {
   .form-grid--cols2,
   .form-grid--cols3,
-  .form-grid--cols4 {
+  .form-grid--cols4,
+  .form-grid--cols6 {
     grid-template-columns: 1fr;
   }
 }
