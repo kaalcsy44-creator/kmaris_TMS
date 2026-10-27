@@ -748,7 +748,7 @@ def make_packing_list_xlsx(
     form.put(r, 8, _tot("sm_net_weight", "H"), fill=form.lightblue, font=form.bold, align=form.right, fmt=num_fmt)
     form.put(r, 9, _tot("sm_gross_weight", "I"), fill=form.lightblue, font=form.bold, align=form.right, fmt=num_fmt)
     sm_dims = [shipping.get(k) for k in ("sm_dim_l", "sm_dim_w", "sm_dim_h")]
-    for j, d in enumerate(sm_dims):
+    for j, d in enumerate(tot["dims"]):
         form.put(r, 10 + j, _numcell(d), fill=form.lightblue, font=form.bold, align=form.center, fmt=num_fmt)
     # 용적: 직접 적은 값 > 전체 치수 × 케이스 수 수식 > 품목 용적 SUM 수식(packing_totals 와 같은 순서).
     tot_meas = _numcell(shipping.get("sm_measurement"))

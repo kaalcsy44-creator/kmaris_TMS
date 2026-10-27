@@ -1937,15 +1937,22 @@ def packing_totals(data: Dict[str, Any]) -> Dict[str, str]:
     def sm(key: str) -> str:
         return str(shipping.get(key, "") or "").strip()
 
-    # 포장 개수를 적었을 때만 "1 Carton Box" 처럼 종류를 붙인다 — 개수 없이 종류만 있으면
-    # 품목별 합계가 곧 개수이고, 품목마다 종류가 다를 수 있어 숫자만 적는다(기존 동작).
+    # 포장 종류: 직접 고른 값 > 품목 종류(모두 같으면 그 이름, 섞였으면 "Packages") > 거래조건 Packing.
+    # 개수: 직접 적은 값 > 품목별 개수 합. 화면(autoPackingKind)과 같은 규칙.
     cases = sm("sm_total_cases")
-    kind = sm("sm_pkg_kind") or str(terms.get("packing_type", "") or "").strip()
-    packages = f"{cases} {kind}".strip() if cases else _g(sum(_num(it.get("pkg_qty")) for it in items))
+    kinds = [k for k in dict.fromkeys(str(it.get("pkg_kind") or "").strip() for it in items) if k]
+    item_kind = kinds[0] if len(kinds) == 1 else ("Packages" if kinds else "")
+    kind = sm("sm_pkg_kind") or item_kind or str(terms.get("packing_type", "") or "").strip()
+    count = cases or _g(sum(_num(it.get("pkg_qty")) for it in items))
+    packages = f"{count} {kind}".strip() if count else ""
     net = sm("sm_net_weight") or _g(sum(_num(it.get("net_weight")) for it in items))
     gross = sm("sm_gross_weight") or _g(sum(_num(it.get("gross_weight")) for it in items))
     dims = [sm("sm_dim_l"), sm("sm_dim_w"), sm("sm_dim_h")]
     measurement = sm("sm_measurement")
+    # 합계행 치수 — 직접 적은 전체 치수, 없으면 치수를 적은 품목이 모두 같은 치수일 때 그 치수
+    # (서로 다르면 하나로 합칠 수 없어 비운다). 용적 계산은 직접 적은 전체 치수만 쓴다.
+    item_dims = list(dict.fromkeys(tuple(d) for d in (_dim_parts(it.get("dimension")) for it in items) if all(d)))
+    shown_dims = dims if all(dims) else (list(item_dims[0]) if len(item_dims) == 1 else ["", "", ""])
     if not measurement and all(dims):
         # 치수는 cm(포장 1개) — 용적(m³) = 세 변의 곱 × 포장 개수 ÷ 100³.
         measurement = cbm(*dims, cases)
@@ -1956,7 +1963,8 @@ def packing_totals(data: Dict[str, Any]) -> Dict[str, str]:
         "net_weight": net,
         "gross_weight": gross,
         "measurement": measurement,
-        "dimension": " × ".join(dims) if all(dims) else "",
+        "dimension": " × ".join(shown_dims) if all(shown_dims) else "",
+        "dims": shown_dims,
     }
 
 
@@ -2020,7 +2028,7 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
 
     # 합계행 — 전체 포장 규격을 직접 적었으면 그 값, 아니면 품목별 합산(packing_totals).
     tot = packing_totals(data)
-    dims = [num(shipping.get("sm_dim_l")), num(shipping.get("sm_dim_w")), num(shipping.get("sm_dim_h"))]
+    dims = [num(d) for d in tot["dims"]]
     unit = items[0]["unit"] if items else ""
     total_row = [form.p("TOTAL", form.grand), "", "",
                  form.p(_g(sum(_num(it["qty"]) for it in items)), form.grand),

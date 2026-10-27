@@ -2711,6 +2711,38 @@ function cbmText(l: unknown, w: unknown, h: unknown, pkgs?: unknown): string {
   return m3 ? String(m3) : "";
 }
 
+function autoPackingKind(rows: DocumentWorkItem[], fallback?: string): string {
+  const kinds = [...new Set(rows.map((it) => (it.pkg_kind || "").trim()).filter(Boolean))];
+  return kinds.length === 1 ? kinds[0] : kinds.length ? "Packages" : fallback || "Carton Box";
+}
+
+function autoPackingDims(rows: DocumentWorkItem[]): string[] {
+  const dims = [...new Set(rows.map((it) => dimParts(it.dimension)).filter((d) => d.every(Boolean)).map((d) => d.join(" x ")))];
+  return dims.length === 1 ? dimParts(dims[0]) : ["", "", ""];
+}
+
+/** 포장 종류 고르기 — 자주 쓰는 종류 목록(PACKING_OPTIONS). 목록에 없는 저장값도 그대로 보여 준다.
+ *  autoLabel 을 주면 빈 값이 "자동" 선택지가 된다(합계행: 품목 종류를 따라간다). */
+function PackingKindSelect({
+  value,
+  onChange,
+  autoLabel,
+  grid,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  autoLabel?: string;
+  grid?: Record<string, number>;
+}) {
+  const opts = value && !PACKING_OPTIONS.includes(value) ? [value, ...PACKING_OPTIONS] : PACKING_OPTIONS;
+  return (
+    <select {...grid} value={value} onChange={(e) => onChange(e.target.value)} title="Kind of packages">
+      <option value="">{autoLabel || "—"}</option>
+      {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+}
+
 /** 품목 치수는 "L x W x H" 한 문자열로 저장한다(PDF·엑셀이 그대로 읽는 형식). 화면은 세 칸. */
 function dimParts(text: unknown): [string, string, string] {
   const parts = String(text ?? "").split(/[x×*]/).map((s) => s.trim());
@@ -2805,6 +2837,12 @@ function ItemEditor({
   // 합계행 Measurement 칸의 안내값 — 치수를 적었으면 그걸로 계산한 용적을 미리 보여준다.
   const dimMeasurement = packingTotals ? dimMeasurementText(packingTotals.values) : "";
   const fmtNum = (n: number) => (n ? n.toLocaleString(undefined, { maximumFractionDigits: 3 }) : "");
+  const fmtM3 = (n: number) => (n ? n.toLocaleString(undefined, { maximumFractionDigits: 4 }) : "");
+  // 합계행 자동값(서버 packing_totals 와 같은 규칙) — 포장 종류: 품목이 모두 같은 종류면 그 이름,
+  // 섞였으면 "Packages", 아무도 안 적었으면 Commercial Invoice 의 Packing.
+  // 치수: 치수를 적은 품목이 모두 같은 치수면 그 치수(여럿이 다르면 하나로 합칠 수 없어 비운다).
+  const autoKind = autoPackingKind(shown, packingTotals?.kindPlaceholder);
+  const autoDims = autoPackingDims(shown);
   const sel = useRowSelection(items.length);
   const cur = (currency || "USD").toUpperCase();
   const unitListId = useId();
@@ -2818,8 +2856,8 @@ function ItemEditor({
     { key: "unit", label: "Unit" },
     ...(packing
       ? [
-          { key: "pkg_qty", label: "Pkgs", className: "num", phone: true },
-          { key: "pkg_kind", label: "Kind" },
+          { key: "pkg_qty", label: "No. of Packages", className: "num", phone: true },
+          { key: "pkg_kind", label: "Kind of Packages" },
           { key: "net_weight", label: "N.W. (kg)", className: "num" },
           { key: "gross_weight", label: "G.W. (kg)", className: "num" },
           // 발행 문서와 같은 순서 — Dim.(cm) L·W·H 다음에 Meas.(m³).
@@ -2856,7 +2894,7 @@ function ItemEditor({
     headers: [
       "Part No.", "Description", "Maker", "Qty", "Unit",
       ...(packing
-        ? ["Pkgs", "Kind", "N.W. (kg)", "G.W. (kg)", "Dim. (cm)", "Meas. (m³)"]
+        ? ["No. of Packages", "Kind of Packages", "N.W. (kg)", "G.W. (kg)", "Dim. (cm)", "Meas. (m³)"]
         : [`Unit Price (${cur})`, `Amount (${cur})`]),
       "Remark",
     ],
@@ -2917,8 +2955,8 @@ function ItemEditor({
               <ItemTh grid={grid} k="unit">Unit</ItemTh>
               {packing ? (
                 <>
-                  <ItemTh grid={grid} k="pkg_qty" className="num">Pkgs</ItemTh>
-                  <ItemTh grid={grid} k="pkg_kind">Kind</ItemTh>
+                  <ItemTh grid={grid} k="pkg_qty" className="num">No. of Packages</ItemTh>
+                  <ItemTh grid={grid} k="pkg_kind">Kind of Packages</ItemTh>
                   <ItemTh grid={grid} k="net_weight" className="num">N.W. (kg)</ItemTh>
                   <ItemTh grid={grid} k="gross_weight" className="num">G.W. (kg)</ItemTh>
                   <ItemTh grid={grid} k="dimension">Dim. (cm) L × W × H</ItemTh>
@@ -2949,7 +2987,13 @@ function ItemEditor({
                 {packing ? (
                   <>
                     <td><input {...keys.cell(i, 5)} className="num" value={String(item.pkg_qty ?? "")} onChange={(e) => patch(i, "pkg_qty", e.target.value)} /></td>
-                    <td><input {...keys.cell(i, 6)} value={item.pkg_kind || ""} onChange={(e) => patch(i, "pkg_kind", e.target.value)} /></td>
+                    <td>
+                      <PackingKindSelect
+                        grid={{ "data-grid-row": i, "data-grid-col": 6 }}
+                        value={item.pkg_kind || ""}
+                        onChange={(v) => patch(i, "pkg_kind", v)}
+                      />
+                    </td>
                     <td><input {...keys.cell(i, 7)} className="num" value={String(item.net_weight || "")} onChange={(e) => patch(i, "net_weight", e.target.value)} /></td>
                     <td><input {...keys.cell(i, 8)} className="num" value={String(item.gross_weight || "")} onChange={(e) => patch(i, "gross_weight", e.target.value)} /></td>
                     <td>{/* 치수 L·W·H(cm) — 세 칸을 다 적으면 Meas. 가 L×W×H×Pkgs 로 자동 계산된다. */}
@@ -3057,11 +3101,10 @@ function ItemEditor({
                       />
                     </td>
                     <td>{/* 9 pkg_kind */}
-                      <input
+                      <PackingKindSelect
                         value={packingTotals.values.kind}
-                        placeholder={packingTotals.kindPlaceholder || "Carton Box"}
-                        title="Kind of packages"
-                        onChange={(e) => packingTotals.onChange({ kind: e.target.value })}
+                        autoLabel={`Auto · ${autoKind}`}
+                        onChange={(v) => packingTotals.onChange({ kind: v })}
                       />
                     </td>
                     <td>{/* 10 net_weight */}
@@ -3080,20 +3123,20 @@ function ItemEditor({
                     </td>
                     <td>{/* 12 dimension — L × W × H (cm) */}
                       <span className="pack-dim">
-                        <input value={packingTotals.values.dim_l} placeholder="L" title="Length (cm)"
+                        <input value={packingTotals.values.dim_l} placeholder={autoDims[0] || "L"} title="Length (cm)"
                           onChange={(e) => packingTotals.onChange({ dim_l: e.target.value })} />
                         <em>×</em>
-                        <input value={packingTotals.values.dim_w} placeholder="W" title="Width (cm)"
+                        <input value={packingTotals.values.dim_w} placeholder={autoDims[1] || "W"} title="Width (cm)"
                           onChange={(e) => packingTotals.onChange({ dim_w: e.target.value })} />
                         <em>×</em>
-                        <input value={packingTotals.values.dim_h} placeholder="H" title="Height (cm)"
+                        <input value={packingTotals.values.dim_h} placeholder={autoDims[2] || "H"} title="Height (cm)"
                           onChange={(e) => packingTotals.onChange({ dim_h: e.target.value })} />
                       </span>
                     </td>
                     <td>{/* 13 measurement */}
                       <input
                         className="num" value={packingTotals.values.measurement}
-                        placeholder={dimMeasurement || fmtNum(measTotal)} title="Measurement (m³)"
+                        placeholder={dimMeasurement || fmtM3(measTotal)} title="Measurement (m³)"
                         onChange={(e) => packingTotals.onChange({ measurement: e.target.value })}
                       />
                     </td>
@@ -3101,11 +3144,11 @@ function ItemEditor({
                 ) : (
                   <>
                     <td className="num total-value">{fmtNum(pkgTotal)}</td>{/* 8 pkg_qty */}
-                    <td></td>{/* 9 pkg_kind */}
+                    <td>{autoKind}</td>{/* 9 pkg_kind */}
                     <td className="num total-value">{fmtNum(nwTotal)}</td>{/* 10 net_weight */}
                     <td className="num total-value">{fmtNum(gwTotal)}</td>{/* 11 gross_weight */}
-                    <td></td>{/* 12 dimension */}
-                    <td className="num total-value">{fmtNum(measTotal)}</td>{/* 13 measurement */}
+                    <td>{autoDims[0] ? autoDims.join(" × ") : ""}</td>{/* 12 dimension */}
+                    <td className="num total-value">{fmtM3(measTotal)}</td>{/* 13 measurement */}
                   </>
                 )}
                 <td></td>{/* 14 remark */}
