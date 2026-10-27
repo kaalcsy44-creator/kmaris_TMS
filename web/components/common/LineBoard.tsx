@@ -647,6 +647,11 @@ function Cell({
         <b>{money(cell.unit_cost, cell.currency)}</b>
         {cmp ? <span className="lb-cmpv">{cmp}</span> : null}
         {cell.lead_time ? <span className="lb-lt">{cell.lead_time}</span> : null}
+        {cell.kit_lines && cell.kit_lines > 1 ? (
+          <span className="lb-lt" title="The vendor priced this line as several parts — the price is the set total per unit">
+            {cell.kit_lines}-line set
+          </span>
+        ) : null}
       </>
     ) : cell.state === "declined" ? (
       <span className="lb-mark">✕</span>

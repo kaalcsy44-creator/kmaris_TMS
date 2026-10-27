@@ -1222,7 +1222,7 @@ def _line_board(s, rfq) -> dict:
         # (같은 줄을 다시 견적해 왔다면 나중 값이 지금 값이다).
         priced: dict[str, tuple] = {}
         for q in quotes:
-            for lid, it in index_doc_by_line(lines_src, q.items or []).items():
+            for lid, it in index_doc_by_line(lines_src, q.items or [], kits=True).items():
                 priced[lid] = (q, it, _cell_cost(it))
         for idx, ln in enumerate(lines):
             key = line_id_of(lines_src[idx]) or ln["lid"]
@@ -1240,6 +1240,8 @@ def _line_board(s, rfq) -> dict:
                     "qty": (it.get("qty") if isinstance(it, dict) else None) or ln["qty"],
                     "vendor_quote_id": q.id,
                     "vendor_quote_no": q.vendor_quote_no or "",
+                    # 한 줄을 여러 부품으로 쪼개 견적한 세트면 그 줄 수(화면에 "9-line set").
+                    "kit_lines": (it.get("kit_lines") or 0) if isinstance(it, dict) else 0,
                 }
             elif declined:
                 cells.setdefault(ln["lid"], {})[str(vr.id)] = {"state": "declined"}
@@ -1373,7 +1375,7 @@ def save_line_awards(rfq_id: int, body: LineAwardsSave, user: dict = Depends(get
                 raise HTTPException(status_code=400, detail="이 딜의 벤더 견적이 아닙니다.")
             # 채택 시점의 값을 사본으로 남긴다 — 벤더가 견적을 고쳐 보내도 무엇을 보고
             # 골랐는지가 남는다(현재가는 vendor_quote_id 를 따라가면 언제든 다시 읽는다).
-            hit = index_doc_by_line(lines_src, q.items or []).get(lid) or {}
+            hit = index_doc_by_line(lines_src, q.items or [], kits=True).get(lid) or {}
             if row is None:
                 row = DealLineAward(rfq_id=rfq.id, lid=lid)
                 s.add(row)
@@ -1414,7 +1416,7 @@ def awarded_items(rfq_id: int):
         vq_map = {q.id: q for q in s.query(VendorQuote).filter(VendorQuote.id.in_(vq_ids)).all()} if vq_ids else {}
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
         # 견적마다 그 문서의 줄을 딜 라인에 붙여 둔다(단가·납기는 벤더가 쓴 것을 쓴다).
-        doc_lines = {qid: index_doc_by_line(lines_src, q.items or []) for qid, q in vq_map.items()}
+        doc_lines = {qid: index_doc_by_line(lines_src, q.items or [], kits=True) for qid, q in vq_map.items()}
         items, groups, currencies = [], {}, []
         for it in lines_src:
             lid = line_id_of(it)

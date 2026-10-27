@@ -767,6 +767,8 @@ export type LineCell = {
   qty?: number;
   vendor_quote_id?: number;
   vendor_quote_no?: string;
+  /** 벤더가 이 줄을 여러 부품으로 쪼개 견적한 세트면 그 줄 수(단가는 세트 합 ÷ 수량). */
+  kit_lines?: number;
 };
 
 export type LineAward = {

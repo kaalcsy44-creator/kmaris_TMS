@@ -1753,12 +1753,17 @@ def _part_key(v) -> str:
     return str(v or "").strip().upper()
 
 
-def index_doc_by_line(base_items, doc_items) -> dict[str, dict]:
+def index_doc_by_line(base_items, doc_items, kits: bool = False) -> dict[str, dict]:
     """문서(벤더 RFQ·벤더 견적 등)의 품목 줄을 딜의 라인(lid)에 붙여 돌려준다.
 
     lid 가 적힌 줄은 그 이름으로 곧장 잇는다. lid 가 없던 시절의 문서는 예전 규칙
     그대로 — 품번으로, 품번도 없으면 줄 순서로 맞춘다(web/lib/deal.ts 와 같은 규칙).
     옛 딜을 건드리지 않고도 새 딜은 정확해지게 하려는 것이다.
+
+    `kits=True` (소싱 비교·채택용): 벤더가 딜의 한 줄을 여러 부품으로 쪼개 견적하면
+    (Complete Crankshaft Assembly → 크랭크샤프트 + 카운터웨이트 12 + 볼트 …) 그 줄들은
+    모두 같은 lid 를 단다. 이때는 첫 줄만 보지 않고 한 세트로 합쳐 돌려준다 —
+    단가 = Σ(수량×단가) ÷ 딜 줄 수량(_kit_line). 기본값(False)은 예전처럼 첫 줄.
 
     돌려주는 열쇠는 기준 줄의 lid 이고, 아직 이름이 없는 줄(옛 딜)은 그 자리를 뜻하는
     임시 열쇠 "#1"·"#2"… 를 쓴다. 이름이 없다고 그 줄이 표에서 빠지면, 옛 딜의 소싱
@@ -1770,11 +1775,21 @@ def index_doc_by_line(base_items, doc_items) -> dict[str, dict]:
     named = {k for k, b in zip(keys, base) if line_id_of(b)}
     out: dict[str, dict] = {}
     taken: set[int] = set()
+    sets: dict[str, list] = {}
     for d in doc:
         lid = line_id_of(d)
         if lid and lid in named and lid not in out:
             out[lid] = d
             taken.add(id(d))
+            sets[lid] = [d]
+        elif kits and lid in sets:
+            sets[lid].append(d)
+            taken.add(id(d))
+    if kits:
+        base_of = dict(zip(keys, base))
+        for lid, group in sets.items():
+            if len(group) > 1:
+                out[lid] = _kit_line(base_of.get(lid) or {}, group)
     rest = [d for d in doc if id(d) not in taken]
     if not rest:
         return out
@@ -1796,6 +1811,46 @@ def index_doc_by_line(base_items, doc_items) -> dict[str, dict]:
         elif i < len(rest):
             out[key] = rest[i]
     return out
+
+
+def _kit_line(base: dict, group: list[dict]) -> dict:
+    """같은 lid 를 단 벤더 견적 줄 여럿을 딜 줄 하나의 값으로 합친다(세트 견적).
+    단가 = Σ(줄 수량 × 줄 단가) ÷ 딜 줄 수량. 값이 없는 줄은 합에서 뺀다(전부 없으면 None).
+    품번은 비운다 — 여러 부품을 한 번호로 대표할 수 없다. 원래 줄들은 kit_items 에 둔다."""
+    def f(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+    total, priced = 0.0, False
+    for d in group:
+        price = f(d.get("cost_price"))
+        if price is None:
+            price = f(d.get("unit_price"))
+        if price is None:
+            amt = f(d.get("amount"))
+            if amt is not None:
+                total += amt
+                priced = True
+            continue
+        total += price * (f(d.get("qty")) or 1)
+        priced = True
+    qty = f(base.get("qty")) or 1
+    lead = max((str(d.get("lead_time") or "").strip() for d in group), key=len, default="")
+    first = group[0]
+    return {
+        **first,
+        "part_no": "",
+        "description": base.get("description") or first.get("description") or "",
+        "qty": qty,
+        "unit": base.get("unit") or first.get("unit") or "SET",
+        "cost_price": round(total / qty, 4) if priced else None,
+        "unit_price": None,
+        "amount": None,
+        "lead_time": lead,
+        "kit_lines": len(group),
+        "kit_items": group,
+    }
 
 
 # ── 받아 온 문서의 줄에 라인 ID 붙이기 ──────────────────────────────────────────
@@ -1956,6 +2011,20 @@ def stamp_doc_line_ids(base_items, doc_items, scope_lids=None) -> dict:
         if ok:
             for i, lid in zip(rest_i, rest_l):
                 take(i, lid, "order")
+
+    # 이 벤더에게 물어본 줄이 딱 하나인데 답이 여러 줄이면 — 그 한 줄을 부품으로 쪼개 견적한
+    # 세트다(Complete Crankshaft Assembly → 크랭크샤프트·카운터웨이트·볼트 …). 운임·포장 줄과
+    # 품번이 전혀 다른 물건(differs/sibling)만 빼고 모두 그 줄에 붙인다. 비교표는 같은 lid 줄을
+    # 세트로 합산한다(index_doc_by_line kits=True).
+    if scope and len(cands) == 1 and len(left) >= 2 and not claimed:
+        lid = line_id_of(cands[0])
+        for i in sorted(left):
+            _, why = _line_match_score(doc[i], cands[0])
+            if why in ("sibling",) or _CHARGE_LINE.search(str(doc[i].get("description") or "")):
+                continue
+            doc[i][LINE_ID_KEY] = lid
+            left.discard(i)
+            matches.append({"index": i, "lid": lid, "how": "set"})
 
     return {"matches": matches, "unmatched": sorted(left)}
 

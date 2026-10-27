@@ -4603,7 +4603,7 @@ function LinePick({
   const others = (lid: string) => (lidRows?.get(lid) ?? []).filter((n) => n !== seq);
   const dupOf = value ? others(value) : [];
   const dupNote = dupOf.length
-    ? `Also linked on row ${dupOf.join(", ")} — only the first row counts in the comparison; pick the right line.`
+    ? `Also linked on row ${dupOf.join(", ")} — these rows are compared as one set (sum of qty × price ÷ project qty).`
     : "";
   if (!lines || lines.length === 0)
     return <span className={dupOf.length ? "line-dup" : "muted"} title={dupNote || undefined}>{value || "—"}</span>;
@@ -4618,7 +4618,7 @@ function LinePick({
   const cur = lines.find((l) => l.lid === value);
   return (
     <select
-      className={`line-pick${value ? "" : " unlinked"}${dupOf.length ? " dup" : ""}`}
+      className={`line-pick${value ? "" : " unlinked"}`}
       value={value}
       title={dupNote || (cur ? label(cur) : value || "Not linked to a project item")}
       onChange={(e) => onChange(e.target.value)}
