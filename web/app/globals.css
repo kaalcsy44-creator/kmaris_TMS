@@ -6295,6 +6295,14 @@ input.num-bad {
 .doc-party > .sub-h {
   margin-bottom: 8px;
 }
+/* 매수인 블록 제목 옆 Same / Different 토글 — 제목은 왼쪽, 토글은 오른쪽 끝. */
+.doc-party-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 /* 한 당사자 블록: [회사명·담당자·이메일] 한 줄 + [주소] 한 줄. */
 .doc-party-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));

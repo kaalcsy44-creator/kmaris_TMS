@@ -3,7 +3,7 @@
 import AmountInput from "@/components/common/AmountInput";
 import { filenameFromDisposition } from "@/lib/download";
 import DecimalsSelect, { decimalsOf } from "@/components/common/DecimalsSelect";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   documentDownloadUrl,
@@ -1681,8 +1681,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       <PartiesSection order={data.order} shipping={shipping} setShipping={setShipping} />
       <p className="hint-inline" style={{ marginTop: 6 }}>
         Empty fields print the grey value. Consignee defaults to the contact registered for this deal on the RFQ, with the
-        rest from the customer master. Fill in the buyer only when it differs — empty buyer fields copy the consignee. The
-        consignee company is shared with the Shipping Mark tab (C/O line).
+        rest from the customer master. Buyer: "Same as consignee" fills it from the consignee — edit any field to make it
+        different; "Different" starts from the customer master. The consignee company is shared with the Shipping Mark tab (C/O line).
       </p>
       <div className="sub-h doc-sec-h">Shipping information</div>
       <div className="form-grid doc-form-grid">
@@ -2166,14 +2166,43 @@ function PartiesSection({
   // 인쇄될 값 — 적은 값, 없으면 기본값(수하인: 고객 마스터 / 매수인: 수하인). 백엔드 doc_parties 와 같은 규칙.
   const consigneeVal = CONSIGNEE_FIELDS.map(({ key, master }) => shipping[key] || master(order));
   const fallback = (i: number) => (buyerOnly ? BUYER_FIELDS[i].master(order) : consigneeVal[i]);
-  const block = (title: string, fields: PartyField[], base: (i: number) => string, row?: boolean) => (
+  // 매수인 Same / Different 토글 — 저장값은 그대로(매수인 칸이 비면 Same).
+  // · Same: 매수인 칸은 비워 두고 입력란엔 수하인 값을 실제 글자로 채워 보여준다. 거기서 한 칸이라도
+  //   고치면 네 칸을 수하인 값으로 채운 뒤 그 칸만 바꿔 Different 로 넘어간다.
+  // · Different: 처음 고르면 고객 마스터 값으로 채운다(수하인이 포워더일 때 매수인은 보통 고객사).
+  const hasBuyer = BUYER_FIELDS.some(({ key }) => shipping[key]);
+  const [diffPick, setDiffPick] = useState<boolean | null>(null);
+  const differs = diffPick ?? hasBuyer;
+  const fillBuyer = (val: (i: number) => string) =>
+    setShipping({ ...shipping, ...Object.fromEntries(BUYER_FIELDS.map(({ key }, i) => [key, val(i)])) });
+  const pickSame = () => {
+    setDiffPick(false);
+    fillBuyer(() => "");
+  };
+  const pickDifferent = () => {
+    setDiffPick(true);
+    if (!hasBuyer) fillBuyer((i) => BUYER_FIELDS[i].master(order));
+  };
+  const editSameBuyer = (i: number) => (v: string) => {
+    setDiffPick(true);
+    fillBuyer((j) => (j === i ? v : consigneeVal[j]));
+  };
+  const buyerToggle = (
+    <div className="seg-toggle" role="group" aria-label="Buyer">
+      <button type="button" className={differs ? "" : "on"} onClick={pickSame}>Same as consignee</button>
+      <button type="button" className={differs ? "on" : ""} onClick={pickDifferent}>Different</button>
+    </div>
+  );
+  const block = (title: string, fields: PartyField[], base: (i: number) => string, row?: boolean, mirror?: boolean, head?: ReactNode) => (
     <section className="doc-party">
-      <div className="sub-h">{title}</div>
+      <div className="sub-h doc-party-head">{title}{head}</div>
       <div className={`form-grid doc-party-grid${row ? " doc-party-grid--row" : ""}`}>
         {fields.map(({ key, label, wide, options }, i) => (
           readonly
             ? <ReadonlyField key={key} label={label} value={shipping[key] || base(i)} wide={wide && !row} />
-            : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} placeholder={base(i)} wide={wide && !row} options={options?.(order)} />
+            : mirror
+              ? <Field key={key} label={label} value={base(i)} onChange={editSameBuyer(i)} wide={wide && !row} options={options?.(order)} />
+              : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} placeholder={base(i)} wide={wide && !row} options={options?.(order)} />
         ))}
       </div>
     </section>
@@ -2184,7 +2213,9 @@ function PartiesSection({
   return (
     <div className="doc-parties">
       {block("Consignee", CONSIGNEE_FIELDS, (i) => CONSIGNEE_FIELDS[i].master(order))}
-      {block("Buyer (if different)", BUYER_FIELDS, fallback)}
+      {readonly
+        ? block("Buyer (if different)", BUYER_FIELDS, fallback)
+        : block("Buyer", BUYER_FIELDS, fallback, false, !differs, buyerToggle)}
     </div>
   );
 }
