@@ -2699,10 +2699,30 @@ function packingTotalsPatch(patch: Partial<PackingTotals>): Record<string, strin
 /** 치수(cm)로 계산한 용적(m³) — 세 변이 모두 있을 때만. 서버(packing_totals)와 같은 규칙이라
  *  화면에 보여주는 값과 문서에 찍히는 값이 어긋나지 않는다. */
 function dimMeasurementText(v: PackingTotals): string {
-  const [l, w, h] = [v.dim_l, v.dim_w, v.dim_h].map((x) => num(x));
-  if (!l || !w || !h) return "";
-  const m3 = Math.round((l * w * h) / 100) / 10000; // cm³ → m³, 소수 4자리
+  return cbmText(v.dim_l, v.dim_w, v.dim_h, v.cases);
+}
+
+/** L·W·H(cm) × 포장 개수(없으면 1) → 용적(m³, 소수 4자리). 세 변이 다 있어야 계산한다.
+ *  서버(kmaris_docs.cbm)·엑셀 수식과 같은 규칙. */
+function cbmText(l: unknown, w: unknown, h: unknown, pkgs?: unknown): string {
+  const [a, b, c] = [l, w, h].map((x) => num(x));
+  if (!a || !b || !c) return "";
+  const m3 = Math.round((a * b * c * (num(pkgs) || 1)) / 100) / 10000; // cm³ → m³
   return m3 ? String(m3) : "";
+}
+
+/** 품목 치수는 "L x W x H" 한 문자열로 저장한다(PDF·엑셀이 그대로 읽는 형식). 화면은 세 칸. */
+function dimParts(text: unknown): [string, string, string] {
+  const parts = String(text ?? "").split(/[x×*]/).map((s) => s.trim());
+  return parts.length === 3 ? [parts[0], parts[1], parts[2]] : [String(text ?? "").trim(), "", ""];
+}
+const dimJoin = (p: string[]) => (p.some((s) => s.trim()) ? p.map((s) => s.trim()).join(" x ") : "");
+
+/** 치수·포장 개수가 바뀐 줄의 용적을 다시 계산한다(세 변이 다 있을 때만 — 아니면 직접 적은 값 유지). */
+function withAutoCbm(it: DocumentWorkItem): DocumentWorkItem {
+  const [l, w, h] = dimParts(it.dimension);
+  const m3 = cbmText(l, w, h, it.pkg_qty);
+  return m3 ? { ...it, measurement: m3 } : it;
 }
 
 function ItemEditor({
@@ -2750,7 +2770,7 @@ function ItemEditor({
     if (!packing && (key === "qty" || key === "unit_price")) {
       item.amount = rnd(num(item.qty) * num(item.unit_price));
     }
-    next[i] = item;
+    next[i] = packing && (key === "dimension" || key === "pkg_qty") ? withAutoCbm(item) : item;
     setItems(next);
   }
   const roundRow = (it: DocumentWorkItem, d: number): DocumentWorkItem => {
@@ -2800,10 +2820,11 @@ function ItemEditor({
       ? [
           { key: "pkg_qty", label: "Pkgs", className: "num", phone: true },
           { key: "pkg_kind", label: "Kind" },
-          { key: "net_weight", label: "N.W." },
-          { key: "gross_weight", label: "G.W." },
+          { key: "net_weight", label: "N.W. (kg)", className: "num" },
+          { key: "gross_weight", label: "G.W. (kg)", className: "num" },
+          // 발행 문서와 같은 순서 — Dim.(cm) L·W·H 다음에 Meas.(m³).
+          { key: "dimension", label: "Dim. (cm)" },
           { key: "measurement", label: "Meas. (m³)", className: "num" },
-          { key: "dimension", label: "Dimension" },
         ]
       : [
           { key: "unit_price", label: `Unit Price (${cur})`, className: "num", phone: true },
@@ -2826,7 +2847,7 @@ function ItemEditor({
     fields: [
       "part_no", "description", "maker", "qty", "unit",
       ...(packing
-        ? ["pkg_qty", "pkg_kind", "net_weight", "gross_weight", "measurement", "dimension"]
+        ? ["pkg_qty", "pkg_kind", "net_weight", "gross_weight", "dimension", "measurement"]
         : ["unit_price", "amount"]),
       "remark",
     ],
@@ -2835,7 +2856,7 @@ function ItemEditor({
     headers: [
       "Part No.", "Description", "Maker", "Qty", "Unit",
       ...(packing
-        ? ["Pkgs", "Kind", "N.W.", "G.W.", "Meas. (m³)", "Dimension"]
+        ? ["Pkgs", "Kind", "N.W. (kg)", "G.W. (kg)", "Dim. (cm)", "Meas. (m³)"]
         : [`Unit Price (${cur})`, `Amount (${cur})`]),
       "Remark",
     ],
@@ -2850,9 +2871,15 @@ function ItemEditor({
         if (changed.includes("unit_price")) next.unit_price = rnd(num(next.unit_price));
         next.amount = rnd(num(next.qty) * num(next.unit_price));
       }
+      if (packing && (changed.includes("dimension") || changed.includes("pkg_qty"))) return withAutoCbm(next);
       return next;
     },
   });
+  const patchDim = (i: number, axis: number, v: string) => {
+    const p = dimParts(items[i].dimension);
+    p[axis] = v;
+    patch(i, "dimension", dimJoin(p));
+  };
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -2892,10 +2919,10 @@ function ItemEditor({
                 <>
                   <ItemTh grid={grid} k="pkg_qty" className="num">Pkgs</ItemTh>
                   <ItemTh grid={grid} k="pkg_kind">Kind</ItemTh>
-                  <ItemTh grid={grid} k="net_weight">N.W.</ItemTh>
-                  <ItemTh grid={grid} k="gross_weight">G.W.</ItemTh>
+                  <ItemTh grid={grid} k="net_weight" className="num">N.W. (kg)</ItemTh>
+                  <ItemTh grid={grid} k="gross_weight" className="num">G.W. (kg)</ItemTh>
+                  <ItemTh grid={grid} k="dimension">Dim. (cm) L × W × H</ItemTh>
                   <ItemTh grid={grid} k="measurement" className="num">Meas. (m³)</ItemTh>
-                  <ItemTh grid={grid} k="dimension">Dimension</ItemTh>
                 </>
               ) : (
                 <>
@@ -2923,10 +2950,23 @@ function ItemEditor({
                   <>
                     <td><input {...keys.cell(i, 5)} className="num" value={String(item.pkg_qty ?? "")} onChange={(e) => patch(i, "pkg_qty", e.target.value)} /></td>
                     <td><input {...keys.cell(i, 6)} value={item.pkg_kind || ""} onChange={(e) => patch(i, "pkg_kind", e.target.value)} /></td>
-                    <td><input {...keys.cell(i, 7)} value={String(item.net_weight || "")} onChange={(e) => patch(i, "net_weight", e.target.value)} /></td>
-                    <td><input {...keys.cell(i, 8)} value={String(item.gross_weight || "")} onChange={(e) => patch(i, "gross_weight", e.target.value)} /></td>
-                    <td><input {...keys.cell(i, 9)} className="num" value={String(item.measurement ?? "")} onChange={(e) => patch(i, "measurement", e.target.value)} /></td>
-                    <td><input {...keys.cell(i, 10)} value={item.dimension || ""} onChange={(e) => patch(i, "dimension", e.target.value)} /></td>
+                    <td><input {...keys.cell(i, 7)} className="num" value={String(item.net_weight || "")} onChange={(e) => patch(i, "net_weight", e.target.value)} /></td>
+                    <td><input {...keys.cell(i, 8)} className="num" value={String(item.gross_weight || "")} onChange={(e) => patch(i, "gross_weight", e.target.value)} /></td>
+                    <td>{/* 치수 L·W·H(cm) — 세 칸을 다 적으면 Meas. 가 L×W×H×Pkgs 로 자동 계산된다. */}
+                      {(() => {
+                        const d = dimParts(item.dimension);
+                        return (
+                          <span className="pack-dim">
+                            <input {...keys.cell(i, 9)} value={d[0]} placeholder="L" title="Length (cm)" onChange={(e) => patchDim(i, 0, e.target.value)} />
+                            <em>×</em>
+                            <input value={d[1]} placeholder="W" title="Width (cm)" onChange={(e) => patchDim(i, 1, e.target.value)} />
+                            <em>×</em>
+                            <input value={d[2]} placeholder="H" title="Height (cm)" onChange={(e) => patchDim(i, 2, e.target.value)} />
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td><input {...keys.cell(i, 10)} className="num" value={String(item.measurement ?? "")} title="Auto: L × W × H × Pkgs ÷ 1,000,000 — editable" onChange={(e) => patch(i, "measurement", e.target.value)} /></td>
                   </>
                 ) : (
                   <>
@@ -3038,14 +3078,7 @@ function ItemEditor({
                         onChange={(e) => packingTotals.onChange({ gross_weight: e.target.value })}
                       />
                     </td>
-                    <td>{/* 12 measurement */}
-                      <input
-                        className="num" value={packingTotals.values.measurement}
-                        placeholder={dimMeasurement || fmtNum(measTotal)} title="Measurement (m³)"
-                        onChange={(e) => packingTotals.onChange({ measurement: e.target.value })}
-                      />
-                    </td>
-                    <td>{/* 13 dimension — L × W × H (cm) */}
+                    <td>{/* 12 dimension — L × W × H (cm) */}
                       <span className="pack-dim">
                         <input value={packingTotals.values.dim_l} placeholder="L" title="Length (cm)"
                           onChange={(e) => packingTotals.onChange({ dim_l: e.target.value })} />
@@ -3057,6 +3090,13 @@ function ItemEditor({
                           onChange={(e) => packingTotals.onChange({ dim_h: e.target.value })} />
                       </span>
                     </td>
+                    <td>{/* 13 measurement */}
+                      <input
+                        className="num" value={packingTotals.values.measurement}
+                        placeholder={dimMeasurement || fmtNum(measTotal)} title="Measurement (m³)"
+                        onChange={(e) => packingTotals.onChange({ measurement: e.target.value })}
+                      />
+                    </td>
                   </>
                 ) : (
                   <>
@@ -3064,8 +3104,8 @@ function ItemEditor({
                     <td></td>{/* 9 pkg_kind */}
                     <td className="num total-value">{fmtNum(nwTotal)}</td>{/* 10 net_weight */}
                     <td className="num total-value">{fmtNum(gwTotal)}</td>{/* 11 gross_weight */}
-                    <td className="num total-value">{fmtNum(measTotal)}</td>{/* 12 measurement */}
-                    <td></td>{/* 13 dimension */}
+                    <td></td>{/* 12 dimension */}
+                    <td className="num total-value">{fmtNum(measTotal)}</td>{/* 13 measurement */}
                   </>
                 )}
                 <td></td>{/* 14 remark */}

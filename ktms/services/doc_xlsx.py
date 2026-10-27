@@ -16,7 +16,7 @@ from openpyxl.utils import get_column_letter
 from services.kmaris_docs import (
     bank_name_address,
     normalize_items, calc_totals, _num, DOC_TITLES, doc_parties,
-    packing_totals, consignee_mark_lines, _dim_parts, _invoice_shipping_rows,
+    packing_totals, consignee_mark_lines, _dim_parts, cbm, _invoice_shipping_rows,
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
     pi_decimals, doc_decimals, print_decimals, pi_charges, pi_doc_date, is_service_doc, service_info_rows,
     SERVICE_PI_DECIMALS, cn_view, cn_contact_line, CN_MIN_ITEM_ROWS,
@@ -662,7 +662,8 @@ def make_packing_list_xlsx(
     terms = data.get("terms", {}) or {}
     items = normalize_items(data.get("items", []))
     consignee, buyer = doc_parties(data)
-    num_fmt = "#,##0.###"
+    # 중량·치수·용적 — 정수는 "12." 처럼 점이 남지 않게 General, 수식 합계가 0 이면 빈 칸.
+    num_fmt = 'General;-General;""'
 
     wb = Workbook()
     ws = wb.active
@@ -720,8 +721,15 @@ def make_packing_list_xlsx(
                  align=form.right, fmt=num_fmt)
         for j, d in enumerate(dims):
             form.put(r, 10 + j, _numcell(d), font=form.item_font, align=form.center, fmt=num_fmt)
-        form.put(r, 13, _numcell(it.get("measurement")) if it else "", font=form.item_font,
-                 align=form.right, fmt="#,##0.####")
+        # 용적 — 세 변이 다 있고 적힌 값이 계산값과 같으면(=직접 고치지 않았으면) 수식으로 넣어
+        # 엑셀에서 치수를 고쳐도 따라 바뀌게 한다. M = L×W×H×포장개수 ÷ 1,000,000.
+        meas = _numcell(it.get("measurement")) if it else ""
+        auto = cbm(*dims, it.get("pkg_qty")) if it else ""
+        if auto and _numcell(auto) == meas:
+            n = _num(it.get("pkg_qty"))
+            mult = f"*{_numcell(n)}" if n and n != 1 else ""
+            meas = f"=ROUND(J{r}*K{r}*L{r}{mult}/1000000,4)"
+        form.put(r, 13, meas, font=form.item_font, align=form.right, fmt=num_fmt)
         form.bd(r, 1, r, form.ncol, None if it else form.alt)
         form.ws.row_dimensions[r].height = form.item_row_height(it["description"], 26) if it else 18
         r += 1
@@ -734,13 +742,22 @@ def make_packing_list_xlsx(
     form.put(r, 5, f"=SUM(E{first}:E{last})", fill=form.lightblue, font=form.bold, align=form.center)
     form.put(r, 6, items[0]["unit"] if items else "", fill=form.lightblue, font=form.bold, align=form.center)
     form.put(r, 7, tot["packages"], fill=form.lightblue, font=form.bold, align=form.right)
-    form.put(r, 8, _numcell(tot["net_weight"]), fill=form.lightblue, font=form.bold, align=form.right, fmt=num_fmt)
-    form.put(r, 9, _numcell(tot["gross_weight"]), fill=form.lightblue, font=form.bold, align=form.right, fmt=num_fmt)
-    for j, key in enumerate(("sm_dim_l", "sm_dim_w", "sm_dim_h")):
-        form.put(r, 10 + j, _numcell(shipping.get(key)), fill=form.lightblue, font=form.bold,
-                 align=form.center, fmt=num_fmt)
-    form.put(r, 13, _numcell(tot["measurement"]), fill=form.lightblue, font=form.bold,
-             align=form.right, fmt="#,##0.####")
+    # 합계 — 전체 포장 규격을 직접 적은 칸은 그 값, 안 적은 칸은 품목 열 SUM 수식.
+    def _tot(key: str, col: str):
+        return _numcell(shipping.get(key)) or f"=SUM({col}{first}:{col}{last})"
+    form.put(r, 8, _tot("sm_net_weight", "H"), fill=form.lightblue, font=form.bold, align=form.right, fmt=num_fmt)
+    form.put(r, 9, _tot("sm_gross_weight", "I"), fill=form.lightblue, font=form.bold, align=form.right, fmt=num_fmt)
+    sm_dims = [shipping.get(k) for k in ("sm_dim_l", "sm_dim_w", "sm_dim_h")]
+    for j, d in enumerate(sm_dims):
+        form.put(r, 10 + j, _numcell(d), fill=form.lightblue, font=form.bold, align=form.center, fmt=num_fmt)
+    # 용적: 직접 적은 값 > 전체 치수 × 케이스 수 수식 > 품목 용적 SUM 수식(packing_totals 와 같은 순서).
+    tot_meas = _numcell(shipping.get("sm_measurement"))
+    if not tot_meas and cbm(*sm_dims):
+        n = _num(shipping.get("sm_total_cases"))
+        mult = f"*{_numcell(n)}" if n and n != 1 else ""
+        tot_meas = f"=ROUND(J{r}*K{r}*L{r}{mult}/1000000,4)"
+    form.put(r, 13, tot_meas or f"=SUM(M{first}:M{last})", fill=form.lightblue, font=form.bold,
+             align=form.right, fmt=num_fmt)
     form.bd(r, 1, r, form.ncol)
     form.ws.row_dimensions[r].height = 20
     r += 1

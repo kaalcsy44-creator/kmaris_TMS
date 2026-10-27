@@ -243,7 +243,8 @@ def normalize_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "package": raw.get("package", ""),
                 "pkg_qty": raw.get("pkg_qty", ""),
                 "pkg_kind": raw.get("pkg_kind", ""),
-                "measurement": raw.get("measurement", ""),
+                # 용적을 안 적었어도 치수(L x W x H cm)가 있으면 계산해 채운다(화면 자동계산과 같은 규칙).
+                "measurement": raw.get("measurement", "") or cbm(*_dim_parts(raw.get("dimension")), raw.get("pkg_qty")),
                 "dimension": raw.get("dimension", ""),
                 "hs_code": raw.get("hs_code", ""),
             }
@@ -947,6 +948,15 @@ def _dim_parts(text: Any) -> List[str]:
     세 조각으로 갈라지지 않으면(자유 형식) 세 칸 모두 비운다 — 서식이 어긋나느니 비우는 편이 낫다."""
     parts = [x.strip() for x in re.split(r"[x×*]", str(text or "")) if x.strip()]
     return parts if len(parts) == 3 else ["", "", ""]
+
+
+def cbm(l: Any, w: Any, h: Any, pkgs: Any = None) -> str:
+    """L·W·H(cm) × 포장 개수(없으면 1) → 용적(m³, 소수 4자리) 문자열. 세 변이 다 있어야 계산한다.
+    화면(cbmText)·엑셀 수식과 같은 규칙. 계산할 수 없으면 빈 문자열."""
+    a, b, c = _num(l), _num(w), _num(h)
+    if not (a and b and c):
+        return ""
+    return _g(round(a * b * c * (_num(pkgs) or 1) / 1_000_000, 4))
 
 
 def doc_decimals(data: Dict[str, Any] | None) -> int | None:
@@ -1937,8 +1947,8 @@ def packing_totals(data: Dict[str, Any]) -> Dict[str, str]:
     dims = [sm("sm_dim_l"), sm("sm_dim_w"), sm("sm_dim_h")]
     measurement = sm("sm_measurement")
     if not measurement and all(dims):
-        # 치수는 cm 로 적는다 — 용적(m³)은 세 변의 곱을 100³ 으로 나눈 값.
-        measurement = _g(round(_num(dims[0]) * _num(dims[1]) * _num(dims[2]) / 1_000_000, 4))
+        # 치수는 cm(포장 1개) — 용적(m³) = 세 변의 곱 × 포장 개수 ÷ 100³.
+        measurement = cbm(*dims, cases)
     if not measurement:
         measurement = _g(sum(_num(it.get("measurement")) for it in items))
     return {
