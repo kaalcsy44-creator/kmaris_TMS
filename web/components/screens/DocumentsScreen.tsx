@@ -1680,7 +1680,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       </div>
       <PartiesSection order={data.order} shipping={shipping} setShipping={setShipping} />
       <p className="hint-inline" style={{ marginTop: 6 }}>
-        Empty fields print the grey value. Consignee defaults to the contact registered for this deal on the RFQ, with the
+        Cleared fields print the grey value. Consignee defaults to the contact registered for this deal on the RFQ, with the
         rest from the customer master. Buyer: "Same as consignee" fills it from the consignee — edit any field to make it
         different; "Different" starts from the customer master. The consignee company is shared with the Shipping Mark tab (C/O line).
       </p>
@@ -2162,7 +2162,13 @@ function PartiesSection({
    *  (수하인을 비워 두면 발행 문서는 매수인을 수하인 자리에 그대로 찍는다 — doc_parties.) */
   buyerOnly?: boolean;
 }) {
-  const set = (key: string) => (v: string) => setShipping({ ...shipping, [key]: v });
+  // 수하인 칸은 고객 마스터 값을 회색 안내가 아니라 실제 글자로 채워 보여준다. 한 번 손댄 칸만
+  // 적은 값 그대로(지우면 빈칸 + 회색 안내 — 비운 칸은 여전히 마스터 값으로 인쇄된다).
+  const [touched, setTouched] = useState<Set<string>>(() => new Set());
+  const set = (key: string) => (v: string) => {
+    if (!touched.has(key)) setTouched(new Set(touched).add(key));
+    setShipping({ ...shipping, [key]: v });
+  };
   // 인쇄될 값 — 적은 값, 없으면 기본값(수하인: 고객 마스터 / 매수인: 수하인). 백엔드 doc_parties 와 같은 규칙.
   const consigneeVal = CONSIGNEE_FIELDS.map(({ key, master }) => shipping[key] || master(order));
   const fallback = (i: number) => (buyerOnly ? BUYER_FIELDS[i].master(order) : consigneeVal[i]);
@@ -2193,7 +2199,7 @@ function PartiesSection({
       <button type="button" className={differs ? "on" : ""} onClick={pickDifferent}>Different</button>
     </div>
   );
-  const block = (title: string, fields: PartyField[], base: (i: number) => string, row?: boolean, mirror?: boolean, head?: ReactNode) => (
+  const block = (title: string, fields: PartyField[], base: (i: number) => string, row?: boolean, mirror?: boolean, head?: ReactNode, prefill?: boolean) => (
     <section className="doc-party">
       <div className="sub-h doc-party-head">{title}{head}</div>
       <div className={`form-grid doc-party-grid${row ? " doc-party-grid--row" : ""}`}>
@@ -2202,7 +2208,7 @@ function PartiesSection({
             ? <ReadonlyField key={key} label={label} value={shipping[key] || base(i)} wide={wide && !row} />
             : mirror
               ? <Field key={key} label={label} value={base(i)} onChange={editSameBuyer(i)} wide={wide && !row} options={options?.(order)} />
-              : <Field key={key} label={label} value={shipping[key] || ""} onChange={set(key)} placeholder={base(i)} wide={wide && !row} options={options?.(order)} />
+              : <Field key={key} label={label} value={shipping[key] || (prefill && !touched.has(key) ? base(i) : "")} onChange={set(key)} placeholder={base(i)} wide={wide && !row} options={options?.(order)} />
         ))}
       </div>
     </section>
@@ -2212,7 +2218,7 @@ function PartiesSection({
   }
   return (
     <div className="doc-parties">
-      {block("Consignee", CONSIGNEE_FIELDS, (i) => CONSIGNEE_FIELDS[i].master(order))}
+      {block("Consignee", CONSIGNEE_FIELDS, (i) => CONSIGNEE_FIELDS[i].master(order), false, false, undefined, true)}
       {readonly
         ? block("Buyer (if different)", BUYER_FIELDS, fallback)
         : block("Buyer", BUYER_FIELDS, fallback, false, !differs, buyerToggle)}
