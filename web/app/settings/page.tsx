@@ -1946,7 +1946,8 @@ function CompanyJump({ jump }: { jump: CompanyJumpNav }) {
             onChange={(e) => { setQ(e.target.value); setHi(0); }}
             onKeyDown={(e) => {
               // Esc 는 이 목록만 닫는다 — 창(Modal)까지 닫히면 보던 회사를 잃는다.
-              if (e.key === "Escape") { e.stopPropagation(); setOpen(false); return; }
+              // preventDefault 가 Modal 에 "이미 처리했다"는 표식이다(Modal.tsx 의 ESC 처리).
+              if (e.key === "Escape") { e.preventDefault(); setOpen(false); return; }
               if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(h + 1, hits.length - 1)); }
               if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
               if (e.key === "Enter" && hits[hi]) { e.preventDefault(); pick(hits[hi].i); }
