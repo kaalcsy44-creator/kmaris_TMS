@@ -3976,7 +3976,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
     ["sell", "Sales Price",
       (r) => tradePrice(r.sell, r.sell_na, r.sell_prev, r.last_date), "ms-num"],
     ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
-    ["margin_pct", "Margin", (r) => marginText(r.margin_pct, r.margin_cross), "ms-num"],
+    ["margin_pct", "Margin", (r) => marginText(r.margin_pct, r.margin_cross), "ms-num ms-margin"],
     // Std Price(표준가)는 아직 쓰지 않아 표에서 뺐다 — 값은 편집 폼에 그대로 있고,
     // 다시 필요해지면 아래 한 줄을 되살리면 된다.
     // ["std_price", "Std Price", undefined, "ms-num"],
@@ -4014,7 +4014,7 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
       // 3단 경로는 알약 폭을 400px 가까이 끌고 간다 — 폭을 못 박고 넘치면 말줄임,
       // 전체 경로는 title 로 읽는다(가격 이력 표와 같은 방식).
       ? <span className="cat-path" title={r.category_path}>{r.category_path}</span>
-      : <span className="dash">Unclassified</span>];
+      : <span className="dash">Unclassified</span>, "ms-catcol"];
 
   return (
     <MasterSection<SettingsItem>

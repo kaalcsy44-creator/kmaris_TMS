@@ -1818,40 +1818,109 @@ table.mini.wide.ms-table.ms-table--items td.ms-date {
   font-variant-numeric: tabular-nums;
   color: #334155;
 }
-/* 품번·품명 칸 폭 — 둘 다 두 줄까지 접는다. 선택표(ms-table--sel)의 nth-child 규칙이
-   이 칸들을 nowrap 으로 묶고 있어 그보다 강하게 건다. 칸 폭은 안쪽 글상자의 최대폭이
-   정한다(표가 auto 배치라 칸 자체의 max-width 는 믿을 수 없다). */
-table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-pncol:not(.ms-actcol),
-table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-pncol:not(.ms-actcol),
-table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-desc:not(.ms-actcol),
-table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-desc:not(.ms-actcol) {
-  white-space: normal;
-}
-/* 폭은 못 박는다 — 선택표 규칙의 width:1% 를 그대로 두면 가장 긴 낱말 폭까지 줄어든다.
-   품번 ≈ 이전 325px 의 절반, 품명 ≈ 이전 320px 의 2/3. */
+/* ── 품목표 칸 폭 — 칸마다 내용에 맞춰 못 박는다 ────────────────────────────────
+   선택표(ms-table--sel)의 nth-child 규칙은 회사 명부용이라 이 표에선 맞지 않는다:
+   2·3번째 칸은 width:1%+nowrap 으로 낱말 폭까지 눌리고, 5번째부터는 모두 최소 120px 이라
+   날짜·마진처럼 짧은 칸에 빈 공간이 생기며 표가 화면을 넘었다. 그보다 강하게(클래스 7개)
+   칸마다 폭을 준다. Category 만 폭을 주지 않아(auto) 남는 폭은 Category 가 가져가고,
+   모자라면 Category 가 말줄임으로 줄어든다 — 화면이 좁을 때 밖으로 밀리는 칸도 Category 뿐.
+   합계(Category 제외) ≈ 1,445px — 1,656px 창에서 스크롤 없이 들어간다(2026-10-28 실측). */
 table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-pncol:not(.ms-actcol),
 table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-pncol:not(.ms-actcol) {
-  width: 162px;
-  min-width: 162px;
+  width: 150px;
+  min-width: 150px;
+  white-space: nowrap;
 }
 table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-desc:not(.ms-actcol),
 table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-desc:not(.ms-actcol) {
-  width: 213px;
-  min-width: 213px;
+  width: 236px;
+  min-width: 236px;
+  white-space: normal;
 }
-table.mini.wide.ms-table.ms-table--items td.ms-pncol {
-  white-space: nowrap;   /* ▸ 와 품번 글상자를 한 줄에 */
+table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-maker:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-maker:not(.ms-actcol) {
+  width: 130px;
+  min-width: 130px;
+  white-space: nowrap;
+}
+table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-date:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-date:not(.ms-actcol) {
+  width: 92px;
+  min-width: 92px;
+  white-space: nowrap;
+}
+table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-num:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-num:not(.ms-actcol) {
+  width: 116px;
+  min-width: 116px;
+  white-space: nowrap;
+}
+table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-party:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-party:not(.ms-actcol) {
+  width: 126px;
+  min-width: 126px;
+  white-space: normal;
+}
+table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-projcol:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-projcol:not(.ms-actcol) {
+  width: 84px;
+  min-width: 84px;
+  white-space: nowrap;
+}
+table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-deal:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-deal:not(.ms-actcol) {
+  width: 120px;
+  min-width: 120px;
+  white-space: normal;
+}
+table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-catcol:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-catcol:not(.ms-actcol) {
+  width: auto;
+  min-width: 84px;
+  white-space: nowrap;
+}
+/* 마진은 짧다 — 금액 칸(ms-num)과 같은 클래스라 순서로 덮는다. */
+table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-margin:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-margin:not(.ms-actcol) {
+  width: 66px;
+  min-width: 66px;
+}
+/* 분류 경로는 칸 폭을 정하지 않는다 — width:0 + min-width:100% 로 내용폭 기여를 0 으로
+   만들고 칸을 채운다(넘치면 말줄임, 전체 경로는 title). */
+table.mini.wide.ms-table.ms-table--items td.ms-catcol .cat-path {
+  display: block;
+  width: 0;
+  min-width: 100%;
+  max-width: none;
+}
+table.mini.wide.ms-table.ms-table--items td.ms-deal .deal-note {
+  max-width: 104px;
+}
+table.mini.wide.ms-table.ms-table--items td.ms-maker .mk-pick-txt {
+  display: inline-block;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+/* 고치는 손잡이(✎)는 Category 뒤 맨 끝이라, Category 가 밀려나도 보이게 오른쪽에 붙인다. */
+table.mini.wide.ms-table.ms-table--items th.ms-actcol,
+table.mini.wide.ms-table.ms-table--items td.ms-actcol {
+  position: sticky;
+  right: 0;
+  background: var(--panel, #fff);
+  z-index: 1;
 }
 table.mini.wide.ms-table.ms-table--items td.ms-pncol .ms-pn {
   display: -webkit-inline-box;
   vertical-align: middle;
-  max-width: 130px;
+  max-width: 118px;
   white-space: normal;
 }
 table.mini.wide.ms-table.ms-table--items td.ms-desc .ms-clamp2 {
   display: -webkit-inline-box;   /* 용역 탭에선 첫 칸이라 ▸ 와 나란히 */
   vertical-align: middle;
-  max-width: 196px;
+  max-width: 218px;
 }
 .ms-clamp2 {
   display: -webkit-box;
