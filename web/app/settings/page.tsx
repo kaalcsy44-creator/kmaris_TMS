@@ -3612,6 +3612,54 @@ const DEAL_RANK: Record<string, number> = {
   open: 1, quoted: 2, ordered: 3, paid: 4, closed: 5,
 };
 
+/** 품목의 대분류 — 분류 경로("Engines & power systems > Piston")의 첫 마디. */
+function itemMajor(r: SettingsItem): string {
+  return (r.category_path || "").split(">")[0].trim();
+}
+const UNCLASSIFIED = "__none__";
+
+/** 품목표 위의 대분류 탭 — 전체 / 대분류(건수 많은 순) / 미분류(맨 끝). 건수는 지금
+ *  불러온 목록(Priced only 반영) 기준이다. */
+function MajorTabs({ rows, value, onPick }: {
+  rows: SettingsItem[];
+  value: string;
+  onPick: (v: string) => void;
+}) {
+  const counts = new Map<string, number>();
+  let none = 0;
+  for (const r of rows) {
+    const m = itemMajor(r);
+    if (m) counts.set(m, (counts.get(m) ?? 0) + 1);
+    else none += 1;
+  }
+  const majors = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  // 기억해 둔 대분류가 지금 목록에 없으면(Priced only 를 켰거나 분류를 옮긴 뒤) 표가
+  // 통째로 빈 것처럼 보인다 — 전체로 되돌린다.
+  const stale = !!rows.length && !!value &&
+    (value === UNCLASSIFIED ? none === 0 : !counts.has(value));
+  useEffect(() => {
+    if (stale) onPick("");
+  }, [stale, onPick]);
+  const tab = (key: string, label: string, n: number) => (
+    <button
+      key={key || "all"}
+      type="button"
+      className={`ms-major${value === key ? " on" : ""}`}
+      onClick={() => onPick(key)}
+    >
+      {label}
+      <span className="ms-major-n">{n}</span>
+    </button>
+  );
+  return (
+    <div className="ms-majors" role="tablist">
+      {tab("", "All", rows.length)}
+      {majors.map(([m, n]) => tab(m, m, n))}
+      {none ? tab(UNCLASSIFIED, "Unclassified", none) : null}
+    </div>
+  );
+}
+
 /** 품목이 들어간 선박(최근 순). 같은 규칙. */
 function itemVessels(r: SettingsItem): string[] {
   return r.vessels?.length ? r.vessels : r.vessel ? [r.vessel] : [];
@@ -3892,6 +3940,22 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
       return true;
     }
   });
+  // 대분류 탭 — "" = 전체, UNCLASSIFIED = 분류 없음, 그 밖에는 대분류 이름.
+  // 탭(Parts/Service)마다 따로 기억한다(대분류가 서로 다르다).
+  const majorKey = `ktms.items.major.${kind}`;
+  const [major, setMajor] = useState(() => {
+    try {
+      return window.localStorage.getItem(majorKey) || "";
+    } catch {
+      return "";
+    }
+  });
+  function pickMajor(v: string) {
+    setMajor(v);
+    try {
+      window.localStorage.setItem(majorKey, v);
+    } catch {}
+  }
   function togglePriced(v: boolean) {
     setPricedOnly(v);
     try {
@@ -3963,6 +4027,11 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
         (r.item_type || "part") === kind &&
         (!pricedOnly || (r.buy?.unit_price ?? 0) > 0 || (r.sell?.unit_price ?? 0) > 0)))}
       rowDetail={(r) => <ItemTradeHistory row={r} />}
+      scope={{
+        test: (r) => !major || itemMajor(r) === major ||
+          (major === UNCLASSIFIED && !itemMajor(r)),
+        render: (rows) => <MajorTabs rows={rows} value={major} onPick={pickMajor} />,
+      }}
       // 줄을 골라 Parts↔Service 로 옮긴다 — 낱말 추측이 틀려 용역이 Parts 에 들어온 경우.
       bulk={{
         keyOf: (r) => String(r.id),
@@ -4020,9 +4089,11 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
             category,
           ]
         : [
+            // 긴 품번("RU-FLEX 16Cx1.5SQMM IEC 60332-3 …")은 두 줄로 접고 넘치면 말줄임 —
+            // 한 줄로 두면 그 한 건이 칸 폭을 325px 까지 끌고 갔다.
             ["part_no", "Part No.", (r) => r.part_no
-              ? <span className="ms-pn">{r.part_no}</span>
-              : <span className="dash">—</span>],
+              ? <span className="ms-pn ms-clamp2" title={r.part_no}>{r.part_no}</span>
+              : <span className="dash">—</span>, "ms-pncol"],
             desc("Description"),
             // 명부에 있는 제조사면 거래선 화면과 같은 로고 배지로, 없으면 적힌 글자 옆 ▾ 로
             // 명부에서 바로 골라 붙인다(편집 창을 열지 않고 그 품목에 저장).
@@ -5675,6 +5746,7 @@ function MasterSection<T extends { id: number }>({
   toolbarExtra,
   bulk,
   rowDetail,
+  scope,
 }: {
   title: string;
   empty: T;
@@ -5799,6 +5871,9 @@ function MasterSection<T extends { id: number }>({
    *  편집 대신 펼치기가 되고, 편집은 줄 끝 ✎ 로 간다 — 이 표에 오는 까닭이 고치기보다
    *  "전에 얼마였나"를 보는 쪽이라서다. */
   rowDetail?: (row: T) => ReactNode;
+  /** 표 위에 세우는 갈래 탭(품목표: 대분류). render 는 불러온 전체 줄을 받아 탭과
+   *  건수를 그리고, test 를 통과한 줄만 검색·열 필터로 넘어간다. */
+  scope?: { render: (rows: T[]) => ReactNode; test: (row: T) => boolean };
 }) {
   const NEW_ID = -1; // editId 센티넬: 신규 등록 편집기
   const [rows, setRows] = useState<T[]>([]);
@@ -5992,13 +6067,14 @@ function MasterSection<T extends { id: number }>({
     (k) => (fields.find(([f]) => f === k)?.[1] ?? String(k)).replace(/\s*\*$/, "")
   );
   const ql = q.trim().toLowerCase();
+  const scoped = scope ? rows.filter(scope.test) : rows;
   const searched = ql
-    ? rows.filter((r) =>
+    ? scoped.filter((r) =>
         searchText
           ? searchText(r).toLowerCase().includes(ql)
           : columns.some(([key]) => String(r[key] ?? "").toLowerCase().includes(ql))
       )
-    : rows;
+    : scoped;
   // 머리 칸 정렬·필터는 검색으로 좁힌 목록을 다시 자른다(검색 → 열 필터 → 정렬 순).
   const filtered = head.apply(searched);
   const isEdit = !!editId && editId > 0;
@@ -6431,7 +6507,7 @@ Every contact of ${names.length === 1 ? "this company" : "these companies"} is r
         {group ? (
           <span className="ms-count">{group.summary?.(groups.length, filtered.length)}</span>
         ) : countText ? (
-          <span className="ms-count">{countText(filtered.length, rows.length)}</span>
+          <span className="ms-count">{countText(filtered.length, scoped.length)}</span>
         ) : null}
         {toolbarExtra}
         <input
@@ -6468,6 +6544,8 @@ Every contact of ${names.length === 1 ? "this company" : "these companies"} is r
           </button>
         ) : null}
       </div>
+
+      {scope?.render(rows)}
 
       {editor}
 
