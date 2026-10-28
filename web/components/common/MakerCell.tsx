@@ -299,7 +299,10 @@ export default function MakerCell({
    글(Specialization)이 지금껏 이 일을 대신해 왔지만 적힌 이름은 표기가 흔들려
    (MAN B&W / MAN-B&W / MAN Energy Solutions) 그 이름으로 벤더를 되찾을 수 없었다. */
 
-/** 읽기용 — 고른 메이커를 로고와 함께 세운다. max 를 주면 나머지는 "+N" 으로 접는다. */
+/** 읽기용 — 고른 메이커를 로고와 함께 세운다. max 를 주면 나머지는 "+N" 으로 접는다.
+ *
+ *  배지는 눌러서 그 메이커 창으로 건너간다 — 메이커 창의 Agency 배지가 거래선으로
+ *  가는 것의 반대 방향이다. 태그는 명부의 id 로만 붙으므로 갈 곳이 없는 배지는 없다. */
 export function MakerBadges({
   ids,
   max,
@@ -316,10 +319,14 @@ export function MakerBadges({
   return (
     <span className="mk-tags">
       {shown.map((m) => (
-        <span key={m.id} className="mk-tag" title={m.name}>
+        // 목록 줄 안에서도 쓰인다 — 줄을 누른 것으로 번지면 거래선 창이 먼저 열린다.
+        <a key={m.id} className="mk-tag mk-tag--link"
+           href={`/partners?side=makers&company=${encodeURIComponent(m.name)}`}
+           title={`${m.name} — open maker`}
+           onClick={(e) => e.stopPropagation()}>
           {m.logo ? <img className="mk-tag-logo" src={m.logo} alt="" /> : null}
           {m.name}
-        </span>
+        </a>
       ))}
       {rest > 0 ? (
         <span className="mk-tag mk-tag--more"
