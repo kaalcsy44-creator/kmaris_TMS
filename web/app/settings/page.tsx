@@ -1150,6 +1150,7 @@ export function MakersTab() {
           if (deepCompany.current) {
             const hit = find(deepCompany.current);
             deepCompany.current = "";
+            dropCompanyParam();
             if (hit) { setCompany(hit); return; }
           }
           setCompany((cur) => (cur
@@ -1422,6 +1423,7 @@ export function CustomersTab() {
           if (deepCompany.current) {
             const hit = find(deepCompany.current);
             deepCompany.current = "";
+            dropCompanyParam();
             if (hit) { setCompany(hit); return; }
           }
           setCompany((cur) => (cur
@@ -1763,6 +1765,17 @@ function contactValues(multi: string[] | undefined, flat: string | undefined): s
 
 /** 홈페이지 주소를 눌러서 열 수 있는 꼴로 — 앞머리(https://)를 빼먹고 적는 일이 흔해서,
  *  없으면 붙여서 연다(회사 정보 창이 오래 쓰던 규칙을 목록도 같이 쓴다). */
+/** ?company= 딥링크를 쓴 뒤 주소에서 지운다(?side= 등 나머지는 그대로).
+ *
+ *  남겨 두면 탭을 바꿀 때마다 명부 화면이 새로 그려지며 주소를 다시 읽어, 이미 닫은
+ *  회사 창이 저절로 또 열린다(Agency·Maker 배지로 건너온 뒤 Vendor ↔ Maker 를 오갈 때). */
+function dropCompanyParam() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("company")) return;
+  url.searchParams.delete("company");
+  window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+}
+
 function siteHref(site: string): string {
   const v = site.trim();
   return /^https?:\/\//i.test(v) ? v : `https://${v}`;
@@ -3143,6 +3156,7 @@ export function VendorsTab() {
           if (deepCompany.current) {
             const hit = find(deepCompany.current);
             deepCompany.current = "";
+            dropCompanyParam();
             if (hit) { setCompany(hit); return; }
           }
           setCompany((cur) => (cur
