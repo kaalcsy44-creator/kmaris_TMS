@@ -1825,8 +1825,19 @@ table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-pncol:not(.ms-actco
 table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-pncol:not(.ms-actcol),
 table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-desc:not(.ms-actcol),
 table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-desc:not(.ms-actcol) {
-  min-width: 0;
   white-space: normal;
+}
+/* 폭은 못 박는다 — 선택표 규칙의 width:1% 를 그대로 두면 가장 긴 낱말 폭까지 줄어든다.
+   품번 ≈ 이전 325px 의 절반, 품명 ≈ 이전 320px 의 2/3. */
+table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-pncol:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-pncol:not(.ms-actcol) {
+  width: 162px;
+  min-width: 162px;
+}
+table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-desc:not(.ms-actcol),
+table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-desc:not(.ms-actcol) {
+  width: 213px;
+  min-width: 213px;
 }
 table.mini.wide.ms-table.ms-table--items td.ms-pncol {
   white-space: nowrap;   /* ▸ 와 품번 글상자를 한 줄에 */
@@ -1840,7 +1851,7 @@ table.mini.wide.ms-table.ms-table--items td.ms-pncol .ms-pn {
 table.mini.wide.ms-table.ms-table--items td.ms-desc .ms-clamp2 {
   display: -webkit-inline-box;   /* 용역 탭에선 첫 칸이라 ▸ 와 나란히 */
   vertical-align: middle;
-  max-width: 200px;
+  max-width: 196px;
 }
 .ms-clamp2 {
   display: -webkit-box;
