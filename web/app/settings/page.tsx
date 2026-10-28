@@ -1885,13 +1885,104 @@ type CompanyNavCtx<T> = {
   removeRow: (row: T) => Promise<string>;
 };
 
+/** 회사 창의 "목록에서 고르기" — 지금 표에 선 순서 그대로의 회사 이름들. */
+type CompanyJumpNav = { names: string[]; index: number; go: (i: number) => void };
+
+/** ◀ ▶ 사이의 고르기 단추. 눌러 펼치면 검색칸과 회사 목록이 뜬다.
+ *
+ *  목록은 표에 지금 선 회사들이다(검색·필터로 좁혔으면 좁힌 그대로) — ◀ ▶ 가 걷는 길과
+ *  같아야 고른 뒤 옆으로 넘길 때 엉뚱한 곳으로 가지 않는다. */
+function CompanyJump({ jump }: { jump: CompanyJumpNav }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [hi, setHi] = useState(0);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const ql = q.trim().toLowerCase();
+  const hits = jump.names
+    .map((name, i) => ({ name, i }))
+    .filter((h) => !ql || h.name.toLowerCase().includes(ql));
+
+  useEffect(() => {
+    if (!open) return;
+    const off = (e: MouseEvent) => {
+      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", off);
+    return () => document.removeEventListener("mousedown", off);
+  }, [open]);
+
+  // 펼치면 지금 회사를 가운데쯤에 보이게 — 백여 곳 목록의 맨 위에서 시작하면 내가 어디
+  // 있는지부터 찾아야 한다.
+  useEffect(() => {
+    if (!open) return;
+    listRef.current?.querySelector(".co-jump-item.on")?.scrollIntoView({ block: "center" });
+  }, [open]);
+
+  useEffect(() => {
+    listRef.current?.querySelector(".co-jump-item.hi")?.scrollIntoView({ block: "nearest" });
+  }, [hi]);
+
+  function pick(i: number) {
+    setOpen(false);
+    setQ("");
+    if (i !== jump.index) jump.go(i);
+  }
+
+  return (
+    <div className="co-jump" ref={boxRef}>
+      <button type="button" className="btn tiny" aria-expanded={open}
+              onClick={() => { setOpen((v) => !v); setQ(""); setHi(0); }}
+              title="Pick a company from the list">
+        {jump.index + 1} / {jump.names.length} ▾
+      </button>
+      {open ? (
+        <div className="co-jump-pop">
+          <input
+            autoFocus
+            className="co-jump-q"
+            placeholder="Search company…"
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setHi(0); }}
+            onKeyDown={(e) => {
+              // Esc 는 이 목록만 닫는다 — 창(Modal)까지 닫히면 보던 회사를 잃는다.
+              if (e.key === "Escape") { e.stopPropagation(); setOpen(false); return; }
+              if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(h + 1, hits.length - 1)); }
+              if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
+              if (e.key === "Enter" && hits[hi]) { e.preventDefault(); pick(hits[hi].i); }
+            }}
+          />
+          <div className="co-jump-list" ref={listRef}>
+            {hits.length ? hits.map((h, k) => (
+              <button key={h.i} type="button"
+                      className={`co-jump-item${h.i === jump.index ? " on" : ""}${k === hi && ql ? " hi" : ""}`}
+                      onMouseEnter={() => setHi(k)}
+                      onClick={() => pick(h.i)}>
+                {h.name}
+              </button>
+            )) : <div className="co-jump-empty">No match</div>}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** 회사 목록에서 앞뒤 한 걸음을 만든다(두 탭이 같은 모양으로 쓴다). */
 function companyNav<T extends { name: string }, S extends { groups: T[][]; index: number }>(
   st: S,
   set: (s: S) => void,
-): { prev?: CompanyNav; next?: CompanyNav } {
+): { prev?: CompanyNav; next?: CompanyNav; jump?: CompanyJumpNav } {
   const nameAt = (i: number) => st.groups[i]?.[0]?.name ?? "";
   return {
+    // 앞뒤 한 걸음만으로는 멀리 있는 회사까지 ▶ 를 수십 번 눌러야 한다 — 목록에서 곧장 고른다.
+    jump: st.groups.length > 1
+      ? {
+          names: st.groups.map((g) => g[0]?.name ?? ""),
+          index: st.index,
+          go: (i: number) => set({ ...st, index: i }),
+        }
+      : undefined,
     prev: st.index > 0
       ? { name: nameAt(st.index - 1), go: () => set({ ...st, index: st.index - 1 }) } : undefined,
     next: st.index < st.groups.length - 1
@@ -1922,6 +2013,7 @@ function CompanyInfoModal<
   projects,
   prev,
   next,
+  jump,
   onSaveContact,
   onCreateContact,
   onDeleteContact,
@@ -1951,6 +2043,8 @@ function CompanyInfoModal<
   /** 표의 앞뒤 회사로 건너뛰기. 이름을 함께 받아 어디로 가는지 미리 보인다. */
   prev?: CompanyNav;
   next?: CompanyNav;
+  /** 표의 회사 목록에서 곧장 골라 건너뛰기(◀ ▶ 사이의 ▾). */
+  jump?: CompanyJumpNav;
   /** 담당자 한 명을 그 줄에서 고쳐 저장한다. 빈 문자열이면 성공, 아니면 실패 사유.
    *  없으면 ✎ 단추도 없다. */
   onSaveContact?: (row: T) => Promise<string>;
@@ -2344,6 +2438,7 @@ function CompanyInfoModal<
                     onClick={() => prev?.go()} title={prev ? `Previous company — ${prev.name}` : ""}>
               ◀ {prev ? prev.name : "—"}
             </button>
+            {jump ? <CompanyJump jump={jump} /> : null}
             <button type="button" className="btn tiny" disabled={!next}
                     onClick={() => next?.go()} title={next ? `Next company — ${next.name}` : ""}>
               {next ? next.name : "—"} ▶

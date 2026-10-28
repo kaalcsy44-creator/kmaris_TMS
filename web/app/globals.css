@@ -12021,11 +12021,37 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   margin-bottom: 12px;
 }
 .co-nav .btn {
-  max-width: 46%;
+  max-width: 40%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* ◀ ▶ 사이의 "목록에서 고르기" — 단추 아래로 검색칸 + 회사 목록이 펼쳐진다. */
+.co-jump { position: relative; flex: none; }
+.co-nav .co-jump .btn { max-width: none; }
+.co-jump-pop {
+  position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+  z-index: 30; width: 300px;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 30, 60, .16);
+  padding: 6px;
+}
+.co-jump-q {
+  width: 100%; box-sizing: border-box;
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 5px 8px; font-size: 12.5px; margin-bottom: 4px;
+}
+.co-jump-list { max-height: 320px; overflow-y: auto; }
+.co-jump-item {
+  display: block; width: 100%; text-align: left;
+  border: 0; background: none; cursor: pointer;
+  padding: 5px 8px; border-radius: 5px;
+  font-size: 12.5px; color: #1d2b44;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.co-jump-item:hover, .co-jump-item.hi { background: #eef3fb; }
+.co-jump-item.on { font-weight: 700; color: #0b4fa8; background: #e3ecfa; }
+.co-jump-empty { padding: 8px; font-size: 12px; color: #8a94a6; }
 /* 회사 정보 읽기 화면 — 값을 확인하러 여는 자리라 입력칸이 아니라 그대로 읽히게 둔다.
    고칠 때만 아래 Edit 로 폼으로 넘어간다(저장이 회사 전 담당자에 닿으므로). */
 .company-read dl { margin: 0; }
