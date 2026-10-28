@@ -5924,6 +5924,10 @@ function MasterSection<T extends { id: number }>({
   useEffect(() => {
     const hand = group?.onRowsSync;
     if (!hand) return;
+    // 첫 렌더(아직 불러오기 전의 빈 목록)에는 건네지 않는다 — 받는 쪽이 ?company= 딥링크를
+    // 이 첫 호출에서 한 번 쓰고 지우므로, 빈 목록에 대고 찾다 놓치면 진짜 목록이 왔을 때는
+    // 이미 열 회사가 없다(Agency 배지·Network 에서 건너와도 창이 안 뜨던 까닭).
+    if (!rows.length) return;
     hand((name) => {
       // 찾는 열쇠는 묶음 열쇠(group.by)다 — 이 표들은 그것이 곧 회사 이름이고,
       // 무엇보다 T 가 name 을 가졌다고 이 자리에서는 말할 수 없다.
