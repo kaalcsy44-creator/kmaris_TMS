@@ -1773,7 +1773,9 @@ function dropCompanyParam() {
   const url = new URL(window.location.href);
   if (!url.searchParams.has("company")) return;
   url.searchParams.delete("company");
-  window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  // state 는 null 로 — 지금 기록의 state(__NA 표식)를 그대로 넘기면 Next 가 제 내부 호출로
+  // 여겨 useSearchParams 를 고치지 않는다. 주소만 바뀌고 탭을 바꾸면 옛 company 를 또 읽는다.
+  window.history.replaceState(null, "", url.pathname + url.search + url.hash);
 }
 
 function siteHref(site: string): string {
