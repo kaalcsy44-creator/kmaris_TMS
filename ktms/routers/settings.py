@@ -106,7 +106,7 @@ from services.item_ledger import (
     ledger_rows, item_history, rebuild_price_history, stamp_history_item, match_key,
     master_price_summary, master_party_fallback, ensure_price_history_fresh,
     guess_item_type, category_item_type, suggest_categories, category_ship_map,
-    fit_part, fit_desc,
+    fit_part, fit_desc, _doc_labels,
 )
 import _core
 
@@ -2404,6 +2404,16 @@ def settings_items():
                 "customer": cust.get(sm.get("customer_id") or fb.get("customer_id")) or "",
                 "vendor": vend.get(sm.get("vendor_id") or fb.get("vendor_id")) or "",
                 "buy": sm.get("buy"), "sell": sm.get("sell"),
+                # 값 없이 N/A(단가 0)로만 답이 온 쪽 — 화면은 빈칸 대신 N/A 배지를 세운다.
+                "buy_na": bool(sm.get("buy_na")), "sell_na": bool(sm.get("sell_na")),
+                # 직전 딜의 같은 통화 값 — 가격 옆 ▲▼ 의 비교 상대.
+                "buy_prev": sm.get("buy_prev"), "sell_prev": sm.get("sell_prev"),
+                # 거래 이력이 실제로 붙은 마스터 id — 펼쳐 보는 이력은 이 id 로 부른다
+                # (식별키를 공유하는 줄들은 이력이 그중 한 줄에만 붙는다, 위 twins 주석).
+                "ledger_id": src if src in summary else None,
+                # 최근 거래일 — 세운 구매가·판매가 중 늦은 쪽(값 있는 줄의 날짜).
+                "last_date": max(((p or {}).get("date") or "")
+                                 for p in (sm.get("buy"), sm.get("sell"))),
                 # 견적일 — 공급사 견적 수신일 / 고객 견적 제출일.
                 "vendor_quote_at": sm.get("vendor_quote_at") or "",
                 "quoted_at": sm.get("quoted_at") or "",
@@ -2708,10 +2718,15 @@ def settings_item_ledger_history(
         cust = {c.id: c.name for c in s.query(Customer).all()}
         vend = {v.id: v.name for v in s.query(Vendor).all()}
         vess = {v.id: v.name for v in s.query(Vessel).all()}
+        # 품목표에서 펼쳐 보는 이력은 "어느 딜·어느 문서의 값인가"까지 읽는다.
+        proj_no = _core._project_no_map(s)
+        docs = _doc_labels(s)
         for r in rows:
             r["customer"] = cust.get(r.get("customer_id")) or ""
             r["vendor"] = vend.get(r.get("vendor_id")) or ""
             r["vessel"] = vess.get(r.get("vessel_id")) or ""
+            r["project_no"] = proj_no.get(r.get("rfq_id")) or ""
+            r["doc_no"] = (docs.get((r.get("source_type"), r.get("source_id"))) or {}).get("no", "")
         return rows
     finally:
         s.close()

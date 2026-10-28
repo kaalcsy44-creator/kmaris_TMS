@@ -219,6 +219,15 @@ export type SettingsItem = {
   quoted_at?: string;            // 고객 견적 제출일 "YYYY-MM-DD"
   buy: ItemLedgerPrice | null;   // 최근 구매가
   sell: ItemLedgerPrice | null;  // 최근 판매가
+  /** 값 없이 N/A(단가 0)로만 답이 온 쪽 — 가격은 비고 N/A 배지를 세운다. */
+  buy_na?: boolean;
+  sell_na?: boolean;
+  /** 직전 딜의 같은 통화 값 — 가격 옆 ▲▼ 의 비교 상대. */
+  buy_prev?: ItemLedgerPrice | null;
+  sell_prev?: ItemLedgerPrice | null;
+  /** 거래 이력이 실제로 붙은 마스터 id(식별키 공유 줄은 이력이 한 줄에만 붙는다). */
+  ledger_id?: number | null;
+  last_date?: string;            // 최근 거래일 — 세운 구매가·판매가 중 늦은 쪽
   margin_pct?: number | null;    // 구매가 대비 판매가 마진%(USD 환산)
   margin_cross?: boolean;        // 매입·매출 통화가 달라 환산으로 계산된 값인지
   // 이 품목이 등장한 딜의 관리번호 — 최근 딜 순. 재발주 품목은 여럿이라 목록은
@@ -380,6 +389,8 @@ export type ItemPriceRow = {
   qty: number;
   amount: number;
   doc_date: string | null;
+  project_no?: string;           // 그 딜의 관리번호 "P-024(260622)"
+  doc_no?: string;               // 문서 번호(수동 입력이라 빌 수 있다)
 };
 
 export type SettingsUser = {

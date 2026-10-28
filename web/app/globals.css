@@ -1810,6 +1810,140 @@ table.mini.wide.ms-table.ms-table--items th.ms-vessel,
 table.mini.wide.ms-table.ms-table--items td.ms-vessel {
   min-width: 92px;
 }
+/* ── 품목표 = 가격 조회 화면 ───────────────────────────────────────────────────
+   읽는 순서는 품목 → 날짜 → 가격·상대. 가격은 이 화면의 주인공이라 굵게, 통화는
+   작게 앞에 붙인다(숫자끼리 오른쪽 끝이 맞아 자릿수가 한눈에 견줘진다). */
+table.mini.wide.ms-table.ms-table--items td.ms-date {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: #334155;
+}
+table.mini.wide.ms-table.ms-table--items td.ms-desc {
+  max-width: 320px;
+}
+.ms-clamp2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+.ms-pn {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ms-amt {
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+  white-space: nowrap;
+}
+.ms-cur {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted, #8a97ab);
+  margin-right: 3px;
+  letter-spacing: 0.02em;
+}
+.ms-price-sub {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 11px;
+}
+.ms-up { color: #b42318; font-weight: 600; cursor: help; }
+.ms-down { color: #0f7a52; font-weight: 600; cursor: help; }
+.ms-na {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #8a5a00;
+  background: #fdf3e2;
+  cursor: help;
+}
+/* 제조사 ▾ 는 고칠 때만 쓰는 손잡이다 — 줄마다 떠 있으면 잡음이라, 줄에 올렸을 때만. */
+table.mini.wide.ms-table.ms-table--items tr:not(:hover) .mk-pick-toggle:not([aria-expanded="true"]) {
+  visibility: hidden;
+}
+/* 펼치는 줄 — 첫 칸 앞의 ▸ 와 펼친 줄의 바탕. */
+.ms-xrow { cursor: pointer; }
+.ms-xchev {
+  display: inline-block;
+  width: 12px;
+  margin-right: 4px;
+  font-size: 10px;
+  color: var(--muted, #8a97ab);
+}
+table.mini.wide.ms-table tr.ms-xopen > td {
+  background: #f4f7fc;
+}
+table.mini.wide.ms-table tr.ms-xdetail > td {
+  background: #f8fafd;
+  padding: 6px 12px 12px 30px;
+  white-space: normal;
+}
+.ms-hist {
+  max-width: 1100px;
+}
+.ms-hist-empty {
+  font-size: 12px;
+  color: var(--muted, #8a97ab);
+  padding: 4px 0;
+}
+.ms-hist-sum {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-size: 12px;
+  color: #475569;
+  margin-bottom: 6px;
+}
+.ms-hist-sum b { color: var(--ink, #0f172a); }
+.ms-hist-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  background: #fff;
+  border: 1px solid var(--line, #e3e8ef);
+  border-radius: 6px;
+}
+.ms-hist-table th {
+  text-align: left;
+  font-weight: 600;
+  color: #64748b;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line, #e3e8ef);
+  white-space: nowrap;
+}
+.ms-hist-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid #f1f4f8;
+  vertical-align: middle;
+}
+.ms-hist-table tr:last-child td { border-bottom: 0; }
+.ms-hist-table .num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ms-hist-date {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ms-hist-kind {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.ms-hist-kind.buy { background: #e8f0fd; color: #1a5fc4; }
+.ms-hist-kind.sell { background: #e6f6ee; color: #0f7a52; }
+.ms-hist-doc {
+  color: #64748b;
+  font-size: 11px;
+}
 /* ── 머리 칸 정렬·필터 ────────────────────────────────────────────────────────
    칸을 누르면 진행현황·지급대장 표와 같은 메뉴(.pl-col-menu)가 열린다. 칸의 안쪽
    여백은 단추가 가져간다 — 칸 어디를 눌러도 열려야 하기 때문. 글자는 이 표의 다른

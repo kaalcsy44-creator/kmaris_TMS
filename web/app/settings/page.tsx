@@ -95,6 +95,7 @@ import type {
   ItemCategory,
   ItemLedger,
   ItemLedgerRow,
+  ItemLedgerPrice,
   AutoCategoryProposal,
   ItemPriceRow,
   SettingsUser,
@@ -3847,6 +3848,8 @@ const itemHeadCols: HeadCol<SettingsItem>[] = [
   // 선박도 딜처럼 한 품목에 여럿이라 판정은 전부, 표시·정렬은 최근 한 척으로.
   { key: "vessel", text: (r) => itemVessels(r)[0] || "", filter: "facet",
     facetValues: itemVessels, emptyLabel: "No vessel" },
+  // 날짜는 정렬만 — "YYYY-MM-DD" 라 글자 순이 곧 날짜 순이다.
+  { key: "last_date", text: (r) => r.last_date || "" },
   // 결말은 딜 하나에 하나뿐 — 세운 배지 그대로 고르면 된다(정렬은 진행 순서로).
   { key: "deal_state", text: (r) => DEAL_LABEL[r.deal_state || ""] || "", filter: "facet",
     sortValue: (r) => DEAL_RANK[r.deal_state || ""] ?? 0, emptyLabel: "No deal yet" },
@@ -3896,16 +3899,19 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
     } catch {}
     setReloadKey((k) => k + 1);
   }
+  // 이 표에 오는 까닭은 "이 품목, 언제·얼마에·누구와 거래했나"다 — 그 셋을 품목 바로
+  // 옆에 세운다. 날짜는 독립 열(정렬 가능), 거래 상대는 제 가격 바로 오른쪽(공급사→
+  // 구매가, 고객→판매가). 자리를 내려고 원산지·단위·HS 코드·선박은 화면에서 뺐다 —
+  // 거의 빈칸인 열들이고, 종이(Print)와 펼친 이력에는 그대로 있다.
   // 고객·공급사·구매가·판매가·마진은 가격 이력에서 온 읽기전용 파생값이라 편집 폼엔 없다.
   const trade: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?][] = [
-    ["vendor", "Vendor", (r) => r.vendor || <span className="dash">—</span>, "ms-party"],
-    // 견적일은 각자 짝인 가격과 한 칸에 위아래로 — 공급사 견적(수신) → 구매가,
-    // 우리 견적(제출) → 판매가. 날짜를 독립 열로 두면 물품 탭이 16열이 되어 오른쪽
-    // 서너 칸(판매가·마진·편집)이 화면 밖으로 밀려났다.
+    ["last_date", "Date", (r) => r.last_date || <span className="dash">—</span>, "ms-date"],
     ["buy", "Purchase Price",
-      (r) => priceWithDate(r.buy, r.vendor_quote_at, "Vendor quote received"), "ms-num"],
+      (r) => tradePrice(r.buy, r.buy_na, r.buy_prev, r.last_date), "ms-num"],
+    ["vendor", "Vendor", (r) => r.vendor || <span className="dash">—</span>, "ms-party"],
     ["sell", "Sales Price",
-      (r) => priceWithDate(r.sell, r.quoted_at, "Our quote sent"), "ms-num"],
+      (r) => tradePrice(r.sell, r.sell_na, r.sell_prev, r.last_date), "ms-num"],
+    ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
     ["margin_pct", "Margin", (r) => marginText(r.margin_pct, r.margin_cross), "ms-num"],
     // Std Price(표준가)는 아직 쓰지 않아 표에서 뺐다 — 값은 편집 폼에 그대로 있고,
     // 다시 필요해지면 아래 한 줄을 되살리면 된다.
@@ -3934,9 +3940,11 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
         </span>
       );
     }, "ms-deal"];
-  // 선박 — 딜을 따라온다(그 딜이 다룬 배). 여러 척이면 최근 한 척 + "+N".
-  const vessel: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =
-    ["vessel", "Vessel", (r) => multiCell(itemVessels(r)), "ms-vessel"];
+  // 품명은 두 줄까지만 — 넘치면 말줄임, 전체는 title. 긴 설명 한 줄이 행 높이를 다섯
+  // 줄로 늘려 표 전체의 리듬을 깼다.
+  const desc = (label: string): [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =>
+    ["description", label,
+      (r) => <span className="ms-clamp2" title={r.description}>{r.description || "—"}</span>, "ms-desc"];
   const category: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =
     ["category_path", "Category", (r) => r.category_path
       // 3단 경로는 알약 폭을 400px 가까이 끌고 간다 — 폭을 못 박고 넘치면 말줄임,
@@ -3949,8 +3957,12 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
       title={ITEM_KIND_LABEL[kind]}
       empty={{ id: 0, part_no: "", description: "", maker: "", origin: "", unit: isService ? "EA" : "PCS", hs_code: "", std_price: 0, item_type: kind, category_id: null, category_path: "", customer: "", vendor: "", vendor_quote_at: "", quoted_at: "", buy: null, sell: null, margin_pct: null, margin_cross: false }}
       // 마스터는 한 벌이고 탭은 그중 한쪽만 본다 — 목록을 받아 이 탭의 구분만 남긴다.
+      // '값이 붙었다' = 0 보다 큰 단가. 가격 객체가 있다는 것만 보면 N/A(단가 0)로 답한
+      // 줄이 Priced only 를 통과해 "KRW 0" 으로 섰다.
       load={() => fetchSettingsItems().then((rows) => rows.filter((r) =>
-        (r.item_type || "part") === kind && (!pricedOnly || !!r.buy || !!r.sell)))}
+        (r.item_type || "part") === kind &&
+        (!pricedOnly || (r.buy?.unit_price ?? 0) > 0 || (r.sell?.unit_price ?? 0) > 0)))}
+      rowDetail={(r) => <ItemTradeHistory row={r} />}
       // 줄을 골라 Parts↔Service 로 옮긴다 — 낱말 추측이 틀려 용역이 Parts 에 들어온 경우.
       bulk={{
         keyOf: (r) => String(r.id),
@@ -3995,27 +4007,23 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
         invalidateMasterCategories();
         return r;
       }}
-      // 앞쪽은 "누구에게 판 무엇인가"(고객·설명), 뒤쪽은 거래 조건(공급사·구매가·
-      // 판매가·마진) 순이고, 딜의 결말(Deal)은 그 조건을 읽은 다음에 보는 값이라
-      // 마진 오른쪽에 둔다. 분류(Category)는 경로가 길어 앞쪽 칸을 밀어내므로 맨 끝에.
-      // 용역 탭은 품번·제조사·원산지·HS 코드를 걷어낸다(전부 빈칸이라).
+      // 무엇을(품번·품명·제조사) → 언제(Date) → 얼마에·누구와(구매가·공급사, 판매가·
+      // 고객) → 마진 순. 어느 딜이었는지(Project No.)와 결말(Deal)은 그 다음에 보는 값이고,
+      // 딜이 여럿인 품목은 줄을 펼치면 딜마다의 값이 나온다. 분류는 경로가 길어 맨 끝에.
+      // 용역 탭은 품번·제조사를 걷어낸다(전부 빈칸이라).
       columns={isService
         ? [
-            project,
-            ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
-            vessel,
-            ["description", "Service", undefined, "ms-desc"],
-            ["unit", "Unit"],
+            desc("Service"),
             ...trade,
+            project,
             deal,
             category,
           ]
         : [
-            project,
-            ["customer", "Customer", (r) => r.customer || <span className="dash">—</span>, "ms-party"],
-            vessel,
-            ["description", "Description", undefined, "ms-desc"],
-            ["part_no", "Part No."],
+            ["part_no", "Part No.", (r) => r.part_no
+              ? <span className="ms-pn">{r.part_no}</span>
+              : <span className="dash">—</span>],
+            desc("Description"),
             // 명부에 있는 제조사면 거래선 화면과 같은 로고 배지로, 없으면 적힌 글자 옆 ▾ 로
             // 명부에서 바로 골라 붙인다(편집 창을 열지 않고 그 품목에 저장).
             ["maker", "Maker", (r) => (
@@ -4030,11 +4038,9 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
                   setReloadKey((k) => k + 1);
                 }}
               />
-            )],
-            ["origin", "Origin"],
-            ["unit", "Unit"],
-            ["hs_code", "HS Code"],
+            ), "ms-maker"],
             ...trade,
+            project,
             deal,
             category,
           ]}
@@ -4280,8 +4286,8 @@ type LedgerFilter = { kind: "all" } | { kind: "cat"; id: number } | { kind: "unm
    값(원산지·HS 코드·마진·분류 전체 경로)까지 펴서 싣고, 배지는 글자로 풀어 적는다.
    금액은 화면과 같은 표기(통화 + 정수)로 맞춘다 — 두 곳이 다르면 어느 쪽이 맞는지
    확인하러 다시 화면을 봐야 한다. */
-function printPrice(p: { unit_price: number; currency: string } | null | undefined): string {
-  return p ? `${p.currency} ${fmtAmt(p.unit_price)}` : "";
+function printPrice(p: { unit_price: number; currency: string } | null | undefined, na?: boolean): string {
+  return p ? `${p.currency} ${fmtAmt(p.unit_price)}` : na ? "N/A" : "";
 }
 function printMargin(pct: number | null | undefined, cross?: boolean): string {
   return pct == null ? "" : `${cross ? "~" : ""}${pct.toFixed(1)}%`;
@@ -4290,36 +4296,32 @@ function printMargin(pct: number | null | undefined, cross?: boolean): string {
 /** 품목 마스터(Parts·Service) 인쇄 칸. 용역 탭은 품번·제조사·원산지·HS 를 뺀다. */
 const itemPrintCols = (kind: ItemKind): PrintCol<SettingsItem>[] => {
   const isService = kind === "service";
-  const head: PrintCol<SettingsItem>[] = [
-    // 품명은 종이에서도 가장 긴 값이라 폭을 넉넉히 준다 — 좁히면 한 줄이 대여섯 줄로
-    // 접혀 한 장에 들어가는 품목이 그만큼 줄어든다.
-    { label: "Project No.", value: (r) => itemProjects(r).join(" · "), width: 1.1 },
-    { label: "Customer", value: (r) => r.customer || "", width: 1.3 },
-    { label: "Vessel", value: (r) => itemVessels(r).join(" · "), width: 1.1 },
+  // 화면과 같은 순서(무엇을 → 언제 → 얼마에·누구와)로 싣고, 화면에서 뺀 열(선박·원산지·
+  // 단위·HS 코드)은 그 뒤에 붙인다. 품명은 종이에서도 가장 긴 값이라 폭을 넉넉히 준다.
+  const what: PrintCol<SettingsItem>[] = [
+    ...(isService ? [] : [{ label: "Part No.", value: (r: SettingsItem) => r.part_no || "", width: 1.2 }]),
     { label: isService ? "Service" : "Description", value: (r) => r.description || "", width: 3.6 },
+    ...(isService ? [] : [{ label: "Maker", value: (r: SettingsItem) => r.maker || "", width: 1.2 }]),
   ];
-  const parts: PrintCol<SettingsItem>[] = isService ? [] : [
-    { label: "Part No.", value: (r) => r.part_no || "", width: 1.2 },
+  const trade: PrintCol<SettingsItem>[] = [
+    { label: "Date", value: (r) => r.last_date || "", width: 0.9 },
+    { label: "Purchase Price", value: (r) => printPrice(r.buy, r.buy_na), width: 1.2, align: "right" },
+    { label: "Vendor", value: (r) => r.vendor || "", width: 1.3 },
+    { label: "Sales Price", value: (r) => printPrice(r.sell, r.sell_na), width: 1.2, align: "right" },
+    { label: "Customer", value: (r) => r.customer || "", width: 1.3 },
+    { label: "Margin", value: (r) => printMargin(r.margin_pct, r.margin_cross), width: 0.7, align: "right" },
+    { label: "Project No.", value: (r) => itemProjects(r).join(" · "), width: 1.1 },
+    { label: "Vessel", value: (r) => itemVessels(r).join(" · "), width: 1.1 },
   ];
-  const mid: PrintCol<SettingsItem>[] = [
-    { label: "Category", value: (r) => r.category_path || "", width: 2.2 },
-  ];
-  const spec: PrintCol<SettingsItem>[] = isService ? [] : [
-    { label: "Maker", value: (r) => r.maker || "", width: 1.2 },
-    { label: "Origin", value: (r) => r.origin || "", width: 0.9 },
-  ];
-  const tail: PrintCol<SettingsItem>[] = [
+  const spec: PrintCol<SettingsItem>[] = [
+    ...(isService ? [] : [{ label: "Origin", value: (r: SettingsItem) => r.origin || "", width: 0.9 }]),
     { label: "Unit", value: (r) => r.unit || "", width: 0.6 },
     ...(isService ? [] : [{ label: "HS Code", value: (r: SettingsItem) => r.hs_code || "", width: 1 }]),
-    { label: "Vendor", value: (r) => r.vendor || "", width: 1.3 },
-    { label: "Purchase Price", value: (r) => printPrice(r.buy), width: 1.2, align: "right" as const },
-    { label: "Sales Price", value: (r) => printPrice(r.sell), width: 1.2, align: "right" as const },
-    { label: "Margin", value: (r) => printMargin(r.margin_pct, r.margin_cross),
-      width: 0.7, align: "right" as const },
     { label: "Deal", value: (r) => [DEAL_LABEL[r.deal_state || ""] || "", r.deal_note || ""]
         .filter(Boolean).join(" — "), width: 1.1 },
+    { label: "Category", value: (r) => r.category_path || "", width: 2.2 },
   ];
-  return [...head, ...parts, ...mid, ...spec, ...tail];
+  return [...what, ...trade, ...spec];
 };
 
 /** 가격 이력(카테고리 탭 오른쪽 표) 인쇄 칸 — 화면에서 숨긴 열도 종이에는 싣는다. */
@@ -4416,18 +4418,161 @@ function fmtRate(n: number): string {
 function fmtPrice(p: { unit_price: number; currency: string } | null): string {
   return p ? `${p.currency} ${fmtAmt(p.unit_price)}` : "—";
 }
-// 금액과 그 금액이 나온 견적일을 한 칸에(위=금액, 아래=회색 날짜). 날짜가 없으면 금액만.
-function priceWithDate(
-  p: { unit_price: number; currency: string } | null,
-  date: string | undefined,
-  dateTitle: string,
+/** 품목표의 가격 칸 — 금액은 굵게, 통화는 작게 앞에. 아래 작은 줄에는 직전 딜 대비
+ *  ▲▼%와(같은 통화일 때만), 이 값의 날짜가 Date 열과 다를 때만 그 날짜를 적는다
+ *  (구매가와 판매가가 다른 날 나온 경우). 값 없이 N/A 로만 답이 왔으면 N/A 배지. */
+function tradePrice(
+  p: ItemLedgerPrice | null,
+  na: boolean | undefined,
+  prev: ItemLedgerPrice | null | undefined,
+  lastDate: string | undefined,
 ): React.ReactNode {
+  if (!p) {
+    return na
+      ? <span className="ms-na" title="Quoted as not available — no price was given">N/A</span>
+      : <span className="dash">—</span>;
+  }
+  const date = p.date && p.date !== lastDate ? p.date : "";
+  const diff = prev && prev.unit_price > 0
+    ? ((p.unit_price - prev.unit_price) / prev.unit_price) * 100
+    : null;
+  const showDiff = diff != null && Math.abs(diff) >= 0.05;
   return (
     <span className="ms-price">
-      <span>{fmtPrice(p)}</span>
-      {date ? <span className="ms-price-date" title={dateTitle}>{date}</span> : null}
+      <span className="ms-amt">
+        <span className="ms-cur">{p.currency}</span>
+        {fmtAmt(p.unit_price)}
+      </span>
+      {showDiff || date ? (
+        <span className="ms-price-sub">
+          {showDiff ? (
+            <span
+              className={diff! > 0 ? "ms-up" : "ms-down"}
+              title={`Previous deal: ${prev!.currency} ${fmtAmt(prev!.unit_price)}${prev!.date ? ` (${prev!.date})` : ""}`}
+            >
+              {diff! > 0 ? "▲" : "▼"}{Math.abs(diff!).toFixed(1)}%
+            </span>
+          ) : null}
+          {date ? <span className="ms-price-date">{date}</span> : null}
+        </span>
+      ) : null}
     </span>
   );
+}
+
+/** 이력 한 줄 — 같은 딜·같은 쪽(매입/매출)·같은 값이 여러 문서에 옮겨 적힌 것은 한 줄로
+ *  접는다(벤더 견적의 원가가 우리 견적·오더로 그대로 따라온다). 문서 이름은 모아 둔다. */
+type TradeLine = ItemPriceRow & { docs: string[] };
+
+function foldHistory(rows: ItemPriceRow[]): TradeLine[] {
+  const out: TradeLine[] = [];
+  const byKey = new Map<string, TradeLine>();
+  for (const h of rows) {   // 서버가 최신순으로 준다 — 먼저 온 줄이 대표가 된다
+    const k = `${h.price_type}|${h.rfq_id ?? `s${h.source_type}${h.source_id}`}|${h.currency}|${h.unit_price}`;
+    const doc = [SOURCE_LABEL[h.source_type] || h.source_type, h.doc_no].filter(Boolean).join(" ");
+    const hit = byKey.get(k);
+    if (hit) {
+      if (!hit.docs.includes(doc)) hit.docs.push(doc);
+      continue;
+    }
+    const line = { ...h, docs: [doc] };
+    byKey.set(k, line);
+    out.push(line);
+  }
+  return out;
+}
+
+/** 통화별 최저~최고 — 값이 둘 이상일 때만 뜻이 있다. */
+function priceRange(lines: TradeLine[]): string {
+  const byCur = new Map<string, number[]>();
+  for (const l of lines) {
+    if (l.unit_price > 0) byCur.set(l.currency, [...(byCur.get(l.currency) ?? []), l.unit_price]);
+  }
+  return [...byCur.entries()].map(([cur, v]) => {
+    const lo = Math.min(...v), hi = Math.max(...v);
+    return lo === hi ? `${cur} ${fmtAmt(lo)}` : `${cur} ${fmtAmt(lo)} ~ ${fmtAmt(hi)}`;
+  }).join(" · ");
+}
+
+/** 품목표에서 줄을 펼치면 나오는 거래 이력 — 딜마다 언제·얼마에·누구와. */
+function ItemTradeHistory({ row }: { row: SettingsItem }) {
+  const [lines, setLines] = useState<TradeLine[] | null>(null);
+  const [err, setErr] = useState("");
+  const id = row.ledger_id ?? row.id;
+  useEffect(() => {
+    let alive = true;
+    fetchItemPriceHistory({ item_id: id })
+      .then((rows) => { if (alive) setLines(foldHistory(rows)); })
+      .catch((e) => { if (alive) setErr(e instanceof Error ? e.message : "Load failed"); });
+    return () => { alive = false; };
+  }, [id]);
+
+  if (err) return <div className="ms-hist"><span className="action-err">{err}</span></div>;
+  if (!lines) return <div className="ms-hist ms-hist-empty">Loading trade history…</div>;
+  if (!lines.length) {
+    return (
+      <div className="ms-hist ms-hist-empty">
+        No priced document yet — this item was only enquired.
+      </div>
+    );
+  }
+  const buys = lines.filter((l) => l.price_type === "buy");
+  const sells = lines.filter((l) => l.price_type === "sell");
+  const deals = new Set(lines.map((l) => l.rfq_id).filter(Boolean)).size;
+  return (
+    <div className="ms-hist" onClick={(e) => e.stopPropagation()}>
+      <div className="ms-hist-sum">
+        <span><b>{deals}</b> deal{deals === 1 ? "" : "s"}</span>
+        {buys.length ? <span>Buy <b>{priceRange(buys) || "N/A"}</b></span> : null}
+        {sells.length ? <span>Sell <b>{priceRange(sells) || "N/A"}</b></span> : null}
+      </div>
+      <table className="ms-hist-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Project</th>
+            <th></th>
+            <th className="num">Unit Price</th>
+            <th className="num">Qty</th>
+            <th>Vendor / Customer</th>
+            <th>Vessel</th>
+            <th>Document</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((l) => (
+            <tr key={l.id} className={l.price_type === "buy" ? "is-buy" : "is-sell"}>
+              <td className="ms-hist-date">{l.doc_date || "—"}</td>
+              <td>{l.project_no ? <ProjectNo value={l.project_no} /> : <span className="dash">—</span>}</td>
+              <td>
+                <span className={`ms-hist-kind ${l.price_type}`}>
+                  {l.price_type === "buy" ? "Buy" : "Sell"}
+                </span>
+              </td>
+              <td className="num">
+                {l.unit_price > 0 ? (
+                  <span className="ms-amt">
+                    <span className="ms-cur">{l.currency}</span>
+                    {fmtAmt(l.unit_price)}
+                  </span>
+                ) : (
+                  <span className="ms-na" title="Quoted as not available — no price was given">N/A</span>
+                )}
+              </td>
+              <td className="num">{l.qty ? fmtQty(l.qty) : ""}</td>
+              <td>{(l.price_type === "buy" ? l.vendor : l.customer) || <span className="dash">—</span>}</td>
+              <td>{l.vessel || <span className="dash">—</span>}</td>
+              <td className="ms-hist-doc">{l.docs.join(" · ")}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function fmtQty(n: number): string {
+  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 // 마진% — 백엔드가 USD 환산으로 계산해 준 margin_pct 사용. 통화가 달라 환산된
 // 값이면 '~'를 붙여 근사치임을 표시(환율 가정으로 산출).
@@ -5529,6 +5674,7 @@ function MasterSection<T extends { id: number }>({
   transfer,
   toolbarExtra,
   bulk,
+  rowDetail,
 }: {
   title: string;
   empty: T;
@@ -5649,9 +5795,21 @@ function MasterSection<T extends { id: number }>({
     keyOf: (row: T) => string;
     actions: (keys: string[], done: (msg?: string, isErr?: boolean) => void) => ReactNode;
   };
+  /** 줄 아래로 펼쳐 보는 내용(품목표: 그 품목의 거래 이력). 주면 줄을 누르는 일이
+   *  편집 대신 펼치기가 되고, 편집은 줄 끝 ✎ 로 간다 — 이 표에 오는 까닭이 고치기보다
+   *  "전에 얼마였나"를 보는 쪽이라서다. */
+  rowDetail?: (row: T) => ReactNode;
 }) {
   const NEW_ID = -1; // editId 센티넬: 신규 등록 편집기
   const [rows, setRows] = useState<T[]>([]);
+  const [openRows, setOpenRows] = useState<Set<number>>(new Set()); // rowDetail 로 펼친 줄
+  function toggleRow(id: number) {
+    setOpenRows((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
   const [editId, setEditId] = useState<number | null>(null); // null=닫힘, -1=신규, >0=수정
   const [form, setForm] = useState<T>(empty);
   const [q, setQ] = useState("");
@@ -6132,13 +6290,18 @@ Every contact of ${names.length === 1 ? "this company" : "these companies"} is r
 
   // 데이터 행 1건. sub=true 면 그룹에 속한 하위(담당자) 행 — 첫 칸은 비워 회사명 반복을 없앤다.
   function dataRow(row: T, sub = false) {
+    const open = !!rowDetail && openRows.has(row.id);
+    const span = columns.length + (selKey ? 1 : 0) + (showActCol ? 1 : 0);
     return (
+      <Fragment key={row.id}>
       <tr
-        key={row.id}
         className={`${sub ? "ms-sub" : ""}${row.id === editId ? " sel" : ""}${
           selKey && !group && picked.has(selKey(row)) ? " ms-picked" : ""
-        }`}
-        onClick={() => (onRowOpen ? onRowOpen(row, () => openEdit(row)) : openEdit(row))}
+        }${rowDetail ? " ms-xrow" : ""}${open ? " ms-xopen" : ""}`}
+        onClick={() =>
+          rowDetail
+            ? toggleRow(row.id)
+            : onRowOpen ? onRowOpen(row, () => openEdit(row)) : openEdit(row)}
       >
         {selKey ? (
           <td className="ms-selcol" onClick={(e) => e.stopPropagation()}>
@@ -6159,6 +6322,9 @@ Every contact of ${names.length === 1 ? "this company" : "these companies"} is r
         ) : null}
         {columns.map(([key, , renderCell, cls], i) => (
           <td key={String(key)} className={cls}>
+            {rowDetail && i === 0 ? (
+              <span className="ms-xchev" aria-hidden>{open ? "▾" : "▸"}</span>
+            ) : null}
             {sub && i === 0
               ? group?.subFirst?.(row) ?? null
               : renderCell
@@ -6180,6 +6346,12 @@ Every contact of ${names.length === 1 ? "this company" : "these companies"} is r
           </td>
         ) : null}
       </tr>
+      {open ? (
+        <tr className="ms-xdetail">
+          <td colSpan={span}>{rowDetail!(row)}</td>
+        </tr>
+      ) : null}
+      </Fragment>
     );
   }
 

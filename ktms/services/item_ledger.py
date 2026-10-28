@@ -604,13 +604,36 @@ def master_price_summary(session) -> dict[int, dict]:
     def newest(rows: list):
         return max(rows, key=lambda r: (r.doc_date or "", r.id)) if rows else None
 
+    def priced(rows: list) -> list:
+        return [r for r in rows if (r.unit_price or 0) > 0]
+
+    def prev_deal(rows: list, cur):
+        """직전 딜의 같은 통화 값 — 가격 칸의 ▲▼ 가 견주는 상대. 같은 딜 안의 다른
+        문서(벤더 견적 → 우리 견적 원가)는 값이 그대로 옮겨진 것이라 견줄 거리가 못 된다."""
+        if cur is None:
+            return None
+        cand = [r for r in rows if r.rfq_id != cur.rfq_id
+                and (r.currency or "USD") == (cur.currency or "USD")
+                and (r.doc_date or "", r.id) < (cur.doc_date or "", cur.id)]
+        return newest(cand)
+
     out: dict[int, dict] = {}
     for item_id, rows in by_item.items():
         buys = [r for r in rows if r.price_type == "buy"]
         sells = [r for r in rows if r.price_type == "sell"]
-        b, sl = newest(buys), newest(sells)
-        cust = newest([r for r in sells if r.customer_id]) or newest([r for r in rows if r.customer_id])
-        vend = newest([r for r in buys if r.vendor_id]) or newest([r for r in rows if r.vendor_id])
+        # 0 원은 값이 아니다 — 공급사가 "N/A(공급 불가)"로 답한 줄이 단가 0 으로 남는다.
+        # 그런 줄을 최근 가격으로 세우면 품목표에 "KRW 0" 이 뜬다. 값이 있는 가장 최근
+        # 줄을 세우고, 값이 하나도 없으면 가격은 비우되 N/A 였다는 사실(*_na)만 남긴다.
+        pb, ps = priced(buys), priced(sells)
+        b, sl = newest(pb), newest(ps)
+        # 상대는 세운 가격의 상대여야 한다 — N/A 로 답한 공급사가 더 최근이라고 그 이름을
+        # 다른 공급사의 값 옆에 붙이면 "누구에게서 얼마에"가 틀어진다.
+        cust = (newest([r for r in ps if r.customer_id])
+                or newest([r for r in sells if r.customer_id])
+                or newest([r for r in rows if r.customer_id]))
+        vend = (newest([r for r in pb if r.vendor_id])
+                or newest([r for r in buys if r.vendor_id])
+                or newest([r for r in rows if r.vendor_id]))
         # 견적일 두 가지 — 공급사가 우리에게 준 견적(수신)과 우리가 고객에게 낸 견적(제출).
         vq = newest([r for r in buys if r.source_type == "vendor_quote"])
         cq = newest([r for r in sells if r.source_type == "quotation"])
@@ -626,6 +649,10 @@ def master_price_summary(session) -> dict[int, dict]:
         out[item_id] = {
             "buy": price(b),
             "sell": price(sl),
+            "buy_na": bool(buys) and not pb,
+            "sell_na": bool(sells) and not ps,
+            "buy_prev": price(prev_deal(pb, b)),
+            "sell_prev": price(prev_deal(ps, sl)),
             "customer_id": cust.customer_id if cust else None,
             "vendor_id": vend.vendor_id if vend else None,
             "vendor_quote_at": vq.doc_date if vq else None,
