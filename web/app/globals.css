@@ -2328,6 +2328,8 @@ table.mini.wide.ms-table.ms-table--sel td.ms-site:not(.ms-actcol) {
   font-size: 10.5px; font-weight: 700; line-height: 17px; white-space: nowrap;
 }
 .mk-tag--more { border-color: var(--line); background: #f1f3f6; color: #6b7684; }
+.mk-tag--link { text-decoration: none; cursor: pointer; }
+.mk-tag--link:hover { border-color: #8fb0de; background: #e0eaf8; text-decoration: underline; }
 .mk-tag--edit { padding-right: 3px; }
 .mk-tag--edit button {
   border: 0; background: none; cursor: pointer; padding: 0 3px;

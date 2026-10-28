@@ -44,7 +44,10 @@ export function useVendorCompanies(): SettingsVendor[] {
   }, [data]);
 }
 
-/** 읽기용 배지 줄 — 대리점 이름을 로고와 함께 세운다(명부에 없는 이름도 글자로 남긴다). */
+/** 읽기용 배지 줄 — 대리점 이름을 로고와 함께 세운다(명부에 없는 이름도 글자로 남긴다).
+ *
+ * 명부에 있는 대리점은 눌러서 그 거래선 창으로 건너간다 — "여기서 산다"를 확인한 다음
+ * 할 일은 대개 그 회사 담당자에게 묻는 것이다. 명부에 없는 이름은 갈 곳이 없어 글자로만. */
 export function AgencyBadges({ names }: { names: string[] }) {
   const companies = useVendorCompanies();
   const byName = useMemo(
@@ -56,11 +59,23 @@ export function AgencyBadges({ names }: { names: string[] }) {
     <span className="mk-tags">
       {names.map((n) => {
         const co = byName.get(norm(n));
-        return (
-          <span key={n} className="mk-tag" title={`${n} — supplies this maker`}>
+        const body = (
+          <>
             {co?.logo ? <img className="mk-tag-logo" src={co.logo} alt="" /> : null}
             {co?.name || n}
-          </span>
+          </>
+        );
+        if (!co?.name) {
+          return <span key={n} className="mk-tag" title={`${n} — supplies this maker`}>{body}</span>;
+        }
+        return (
+          // 목록 줄 안에서도 쓰인다 — 줄을 누른 것으로 번지면 메이커 창이 먼저 열린다.
+          <a key={n} className="mk-tag mk-tag--link"
+             href={`/partners?side=vendors&company=${encodeURIComponent(co.name)}`}
+             title={`${co.name} — supplies this maker. Open vendor`}
+             onClick={(e) => e.stopPropagation()}>
+            {body}
+          </a>
         );
       })}
     </span>
