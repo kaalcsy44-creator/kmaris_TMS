@@ -2132,17 +2132,27 @@ table.mini.wide.ms-table tr.ms-xdetail > td {
   color: #94a3b8;
   font-weight: 500;
 }
-/* 이력 표는 칸마다 한 줄 — 펼침 칸(.ms-xdetail td)이 white-space:normal 이라 거래선·
-   선박·문서 번호가 두세 줄로 접혔다. 넘치면 이력 상자 안에서 옆으로 민다. */
+/* 이력 표는 칸마다 한 줄, 폭은 내용만큼 — 한눈에 보이고 행 높이도 한 줄.
+   바깥 품목표의 열 규칙(table.mini.wide.ms-table td:nth-child(n) 의 width:1%·min-width·
+   white-space:normal)이 자손 선택자라 이 표의 칸에도 그대로 걸렸다. 그 규칙들은 클래스가
+   6개까지 붙어 구체성으로는 이길 수 없어 여기서만 !important 로 끊는다. 긴 문서 칸만
+   폭을 묶고 말줄임(전체는 title). */
 .ms-hist {
   overflow-x: auto;
 }
-table.mini.wide.ms-table tr.ms-xdetail .ms-hist-table th,
-table.mini.wide.ms-table tr.ms-xdetail .ms-hist-table td {
-  white-space: nowrap;
-}
 .ms-hist-table {
-  min-width: max-content;
+  width: auto;
+}
+table.ms-table .ms-hist-table th,
+table.ms-table .ms-hist-table td {
+  width: auto !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+}
+table.ms-table .ms-hist-table td.ms-hist-doc {
+  max-width: 340px !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* ── 머리 칸 정렬·필터 ────────────────────────────────────────────────────────
    칸을 누르면 진행현황·지급대장 표와 같은 메뉴(.pl-col-menu)가 열린다. 칸의 안쪽

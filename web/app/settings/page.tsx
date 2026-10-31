@@ -4827,7 +4827,7 @@ function ItemTradeHistory({ row }: { row: SettingsItem }) {
               <td className="num">{l.qty ? fmtQty(l.qty) : ""}</td>
               <td>{(l.price_type === "buy" ? l.vendor : l.customer) || <span className="dash">—</span>}</td>
               <td>{l.vessel || <span className="dash">—</span>}</td>
-              <td className="ms-hist-doc">{l.docs.join(" · ")}</td>
+              <td className="ms-hist-doc" title={l.docs.join(" · ")}>{l.docs.join(" · ")}</td>
             </tr>
           ))}
         </tbody>
