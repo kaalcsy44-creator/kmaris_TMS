@@ -5305,7 +5305,11 @@ export function CategoriesTab({ onOpenItems }: {
     }
   }
 
-  function NodeRow({ node }: { node: ItemCategory }) {
+  // 컴포넌트(<NodeRow/>)가 아니라 함수 호출로 그린다. 이 탭 안에서 정의한 컴포넌트는
+  // 그릴 때마다 새 타입이라, 접고 펼 때마다 React 가 나무 전체를 지웠다가 다시 세웠다 —
+  // 그 사이 목록 높이가 0 으로 꺼지며 스크롤이 맨 위로 튀었다. 함수로 부르면 같은 줄을
+  // 그대로 두고 바뀐 곳만 고친다.
+  function nodeRow(node: ItemCategory): React.ReactNode {
     const kids = childrenOf(node.id);
     const sibs = childrenOf(node.parent_id);
     const pos = sibs.findIndex((c) => c.id === node.id);
@@ -5316,7 +5320,7 @@ export function CategoriesTab({ onOpenItems }: {
     const canHaveKids = node.level < 2;
     const isOpen = expanded.has(node.id);
     return (
-      <li className={`cat-node cat-l${node.level}${node.active ? "" : " off"}`}>
+      <li key={node.id} className={`cat-node cat-l${node.level}${node.active ? "" : " off"}`}>
         <div
           className={`cat-node-row${
             filter.kind === "cat" && filter.id === node.id ? " sel" : ""
@@ -5369,7 +5373,7 @@ export function CategoriesTab({ onOpenItems }: {
         {canHaveKids && isOpen ? (
           // 하위 그룹(세로선). 자식들 + 맨 끝에 '+ 하위레벨 추가' 버튼 1개.
           <ul className="cat-children">
-            {kids.map((k) => <NodeRow key={k.id} node={k} />)}
+            {kids.map((k) => nodeRow(k))}
             {canCreate ? (
               <li className="cat-addrow">
                 <button className="cat-add" onClick={() => openNew(node)}>
@@ -5434,7 +5438,7 @@ export function CategoriesTab({ onOpenItems }: {
             <div className="state">No categories yet.</div>
           ) : (
             <ul className="cat-tree">
-              {roots.map((r) => <NodeRow key={r.id} node={r} />)}
+              {roots.map((r) => nodeRow(r))}
               {canCreate ? (
                 <li className="cat-addrow cat-addrow-root">
                   <button className="cat-add" onClick={() => openNew(null)}>+ Main</button>
