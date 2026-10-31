@@ -2102,6 +2102,30 @@ table.mini.wide.ms-table tr.ms-xdetail > td {
   color: #64748b;
   font-size: 11px;
 }
+/* 펼친 이력은 주인 행에 딸린 부연 — 위쪽에 주인 행이 드리운 그림자를 깔고, 글자는
+   한 톤 옅게, 굵기는 빼서 주인 행(검정·굵게)과 위계가 갈리게 한다. */
+table.mini.wide.ms-table tr.ms-xdetail > td {
+  box-shadow: inset 0 7px 8px -7px rgba(15, 23, 42, 0.22);
+}
+.ms-hist,
+.ms-hist-sum,
+.ms-hist-table td {
+  color: #64748b;
+}
+.ms-hist-sum b,
+.ms-hist .ms-amt,
+.ms-hist .pjno-main {
+  font-weight: 500;
+  color: #475569;
+}
+.ms-hist .ms-cur,
+.ms-hist .pjno-date {
+  color: #94a3b8;
+}
+.ms-hist-table th {
+  color: #94a3b8;
+  font-weight: 500;
+}
 /* ── 머리 칸 정렬·필터 ────────────────────────────────────────────────────────
    칸을 누르면 진행현황·지급대장 표와 같은 메뉴(.pl-col-menu)가 열린다. 칸의 안쪽
    여백은 단추가 가져간다 — 칸 어디를 눌러도 열려야 하기 때문. 글자는 이 표의 다른
