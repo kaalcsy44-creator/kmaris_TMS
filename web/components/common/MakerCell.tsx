@@ -347,7 +347,7 @@ export function MakerNameBadge({ name, empty = null }: { name?: string | null; e
     <span className="mk-tags">
       <span className="mk-tag" title={name}>
         {m.logo ? <img className="mk-tag-logo" src={m.logo} alt="" /> : null}
-        {m.name}
+        <span className="mk-tag-name">{m.name}</span>
       </span>
     </span>
   );

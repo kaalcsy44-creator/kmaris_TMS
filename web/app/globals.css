@@ -1839,9 +1839,26 @@ table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-desc:not(.ms-actcol
 }
 table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-maker:not(.ms-actcol),
 table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-maker:not(.ms-actcol) {
-  width: 130px;
-  min-width: 130px;
+  width: 170px;
+  min-width: 170px;
+  max-width: 170px;
   white-space: nowrap;
+}
+/* 제조사 배지가 칸보다 길면(Hansung Heavy Industries …) 칸 끝에서 잘려 끝이 안 보였다 —
+   배지를 칸 폭에 묶고 이름만 말줄임(배지 title 에 전체 이름). ▾ 자리는 남긴다. */
+table.mini.wide.ms-table.ms-table--items td.ms-maker .mk-tags {
+  max-width: 100%;
+  margin-right: 0;
+  flex-wrap: nowrap;
+}
+table.mini.wide.ms-table.ms-table--items td.ms-maker .mk-tag {
+  max-width: 100%;
+  min-width: 0;
+}
+.mk-tag-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 table.mini.wide.ms-table.ms-table--items.ms-table--sel th.ms-date:not(.ms-actcol),
 table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-date:not(.ms-actcol) {
@@ -1898,7 +1915,7 @@ table.mini.wide.ms-table.ms-table--items td.ms-deal .deal-note {
 }
 table.mini.wide.ms-table.ms-table--items td.ms-maker .mk-pick-txt {
   display: inline-block;
-  max-width: 100px;
+  max-width: 136px;
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: middle;
