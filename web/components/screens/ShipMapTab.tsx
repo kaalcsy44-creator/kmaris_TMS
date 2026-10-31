@@ -463,6 +463,8 @@ function Parties({ marks, title, onMore }: {
             >
               {KIND_LABEL[k]}
             </button>
+            {/* 칩은 제 상자에 — 좁은 단에서 줄이 넘쳐도 첫 칩 밑에 맞춰 선다. */}
+            <span className="ship-party-list">
             {list.slice(0, TOP).map((v) => (
               <span key={v.name} className={`ship-party ship-party--${v.tier}`} title={markTitle(v)}>
                 <PartyMark v={v} />
@@ -480,6 +482,7 @@ function Parties({ marks, title, onMore }: {
                 +{rest.length}
               </button>
             ) : null}
+            </span>
           </div>
         );
       })}
