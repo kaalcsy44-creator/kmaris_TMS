@@ -4474,13 +4474,72 @@ function CategoryPicker({
   const l1Opts = opts(1, null);
   const l2Opts = l1 != null ? opts(2, l1) : [];
   const l3Opts = l2 != null ? opts(3, l2) : [];
+  // 지금 트리는 2단(대분류 > 부품)이다 — 3단 노드가 하나도 없으면 셋째 칸은 늘 꺼진
+  // 빈 칸이라 세우지 않는다(옛 3단 트리를 쓰는 DB 에서는 그대로 선다).
+  const threeLevels = cats.some((c) => c.level >= 3 && c.active);
+
+  // 검색 — 이름·경로·코드(EN-001)·한글명으로 찾아 바로 고른다. 부품이 145개라 대분류를
+  // 짐작해 드롭다운을 하나씩 열어 보는 것보다 낱말 하나로 찾는 편이 빠르다.
+  const [q, setQ] = useState("");
+  const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const hits = terms.length
+    ? cats
+        .filter((c) => c.active)
+        .filter((c) => {
+          const hay = [c.path, c.name, c.code ?? "", c.name_ko ?? ""].join(" ").toLowerCase();
+          return terms.every((t) => hay.includes(t));
+        })
+        // 깊은(부품) 쪽을 먼저 — 품목은 대개 부품까지 넣는다.
+        .sort((a, b) => b.level - a.level || a.path.localeCompare(b.path))
+        .slice(0, 8)
+    : [];
+  function pick(id: number) {
+    onChange(id);
+    setQ("");
+  }
 
   return (
-    <label className="form-field cat-picker">
-      <span>Category (Main · Sub · Detail)</span>
-      <div className="cat-picker-row">
+    <div className="form-field cat-picker">
+      <span>{threeLevels ? "Category (Main · Sub · Detail)" : "Category (Major · Part)"}</span>
+      <div className="cat-picker-search">
+        <input
+          type="search"
+          placeholder="🔍 Search categories — name, code (EN-001) or 한글"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              // 창의 저장(Enter)으로 넘어가지 않게 — 여기서 Enter 는 첫 결과 고르기다.
+              e.preventDefault();
+              if (hits[0]) pick(hits[0].id);
+            } else if (e.key === "Escape" && q) {
+              e.preventDefault();
+              e.stopPropagation();
+              setQ("");
+            }
+          }}
+        />
+        {terms.length ? (
+          <ul className="cat-picker-hits" role="listbox">
+            {hits.length ? hits.map((c) => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  className={c.id === value ? "on" : ""}
+                  onClick={() => pick(c.id)}
+                >
+                  {c.code ? <span className="cat-picker-code">{c.code}</span> : null}
+                  {c.path}
+                  {c.name_ko ? <span className="cat-picker-ko">{c.name_ko}</span> : null}
+                </button>
+              </li>
+            )) : <li className="cat-picker-none">No matching category.</li>}
+          </ul>
+        ) : null}
+      </div>
+      <div className={`cat-picker-row${threeLevels ? "" : " two"}`}>
         <select value={l1 ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
-          <option value="">Main</option>
+          <option value="">{threeLevels ? "Main" : "Major"}</option>
           {l1Opts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <select
@@ -4488,20 +4547,24 @@ function CategoryPicker({
           disabled={l1 == null || l2Opts.length === 0}
           onChange={(e) => onChange(e.target.value ? Number(e.target.value) : l1)}
         >
-          <option value="">{l1 == null ? "—" : "Sub"}</option>
+          <option value="">{l1 == null ? "—" : threeLevels ? "Sub" : "Part"}</option>
           {l2Opts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <select
-          value={l3 ?? ""}
-          disabled={l2 == null || l3Opts.length === 0}
-          onChange={(e) => onChange(e.target.value ? Number(e.target.value) : l2)}
-        >
-          <option value="">{l2 == null ? "—" : "Detail"}</option>
-          {l3Opts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        {threeLevels ? (
+          <select
+            value={l3 ?? ""}
+            disabled={l2 == null || l3Opts.length === 0}
+            onChange={(e) => onChange(e.target.value ? Number(e.target.value) : l2)}
+          >
+            <option value="">{l2 == null ? "—" : "Detail"}</option>
+            {l3Opts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        ) : null}
       </div>
-      {value == null ? <span className="hint-inline">Unclassified — pick a Main category first.</span> : null}
-    </label>
+      {value == null
+        ? <span className="hint-inline">Unclassified — search above, or pick a {threeLevels ? "Main" : "Major"} category.</span>
+        : null}
+    </div>
   );
 }
 

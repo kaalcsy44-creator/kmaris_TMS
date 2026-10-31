@@ -12021,6 +12021,65 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .cat-picker-row select {
   min-width: 0;
 }
+.cat-picker-row.two {
+  grid-template-columns: 1fr 1fr;
+}
+/* 분류 검색 — 칸 아래에 결과가 바로 펼쳐진다(누르면 그 분류로 정해지고 닫힌다). */
+.cat-picker-search {
+  margin-bottom: 8px;
+}
+.cat-picker-search input {
+  width: 100%;
+}
+.cat-picker-hits {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  border: 1px solid var(--line, #e3e8ef);
+  border-radius: 8px;
+  background: #fff;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.cat-picker-hits button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.cat-picker-hits li:first-child button,
+.cat-picker-hits button:hover {
+  background: #eef3fb;
+}
+.cat-picker-hits button.on {
+  font-weight: 700;
+  color: #1a5fc4;
+}
+.cat-picker-code {
+  font-size: 11px;
+  font-weight: 700;
+  color: #5a6b85;
+  background: var(--head-bg, #eef2f8);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.cat-picker-ko {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: #8592a6;
+}
+.cat-picker-none {
+  padding: 6px 8px;
+  font-size: 12.5px;
+  color: #8592a6;
+}
 
 /* 작은 인라인 버튼(분류 트리 액션) */
 .btn.tiny {
