@@ -1932,6 +1932,26 @@ table.mini.wide.ms-table.ms-table--items td.ms-desc .ms-clamp2 {
 .ms-pn {
   font-weight: 600;
 }
+/* 부품 칩 — 대분류를 고르면 그 아래 한 줄. 대분류 칩보다 한 단 작고 옅게. */
+.ms-majors.ms-subs {
+  margin-top: -4px;
+  padding-left: 10px;
+  border-left: 2px solid var(--line, #e3e8ef);
+}
+.ms-major.ms-sub {
+  padding: 3px 9px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.ms-major.ms-sub.on {
+  background: #e8f0fd;
+  border-color: #1a5fc4;
+  color: #1a5fc4;
+}
+.ms-major.ms-sub.on .ms-major-n {
+  background: #fff;
+  color: #1a5fc4;
+}
 /* 대분류 탭 — 표 바로 위. 13갈래까지 늘 수 있어 줄을 넘기면 접어 내린다. */
 .ms-majors {
   display: flex;

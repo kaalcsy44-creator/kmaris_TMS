@@ -63,8 +63,16 @@ def guess_item_type(part_no, description) -> str:
     return "service" if any(w in d for w in _SERVICE_WORDS) else "part"
 
 
-# 용역 대분류의 이름 — init_db.ITEM_CATEGORY_TREE 의 "Service" 뿌리와 같아야 한다.
-SERVICE_ROOT = "Service"
+# 용역 대분류의 이름들. 2026-09 분류 전환 뒤로 용역은 "Service" 한 뿌리가 아니라
+# tree_type 이 service 인 대분류(Technical service coordination · Trading & delivery
+# support)에 얹힌다 — 옛 이름 하나만 보면 용역 분류를 골라도 물품으로 판정됐다.
+# 옛 "Service" 뿌리는 아직 그 트리를 쓰는 DB 를 위해 남겨 둔다.
+def _service_roots() -> set[str]:
+    from services.item_taxonomy_data import MAJORS
+    return {m["name_en"] for m in MAJORS if m.get("tree_type") == "service"} | {"Service"}
+
+
+SERVICE_ROOTS = _service_roots()
 
 
 def category_item_type(parents, cid) -> str | None:
@@ -85,7 +93,7 @@ def category_item_type(parents, cid) -> str | None:
         seen.add(cur)
         pid, name = parents[cur]
         if not pid:
-            return "service" if str(name or "").strip() == SERVICE_ROOT else "part"
+            return "service" if str(name or "").strip() in SERVICE_ROOTS else "part"
         cur = pid
     return None
 

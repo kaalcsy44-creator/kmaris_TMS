@@ -12,7 +12,6 @@ import {
   changeMyPassword,
   deleteSettingsCustomer,
   deleteSettingsItem,
-  setSettingsItemsType,
   deleteSettingsUser,
   deleteSettingsVendor,
   deleteSettingsVessel,
@@ -115,7 +114,7 @@ import { downscaleImageFile, fileToLogoDataUrl, imageFromClipboard } from "@/lib
 import { PAYMENT_TERMS_PRESETS } from "@/lib/terms";
 import ComboBox from "@/components/common/ComboBox";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
-import { ColumnResizer, ColumnsButton, dragHandleProps } from "@/components/common/tableLayout";
+import { ColumnResizer, dragHandleProps } from "@/components/common/tableLayout";
 import { invalidateMasterCategories } from "@/components/common/CategoryCell";
 import { CategoryBadges, CategoryTagPicker, useVendorCategoryOptions } from "@/components/common/CategoryTags";
 import { MakerBadges, MakerPickBadge, MakerTagPicker, useMakerOptions } from "@/components/common/MakerCell";
@@ -130,7 +129,6 @@ import RegionCombo from "@/components/common/RegionPicker";
 import CustomerName from "@/components/common/CustomerName";
 import FlagName from "@/components/common/FlagName";
 import { BounceBadge, MailAddress, hasBounced, isBounced } from "@/components/common/BouncedEmail";
-import VendorName from "@/components/common/VendorName";
 import ProjectNo from "@/components/common/ProjectNo";
 // 머리 칸 정렬·필터 — 진행현황·지급대장 표에서 쓰는 장치를 마스터 목록에도 그대로 쓴다.
 import { HeadTh, useHeadMenu, type HeadCol } from "@/components/common/tableHeadMenu";
@@ -3705,12 +3703,14 @@ const VESSEL_TYPES = [
   "Tug / Offshore",
 ];
 
-// 품목 마스터는 물품(Parts)과 용역(Service)을 한 표에 섞어 두면 서로의 빈칸만 는다 —
-// 용역엔 품번·원산지·HS 코드가 없고, 물품엔 그런 칸이 다 필요하다. 그래서 같은 마스터를
-// item_type 으로 갈라 탭 하나씩 준다. 탭마다 보여 줄 칸과 입력 칸이 다르다.
+// 물품(part)·용역(service) 구분. 화면은 한 표(Parts & Services)로 보고 용역은 분류
+// (Technical service coordination 등 용역 대분류)로 가른다 — 탭을 둘로 나누면 분류 칩과
+// 같은 일을 두 번 하게 된다. 구분 값 자체는 편집 창의 Type 과 공급사 추천에 남아 있다.
 export type ItemKind = "part" | "service";
 
-const ITEM_KIND_LABEL: Record<ItemKind, string> = { part: "Parts", service: "Service" };
+/** 다른 탭(Item Category)에서 품목 탭을 특정 분류로 걸어 열 때 넘기는 값.
+ *  n 은 같은 분류를 다시 눌러도 다시 걸리게 하는 번호다. */
+export type ItemFocus = { major: string; sub: string; n: number };
 
 /** 품목이 등장한 딜의 프로젝트 번호(최근 순). 옛 응답(필드 없음)도 견디게 한다. */
 function itemProjects(r: SettingsItem): string[] {
@@ -3728,14 +3728,22 @@ const DEAL_RANK: Record<string, number> = {
 function itemMajor(r: SettingsItem): string {
   return (r.category_path || "").split(">")[0].trim();
 }
+/** 품목의 부품(2단) — 경로의 둘째 마디. 대분류에만 걸린 품목은 "". */
+function itemSub(r: SettingsItem): string {
+  return ((r.category_path || "").split(">")[1] || "").trim();
+}
 const UNCLASSIFIED = "__none__";
+/** 부품 칩의 "대분류에만 걸리고 부품은 안 고른 품목" 자리. */
+const NO_SUB = "__nosub__";
 
 /** 품목표 위의 대분류 탭 — 전체 / 대분류(건수 많은 순) / 미분류(맨 끝). 건수는 지금
- *  불러온 목록(Priced only 반영) 기준이다. */
-function MajorTabs({ rows, value, onPick }: {
+ *  불러온 목록(Priced only 반영) 기준이다. 대분류를 고르면 그 아래 줄에 부품 칩이 선다. */
+function MajorTabs({ rows, value, onPick, sub, onPickSub }: {
   rows: SettingsItem[];
   value: string;
   onPick: (v: string) => void;
+  sub: string;
+  onPickSub: (v: string) => void;
 }) {
   const counts = new Map<string, number>();
   let none = 0;
@@ -3763,12 +3771,47 @@ function MajorTabs({ rows, value, onPick }: {
       <span className="ms-major-n">{n}</span>
     </button>
   );
+  // 고른 대분류 안의 부품별 건수. 부품이 하나뿐이면 칩 줄이 대분류 칩을 되풀이할
+  // 뿐이라 세우지 않는다.
+  const subCounts = new Map<string, number>();
+  if (value && value !== UNCLASSIFIED) {
+    for (const r of rows) {
+      if (itemMajor(r) !== value) continue;
+      const s = itemSub(r) || NO_SUB;
+      subCounts.set(s, (subCounts.get(s) ?? 0) + 1);
+    }
+  }
+  const subs = [...subCounts.entries()].sort((a, b) =>
+    (a[0] === NO_SUB ? 1 : 0) - (b[0] === NO_SUB ? 1 : 0) || b[1] - a[1] || a[0].localeCompare(b[0]));
+  const subStale = !!sub && !!rows.length && !subCounts.has(sub);
+  useEffect(() => {
+    if (subStale) onPickSub("");
+  }, [subStale, onPickSub]);
+  const subTab = (key: string, label: string, n: number) => (
+    <button
+      key={key || "all"}
+      type="button"
+      className={`ms-major ms-sub${sub === key ? " on" : ""}`}
+      onClick={() => onPickSub(key)}
+    >
+      {label}
+      <span className="ms-major-n">{n}</span>
+    </button>
+  );
   return (
-    <div className="ms-majors" role="tablist">
-      {tab("", "All", rows.length)}
-      {majors.map(([m, n]) => tab(m, m, n))}
-      {none ? tab(UNCLASSIFIED, "Unclassified", none) : null}
-    </div>
+    <>
+      <div className="ms-majors" role="tablist">
+        {tab("", "All", rows.length)}
+        {majors.map(([m, n]) => tab(m, m, n))}
+        {none ? tab(UNCLASSIFIED, "Unclassified", none) : null}
+      </div>
+      {subs.length > 1 ? (
+        <div className="ms-majors ms-subs" role="tablist">
+          {subTab("", "All parts", counts.get(value) ?? 0)}
+          {subs.map(([s, n]) => subTab(s, s === NO_SUB ? "No part" : s, n))}
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -4039,8 +4082,7 @@ function priceSortText(p: { unit_price: number; currency: string } | null): stri
   return `${p.currency} ${(p.unit_price || 0).toFixed(2).padStart(15, "0")}`;
 }
 
-export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
-  const isService = kind === "service";
+export function ItemsTab({ focus }: { focus?: ItemFocus | null }) {
   // Maker 칸에서 바로 고친 뒤 목록을 다시 불러온다.
   const [reloadKey, setReloadKey] = useState(0);
   // 값이 붙은 품목만 볼지. 가격 없는 품목(문의만 있었던 것)도 수요·못 판 이유의 기록이라
@@ -4053,21 +4095,44 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
     }
   });
   // 대분류 탭 — "" = 전체, UNCLASSIFIED = 분류 없음, 그 밖에는 대분류 이름.
-  // 탭(Parts/Service)마다 따로 기억한다(대분류가 서로 다르다).
-  const majorKey = `ktms.items.major.${kind}`;
+  // 부품 칩 — "" = 그 대분류 전체, NO_SUB = 부품 없이 대분류에만 걸린 품목.
+  // 둘 다 브라우저에 기억한다. Item Category 에서 건너왔으면(focus) 그 분류가 먼저다.
+  const majorKey = "ktms.items.major.all";
+  const subKey = "ktms.items.sub.all";
   const [major, setMajor] = useState(() => {
+    if (focus) return focus.major;
     try {
       return window.localStorage.getItem(majorKey) || "";
     } catch {
       return "";
     }
   });
-  function pickMajor(v: string) {
+  const [sub, setSub] = useState(() => {
+    if (focus) return focus.sub;
+    try {
+      return window.localStorage.getItem(subKey) || "";
+    } catch {
+      return "";
+    }
+  });
+  const pickSub = useCallback((v: string) => {
+    setSub(v);
+    try {
+      window.localStorage.setItem(subKey, v);
+    } catch {}
+  }, []);
+  const pickMajor = useCallback((v: string) => {
     setMajor(v);
     try {
       window.localStorage.setItem(majorKey, v);
     } catch {}
-  }
+    pickSub("");
+  }, [pickSub]);
+  useEffect(() => {
+    if (!focus) return;
+    setMajor(focus.major);
+    setSub(focus.sub);
+  }, [focus]);
   function togglePriced(v: boolean) {
     setPricedOnly(v);
     try {
@@ -4130,41 +4195,23 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
 
   return (
     <MasterSection<SettingsItem>
-      title={ITEM_KIND_LABEL[kind]}
-      empty={{ id: 0, part_no: "", description: "", maker: "", origin: "", unit: isService ? "EA" : "PCS", hs_code: "", std_price: 0, item_type: kind, category_id: null, category_path: "", customer: "", vendor: "", vendor_quote_at: "", quoted_at: "", buy: null, sell: null, margin_pct: null, margin_cross: false }}
-      // 마스터는 한 벌이고 탭은 그중 한쪽만 본다 — 목록을 받아 이 탭의 구분만 남긴다.
+      title="Parts & Services"
+      empty={{ id: 0, part_no: "", description: "", maker: "", origin: "", unit: "PCS", hs_code: "", std_price: 0, item_type: "part", category_id: null, category_path: "", customer: "", vendor: "", vendor_quote_at: "", quoted_at: "", buy: null, sell: null, margin_pct: null, margin_cross: false }}
       // '값이 붙었다' = 0 보다 큰 단가. 가격 객체가 있다는 것만 보면 N/A(단가 0)로 답한
       // 줄이 Priced only 를 통과해 "KRW 0" 으로 섰다.
       load={() => fetchSettingsItems().then((rows) => rows.filter((r) =>
-        (r.item_type || "part") === kind &&
-        (!pricedOnly || (r.buy?.unit_price ?? 0) > 0 || (r.sell?.unit_price ?? 0) > 0)))}
+        !pricedOnly || (r.buy?.unit_price ?? 0) > 0 || (r.sell?.unit_price ?? 0) > 0))}
       rowDetail={(r) => <ItemTradeHistory row={r} />}
       scope={{
-        test: (r) => !major || itemMajor(r) === major ||
-          (major === UNCLASSIFIED && !itemMajor(r)),
-        render: (rows) => <MajorTabs rows={rows} value={major} onPick={pickMajor} />,
-      }}
-      // 줄을 골라 Parts↔Service 로 옮긴다 — 낱말 추측이 틀려 용역이 Parts 에 들어온 경우.
-      bulk={{
-        keyOf: (r) => String(r.id),
-        actions: (keys, done) => {
-          const target: ItemKind = isService ? "part" : "service";
-          return (
-            <button
-              className="btn sm"
-              onClick={async () => {
-                try {
-                  const r = await setSettingsItemsType(keys.map(Number), target);
-                  done(`${r.updated} moved to ${ITEM_KIND_LABEL[target]}`);
-                } catch (e) {
-                  done(e instanceof Error ? e.message : "Move failed", true);
-                }
-              }}
-            >
-              → Move to {ITEM_KIND_LABEL[target]}
-            </button>
-          );
+        test: (r) => {
+          if (!major) return true;
+          if (major === UNCLASSIFIED) return !itemMajor(r);
+          if (itemMajor(r) !== major) return false;
+          return !sub || (itemSub(r) || NO_SUB) === sub;
         },
+        render: (rows) => (
+          <MajorTabs rows={rows} value={major} onPick={pickMajor} sub={sub} onPickSub={pickSub} />
+        ),
       }}
       toolbarExtra={
         <label className="ms-toggle" title="Show only items with a purchase or sales price. Turn off to include items that were only enquired.">
@@ -4191,76 +4238,61 @@ export function ItemsTab({ kind = "part" }: { kind?: ItemKind }) {
       // 무엇을(품번·품명·제조사) → 언제(Date) → 얼마에·누구와(구매가·공급사, 판매가·
       // 고객) → 마진 순. 어느 딜이었는지(Project No.)와 결말(Deal)은 그 다음에 보는 값이고,
       // 딜이 여럿인 품목은 줄을 펼치면 딜마다의 값이 나온다. 분류는 경로가 길어 맨 끝에.
-      // 용역 탭은 품번·제조사를 걷어낸다(전부 빈칸이라).
-      columns={isService
-        ? [
-            desc("Service"),
-            ...trade,
-            project,
-            deal,
-            category,
-          ]
-        : [
-            // 긴 품번("RU-FLEX 16Cx1.5SQMM IEC 60332-3 …")은 두 줄로 접고 넘치면 말줄임 —
-            // 한 줄로 두면 그 한 건이 칸 폭을 325px 까지 끌고 갔다.
-            ["part_no", "Part No.", (r) => r.part_no
-              ? <span className="ms-pn ms-clamp2" title={r.part_no}>{r.part_no}</span>
-              : <span className="dash">—</span>, "ms-pncol"],
-            desc("Description"),
-            // 명부에 있는 제조사면 거래선 화면과 같은 로고 배지로, 없으면 적힌 글자 옆 ▾ 로
-            // 명부에서 바로 골라 붙인다(편집 창을 열지 않고 그 품목에 저장).
-            ["maker", "Maker", (r) => (
-              <MakerPickBadge
-                name={r.maker}
-                empty={<span className="dash">—</span>}
-                onPick={async (maker) => {
-                  const { id, ...body } = r;
-                  void id;
-                  await updateSettingsItem(r.id, { ...body, maker });
-                  invalidateMasterCategories();
-                  setReloadKey((k) => k + 1);
-                }}
-              />
-            ), "ms-maker"],
-            ...trade,
-            project,
-            deal,
-            category,
-          ]}
+      // 용역은 품번·제조사가 빈칸(—)으로 선다.
+      columns={[
+        // 긴 품번("RU-FLEX 16Cx1.5SQMM IEC 60332-3 …")은 두 줄로 접고 넘치면 말줄임 —
+        // 한 줄로 두면 그 한 건이 칸 폭을 325px 까지 끌고 갔다.
+        ["part_no", "Part No.", (r) => r.part_no
+          ? <span className="ms-pn ms-clamp2" title={r.part_no}>{r.part_no}</span>
+          : <span className="dash">—</span>, "ms-pncol"],
+        desc("Description"),
+        // 명부에 있는 제조사면 거래선 화면과 같은 로고 배지로, 없으면 적힌 글자 옆 ▾ 로
+        // 명부에서 바로 골라 붙인다(편집 창을 열지 않고 그 품목에 저장).
+        ["maker", "Maker", (r) => (
+          <MakerPickBadge
+            name={r.maker}
+            empty={<span className="dash">—</span>}
+            onPick={async (maker) => {
+              const { id, ...body } = r;
+              void id;
+              await updateSettingsItem(r.id, { ...body, maker });
+              invalidateMasterCategories();
+              setReloadKey((k) => k + 1);
+            }}
+          />
+        ), "ms-maker"],
+        ...trade,
+        project,
+        deal,
+        category,
+        ]}
       // 머리 칸을 누르면 그 열로 정렬하거나 값을 골라 거를 수 있다. 값의 가짓수가
       // 적은 열(분류·상대처·제조사·원산지·단위·프로젝트)은 고르는 목록으로, 품명·품번처럼
       // 행마다 다른 열과 금액 열은 정렬만 — 목록으로 만들면 행 수만큼 긴 메뉴가 된다.
       headCols={itemHeadCols}
       reloadKey={reloadKey}
-      printCols={itemPrintCols(kind)}
+      printCols={itemPrintCols}
       tableClass="ms-table--items"
-      fields={isService
-        ? [
-            ["description", "Service Name *"],
-            ["unit", "Unit"],
-            ["std_price", "Std Price"],
-            ["item_type", "Type"],
-          ]
-        : [
-            ["part_no", "Part No."],
-            ["description", "Description"],
-            ["maker", "Maker"],
-            ["origin", "Origin"],
-            ["unit", "Unit"],
-            ["hs_code", "HS Code"],
-            ["std_price", "Std Price"],
-            ["item_type", "Type"],
-          ]}
-      // 용역은 품번이 없다 — 필수 칸이 설명(용역명)으로 바뀐다. 물품 쪽도 품번을 홀로
-      // 요구하지 않는다: 품번 없이 들어온 줄이 있고(현장 작업처럼 살 물건이 없는 항목),
-      // 품번을 필수로 두면 그 줄은 분류도 구분도 고칠 수 없는 막다른 길이 된다.
-      // 식별키 규칙(match_key)과도 같은 말이다 — 품번이 없으면 품명이 그 자리를 맡는다.
-      required={isService ? "description" : ["part_no", "description"]}
+      fields={[
+        ["part_no", "Part No."],
+        ["description", "Description"],
+        ["maker", "Maker"],
+        ["origin", "Origin"],
+        ["unit", "Unit"],
+        ["hs_code", "HS Code"],
+        ["std_price", "Std Price"],
+        ["item_type", "Type"],
+        ]}
+      // 품번은 홀로 요구하지 않는다: 용역엔 품번이 없고, 품번 없이 들어온 물품 줄도 있다
+      // (현장 작업처럼 살 물건이 없는 항목). 품번을 필수로 두면 그 줄은 분류도 구분도
+      // 고칠 수 없는 막다른 길이 된다. 식별키 규칙(match_key)과도 같은 말이다 — 품번이
+      // 없으면 품명이 그 자리를 맡는다.
+      required={["part_no", "description"]}
       numeric={["std_price"]}
       // 검색은 화면 컬럼 기본값 대신 직접 지정 — 가격 열은 객체라 기본 문자열화가 안 된다.
       searchText={(r) => [...itemProjects(r), ...itemVessels(r),
         DEAL_LABEL[r.deal_state || ""] || "", r.deal_note || "", r.customer, r.description, r.part_no, r.category_path, r.maker, r.origin, r.hs_code, r.vendor].join(" ")}
-      // Type 을 바꿔 저장하면 그 항목은 반대편 탭으로 옮겨 간다(잘못 잡힌 구분 교정용).
+      // Type(물품/용역)은 화면을 가르지 않는다 — 공급사 추천이 읽는 구분이라 남겨 둔다.
       renderField={({ key, label, form, setForm }) =>
         key === "item_type" ? (
           <label className="form-field" key="item_type">
@@ -4458,7 +4490,7 @@ type CatEditor = {
 
 // Item category tree (Main > Sub > Detail) management tab. Edited with "settings" master-data permission.
 // 선택된 분류 필터 — 전체 / 특정 분류(하위 포함) / 미연결(마스터 없음)
-type LedgerFilter = { kind: "all" } | { kind: "cat"; id: number } | { kind: "unmatched" };
+type LedgerFilter = { kind: "none" } | { kind: "cat"; id: number } | { kind: "unmatched" };
 
 // 가격 목록표의 컬럼 정의 — 폭 조절·숨김·순서 변경(useColumnLayout, localStorage) 대상.
 // 좌측 선택 체크박스 열은 구조 컬럼이라 여기 넣지 않는다.
@@ -4476,15 +4508,14 @@ function printMargin(pct: number | null | undefined, cross?: boolean): string {
   return pct == null ? "" : `${cross ? "~" : ""}${pct.toFixed(1)}%`;
 }
 
-/** 품목 마스터(Parts·Service) 인쇄 칸. 용역 탭은 품번·제조사·원산지·HS 를 뺀다. */
-const itemPrintCols = (kind: ItemKind): PrintCol<SettingsItem>[] => {
-  const isService = kind === "service";
+/** 품목 마스터(Parts & Services) 인쇄 칸. */
+const itemPrintCols: PrintCol<SettingsItem>[] = (() => {
   // 화면과 같은 순서(무엇을 → 언제 → 얼마에·누구와)로 싣고, 화면에서 뺀 열(선박·원산지·
   // 단위·HS 코드)은 그 뒤에 붙인다. 품명은 종이에서도 가장 긴 값이라 폭을 넉넉히 준다.
   const what: PrintCol<SettingsItem>[] = [
-    ...(isService ? [] : [{ label: "Part No.", value: (r: SettingsItem) => r.part_no || "", width: 1.2 }]),
-    { label: isService ? "Service" : "Description", value: (r) => r.description || "", width: 3.6 },
-    ...(isService ? [] : [{ label: "Maker", value: (r: SettingsItem) => r.maker || "", width: 1.2 }]),
+    { label: "Part No.", value: (r) => r.part_no || "", width: 1.2 },
+    { label: "Description", value: (r) => r.description || "", width: 3.6 },
+    { label: "Maker", value: (r) => r.maker || "", width: 1.2 },
   ];
   const trade: PrintCol<SettingsItem>[] = [
     { label: "Date", value: (r) => r.last_date || "", width: 0.9 },
@@ -4497,46 +4528,23 @@ const itemPrintCols = (kind: ItemKind): PrintCol<SettingsItem>[] => {
     { label: "Vessel", value: (r) => itemVessels(r).join(" · "), width: 1.1 },
   ];
   const spec: PrintCol<SettingsItem>[] = [
-    ...(isService ? [] : [{ label: "Origin", value: (r: SettingsItem) => r.origin || "", width: 0.9 }]),
+    { label: "Origin", value: (r) => r.origin || "", width: 0.9 },
     { label: "Unit", value: (r) => r.unit || "", width: 0.6 },
-    ...(isService ? [] : [{ label: "HS Code", value: (r: SettingsItem) => r.hs_code || "", width: 1 }]),
+    { label: "HS Code", value: (r) => r.hs_code || "", width: 1 },
     { label: "Deal", value: (r) => [DEAL_LABEL[r.deal_state || ""] || "", r.deal_note || ""]
         .filter(Boolean).join(" — "), width: 1.1 },
     { label: "Category", value: (r) => r.category_path || "", width: 2.2 },
   ];
   return [...what, ...trade, ...spec];
-};
+})();
 
-/** 가격 이력(카테고리 탭 오른쪽 표) 인쇄 칸 — 화면에서 숨긴 열도 종이에는 싣는다. */
-const ledgerPrintCols: PrintCol<ItemLedgerRow>[] = [
-  { label: "Part No.", value: (r) => r.part_no || "", width: 1.2 },
-  { label: "Description", value: (r) => r.description || "", width: 3 },
-  { label: "Maker", value: (r) => r.maker || "", width: 1.2 },
-  { label: "Vendor", value: (r) => r.vendor || "", width: 1.5 },
-  { label: "Buy", value: (r) => printPrice(r.buy), width: 1.2, align: "right" },
-  { label: "Customer", value: (r) => r.customer || "", width: 1.5 },
-  { label: "Sell", value: (r) => printPrice(r.sell), width: 1.2, align: "right" },
-  { label: "Margin", value: (r) => printMargin(r.margin_pct, r.margin_cross), width: 0.7, align: "right" },
-  { label: "Deals", value: (r) => `${r.buy_count}/${r.sell_count}`, width: 0.6, align: "right" },
-  { label: "Last", value: (r) => r.last_date || "", width: 0.9 },
-  { label: "Category", value: (r) => r.category_path || "", width: 2.4 },
-];
-
+// Item Category 오른쪽 분류 작업 목록의 칸. 가격·거래선은 Parts & Services 가 보여 주므로
+// 여기엔 무엇인지(품번·품명·제조사)와 어디에 넣었는지(분류)만 둔다.
 const LEDGER_COLS: { key: string; label: string; width: number; numeric?: boolean }[] = [
-  { key: "part_no", label: "Part No.", width: 100 },
-  { key: "description", label: "Description", width: 200 },
+  { key: "part_no", label: "Part No.", width: 110 },
+  { key: "description", label: "Description", width: 240 },
   { key: "maker", label: "Maker", width: 110 },
-  // 거래 상대는 제 가격 옆에 둔다 — 공급사→구매가, 고객사→판매가 순으로 읽힌다.
-  { key: "vendor", label: "Vendor", width: 132 },
-  { key: "buy", label: "Buy", width: 128, numeric: true },
-  { key: "customer", label: "Customer", width: 132 },
-  { key: "sell", label: "Sell", width: 128, numeric: true },
-  { key: "margin", label: "Margin", width: 72, numeric: true },
-  { key: "deals", label: "Deals", width: 56, numeric: true },
-  { key: "last", label: "Last", width: 84 },
-  // 300px = 측정값 기준. "Engine Room > Main Engine System"(241px)처럼 흔한 2단 경로와
-  // "Service > Labor & Travel > Accommodation"(280px)까지 온전히 들어간다. 더 긴 3단
-  // 경로는 말줄임 + title 로 읽는다.
+  // 300px = 측정값 기준. 흔한 2단 경로가 온전히 들어간다. 더 길면 말줄임 + title.
   { key: "category", label: "Category", width: 300 },
 ];
 
@@ -4545,11 +4553,10 @@ function ledgerRowKey(it: ItemLedgerRow): string {
   return it.item_id != null ? `i${it.item_id}` : `u:${it.part_no}|${it.description}`;
 }
 
-function ledgerCellClass(key: string, numeric?: boolean): string {
+function ledgerCellClass(key: string): string {
   if (key === "description") return "ledger-desc";
   if (key === "category") return "ledger-cat";
-  if (key === "vendor" || key === "customer") return "ledger-party";
-  return numeric ? "num" : "";
+  return "";
 }
 
 /** Category 를 뺀 나머지 컬럼의 셀 값(Category 는 버튼이라 호출부에서 직접 렌더). */
@@ -4561,20 +4568,6 @@ function ledgerCellValue(key: string, it: ItemLedgerRow): React.ReactNode {
       return it.description;
     case "maker":
       return it.maker || "";
-    case "vendor":
-      return it.vendor ? <VendorName name={it.vendor} /> : <span className="dash">—</span>;
-    case "customer":
-      return it.customer ? <CustomerName name={it.customer} /> : <span className="dash">—</span>;
-    case "buy":
-      return fmtPrice(it.buy);
-    case "sell":
-      return fmtPrice(it.sell);
-    case "margin":
-      return marginPct(it);
-    case "deals":
-      return `${it.buy_count}/${it.sell_count}`;
-    case "last":
-      return it.last_date || "";
     default:
       return null;
   }
@@ -4593,13 +4586,6 @@ const SOURCE_LABEL: Record<string, string> = {
 // (표시만 반올림한다. 저장된 값과 마진 계산은 소수점 그대로다.)
 function fmtAmt(n: number): string {
   return Math.round(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
-}
-// 환율은 금액이 아니다 — "1,384.50" 의 소수점 아래가 값의 일부라 그대로 둔다.
-function fmtRate(n: number): string {
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function fmtPrice(p: { unit_price: number; currency: string } | null): string {
-  return p ? `${p.currency} ${fmtAmt(p.unit_price)}` : "—";
 }
 /** 품목표의 가격 칸 — 금액은 굵게, 통화는 작게 앞에. 아래 작은 줄에는 직전 딜 대비
  *  ▲▼%와(같은 통화일 때만), 이 값의 날짜가 Date 열과 다를 때만 그 날짜를 적는다
@@ -4759,9 +4745,6 @@ function fmtQty(n: number): string {
 }
 // 마진% — 백엔드가 USD 환산으로 계산해 준 margin_pct 사용. 통화가 달라 환산된
 // 값이면 '~'를 붙여 근사치임을 표시(환율 가정으로 산출).
-function marginPct(row: ItemLedgerRow): string {
-  return marginText(row.margin_pct, row.margin_cross);
-}
 function marginText(pct: number | null | undefined, cross?: boolean): string {
   if (pct == null) return "—";
   return `${cross ? "~" : ""}${pct.toFixed(1)}%`;
@@ -4770,7 +4753,10 @@ function fmtBuiltAt(iso: string | null): string {
   return iso ? iso.replace("T", " ").slice(0, 16) : "";
 }
 
-export function CategoriesTab() {
+export function CategoriesTab({ onOpenItems }: {
+  /** 고른 분류의 가격을 보러 Parts & Services 로 건너간다(대분류·부품 이름). */
+  onOpenItems?: (f: { major: string; sub: string }) => void;
+} = {}) {
   const [rows, setRows] = useState<ItemCategory[]>([]);
   const [editor, setEditor] = useState<CatEditor | null>(null);
   const [err, setErr] = useState("");
@@ -4780,11 +4766,10 @@ export function CategoriesTab() {
 
   // ── 품목 가격 이력(ledger) ────────────────────────────────────────────────
   const [ledger, setLedger] = useState<ItemLedger | null>(null);
-  const [filter, setFilter] = useState<LedgerFilter>({ kind: "all" });
+  // 처음엔 할 일(미분류)부터 보인다 — 이 탭은 품목을 분류에 넣는 작업대다.
+  const [filter, setFilter] = useState<LedgerFilter>({ kind: "none" });
   const [rebuilding, setRebuilding] = useState(false);
   const [purging, setPurging] = useState(false);
-  const [histRow, setHistRow] = useState<ItemLedgerRow | null>(null);
-  const [hist, setHist] = useState<ItemPriceRow[] | null>(null);
   const [assignRow, setAssignRow] = useState<ItemLedgerRow | null>(null);
   const [assignCat, setAssignCat] = useState<number | null>(null);
   const [assignBusy, setAssignBusy] = useState(false);
@@ -4805,8 +4790,10 @@ export function CategoriesTab() {
   const unusedCount = (ledger?.items ?? []).filter(
     (r) => (r.buy_count ?? 0) === 0 && (r.sell_count ?? 0) === 0,
   ).length;
-  // 목록표 컬럼 폭·순서·표시(브라우저에 저장).
-  const ledgerCols = useColumnLayout("item-ledger", LEDGER_COLS);
+  const noneCount = (ledger?.items ?? []).filter((r) => r.category_id == null).length;
+  // 목록표 컬럼 폭·순서(브라우저에 저장). 가격 칸을 걷어낸 뒤로 키를 새로 잡았다 —
+  // 옛 키에 남은 순서·숨김은 지금 없는 칸을 가리킨다.
+  const ledgerCols = useColumnLayout("item-classify", LEDGER_COLS);
   const [dragCol, setDragCol] = useState<string | null>(null);
   const shownCols = ledgerCols.visibleKeys
     .map((k) => LEDGER_COLS.find((c) => c.key === k))
@@ -4927,7 +4914,7 @@ export function CategoriesTab() {
   const filtered: ItemLedgerRow[] = (() => {
     if (!ledger) return [];
     if (filter.kind === "unmatched") return ledger.unmatched;
-    if (filter.kind === "all") return ledger.items;
+    if (filter.kind === "none") return ledger.items.filter((it) => it.category_id == null);
     const ids = descendantIds(filter.id);
     return ledger.items.filter((it) => it.category_id != null && ids.has(it.category_id));
   })();
@@ -4975,21 +4962,6 @@ export function CategoriesTab() {
       setErr(e instanceof Error ? e.message : "Remove failed");
     } finally {
       setPurging(false);
-    }
-  }
-
-  async function openHistory(row: ItemLedgerRow) {
-    setHistRow(row);
-    setHist(null);
-    try {
-      const data = await fetchItemPriceHistory(
-        row.item_id != null
-          ? { item_id: row.item_id }
-          : { part_no: row.part_no, description: row.description }
-      );
-      setHist(data);
-    } catch {
-      setHist([]);
     }
   }
 
@@ -5272,7 +5244,7 @@ export function CategoriesTab() {
           <span
             className="cat-node-name cat-node-pick"
             onClick={() => setFilter({ kind: "cat", id: node.id })}
-            title="Show this category's item prices"
+            title="List this category's items"
           >
             {node.name}
             {/* 배정된 품목 수(하위 분류 포함) — 0이면 옅게. 목록을 열지 않고도 어디에
@@ -5322,20 +5294,24 @@ export function CategoriesTab() {
     : "";
 
   const filterTitle =
-    filter.kind === "all"
-      ? "All items"
+    filter.kind === "none"
+      ? "Unclassified items"
       : filter.kind === "unmatched"
         ? "Unmatched items (no master link)"
         : byId.get(filter.id)?.path || byId.get(filter.id)?.name || "Category";
+  // 고른 분류를 Parts & Services 의 칩(대분류·부품)으로 옮길 이름 — 경로의 두 마디.
+  const pickedCat = filter.kind === "cat" ? byId.get(filter.id) : undefined;
+  const pickedPath = (pickedCat?.path || pickedCat?.name || "").split(">").map((x) => x.trim());
 
   return (
     <div className="panel">
       <div className="ms-toolbar">
-        <h3 className="form-title">Item Categories · Prices</h3>
+        <h3 className="form-title">Item Categories</h3>
       </div>
-      <p className="hint-inline" style={{ display: "block", marginBottom: 12 }}>
-        Left: manage the classification (Major &gt; Part, ▲▼ to reorder). Click a category to list its
-        items with the latest purchase (buy) and sales (sell) prices on the right; click a row for the full history.
+      <p className="hint-inline cat-intro" style={{ display: "block", marginBottom: 12 }}>
+        Left: manage the classification (Major &gt; Part, ▲▼ to reorder). Right: file items into it —
+        unclassified items first; click a category to review what is in it. Prices are compared on
+        Parts &amp; Services.
       </p>
 
       {err ? <div className="action-err" style={{ marginBottom: 10 }}>{err}</div> : null}
@@ -5345,10 +5321,10 @@ export function CategoriesTab() {
         <div className="cat-tree-pane">
           <div className="cat-quickfilter">
             <button
-              className={`btn tiny${filter.kind === "all" ? " primary" : ""}`}
-              onClick={() => setFilter({ kind: "all" })}
+              className={`btn tiny${filter.kind === "none" ? " primary" : ""}`}
+              onClick={() => setFilter({ kind: "none" })}
             >
-              All items{ledger ? ` (${ledger.items.length})` : ""}
+              Unclassified{ledger ? ` (${noneCount})` : ""}
             </button>
             <button
               className={`btn tiny${filter.kind === "unmatched" ? " primary" : ""}`}
@@ -5396,21 +5372,17 @@ export function CategoriesTab() {
                   ✦ Auto-assign
                 </button>
               ) : null}
+              {onOpenItems && pickedCat ? (
+                <button
+                  className="btn tiny"
+                  title="Compare this category's prices on Parts & Services"
+                  onClick={() => onOpenItems({ major: pickedPath[0] || "", sub: pickedPath[1] || "" })}
+                >
+                  Prices →
+                </button>
+              ) : null}
               {ledger?.built_at ? (
                 <span className="hint-inline">Built {fmtBuiltAt(ledger.built_at)}</span>
-              ) : null}
-              <ColumnsButton cols={LEDGER_COLS} layout={ledgerCols} />
-              {/* 지금 보고 있는 목록 그대로(고른 분류·검색으로 좁힌 결과) 미리보고 받는다. */}
-              {filtered.length ? (
-                <PrintListButton
-                  small
-                  build={() => printBook(
-                    filterTitle, ledgerPrintCols, filtered,
-                    [filter.kind === "unmatched" ? "No master link" : "",
-                     ledger?.built_at ? `Built ${fmtBuiltAt(ledger.built_at)}` : ""]
-                      .filter(Boolean).join(" · "),
-                  )}
-                />
               ) : null}
               {canDelete && unusedCount > 0 ? (
                 <button
@@ -5431,11 +5403,14 @@ export function CategoriesTab() {
           </div>
 
           {!ledger ? (
-            <div className="state">Loading prices…</div>
+            <div className="state">Loading items…</div>
           ) : filtered.length === 0 ? (
             <div className="state">
-              No item prices in this view.
-              {filter.kind === "cat" ? " Assign items to this category in Item Master, or try Rebuild." : " Try Rebuild."}
+              {filter.kind === "none"
+                ? "Every item is classified."
+                : filter.kind === "unmatched"
+                  ? "Every document line is linked to Item Master."
+                  : "No items in this category yet."}
             </div>
           ) : (
             <div className="table-wrap">
@@ -5490,16 +5465,14 @@ export function CategoriesTab() {
                       <tr
                         key={it.item_id ?? `u${i}`}
                         className={`ledger-row${picked.has(key) ? " row-picked" : ""}`}
-                        // 평소엔 이력 열기. Shift+클릭은 행 어디를 눌러도 구간 선택으로 —
-                        // 체크박스만 정확히 노리지 않아도 되게(그때 이력이 열리면 방해된다).
+                        // 행을 누르면 고르기(분류는 여럿을 골라 한 번에 넣는 일이 많다).
+                        // Shift+클릭은 행 어디를 눌러도 구간 선택 — 체크박스만 노리지 않아도 된다.
                         onClick={(e) => {
-                          if (e.shiftKey && classifiable) {
-                            extendRange(it);
-                            return;
-                          }
-                          openHistory(it);
+                          if (!classifiable) return;
+                          if (e.shiftKey) extendRange(it);
+                          else toggleRow(it);
                         }}
-                        title="Show full price history · Shift+click to select a range"
+                        title="Click to select · Shift+click to select a range"
                       >
                         <td className="row-tools" onClick={(e) => e.stopPropagation()}>
                           <input
@@ -5521,12 +5494,7 @@ export function CategoriesTab() {
                         {shownCols.map((c) => (
                           <td
                             key={c.key}
-                            className={ledgerCellClass(c.key, c.numeric)}
-                            title={
-                              c.key === "margin" && it.margin_cross
-                                ? "Converted to USD using each deal's stored FX rate (app rate if none)"
-                                : undefined
-                            }
+                            className={ledgerCellClass(c.key)}
                             onClick={c.key === "category" ? (e) => e.stopPropagation() : undefined}
                           >
                             {c.key === "category" ? (
@@ -5563,57 +5531,6 @@ export function CategoriesTab() {
           )}
         </div>
       </div>
-
-      {histRow ? (
-        <Modal
-          title={`Price history — ${histRow.part_no || histRow.description || "item"}`}
-          onClose={() => { setHistRow(null); setHist(null); }}
-          wide
-        >
-          {hist === null ? (
-            <div className="state">Loading…</div>
-          ) : hist.length === 0 ? (
-            <div className="state">No price rows.</div>
-          ) : (
-            <div className="table-wrap">
-              <table className="mini wide">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Source</th>
-                    <th>Customer / Vendor</th>
-                    <th>Vessel</th>
-                    <th className="num">Unit</th>
-                    <th className="num">Qty</th>
-                    <th className="num">Amount</th>
-                    <th className="num">FX (1 USD)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {hist.map((r) => (
-                    <tr key={r.id}>
-                      <td>{r.doc_date || "—"}</td>
-                      <td>
-                        <span className={`ledger-pill ${r.price_type}`}>
-                          {r.price_type === "buy" ? "Buy" : "Sell"}
-                        </span>
-                      </td>
-                      <td>{SOURCE_LABEL[r.source_type] || r.source_type}</td>
-                      <td>{r.price_type === "buy" ? (r.vendor || "—") : (r.customer || "—")}</td>
-                      <td>{r.vessel || ""}</td>
-                      <td className="num">{r.currency} {fmtAmt(r.unit_price)}</td>
-                      <td className="num">{r.qty}</td>
-                      <td className="num">{r.currency} {fmtAmt(r.amount)}</td>
-                      <td className="num">{r.fx_rate ? `₩${fmtRate(r.fx_rate)}` : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Modal>
-      ) : null}
 
       {autoOpen ? (
         <Modal
