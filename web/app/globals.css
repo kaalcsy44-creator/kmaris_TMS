@@ -8965,10 +8965,31 @@ table.mini .num {
   .ms-toolbar {
     flex-wrap: wrap;
   }
+  /* 위 탭이 어느 표인지 이미 말해 주므로 제목은 걷고, 검색칸은 맨 아래 한 줄을 통째로 쓴다.
+     flex:1 의 basis 0 이 width:100% 를 이겨 칸이 단추 사이에서 짜부라지던 것을 basis 로 잡는다. */
+  .ms-toolbar .form-title {
+    display: none;
+  }
   .ms-search {
+    flex: 1 1 100%;
+    order: 10;
     width: 100%;
     max-width: none;
     margin-left: 0;
+  }
+  /* 대분류 탭은 한 줄로 두고 옆으로 민다 — 접어 내리면 표가 화면 아래로 밀려났다. */
+  .ms-majors {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .ms-majors::-webkit-scrollbar {
+    display: none;
+  }
+  .ms-major {
+    flex-shrink: 0;
+    white-space: nowrap;
   }
   .field {
     flex: 1 1 100%;
