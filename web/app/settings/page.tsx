@@ -3736,8 +3736,33 @@ const UNCLASSIFIED = "__none__";
 /** 부품 칩의 "대분류에만 걸리고 부품은 안 고른 품목" 자리. */
 const NO_SUB = "__nosub__";
 
-/** 품목표 위의 대분류 탭 — 전체 / 대분류(건수 많은 순) / 미분류(맨 끝). 건수는 지금
- *  불러온 목록(Priced only 반영) 기준이다. 대분류를 고르면 그 아래 줄에 부품 칩이 선다. */
+/** 분류 트리의 순서 — {경로("대분류" · "대분류 > 부품"): 트리에서의 차례}.
+ *  Item Category 트리와 같은 규칙(sort_order, 같으면 이름)으로 깊이 우선으로 센다. */
+function useCategoryOrder(): Map<string, number> {
+  const [cats, setCats] = useState<ItemCategory[]>([]);
+  useEffect(() => {
+    fetchItemCategories().then(setCats).catch(() => setCats([]));
+  }, []);
+  const out = new Map<string, number>();
+  const kids = (pid: number | null) =>
+    cats
+      .filter((c) => (c.parent_id ?? null) === pid)
+      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+  const walk = (pid: number | null, prefix: string, depth: number) => {
+    if (depth > 3) return;
+    for (const c of kids(pid)) {
+      const path = prefix ? `${prefix} > ${c.name}` : c.name;
+      out.set(path, out.size);
+      walk(c.id, path, depth + 1);
+    }
+  };
+  walk(null, "", 1);
+  return out;
+}
+
+/** 품목표 위의 대분류 탭 — 전체 / 대분류(트리 순) / 미분류(맨 끝). 건수는 지금
+ *  불러온 목록(Priced only 반영) 기준이다. 대분류를 고르면 그 아래 줄에 부품 칩이 선다.
+ *  순서는 Item Category 트리를 따른다. */
 function MajorTabs({ rows, value, onPick, sub, onPickSub }: {
   rows: SettingsItem[];
   value: string;
@@ -3752,7 +3777,11 @@ function MajorTabs({ rows, value, onPick, sub, onPickSub }: {
     if (m) counts.set(m, (counts.get(m) ?? 0) + 1);
     else none += 1;
   }
-  const majors = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  // 칩 순서는 Item Category 트리와 같다(▲▼ 로 정한 순서). 트리에 없는 이름(옛 경로)은 끝에.
+  const order = useCategoryOrder();
+  const rank = (path: string) => order.get(path) ?? 1e6;
+  const majors = [...counts.entries()].sort((a, b) =>
+    rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]));
   // 기억해 둔 대분류가 지금 목록에 없으면(Priced only 를 켰거나 분류를 옮긴 뒤) 표가
   // 통째로 빈 것처럼 보인다 — 전체로 되돌린다.
   const stale = !!rows.length && !!value &&
@@ -3782,7 +3811,8 @@ function MajorTabs({ rows, value, onPick, sub, onPickSub }: {
     }
   }
   const subs = [...subCounts.entries()].sort((a, b) =>
-    (a[0] === NO_SUB ? 1 : 0) - (b[0] === NO_SUB ? 1 : 0) || b[1] - a[1] || a[0].localeCompare(b[0]));
+    (a[0] === NO_SUB ? 1 : 0) - (b[0] === NO_SUB ? 1 : 0) ||
+    rank(`${value} > ${a[0]}`) - rank(`${value} > ${b[0]}`) || a[0].localeCompare(b[0]));
   const subStale = !!sub && !!rows.length && !subCounts.has(sub);
   useEffect(() => {
     if (subStale) onPickSub("");
