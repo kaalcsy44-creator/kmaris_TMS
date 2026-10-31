@@ -895,9 +895,17 @@ def _vendor_marks(s) -> list[dict]:
     세면 견적만 주고 끝난 거래선이 공급한 곳으로 찍힌다.
 
     회사명으로 묶는다 — 레코드 1건 = 담당자 1명이라 담당자 수만큼 같은 마크가 서면
-    한 회사가 계통 하나를 혼자 덮는다."""
+    한 회사가 계통 하나를 혼자 덮는다.
+
+    제조사(kind='maker')도 같은 세 세기로 함께 돌려준다 — 이 판은 "이 계통 품목을 누가
+    만들고 누가 대 주는가"를 함께 보는 자리라서다.
+      supplied  그 계통의 품목 중 이 제조사 것을 발주한 적이 있다.
+      quoted    이 제조사 품목에 값이 붙은 적이 있다(견적·주문).
+      listed    거래는 없고 제조사 명부에 그 분류를 만든다고 적혀 있다(잠재).
+    n 은 그 회사가 그 계통에서 거래한 품목 수다 — 같은 세기 안에서 앞세울 순서."""
     cats = {c.id: c for c in s.query(ItemCategory).all()}
-    cat_of_item = {m.id: m.category_id for m in s.query(ItemMaster).all()}
+    masters = s.query(ItemMaster).all()
+    cat_of_item = {m.id: m.category_id for m in masters}
     vendors = s.query(Vendor).all()
     name_of = {v.id: (v.name or "").strip() for v in vendors}
     # 대리점을 타고 가려면 그 제조사가 무엇을 만드는지 알아야 한다(회사 단위로 접은 값).
@@ -905,16 +913,20 @@ def _vendor_marks(s) -> list[dict]:
 
     # 센 것이 이긴다 — 한 회사가 같은 계통에서 사기도 하고 견적도 줬으면 '샀다'로 선다.
     _RANK = {"listed": 0, "quoted": 1, "supplied": 2}
-    # {분류 id: {회사명: (tier, 근거 한 줄)}}
-    marks: dict[int, dict[str, tuple[str, str]]] = {}
+    # {(분류 id, kind): {회사명: [tier, 근거 한 줄, 거래한 품목 id 집합]}}
+    marks: dict[tuple[int, str], dict[str, list]] = {}
 
-    def put(cid, company: str, tier: str, why: str):
+    def put(cid, company: str, tier: str, why: str, kind: str = "vendor", item_id=None):
         if not cid or not company or cid not in cats:
             return
-        slot = marks.setdefault(cid, {})
+        slot = marks.setdefault((cid, kind), {})
         cur = slot.get(company)
-        if cur is None or _RANK[tier] > _RANK[cur[0]]:
-            slot[company] = (tier, why)
+        if cur is None:
+            cur = slot[company] = [tier, why, set()]
+        elif _RANK[tier] > _RANK[cur[0]]:
+            cur[0], cur[1] = tier, why
+        if item_id:
+            cur[2].add(item_id)
 
     # ── listed: 밝혀 둔 것 ────────────────────────────────────────────────
     for v in vendors:
@@ -955,14 +967,44 @@ def _vendor_marks(s) -> list[dict]:
         put(_up_to_level2(cats, cat_of_item.get(h.item_id)),
             name_of.get(h.vendor_id, ""),
             "supplied" if supplied else "quoted",
-            "Supplied on this system" if supplied else "Quoted on this system")
+            "Supplied on this system" if supplied else "Quoted on this system",
+            item_id=h.item_id)
+
+    # ── 제조사 ───────────────────────────────────────────────────────────
+    # 명부에 적힌 이름으로 맞춘다 — 품목의 제조사 칸은 "Mt.H"·"HYUNDAI Heavy Industries
+    # Co., Ltd." 처럼 표기가 흔들린다. 명부에 없으면 적힌 그대로 선다.
+    maker_name: dict[str, str] = {}
+    for mk_name, mk_cats in maker_of.values():
+        key = _norm_company(mk_name)
+        if key:
+            maker_name.setdefault(key, mk_name)
+            for cid in mk_cats:
+                put(cid, mk_name, "listed", "Maker lists this category", kind="maker")
+    # 값이 붙은 품목만 거래로 센다 — 발주 문서가 있으면 supplied, 값만 있으면 quoted.
+    priced: dict[int, bool] = {}
+    for item_id, src in s.query(ItemPriceHistory.item_id, ItemPriceHistory.source_type).filter(
+            ItemPriceHistory.item_id.isnot(None), ItemPriceHistory.unit_price > 0).all():
+        priced[item_id] = priced.get(item_id, False) or src in ("po", "order")
+    for m in masters:
+        raw = (m.maker or "").strip()
+        if not raw or m.id not in priced:
+            continue
+        co = maker_name.get(_norm_company(raw), raw)
+        sup = priced[m.id]
+        put(_up_to_level2(cats, m.category_id), co,
+            "supplied" if sup else "quoted",
+            "Ordered on this system" if sup else "Priced on this system",
+            kind="maker", item_id=m.id)
 
     out: list[dict] = []
-    for cid, companies in marks.items():
-        # 센 근거부터 — 잘려 나가는 쪽은 늘 약한 쪽이어야 한다.
-        for co, (tier, why) in sorted(companies.items(),
-                                      key=lambda kv: (-_RANK[kv[1][0]], kv[0].lower())):
-            out.append({"category_id": cid, "name": co, "tier": tier, "why": why})
+    for (cid, kind), companies in marks.items():
+        # 센 근거부터, 같은 세기면 거래 품목이 많은 곳부터 — 잘려 나가는 쪽은 늘 약한
+        # 쪽이어야 한다.
+        for co, (tier, why, items) in sorted(
+                companies.items(),
+                key=lambda kv: (-_RANK[kv[1][0]], -len(kv[1][2]), kv[0].lower())):
+            out.append({"category_id": cid, "kind": kind, "name": co, "tier": tier,
+                        "why": why, "n": len(items)})
     return out
 
 

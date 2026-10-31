@@ -17926,8 +17926,57 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .ship-pin--listed {
   opacity: 0.45; filter: grayscale(0.55); border-style: dashed;
 }
-/* 넘치면 자른다 — 개수를 미리 잘라 접으면 넓은 화면에서 자리가 남는데도 늘 몇 개에서
-   멈춘다. 센 근거(발주 > 견적 > 신고)부터 오므로 잘리는 쪽은 늘 약한 쪽이다. */
+/* 거래선 줄 — Vendor·Maker 를 제 줄에, 앞의 셋만 로고+이름. 세기는 칩 모양으로:
+   공급(온전한 색) > 견적(옅게) > 잠재(점선·흐리게). 나머지는 +N. */
+.ship-parties { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 2px; }
+.ship-zone > header + .ship-parties { margin-top: 7px; }
+.ship-party-row { display: flex; align-items: center; gap: 4px; min-width: 0; flex-wrap: wrap; }
+.ship-party-k {
+  flex: 0 0 42px; padding: 0; border: 0; background: none; cursor: pointer;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+  color: #94a3b8; text-align: left;
+}
+.ship-party-k:hover { color: var(--z-ink); }
+.ship-party {
+  display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 132px;
+  padding: 1px 7px 1px 2px; border: 1px solid var(--z-chip-line); border-radius: 999px;
+  background: #fff; font-size: 11px; line-height: 17px; color: #334155;
+}
+.ship-party .ship-pin { width: 15px; height: 15px; border: 0; }
+.ship-party-nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ship-party--supplied { font-weight: 600; color: #1e293b; }
+.ship-party--quoted { color: #475569; }
+.ship-party--listed {
+  border-style: dashed; background: transparent; color: #94a3b8;
+}
+.ship-party--listed .ship-pin { opacity: 0.55; filter: grayscale(0.6); }
+.ship-party-more {
+  padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; background: #fff;
+  font-size: 10.5px; font-weight: 700; line-height: 17px; color: #64748b; cursor: pointer;
+}
+.ship-party-more:hover { border-color: var(--z-ink); color: var(--z-ink); }
+/* 거래선 판 */
+.ship-roster-body { overflow-y: auto; min-height: 0; }
+.ship-roster h4 {
+  margin: 8px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: #64748b;
+}
+.ship-roster h4 span { color: #94a3b8; font-weight: 500; }
+.ship-roster ul { list-style: none; margin: 0; padding: 0; }
+.ship-roster li {
+  display: grid; grid-template-columns: 18px 1fr auto; column-gap: 7px; align-items: center;
+  padding: 4px 0; border-top: 1px solid #f1f4f8; font-size: 12px;
+}
+.ship-roster li .ship-pin { width: 16px; height: 16px; }
+.ship-roster-nm { font-weight: 600; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ship-roster-listed .ship-roster-nm { font-weight: 500; color: #64748b; }
+.ship-roster-tier {
+  font-size: 10px; font-weight: 700; padding: 0 6px; border-radius: 999px; white-space: nowrap;
+}
+.ship-roster-tier--supplied { background: #e6f6ee; color: #0f7a52; }
+.ship-roster-tier--quoted { background: #e8f0fd; color: #1a5fc4; }
+.ship-roster-tier--listed { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; }
+.ship-roster-why { grid-column: 2 / -1; font-size: 11px; color: #94a3b8; }
 
 /* 프로젝트 번호 — 이 화면의 요점. 계통 바로 밑에 줄지어 서서 "이 계통에 지금 무엇이
    걸려 있는가"를 먼저 말한다. */

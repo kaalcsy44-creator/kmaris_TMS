@@ -367,6 +367,10 @@ export type ShipMap = {
     name: string;
     tier: "supplied" | "quoted" | "listed";
     why: string;
+    /** 거래선(vendor)인가 제조사(maker)인가. 옛 응답에는 없다(= vendor). */
+    kind?: "vendor" | "maker";
+    /** 그 회사가 이 분류에서 거래한 품목 수(잠재는 0). */
+    n?: number;
   }[];
   unmatched: number;             // 마스터에 연결조차 안 된 이력 줄 수(안내용)
   built_at: string | null;

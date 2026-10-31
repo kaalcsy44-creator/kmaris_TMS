@@ -7,6 +7,7 @@ import { assignItemLedgerCategory, fetchItemShipMap } from "@/lib/api";
 import { invalidateCache, useCachedData } from "@/lib/useCachedData";
 import type { ShipDeal, ShipItem, ShipMap } from "@/lib/types";
 import { useVendorLogo } from "@/lib/vendorLogos";
+import { useMakerByName } from "@/components/common/MakerCell";
 import { DECKS, berthOf } from "@/lib/shipZones";
 
 /**
@@ -160,16 +161,19 @@ export default function ShipMapTab() {
   const { data, error, refresh } = useCachedData<ShipMap>("item:ship-map", fetchItemShipMap);
   const [hint, setHint] = useState<Hint>(null);
   const [panel, setPanel] = useState<Panel>(null);
+  const [roster, setRoster] = useState<Roster>(null);
   // 프로젝트가 걸린 계통만 볼 것인가 — 배가 커질수록 빈 칸이 화면을 먹는다.
   const [busyOnly, setBusyOnly] = useState(false);
 
   // 펴 둔 판은 Esc 로도 닫힌다 — 어디를 눌러야 닫히는지 모를 때의 퇴로.
   useEffect(() => {
-    if (!panel) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setPanel(null); };
+    if (!panel && !roster) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setPanel(null); setRoster(null); }
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [panel]);
+  }, [panel, roster]);
 
   const model: ShipModel | null = useMemo(() => {
     if (!data) return null;
@@ -349,12 +353,17 @@ export default function ShipMapTab() {
                 dealsOf={dealsOf}
                 spot={spot}
                 opens={opens}
+                onMore={(title, marks, e) => {
+                  setHint(null);
+                  setRoster({ title, marks, x: e.clientX, y: e.clientY });
+                }}
               />
             ))}
         </div>
       </div>
 
       {hint ? <Hinter hint={hint} /> : null}
+      {roster ? <RosterPeek roster={roster} onClose={() => setRoster(null)} /> : null}
       {panel ? (
         <Peeker
           panel={panel}
@@ -395,25 +404,133 @@ export default function ShipMapTab() {
  * 넘치는 것은 CSS 가 한 줄로 자른다 — 개수를 미리 잘라 "+N" 으로 접으면 넓은 화면에서
  * 자리가 남는데도 늘 세 개에서 멈춘다. 센 근거부터 오므로 잘리는 쪽은 늘 약한 쪽이다.
  */
-function VendorPins({ marks }: { marks: VendorMark[] }) {
-  const logoFor = useVendorLogo();
+/** 한 분류의 거래선을 펼치는 판 — "+N" 이나 줄 머리를 누르면 뜬다. */
+type Roster = { title: string; marks: VendorMark[]; x: number; y: number } | null;
+
+const TIER_LABEL: Record<VendorMark["tier"], string> = {
+  supplied: "Supplied", quoted: "Quoted", listed: "Potential",
+};
+const KIND_LABEL = { vendor: "Vendor", maker: "Maker" } as const;
+/** 카드에 이름까지 세우는 수 — 나머지는 +N 으로 접고 판에서 본다. */
+const TOP = 3;
+
+/** 회사 하나의 얼굴 — 로고가 있으면 로고, 없으면 이름에서 뽑은 색 이니셜. */
+function PartyMark({ v }: { v: VendorMark }) {
+  const vendorLogo = useVendorLogo();
+  const makerBy = useMakerByName();
+  const logo = (v.kind ?? "vendor") === "maker" ? makerBy(v.name)?.logo : vendorLogo(v.name);
+  return logo ? (
+    <img className="ship-pin" src={logo} alt="" />
+  ) : (
+    <span className="ship-pin ship-pin--mono" style={{ ["--h" as string]: hueOf(v.name) }}>
+      {initialsOf(v.name)}
+    </span>
+  );
+}
+
+function markTitle(v: VendorMark): string {
+  return `${v.name} — ${v.why}${v.n ? ` · ${v.n} item(s)` : ""}`;
+}
+
+/**
+ * 분류 아래 거래선 — Vendor 와 Maker 를 제 줄에 따로, 각각 앞의 셋만 로고+이름으로.
+ * 줄 안 차례는 서버가 정한 것(공급 > 견적 > 잠재, 같으면 거래 품목 수)이라, 셋이
+ * 다 차지 않으면 잠재거래선(점선)이 그 자리를 채운다. 나머지는 +N — 누르면 판.
+ * 로고만 늘어놓던 앞 모양은 무엇인지 하나씩 짚어 봐야 해서(모바일은 그마저 못 한다)
+ * 쓸 데가 없었다.
+ */
+function Parties({ marks, title, onMore }: {
+  marks: VendorMark[];
+  title: string;
+  onMore: (title: string, marks: VendorMark[], e: React.MouseEvent) => void;
+}) {
   if (!marks.length) return null;
+  const rows = (["vendor", "maker"] as const)
+    .map((k) => ({ k, list: marks.filter((m) => (m.kind ?? "vendor") === k) }))
+    .filter((r) => r.list.length);
   return (
-    <span className="ship-pins">
-      {marks.map((v) => {
-        const logo = logoFor(v.name);
-        const cls = `ship-pin ship-pin--${v.tier}`;
-        const title = `${v.name} — ${v.why}`;
-        return logo ? (
-          <img key={v.name} className={cls} src={logo} alt="" title={title} />
-        ) : (
-          <span key={v.name} className={`${cls} ship-pin--mono`}
-                style={{ ["--h" as string]: hueOf(v.name) }} title={title}>
-            {initialsOf(v.name)}
-          </span>
+    <div className="ship-parties">
+      {rows.map(({ k, list }) => {
+        const rest = list.slice(TOP);
+        const traded = rest.filter((m) => m.tier !== "listed").length;
+        return (
+          <div className="ship-party-row" key={k}>
+            <button
+              type="button"
+              className="ship-party-k"
+              onClick={(e) => onMore(title, marks, e)}
+              title={`All ${KIND_LABEL[k].toLowerCase()}s for ${title}`}
+            >
+              {KIND_LABEL[k]}
+            </button>
+            {list.slice(0, TOP).map((v) => (
+              <span key={v.name} className={`ship-party ship-party--${v.tier}`} title={markTitle(v)}>
+                <PartyMark v={v} />
+                <span className="ship-party-nm">{v.name}</span>
+              </span>
+            ))}
+            {rest.length ? (
+              <button
+                type="button"
+                className="ship-party-more"
+                onClick={(e) => onMore(title, marks, e)}
+                title={[traded ? `${traded} traded` : "", rest.length - traded
+                  ? `${rest.length - traded} potential` : ""].filter(Boolean).join(" · ")}
+              >
+                +{rest.length}
+              </button>
+            ) : null}
+          </div>
         );
       })}
-    </span>
+    </div>
+  );
+}
+
+/** 거래선 판 — Vendor·Maker 를 나눠 전부. 거래한 곳 다음에 잠재거래선. */
+function RosterPeek({ roster, onClose }: { roster: NonNullable<Roster>; onClose: () => void }) {
+  const w = 380;
+  const left = typeof window !== "undefined" && roster.x + w + 24 > window.innerWidth
+    ? Math.max(12, roster.x - w - 16)
+    : roster.x + 16;
+  const maxH = typeof window !== "undefined" ? Math.min(window.innerHeight * 0.72, 460) : 460;
+  const top = typeof window !== "undefined"
+    ? Math.min(Math.max(12, roster.y - 40), Math.max(12, window.innerHeight - maxH - 12))
+    : roster.y;
+  return (
+    <>
+      <div className="ship-peek-veil" onClick={onClose} />
+      <div className="ship-peek ship-roster" style={{ left, top, width: `min(${w}px, calc(100vw - 24px))` }}>
+        <div className="ship-peek-hd">
+          <b>{roster.title}</b>
+          <span>who makes and supplies it</span>
+          <button type="button" className="ship-peek-x" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <div className="ship-roster-body">
+          {(["vendor", "maker"] as const).map((k) => {
+            const list = roster.marks.filter((m) => (m.kind ?? "vendor") === k);
+            if (!list.length) return null;
+            return (
+              <section key={k}>
+                <h4>{KIND_LABEL[k]}s <span>{list.length}</span></h4>
+                <ul>
+                  {list.map((v) => (
+                    <li key={v.name} className={`ship-roster-${v.tier}`}>
+                      <PartyMark v={v} />
+                      <span className="ship-roster-nm">{v.name}</span>
+                      <span className={`ship-roster-tier ship-roster-tier--${v.tier}`}>
+                        {TIER_LABEL[v.tier]}{v.n ? ` · ${v.n}` : ""}
+                      </span>
+                      <span className="ship-roster-why">{v.why}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -433,8 +550,9 @@ function hueOf(name: string): number {
 
 /** 대분류 한 칸 — 배 위의 한 구역. 그 아래 중·소분류와 프로젝트 번호가 모두 들어간다. */
 function Zone({
-  cat, model, busyOnly, dealsOf, spot, opens,
+  cat, model, busyOnly, dealsOf, spot, opens, onMore,
 }: {
+  onMore: (title: string, marks: VendorMark[], e: React.MouseEvent) => void;
   cat: Cat;
   model: ShipModel;
   busyOnly: boolean;
@@ -483,7 +601,7 @@ function Zone({
           늘 같은 자리에서 끝나고 로고는 폭을 통째로 쓴다.
           대분류에 직접 달린 것만 세운다 — 아래 중분류의 마크를 끌어올리면 큰 계통
           하나가 스무 개를 달게 된다. */}
-      <VendorPins marks={model.marks.get(cat.id) ?? []} />
+      <Parties marks={model.marks.get(cat.id) ?? []} title={cat.name} onMore={onMore} />
 
       {deals.length ? (
         <div className="ship-projects">
@@ -535,7 +653,7 @@ function Zone({
                 <span>{s.name}</span>
                 <b>{items.length}</b>
               </div>
-              <VendorPins marks={model.marks.get(s.id) ?? []} />
+              <Parties marks={model.marks.get(s.id) ?? []} title={s.name} onMore={onMore} />
               {leaves.length ? (
                 <div className="ship-leaves">
                   {(busyOnly ? leaves.filter((l) => (model.roll.get(l.id) ?? []).length) : leaves)
