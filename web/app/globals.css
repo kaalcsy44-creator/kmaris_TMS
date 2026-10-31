@@ -1911,6 +1911,12 @@ table.mini.wide.ms-table.ms-table--items td.ms-actcol {
   background: var(--panel, #fff);
   z-index: 1;
 }
+/* 그 머리 칸은 위(top)에도 붙는 머리줄의 일부다 — 위 규칙이 z-index 를 1 로 내려
+   굴러 올라온 행의 ✎ 가 머리줄 위로 그려졌다. 머리줄 높이로 되돌리고 배경도 머리색. */
+table.mini.wide.ms-table.ms-table--items thead th.ms-actcol {
+  z-index: 4;
+  background: #f7fafd;
+}
 table.mini.wide.ms-table.ms-table--items td.ms-pncol .ms-pn {
   display: -webkit-inline-box;
   vertical-align: middle;
