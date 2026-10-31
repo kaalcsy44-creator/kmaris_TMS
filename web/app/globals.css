@@ -12708,6 +12708,43 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   .cat-splitter {
     display: none;
   }
+  .cat-ledger-pane {
+    padding: 10px;
+  }
+  /* 제목 한 줄, 그 아래 단추들이 접혀 내려간다 — 한 줄에 다 세우면 "All items"·
+     "Auto-assign"·"Built …" 이 세로로 쪼개지고 끝의 단추는 화면 밖으로 나갔다. */
+  .ledger-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .ledger-title {
+    white-space: nowrap;
+  }
+  .ledger-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .ledger-actions > .btn,
+  .ledger-actions > button,
+  .ledger-actions > .hint-inline {
+    white-space: nowrap;
+  }
+  .ledger-actions > .hint-inline {
+    order: 10;
+    flex-basis: 100%;
+  }
+  /* 모바일 공통 규칙(table.mini.wide → display:block)이 표를 제 스크롤 상자로 만들어,
+     우측 고정 Category 열이 그 좁은 상자를 통째로 덮었다. 표는 표로 두고 감싼
+     .table-wrap 이 넘기게 하며, 좁은 화면에선 Category 고정도 푼다. */
+  table.mini.wide.ledger-table {
+    display: table;
+  }
+  .ledger-table.cat-sticky .ledger-cat,
+  .ledger-table.cat-sticky thead th.led-th-category {
+    position: static;
+    box-shadow: none;
+  }
 }
 
 /* ── Settings: 이메일 템플릿 편집 ─────────────────────────────────────────── */
