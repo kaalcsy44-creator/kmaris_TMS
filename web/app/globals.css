@@ -1712,15 +1712,10 @@ table.mini.wide.ms-table.ms-table--items th.ms-party,
 table.mini.wide.ms-table.ms-table--items td.ms-party {
   min-width: 110px;
 }
-/* 분류 경로 — "Engine Room > Starting Air System > Main Starting Valve" 같은 3단 경로는
-   알약이 줄바꿈하지 않아 이 칸 하나가 400px 가까이 가져갔고, 그만큼 오른쪽 칸들이 표
-   밖으로 밀렸다. 폭을 못 박고 넘치는 만큼만 말줄임 — 전체 경로는 title 로 읽는다
-   (가격 이력 표에서 쓰던 방식과 같다). */
+/* 분류 경로는 자르지 않는다 — 맨 끝 칸이고 표는 어차피 옆으로 민다. 잘라 두면
+   대분류에서 끊겨 정작 읽을 부품 이름이 안 보였다. */
 table.mini.wide.ms-table.ms-table--items .cat-path {
   display: inline-block;
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   vertical-align: middle;
 }
 /* 금액 칸 — 위는 금액, 아래는 그 금액이 나온 견적일(작은 회색). 날짜를 독립 열로 두면
@@ -1902,13 +1897,9 @@ table.mini.wide.ms-table.ms-table--items.ms-table--sel td.ms-margin:not(.ms-actc
   width: 66px;
   min-width: 66px;
 }
-/* 분류 경로는 칸 폭을 정하지 않는다 — width:0 + min-width:100% 로 내용폭 기여를 0 으로
-   만들고 칸을 채운다(넘치면 말줄임, 전체 경로는 title). */
+/* 분류 칸은 경로 전체 길이만큼 — 칸 폭을 경로가 정한다. */
 table.mini.wide.ms-table.ms-table--items td.ms-catcol .cat-path {
-  display: block;
-  width: 0;
-  min-width: 100%;
-  max-width: none;
+  white-space: nowrap;
 }
 table.mini.wide.ms-table.ms-table--items td.ms-deal .deal-note {
   max-width: 104px;

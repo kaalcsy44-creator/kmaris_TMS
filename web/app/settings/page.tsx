@@ -4219,11 +4219,9 @@ export function ItemsTab({ focus }: { focus?: ItemFocus | null }) {
     ["description", label,
       (r) => <span className="ms-clamp2" title={r.description}>{r.description || "—"}</span>, "ms-desc"];
   const category: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =
-    // 대분류는 표 위 칩이 이미 말하므로 칸에는 부품(2단) 이름만 — 전체 경로를 적으면
-    // 앞의 대분류에서 잘려 "Engines…" 만 남았다. 부품 없이 대분류에만 걸린 품목은
-    // 대분류 이름을, 전체 경로는 title 로 읽는다.
-    ["category_path", "Part", (r) => r.category_path
-      ? <span className="cat-path" title={r.category_path}>{itemSub(r) || itemMajor(r)}</span>
+    // 경로 전체(대분류 > 부품)를 자르지 않고 적는다 — 칸 폭은 경로가 정하고 표는 옆으로 민다.
+    ["category_path", "Category", (r) => r.category_path
+      ? <span className="cat-path">{r.category_path}</span>
       : <span className="dash">Unclassified</span>, "ms-catcol"];
 
   return (
