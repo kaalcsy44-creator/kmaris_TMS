@@ -4088,7 +4088,9 @@ const itemHeadCols: HeadCol<SettingsItem>[] = [
     sortValue: (r) => DEAL_RANK[r.deal_state || ""] ?? 0, emptyLabel: "No deal yet" },
   { key: "description", text: (r) => r.description || "" },
   { key: "part_no", text: (r) => r.part_no || "" },
-  { key: "category_path", text: (r) => r.category_path || "", filter: "facet",
+  // 열에 적힌 것(부품 이름)으로 고르고 정렬한다 — 전체 경로 목록은 대분류 이름이
+  // 되풀이돼 메뉴가 길기만 하다.
+  { key: "category_path", text: (r) => itemSub(r) || itemMajor(r), filter: "facet",
     emptyLabel: "Unclassified" },
   { key: "maker", text: (r) => r.maker || "", filter: "facet", emptyLabel: "Unspecified" },
   { key: "origin", text: (r) => r.origin || "", filter: "facet", emptyLabel: "Unspecified" },
@@ -4217,10 +4219,11 @@ export function ItemsTab({ focus }: { focus?: ItemFocus | null }) {
     ["description", label,
       (r) => <span className="ms-clamp2" title={r.description}>{r.description || "—"}</span>, "ms-desc"];
   const category: [keyof SettingsItem, string, ((r: SettingsItem) => React.ReactNode)?, string?] =
-    ["category_path", "Category", (r) => r.category_path
-      // 3단 경로는 알약 폭을 400px 가까이 끌고 간다 — 폭을 못 박고 넘치면 말줄임,
-      // 전체 경로는 title 로 읽는다(가격 이력 표와 같은 방식).
-      ? <span className="cat-path" title={r.category_path}>{r.category_path}</span>
+    // 대분류는 표 위 칩이 이미 말하므로 칸에는 부품(2단) 이름만 — 전체 경로를 적으면
+    // 앞의 대분류에서 잘려 "Engines…" 만 남았다. 부품 없이 대분류에만 걸린 품목은
+    // 대분류 이름을, 전체 경로는 title 로 읽는다.
+    ["category_path", "Part", (r) => r.category_path
+      ? <span className="cat-path" title={r.category_path}>{itemSub(r) || itemMajor(r)}</span>
       : <span className="dash">Unclassified</span>, "ms-catcol"];
 
   return (
