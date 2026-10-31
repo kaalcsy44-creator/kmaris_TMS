@@ -27,8 +27,16 @@ import { DECKS, berthOf } from "@/lib/shipZones";
  * 매입·매출·상대처)이 그 자리에서 펼쳐진다.
  */
 
-/** 소분류를 두 단으로 접을 기준 — 이보다 계열이 많은 카드(기관실)는 안에서 나눈다. */
-const WIDE_SUBS = 6;
+/**
+ * 카드 안 소분류 단 수 — 계열이 아주 많은 카드(Engines & power systems)는 3단, 여럿이면
+ * 2단, 몇 개뿐이면 1단. 카드는 가로로 한 줄에 늘어서므로 단 수가 곧 카드 폭이다 —
+ * 단을 늘려 카드를 넓히는 대신 키를 줄여, 한 화면 높이에 카드 하나가 다 들어오게 한다.
+ */
+function subCols(n: number): number {
+  if (n > 30) return 3;
+  if (n > 4) return 2;
+  return 1;
+}
 
 /**
  * 대분류의 표식 — 한 획짜리 선 그림. 색을 쓰지 않는다(글자색을 그대로 물려받는다).
@@ -199,11 +207,9 @@ export default function ShipMapTab() {
     };
     for (const c of cats) gather(c.id);
 
-    // 카드가 흘러 들어가는 순서 = 배를 읽는 순서(선교·상부 → 갑판 → 기관 → 부두).
-    const roots = (kids.get(null) ?? [])
-      .filter((c) => c.active)
-      .sort((a, b) => berthOf(a.name, a.code) - berthOf(b.name, b.code)
-                      || a.sort_order - b.sort_order || a.id - b.id);
+    // 카드 순서 = Item Category 트리 순서(▲▼ 로 정한 대분류 차례). 품목 탭의 칩과
+    // 같은 차례라야 세 화면이 같은 목록으로 읽힌다. 갑판(위치)은 카드 안 이름표와 색이 말한다.
+    const roots = (kids.get(null) ?? []).filter((c) => c.active);
 
     // 옮겨 갈 수 있는 자리 — 화면에 선 순서 그대로 훑어 내려가며 경로를 쌓는다.
     // 잎만 담지 않는다: 품목은 지금도 2단(Deck Machinery > Crane)에 걸린 것이 있고,
@@ -308,10 +314,8 @@ export default function ShipMapTab() {
           않으면서 카드 뒤에서 색을 흔들었다. 배는 갑판 이름(선교·갑판·기관·부두)이
           말하고, 화면은 그 자리에 실린 숫자만 그린다. */}
       <div className="ship-board">
-        {/* 세 단에 카드를 흘려 넣는다 — 칸을 미리 잘라 계통을 배정하지 않는다.
-            부피가 계통마다 열 배씩 다르므로(기관실 77건 vs 선교 0건) 자리를 못 박으면
-            한 칸은 넘쳐서 스크롤하고 옆 칸은 절반이 빈다. 단 높이는 브라우저가 맞추고,
-            카드는 갑판 순서(선교→갑판→기관→부두)대로 흘러 들어간다. */}
+        {/* 카드를 대분류 차례대로 왼쪽에서 오른쪽으로 한 줄에 세우고 판을 옆으로 민다.
+            카드 폭은 안의 소분류 단 수(1~3)가 정한다. */}
         <div className="ship-grid">
           {model.roots
             .filter((r) => !busyOnly || (model.roll.get(r.id) ?? []).length)
@@ -452,12 +456,15 @@ function Zone({
   const subs = (model.kids.get(cat.id) ?? []).filter((c) => c.active);
   const deals = dealsOf(mine);
   const shown = busyOnly ? subs.filter((s) => (model.roll.get(s.id) ?? []).length) : subs;
+  // 폭은 다 보였을 때의 계열 수로 정한다 — "실린 것만" 을 켤 때마다 카드 폭이 바뀌면
+  // 같은 카드가 다른 자리로 튄다.
+  const cols = subCols(subs.length);
 
   const deck = DECKS[berthOf(cat.name, cat.code)];
 
   return (
     <article
-      className={`ship-zone${mine.length ? "" : " ship-zone--empty"}`}
+      className={`ship-zone ship-zone--c${cols}${mine.length ? "" : " ship-zone--empty"}`}
       /* 색은 카드가 아니라 갑판의 것이다 — 같은 구역 카드끼리 한 계열로 묶여야 세 단에
          흩어져 놓여도 "이 셋은 한 구역"이 먼저 읽힌다. 자리(열)는 부피가 정하므로
          구역을 자리로는 말할 수 없고, 남는 수단이 색이다. */
@@ -514,9 +521,8 @@ function Zone({
         <div className="ship-projects ship-projects--none">no project yet</div>
       )}
 
-      {/* 계열이 많은 카드(기관실)는 소분류를 두 단으로 접는다 — 한 줄로 세우면 카드
-          하나가 다른 카드 서너 장 높이가 되어 화면의 균형이 그 카드 하나로 결정된다. */}
-      <div className={`ship-subs${shown.length > WIDE_SUBS ? " ship-subs--two" : ""}`}>
+      {/* 계열이 많은 카드는 소분류를 여러 단으로 접는다(subCols). */}
+      <div className={`ship-subs ship-subs--c${cols}`}>
         {shown.map((s) => {
           const items = model.roll.get(s.id) ?? [];
           const leaves = (model.kids.get(s.id) ?? []).filter((c) => c.active);
