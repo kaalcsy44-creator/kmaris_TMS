@@ -6254,6 +6254,10 @@ function MasterSection<T extends { id: number }>({
     ? groups.map((g) => g.key)
     : Array.from(new Set(filtered.map((r) => selKey(r)).filter(Boolean)));
   const allPicked = pickKeys.length > 0 && pickKeys.every((k) => picked.has(k));
+  const printPicked: T[] = selKey && !group && picked.size
+    ? [...filtered, ...rows.filter((r) => !filtered.includes(r))]
+        .filter((r) => picked.has(selKey(r)))
+    : [];
   const somePicked = pickKeys.some((k) => picked.has(k));
 
   function togglePick(key: string) {
@@ -6659,8 +6663,14 @@ Every contact of ${names.length === 1 ? "this company" : "these companies"} is r
         ) : null}
         {printCols ? (
           <PrintListButton
+            // 고른 줄이 있으면 그 줄만 싣는다(품목표: 골라 둔 품목끼리 값을 나란히 견주기).
+            // 고른 것은 대분류 칩·검색을 바꿔도 남으므로, 지금 보이는 순서로 먼저 싣고
+            // 화면 밖으로 걸러진 것은 그 뒤에 붙인다.
+            label={printPicked.length ? `🖨 Print ${printPicked.length}` : undefined}
             build={() =>
-              printBook(title, printCols, filtered, group?.summary?.(groups.length, filtered.length))
+              printPicked.length
+                ? printBook(title, printCols, printPicked, `${printPicked.length} selected`)
+                : printBook(title, printCols, filtered, group?.summary?.(groups.length, filtered.length))
             }
           />
         ) : null}
