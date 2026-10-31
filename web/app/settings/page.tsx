@@ -4243,6 +4243,9 @@ export function ItemsTab({ focus }: { focus?: ItemFocus | null }) {
           <MajorTabs rows={rows} value={major} onPick={pickMajor} sub={sub} onPickSub={pickSub} />
         ),
       }}
+      // 맨 앞 체크박스 — 골라 둔 품목만 Print(미리보기·Excel·PDF)로 나란히 견준다.
+      // 고르는 일 말고 다른 일괄 동작은 없다(분류 일괄 배정은 Item Category 몫).
+      bulk={{ keyOf: (r) => String(r.id), actions: () => null }}
       toolbarExtra={
         <label className="ms-toggle" title="Show only items with a purchase or sales price. Turn off to include items that were only enquired.">
           <input type="checkbox" checked={pricedOnly} onChange={(e) => togglePriced(e.target.checked)} />
