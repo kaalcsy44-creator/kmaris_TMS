@@ -17766,9 +17766,22 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   flex: 1;
   min-width: 0;
 }
+/* 카드는 판 높이에 묶이고, 넘치면 소분류 목록(.ship-zone-body)만 굴린다 — 갑판
+   이름표·제목·로고·프로젝트 칩은 머리로 남는다. */
 .page-fill .ship-grid > .ship-zone {
   max-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.page-fill .ship-grid > .ship-zone > :not(.ship-zone-body) {
+  flex: 0 0 auto;
+}
+.page-fill .ship-zone-body {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  margin-right: -6px;
+  padding-right: 6px;
 }
 .ship-unlinked {
   font-size: 11.5px;

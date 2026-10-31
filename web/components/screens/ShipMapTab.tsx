@@ -517,7 +517,10 @@ function Zone({
         <div className="ship-projects ship-projects--none">no project yet</div>
       )}
 
-      {/* 계열이 많은 카드는 소분류를 여러 단으로 접는다(subCols). */}
+      {/* 계열이 많은 카드는 소분류를 여러 단으로 접는다(subCols). 카드가 판 높이를
+          넘으면 여기(.ship-zone-body)만 굴린다 — 위의 이름·로고·프로젝트는 머리로 남는다.
+          단(columns) 상자를 직접 굴리면 넘친 만큼 단이 옆으로 늘어나므로 한 겹 감싼다. */}
+      <div className="ship-zone-body">
       <div className={`ship-subs ship-subs--c${cols}`}>
         {shown.map((s) => {
           const items = model.roll.get(s.id) ?? [];
@@ -556,6 +559,7 @@ function Zone({
           );
         })}
         {!shown.length ? <div className="ship-sub ship-sub--empty">no sub-category</div> : null}
+      </div>
       </div>
     </article>
   );
