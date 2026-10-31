@@ -292,17 +292,38 @@ export default function ShipMapTab() {
               (Settings · Vessels, 딜마다 붙는 선명) 'Ship View' 만 크게 적혀 있으면 어느
               배의 화면인가로 읽힌다. 여기 실린 것은 배가 아니라 품목 분류다 — 배는 그
               분류를 눕혀 놓는 자리일 뿐이라, 제목은 실린 것을 말하고 배는 탭이 말한다. */}
-          <h2>Item categories on board</h2>
-          <p className="hint-inline">
-            The whole classification laid out as one vessel — every category, where it sits on
-            board, and which projects are hanging on it. Hover a category or a project number to
-            read the items behind it. No real vessel is involved; the decks are just where each
-            group of categories belongs.
-          </p>
+          {/* 설명 문단은 걷었다 — 카드를 한 줄이라도 더 위로 올리는 편이 낫고, 읽을 사람은
+              제목에 올리면 같은 말을 본다. */}
+          <h2 title={"The whole classification laid out as one vessel — every category, where it sits "
+            + "on board, and which projects are hanging on it. Hover a category or a project number "
+            + "to read the items behind it. No real vessel is involved; the decks are just where "
+            + "each group of categories belongs."}>
+            Item categories on board
+          </h2>
         </div>
         <div className="ship-stats">
           <span><b>{totals.stowed}</b> of {totals.items} items stowed</span>
           <span><b>{totals.deals}</b> projects on board</span>
+          {/* 아직 배에 싣지 못한 품목 — 분류가 없어 자리를 못 잡은 것들. 감추면 영영 안
+              는다. 판 아래 따로 두면 카드 줄이 그만큼 낮아져 머리줄 끝에 붙였다. */}
+          {model.loose.length ? (
+            <button
+              type="button"
+              className="ship-chip ship-chip--loose"
+              {...spot(`${model.loose.length} item(s) with no category yet`)}
+              {...opens("Unclassified", "no category assigned yet", model.loose)}
+            >
+              {model.loose.length} not stowed
+            </button>
+          ) : null}
+          {data.unmatched ? (
+            <span
+              className="ship-unlinked"
+              title="Price lines not linked to any item master — listed under Item Category · Unmatched."
+            >
+              {data.unmatched} unlinked
+            </span>
+          ) : null}
           <label className="ship-toggle">
             <input type="checkbox" checked={busyOnly} onChange={(e) => setBusyOnly(e.target.checked)} />
             Only where something is stowed
@@ -332,31 +353,6 @@ export default function ShipMapTab() {
             ))}
         </div>
       </div>
-
-      {/* 아직 배에 싣지 못한 품목 — 분류가 없어 자리를 못 잡은 것들. 감추면 영영 안 는다. */}
-      {model.loose.length || data.unmatched ? (
-        <div className="ship-dock">
-          <div className="ship-dock-tag">Not stowed yet</div>
-          <div className="ship-dock-body">
-            {model.loose.length ? (
-              <button
-                type="button"
-                className="ship-chip ship-chip--loose"
-                {...spot(`${model.loose.length} item(s) with no category yet`)}
-                {...opens("Unclassified", "no category assigned yet", model.loose)}
-              >
-                {model.loose.length} item(s) with no category
-              </button>
-            ) : null}
-            {data.unmatched ? (
-              <span className="hint-inline">
-                {data.unmatched} price line(s) are not linked to any item master — they are listed
-                under Item Category · Unmatched.
-              </span>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
 
       {hint ? <Hinter hint={hint} /> : null}
       {panel ? (
