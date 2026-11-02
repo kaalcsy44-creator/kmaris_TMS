@@ -104,6 +104,16 @@ _MIGRATIONS = {
         # 기존 행은 NULL = 보통의 거래선.
         "maker_id": "INTEGER",
     },
+    "schedule_events": {
+        # 일정의 시간·장소·참석자와 진행 후 기록(상태·회의록·결과). 기존 행은 NULL = 예정.
+        "time_start": "VARCHAR(5)",
+        "time_end": "VARCHAR(5)",
+        "location": "VARCHAR(200)",
+        "attendees": "TEXT",
+        "status": "VARCHAR(12)",
+        "minutes": "TEXT",
+        "outcome": "TEXT",
+    },
     "vessels": {
         "vessel_type": "VARCHAR(60)",
         "ais_flag": "VARCHAR(60)",

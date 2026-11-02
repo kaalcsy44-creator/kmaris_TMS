@@ -400,10 +400,18 @@ function HomeTab() {
   // 일정 관리 — 대시보드 카드 내에서 직접 등록/수정.
   const scheduleCols: ColumnDef<ScheduleRow>[] = [
     { key: "date", label: "Date", text: (r) => r.date || "", filter: "date" },
+    { key: "time", label: "Time", text: (r) => scheduleTime(r) },
     { key: "title", label: "Title", text: (r) => r.title || "" },
     { key: "event_type", label: "Type", text: (r) => r.event_type || "", filter: "facet" },
+    {
+      key: "status", label: "Status", text: (r) => SCHEDULE_STATUS_LABEL[r.status] || "Planned", filter: "facet",
+      render: (r) => <span className={`sched-badge ${r.status || "planned"}`}>{SCHEDULE_STATUS_LABEL[r.status] || "Planned"}</span>,
+    },
     { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => (r.customer ? <CustomerName name={r.customer} /> : <>—</>) },
-    { key: "notes", label: "Notes", text: (r) => r.notes || "" },
+    { key: "location", label: "Location", text: (r) => r.location || "" },
+    { key: "attendees", label: "Attendees", text: (r) => r.attendees || "" },
+    // 진행 후에는 결과가, 그 전에는 안건이 이 일정을 한 줄로 말해 준다.
+    { key: "notes", label: "Notes", text: (r) => (r.status === "done" ? r.outcome || r.minutes : "") || r.notes || "" },
     { key: "pic", label: "PIC", text: (r) => r.owner || "", filter: "facet" },
   ];
 
@@ -626,8 +634,24 @@ function HomeTab() {
   );
 }
 
-/* 일정 등록/수정 폼 — 대시보드 Schedule 카드의 모달 본문. */
+/* 일정 등록/수정 폼 — 대시보드 Schedule 카드의 모달 본문.
+   왼쪽은 예정(언제·어디서·누구와·무엇을), 오른쪽은 진행 후 기록(상태·회의 내용·결과).
+   같은 일정을 두 번 연다 — 잡을 때 왼쪽을, 다녀와서 오른쪽을 채운다. */
 const SCHEDULE_TYPES = ["Meeting", "Business trip", "Delivery", "Deadline", "Other"];
+const SCHEDULE_STATUS: { value: string; label: string }[] = [
+  { value: "planned", label: "Planned" },
+  { value: "done", label: "Done" },
+  { value: "cancelled", label: "Cancelled" },
+];
+const SCHEDULE_STATUS_LABEL: Record<string, string> = Object.fromEntries(
+  SCHEDULE_STATUS.map((o) => [o.value, o.label])
+);
+
+/** 일정의 시간 한 줄 — '14:00–15:30', 끝 시간이 없으면 시작만. */
+function scheduleTime(r: { time_start?: string; time_end?: string }): string {
+  if (!r.time_start) return "";
+  return r.time_end ? `${r.time_start}–${r.time_end}` : r.time_start;
+}
 
 function ScheduleForm({
   row,
@@ -641,28 +665,54 @@ function ScheduleForm({
   onChanged: () => void;
 }) {
   const [date, setDate] = useState(row?.date || today());
+  const [timeStart, setTimeStart] = useState(row?.time_start ?? "");
+  const [timeEnd, setTimeEnd] = useState(row?.time_end ?? "");
   const [title, setTitle] = useState(row?.title ?? "");
   const [eventType, setEventType] = useState(row?.event_type || "Meeting");
   const [customerId, setCustomerId] = useState<number | "">(row?.customer_id ?? "");
+  const [location, setLocation] = useState(row?.location ?? "");
+  const [attendees, setAttendees] = useState(row?.attendees ?? "");
   const [notes, setNotes] = useState(row?.notes ?? "");
+  const [status, setStatus] = useState(row?.status || "planned");
+  const [minutes, setMinutes] = useState(row?.minutes ?? "");
+  const [outcome, setOutcome] = useState(row?.outcome ?? "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   const valid = title.trim() !== "" && date.trim() !== "";
+  // 날짜가 지났는데 아직 '예정'이면 결과를 적을 차례라고 알려 준다.
+  const due = status === "planned" && !!row && date < today();
+
+  /** 회의 내용·결과를 적기 시작하면 '예정'은 '진행 완료'로 넘어간다(취소는 그대로 둔다). */
+  function writeResult(set: (v: string) => void, v: string) {
+    set(v);
+    if (v.trim() && status === "planned") setStatus("done");
+  }
 
   function body(): ScheduleSave {
     return {
       date,
+      time_start: timeStart,
+      time_end: timeEnd,
       title: title.trim(),
       event_type: eventType,
       notes,
       customer_id: customerId === "" ? null : customerId,
+      location: location.trim(),
+      attendees: attendees.trim(),
+      status,
+      minutes,
+      outcome,
     };
   }
 
   async function save() {
     if (!valid) {
       setErr("날짜와 제목을 입력하세요.");
+      return;
+    }
+    if (timeStart && timeEnd && timeEnd < timeStart) {
+      setErr("끝 시간이 시작 시간보다 빠릅니다.");
       return;
     }
     setBusy(true);
@@ -697,40 +747,116 @@ function ScheduleForm({
   return (
     <div>
       <fieldset className="form-fieldset" disabled={!canEdit}>
-        <div className="form-grid">
-          <label className="form-field">
-            <span>Date</span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </label>
-          <label className="form-field">
-            <span>Type</span>
-            <select value={eventType} onChange={(e) => setEventType(e.target.value)}>
-              {SCHEDULE_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </label>
-          <label className="form-field">
-            <span>Title</span>
-            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
-          </label>
-          <label className="form-field">
-            <span>Customer (optional)</span>
-            <select
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value ? Number(e.target.value) : "")}
-            >
-              <option value="">—</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </label>
+        <div className="sched-form">
+          <section className="sched-col">
+            <h4 className="sched-col-title">Plan</h4>
+            <div className="sched-row">
+              <label className="form-field">
+                <span>Date</span>
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              </label>
+              <div className="form-field">
+                <span>Time (optional)</span>
+                <span className="sched-time">
+                  <input type="time" value={timeStart} aria-label="Start time" onChange={(e) => setTimeStart(e.target.value)} />
+                  <span className="sched-tilde">~</span>
+                  <input type="time" value={timeEnd} aria-label="End time" onChange={(e) => setTimeEnd(e.target.value)} />
+                </span>
+              </div>
+            </div>
+            <div className="sched-row">
+              <label className="form-field">
+                <span>Type</span>
+                <select value={eventType} onChange={(e) => setEventType(e.target.value)}>
+                  {SCHEDULE_TYPES.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="form-field">
+                <span>Customer (optional)</span>
+                <select
+                  value={customerId}
+                  onChange={(e) => setCustomerId(e.target.value ? Number(e.target.value) : "")}
+                >
+                  <option value="">—</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="form-field">
+              <span>Title</span>
+              <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
+            </label>
+            <label className="form-field">
+              <span>Location</span>
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="e.g. Seoul office · Busan port · Zoom"
+              />
+            </label>
+            <label className="form-field">
+              <span>Attendees</span>
+              <textarea
+                rows={2}
+                value={attendees}
+                onChange={(e) => setAttendees(e.target.value)}
+                placeholder="e.g. Sam Cho, Season Han (EVERHONEST MARINE)"
+              />
+            </label>
+            <label className="form-field">
+              <span>Agenda / plan</span>
+              <textarea
+                rows={5}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="What to discuss, what to bring"
+              />
+            </label>
+          </section>
+          <section className="sched-col sched-col--result">
+            <h4 className="sched-col-title">Result</h4>
+            <div className="form-field">
+              <span>Status</span>
+              <span className="pl-view-toggle sched-status" role="group" aria-label="Status">
+                {SCHEDULE_STATUS.map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    className={status === o.value ? "on" : ""}
+                    aria-pressed={status === o.value}
+                    onClick={() => setStatus(o.value)}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </span>
+              {due ? <span className="hint-inline">This date has passed — record how it went below.</span> : null}
+            </div>
+            <label className="form-field">
+              <span>Meeting notes (what was discussed)</span>
+              <textarea
+                rows={7}
+                value={minutes}
+                onChange={(e) => writeResult(setMinutes, e.target.value)}
+                placeholder="Discussion, figures, what each side said"
+              />
+            </label>
+            <label className="form-field">
+              <span>Outcome / next actions</span>
+              <textarea
+                rows={5}
+                value={outcome}
+                onChange={(e) => writeResult(setOutcome, e.target.value)}
+                placeholder="Agreed points, follow-ups, who does what by when"
+              />
+            </label>
+          </section>
         </div>
-        <label className="form-field" style={{ marginTop: 10 }}>
-          <span>Notes</span>
-          <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
-        </label>
       </fieldset>
       <div className="form-actions">
         {canEdit ? (

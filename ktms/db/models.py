@@ -912,9 +912,18 @@ class ScheduleEvent(Base):
     date        = Column(String(10))    # 일정일 YYYY-MM-DD
     title       = Column(String(200))   # 제목
     event_type  = Column(String(40))    # 유형: 미팅/출장/납기/기타 등
-    notes       = Column(Text)          # 메모
+    notes       = Column(Text)          # 예정 사항(안건·준비물)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)  # 관련 고객사(선택)
     owner_id    = Column(Integer, ForeignKey("users.id"), nullable=True)      # 담당자(PIC)
+    # 언제·어디서·누구와 — 시간은 'HH:MM'(끝 시간은 선택), 참석자는 자유 입력(쉼표·줄바꿈).
+    time_start  = Column(String(5))
+    time_end    = Column(String(5))
+    location    = Column(String(200))
+    attendees   = Column(Text)
+    # 진행 후 기록 — planned(예정) / done(진행 완료) / cancelled(취소).
+    status      = Column(String(12), default="planned")
+    minutes     = Column(Text)          # 진행 내용(회의록)
+    outcome     = Column(Text)          # 결과·후속 조치
     created_at  = Column(DateTime, default=datetime.utcnow)
 
 

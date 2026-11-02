@@ -20748,3 +20748,44 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Home › Schedule 폼 — 왼쪽 예정(Plan), 오른쪽 진행 후 기록(Result) ────────── */
+.sched-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+.sched-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.sched-col .form-field { margin: 0; }
+.sched-col--result { padding-left: 20px; border-left: 1px solid var(--line); }
+.sched-col-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sched-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.sched-time { display: flex; align-items: center; gap: 6px; }
+.sched-time input { flex: 1 1 0; min-width: 0; }
+.sched-tilde { flex: none; color: var(--muted); }
+.sched-status { align-self: flex-start; }
+.sched-col textarea { resize: vertical; }
+@media (max-width: 820px) {
+  .sched-form { grid-template-columns: minmax(0, 1fr); }
+  .sched-col--result { padding-left: 0; border-left: 0; padding-top: 14px; border-top: 1px solid var(--line); }
+}
+/* 목록의 진행 상태 칩. */
+.sched-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: #475569;
+  background: #eef2f7;
+}
+.sched-badge.done { color: #166534; background: #dcfce7; }
+.sched-badge.cancelled { color: #6b7280; background: #f3f4f6; text-decoration: line-through; }

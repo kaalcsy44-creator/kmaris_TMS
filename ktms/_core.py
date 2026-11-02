@@ -3625,6 +3625,32 @@ class ScheduleEventCreate(BaseModel):
     event_type: str | None = ""
     notes: str | None = ""
     customer_id: int | None = None
+    time_start: str | None = ""
+    time_end: str | None = ""
+    location: str | None = ""
+    attendees: str | None = ""
+    status: str | None = "planned"
+    minutes: str | None = ""
+    outcome: str | None = ""
+
+
+SCHEDULE_STATUSES = ("planned", "done", "cancelled")
+
+
+def _schedule_apply(e: ScheduleEvent, body: ScheduleEventCreate) -> None:
+    """폼 값 → 일정 행(등록·수정 공용)."""
+    e.date = body.date or ""
+    e.title = (body.title or "").strip()
+    e.event_type = body.event_type or ""
+    e.notes = body.notes or ""
+    e.customer_id = body.customer_id or None
+    e.time_start = (body.time_start or "").strip()[:5]
+    e.time_end = (body.time_end or "").strip()[:5]
+    e.location = (body.location or "").strip()[:200]
+    e.attendees = (body.attendees or "").strip()
+    e.status = body.status if body.status in SCHEDULE_STATUSES else "planned"
+    e.minutes = body.minutes or ""
+    e.outcome = body.outcome or ""
 
 
 def _schedule_row(e: ScheduleEvent, cust_names: dict, user_names: dict) -> dict:
@@ -3634,6 +3660,13 @@ def _schedule_row(e: ScheduleEvent, cust_names: dict, user_names: dict) -> dict:
         "title": e.title or "",
         "event_type": e.event_type or "",
         "notes": e.notes or "",
+        "time_start": getattr(e, "time_start", None) or "",
+        "time_end": getattr(e, "time_end", None) or "",
+        "location": getattr(e, "location", None) or "",
+        "attendees": getattr(e, "attendees", None) or "",
+        "status": getattr(e, "status", None) or "planned",
+        "minutes": getattr(e, "minutes", None) or "",
+        "outcome": getattr(e, "outcome", None) or "",
         "customer_id": e.customer_id,
         "customer": cust_names.get(e.customer_id, "") if e.customer_id else "",
         "owner_id": e.owner_id or 0,
@@ -4930,6 +4963,7 @@ __all__ = [
     "_rfq_for_order",
     "_rfq_no_disp",
     "_sanitize_vendor_rfq_items",
+    "_schedule_apply",
     "_schedule_guard",
     "_schedule_row",
     "_scope_for",

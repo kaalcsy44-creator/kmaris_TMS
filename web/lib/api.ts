@@ -1336,6 +1336,18 @@ export type ScheduleSave = {
   event_type?: string;
   notes?: string;
   customer_id?: number | null;
+  /** 'HH:MM' — 끝 시간은 선택. */
+  time_start?: string;
+  time_end?: string;
+  location?: string;
+  /** 참석자 — 자유 입력(쉼표·줄바꿈 구분). */
+  attendees?: string;
+  /** planned(예정) / done(진행 완료) / cancelled(취소). */
+  status?: string;
+  /** 진행 내용(회의록). */
+  minutes?: string;
+  /** 결과·후속 조치. */
+  outcome?: string;
 };
 
 export function fetchSchedule(): Promise<{ rows: ScheduleRow[] }> {

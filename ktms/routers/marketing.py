@@ -27,6 +27,7 @@ from _core import (
     _norm_reply_status,
     _resolve_email_template,
     email_template_names,
+    _schedule_apply,
     _schedule_guard,
     _schedule_row,
     app,
@@ -903,14 +904,8 @@ def create_schedule(body: ScheduleEventCreate, user: dict = Depends(get_current_
         raise HTTPException(status_code=400, detail="일정 날짜를 입력하세요.")
     s = get_session()
     try:
-        e = ScheduleEvent(
-            date=body.date or "",
-            title=(body.title or "").strip(),
-            event_type=body.event_type or "",
-            notes=body.notes or "",
-            customer_id=body.customer_id or None,
-            owner_id=user.get("id") or None,
-        )
+        e = ScheduleEvent(owner_id=user.get("id") or None)
+        _schedule_apply(e, body)
         s.add(e)
         s.commit()
         return {"ok": True, "id": e.id}
@@ -928,11 +923,7 @@ def update_schedule(row_id: int, body: ScheduleEventCreate, user: dict = Depends
         if not e:
             raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
         _schedule_guard(e, user)
-        e.date = body.date or ""
-        e.title = (body.title or "").strip()
-        e.event_type = body.event_type or ""
-        e.notes = body.notes or ""
-        e.customer_id = body.customer_id or None
+        _schedule_apply(e, body)
         s.commit()
         return {"ok": True, "id": e.id}
     finally:
