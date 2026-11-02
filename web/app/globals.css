@@ -16134,6 +16134,27 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 .fin-accrual-row { display: flex; align-items: center; gap: 8px; }
 .fin-accrual-row input[type="month"] { width: auto; flex: 1 1 0; min-width: 0; }
 .fin-accrual-tilde { flex: none; color: var(--muted); }
+/* 고지서·거래명세서 자동 입력 — 폼 맨 위 점선 띠(누르기·끌어 놓기·붙여 넣기). */
+.fin-bill-drop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1.5px dashed var(--line);
+  border-radius: 10px;
+  background: var(--page-bg);
+  color: var(--muted);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.fin-bill-drop b { flex: none; color: var(--navy); font-size: 13px; }
+.fin-bill-drop:hover,
+.fin-bill-drop.over { border-color: var(--navy); background: #fff; }
+.fin-bill-drop:disabled { cursor: progress; opacity: 0.8; }
+.fin-bill-note { display: block; margin: -6px 0 10px; }
 .fin-pay-target { font-size: 13px; font-weight: 600; color: var(--navy); }
 /* 지급 등록의 합계 칸 — 공급가액 + 부가세를 되비추기만 하는 자리(입력 불가). */
 .fin-total-ro[readonly] {

@@ -27,7 +27,9 @@ import {
   receiveFinanceIncome,
   fetchVendors,
   fetchPipeline,
+  parsePayableBill,
 } from "@/lib/api";
+import { downscaleImageFile, imageFromClipboard } from "@/lib/imagePaste";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import type {
   FinancePayable,
@@ -1563,6 +1565,9 @@ const emptyPayable: FinancePayableSave = {
   due_date: todayStr(),
   recurrence: "none",
   recur_until: "",
+  bank_name: "",
+  bank_account: "",
+  bank_holder: "",
   notes: "",
 };
 
@@ -2558,6 +2563,54 @@ function PayableForm({
   const supply = supplyOf(form);
   const vat = form.vat_amount || 0;
 
+  // 고지서·거래명세서 자동 입력 — 사진·캡쳐·PDF 를 올리거나 끌어 놓거나 붙여 넣으면
+  // 읽어 낸 칸만 덮어쓴다(못 읽은 칸은 적어 둔 값 그대로). 저장은 사람이 확인하고 누른다.
+  const billRef = useRef<HTMLInputElement | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  async function scanBill(file: File | null) {
+    if (!file || scanning) return;
+    setScanning(true); setErr(""); setScanNote("");
+    try {
+      const b = await parsePayableBill(await downscaleImageFile(file, 2000));
+      const vendor = b.counterparty
+        ? (vendors ?? []).find((v) => v.name.trim().toLowerCase() === b.counterparty.trim().toLowerCase())
+        : undefined;
+      const s0 = round2((b.amount || 0) - (b.vat_amount || 0));
+      setVatChoice(!b.vat_amount ? "0" : s0 > 0 && Math.abs(b.vat_amount - Math.round(s0 * 0.1)) <= 1 ? "0.1" : "custom");
+      setForm((f) => {
+        const category = b.category && b.category !== CONSULTING ? b.category : f.category;
+        const keepDeal = category === CONSULTING || category === VENDOR_PAY;
+        return {
+          ...f,
+          category,
+          rfq_id: keepDeal ? f.rfq_id : null,
+          vendor_id: vendor ? vendor.id : f.vendor_id,
+          counterparty: b.counterparty || f.counterparty,
+          description: b.description || f.description,
+          amount: b.amount ? round2(b.amount) : f.amount,
+          vat_amount: b.amount ? round2(b.vat_amount || 0) : f.vat_amount,
+          currency: b.currency || f.currency,
+          bill_date: b.bill_date || f.bill_date,
+          due_date: b.due_date || f.due_date,
+          accrual_from: b.accrual_from || f.accrual_from,
+          accrual_to: b.accrual_to || f.accrual_to,
+          bank_name: b.bank_name || f.bank_name,
+          bank_account: b.bank_account || f.bank_account,
+          bank_holder: b.bank_holder || f.bank_holder,
+          notes: b.notes ? (f.notes ? `${f.notes}
+${b.notes}` : b.notes) : f.notes,
+        };
+      });
+      setScanNote(`Filled from ${file.name || "the image"} — check the values before saving.`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not read the bill");
+    } finally {
+      setScanning(false);
+    }
+  }
+
   async function save() {
     if (!(form.due_date || "").trim()) { setErr("Enter a due date."); return; }
     if (!(form.description || "").trim() && !(form.counterparty || "").trim()) {
@@ -2581,6 +2634,42 @@ function PayableForm({
 
   return (
     <Modal title={rowId ? "Edit payable" : "Add payable"} onClose={onClose} form>
+      <div
+        onPaste={(e) => {
+          const f = imageFromClipboard(e);
+          if (f) { e.preventDefault(); scanBill(f); }
+        }}
+      >
+      <input
+        ref={billRef}
+        type="file"
+        hidden
+        accept="image/png,image/jpeg,image/webp,application/pdf"
+        onChange={(e) => { scanBill(e.target.files?.[0] ?? null); e.target.value = ""; }}
+      />
+      <button
+        type="button"
+        className={`fin-bill-drop${dragOver ? " over" : ""}`}
+        disabled={scanning}
+        onClick={() => billRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault(); setDragOver(false);
+          scanBill(e.dataTransfer.files?.[0] ?? null);
+        }}
+        title="Photo, screenshot or PDF of a tax/utility notice, invoice or statement of transaction"
+      >
+        {scanning ? (
+          <b>📄 Reading the bill…</b>
+        ) : (
+          <>
+            <b>📄 Scan bill</b>
+            <span>Upload, drop or paste (Ctrl+V) a photo or PDF of the notice · invoice · 거래명세서 to fill this form</span>
+          </>
+        )}
+      </button>
+      {scanNote ? <p className="hint-inline fin-bill-note">{scanNote}</p> : null}
       <div className="form-grid">
         <label className="form-field">
           <span>Category</span>
@@ -2808,6 +2897,25 @@ function PayableForm({
             </span>
           </div>
         ) : null}
+        {/* 보낼 계좌 — 세금 가상계좌·임대인 계좌처럼 거래선 명부에 없는 곳이 대부분이라
+            지급 건에 직접 둔다. 비워 두면 연결 거래선의 계좌를 쓴다. */}
+        <label className="form-field">
+          <span>Bank (optional)</span>
+          <input value={form.bank_name || ""} onChange={(e) => set("bank_name", e.target.value)} placeholder="e.g. 신한은행" />
+        </label>
+        <label className="form-field">
+          <span>Account no. (optional)</span>
+          <input
+            value={form.bank_account || ""}
+            onChange={(e) => set("bank_account", e.target.value)}
+            placeholder="000-000-000000"
+            inputMode="numeric"
+          />
+        </label>
+        <label className="form-field">
+          <span>Account holder (optional)</span>
+          <input value={form.bank_holder || ""} onChange={(e) => set("bank_holder", e.target.value)} placeholder="예금주" />
+        </label>
       </div>
       <label className="form-field" style={{ marginTop: 10 }}>
         <span>Notes</span>
@@ -2819,8 +2927,9 @@ function PayableForm({
         foreign-currency items carry no VAT, so put those at 0%.
       </p>
       <div className="form-actions">
-        <button className="btn primary" disabled={busy} onClick={save}>{busy ? "Working…" : "Save"}</button>
+        <button className="btn primary" disabled={busy || scanning} onClick={save}>{busy ? "Working…" : "Save"}</button>
         {err ? <span className="action-err">{err}</span> : null}
+      </div>
       </div>
     </Modal>
   );

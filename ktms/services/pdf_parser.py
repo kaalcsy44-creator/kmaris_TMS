@@ -583,6 +583,61 @@ JSON schema (all strings on one line, no embedded newlines):
     return _ask_claude([_pdf_document_block(pdf_bytes), {"type": "text", "text": prompt}])
 
 
+# ── 지급 고지서·거래명세서(Finance › Outflow › Add payable 자동 입력) ─────────────
+# 세금 고지서·4대보험 고지서·공과금·임차료 청구서·거래명세서·세금계산서 한 장에서
+# 지급 건 하나를 만드는 데 필요한 칸만 읽는다. 품목표는 받지 않는다(지급대장은 건 단위).
+_PAYABLE_CATEGORIES = ("거래선지급", "임차료", "급여", "공과금", "수수료", "세금", "기타")
+_BILL_HEAD = {
+    "category": {"type": "string", "enum": list(_PAYABLE_CATEGORIES)},
+    **_nullable_str("counterparty", "description", "currency", "bill_date", "due_date",
+                    "accrual_from", "accrual_to", "bank_name", "bank_account", "bank_holder",
+                    "notes"),
+    "supply_amount": {"type": ["number", "null"]},
+    "vat_amount": {"type": ["number", "null"]},
+    "total_amount": {"type": ["number", "null"]},
+}
+_BILL_SCHEMA = {"type": "object", "properties": _BILL_HEAD, "required": list(_BILL_HEAD),
+                "additionalProperties": False}
+
+_BILL_INSTRUCTIONS = (
+    "The attached file is a bill we have to pay: a Korean tax/utility/insurance notice (고지서·"
+    "납부서), a rent or service invoice, a statement of transaction (거래명세서) or a tax invoice "
+    "(세금계산서). Extract ONE payable from it.\n"
+    "category = one of 거래선지급 (a supplier's goods/services invoice or 거래명세서), 임차료 (rent, "
+    "management fee), 급여 (payroll), 공과금 (utilities, telecom, 4대보험/national pension/health "
+    "insurance notices), 수수료 (bank or service fees), 세금 (tax notices: 국세·지방세·소득세·"
+    "부가세·주민세 etc.), 기타 (anything else).\n"
+    "counterparty = who gets paid (the issuer / 공급자 / 부과기관 such as '국세청', '서울특별시', "
+    "'국민연금공단'), never our own company (K-MARIS / 케이마리스). description = a short line in the "
+    "document's language naming what the bill is for and the period, e.g. '지방소득세 10월', "
+    "'국민연금 10월', 'Office Rent - 11월'.\n"
+    "supply_amount / vat_amount / total_amount = the amounts as printed (공급가액 / 세액 / 합계·"
+    "납부할 금액). Use the amount due by the due date (납기내 금액) when several are printed. If no "
+    "VAT line is printed, vat_amount = 0 and supply_amount = total_amount. Numbers only, no "
+    "separators. currency = ISO code (KRW when amounts are in 원).\n"
+    "bill_date = issue date (발행일·작성일자·고지일). due_date = payment deadline (납부기한·납기내·"
+    "지급기일). Dates are YYYY-MM-DD. accrual_from / accrual_to = the months the charge covers "
+    "(귀속연월·부과기간·사용기간) as YYYY-MM; null if not printed.\n"
+    "bank_name / bank_account / bank_holder = the account to pay into (입금계좌·가상계좌·납부계좌 with "
+    "its bank and 예금주), account number exactly as printed with hyphens. If several virtual accounts "
+    "for different banks are printed, take the first one and list the others in notes.\n"
+    "notes = useful reference numbers printed on the bill (전자납부번호, 고지번호, 납부자번호, 문서번호, "
+    "승인번호), one line, ' · ' separated; null if none.\n"
+    "Use null for anything not printed. Do NOT invent values or infer them from outside knowledge."
+)
+
+
+def parse_payable_bill_image(image_bytes: bytes, media_type: str) -> dict:
+    """고지서·거래명세서 사진/캡쳐에서 지급 건 필드를 추출."""
+    return _parse_image(image_bytes, media_type, _BILL_INSTRUCTIONS, _BILL_SCHEMA)
+
+
+def parse_payable_bill_pdf_document(pdf_bytes: bytes) -> dict:
+    """고지서·거래명세서 PDF(스캔본 포함)에서 지급 건 필드를 추출."""
+    return _ask_claude([_pdf_document_block(pdf_bytes), {"type": "text", "text": _BILL_INSTRUCTIONS}],
+                       _BILL_SCHEMA)
+
+
 def parse_order_fields(text: str, customer_names: list[str] | None = None) -> dict:
     """고객 P/O 평문에서 필드를 추출. PDF 파일이 있으면 parse_order_pdf_document 를 먼저 쓴다."""
     prompt = f"""Extract Purchase Order (customer order) information from the document text below.{_customer_hint_line(customer_names)}

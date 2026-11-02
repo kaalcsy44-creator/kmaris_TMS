@@ -18,8 +18,11 @@ from _core import (
     inbound_fee_in,
     Customer,
     Depends,
+    File,
     Quotation,
     RFQ,
+    UploadFile,
+    _ocr_image_media_type,
     _project_no_map,
     FINANCE_CATEGORIES,
     FINANCE_INCOME_CATEGORIES,
@@ -54,6 +57,7 @@ from _core import (
 from calendar import monthrange
 
 from services.fx import get_deal_base_rate, get_rates
+from services.pdf_parser import parse_payable_bill_image, parse_payable_bill_pdf_document
 
 
 def _to_krw(amount: float, currency: str) -> float:
@@ -1018,6 +1022,70 @@ def finance_deal_payables(order_id: int):
         s.close()
 
 
+def _apply_payable_bank(p: FinancePayable, body: FinancePayableIn) -> None:
+    """폼이 보낸 계좌 칸만 적는다 — 보내지 않은 칸(None)은 저장된 값을 지키게 둔다."""
+    for key in ("bank_name", "bank_account", "bank_holder"):
+        v = getattr(body, key)
+        if v is not None:
+            setattr(p, key, v.strip())
+
+
+@app.post("/api/admin/finance/payables/ocr", dependencies=[Depends(require_token)])
+def ocr_payable_bill(file: UploadFile = File(...)):
+    """지급 자동 입력 — 고지서·거래명세서·세금계산서 사진(이미지) 또는 PDF 를 Claude 비전으로
+    읽어 분류·수취인·금액·기일·귀속기간·입금계좌를 뽑아 준다(Add payable 폼용, 저장은 안 한다)."""
+    fname = (file.filename or "").lower()
+    img_media = _ocr_image_media_type(file)
+    try:
+        file.file.seek(0)
+        if img_media:
+            data = parse_payable_bill_image(file.file.read(), img_media)
+        elif fname.endswith(".pdf"):
+            data = parse_payable_bill_pdf_document(file.file.read())
+        else:
+            raise HTTPException(status_code=400, detail="이미지(PNG·JPG·WEBP) 또는 PDF 파일만 업로드할 수 있습니다.")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"고지서 인식 실패: {exc}") from exc
+
+    def _text(key: str, n: int | None = None) -> str:
+        v = data.get(key)
+        t = str(v).strip() if v not in (None, "") else ""
+        return t[:n] if n else t
+
+    def _num(key: str) -> float | None:
+        v = data.get(key)
+        try:
+            return round(float(v), 2) if v not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    total, vat, supply = _num("total_amount"), _num("vat_amount"), _num("supply_amount")
+    # 총액이 안 보이면 공급가액 + 세액으로 맞춘다. 세액은 총액을 넘을 수 없다.
+    if total is None and supply is not None:
+        total = round(supply + (vat or 0), 2)
+    vat = min(max(vat or 0.0, 0.0), total or 0.0)
+    category = _text("category")
+    return {
+        "category": category if category in FINANCE_CATEGORIES else "기타",
+        "counterparty": _text("counterparty"),
+        "description": _text("description"),
+        "amount": total or 0.0,
+        "vat_amount": vat,
+        "currency": (_text("currency") or "KRW").upper()[:3],
+        "bill_date": _text("bill_date", 10),
+        "due_date": _text("due_date", 10),
+        "accrual_from": _text("accrual_from", 7),
+        "accrual_to": _text("accrual_to", 7),
+        "bank_name": _text("bank_name"),
+        "bank_account": _text("bank_account"),
+        "bank_holder": _text("bank_holder"),
+        "notes": _text("notes"),
+        "truncated": bool(data.get("truncated")),
+    }
+
+
 @app.post("/api/admin/finance/payables", dependencies=[Depends(require_token)])
 def create_finance_payable(body: FinancePayableIn, user: dict = Depends(get_current_user)):
     if not (body.description or "").strip() and not (body.counterparty or "").strip():
@@ -1050,6 +1118,7 @@ def create_finance_payable(body: FinancePayableIn, user: dict = Depends(get_curr
             notes=body.notes or "",
             owner_id=user.get("id") or None,
         )
+        _apply_payable_bank(p, body)
         s.add(p)
         s.commit()
         return {"ok": True, "id": p.id}
@@ -1083,6 +1152,7 @@ def update_finance_payable(row_id: int, body: FinancePayableIn):
         p.accrual_from = (body.accrual_from or "").strip()[:7] or None
         p.accrual_to = (body.accrual_to or "").strip()[:7] or None
         p.notes = body.notes or ""
+        _apply_payable_bank(p, body)
         s.commit()
         return {"ok": True, "id": p.id}
     finally:

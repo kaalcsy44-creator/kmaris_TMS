@@ -21,6 +21,7 @@ import type {
   PoWorkItem,
   PoWorkOptions,
   BusinessCardOcr,
+  PayableBillOcr,
   RfqOcrResult,
   RfqSourceFile,
   OrderOcrResult,
@@ -480,6 +481,13 @@ export function parseBusinessCard(file: File): Promise<BusinessCardOcr> {
   const fd = new FormData();
   fd.append("file", file);
   return postForm<BusinessCardOcr>("/api/admin/ocr/business-card", fd);
+}
+
+// 고지서·거래명세서(사진·캡쳐·PDF) 인식 — Add payable 폼 자동 입력용(저장은 하지 않는다).
+export function parsePayableBill(file: File): Promise<PayableBillOcr> {
+  const fd = new FormData();
+  fd.append("file", file);
+  return postForm<PayableBillOcr>("/api/admin/finance/payables/ocr", fd);
 }
 
 export function parseOrderPdf(file: File): Promise<OrderOcrResult> {

@@ -3722,6 +3722,10 @@ class FinancePayableIn(BaseModel):
     accrual_from: str | None = ""
     accrual_to: str | None = ""
     notes: str | None = ""
+    # 보낼 계좌. None 이면(이 칸을 모르는 화면이 보낸 저장) 저장된 값을 그대로 둔다.
+    bank_name: str | None = None
+    bank_account: str | None = None
+    bank_holder: str | None = None
 
 
 class FinancePayablePayIn(BaseModel):
@@ -3783,6 +3787,10 @@ def _finance_payable_row(p: FinancePayable, vendor_names: dict, user_names: dict
         "rfq_id": getattr(p, "rfq_id", None) or 0,
         # 외화 지급에 적용한 환율(1 외화 = ? KRW). 미입력이면 0 — 화면이 '아직 안 정해졌다'로 읽는다.
         "fx_rate": float(getattr(p, "fx_rate", None) or 0),
+        # 이 지급 건에 직접 적은 수취 계좌(비어 있으면 연결 거래선의 계좌를 쓴다).
+        "bank_name": getattr(p, "bank_name", None) or "",
+        "bank_account": getattr(p, "bank_account", None) or "",
+        "bank_holder": getattr(p, "bank_holder", None) or "",
         "notes": p.notes or "",
         "owner_id": p.owner_id or 0,
         "owner": user_names.get(p.owner_id, "") if p.owner_id else "",

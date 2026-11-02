@@ -1498,6 +1498,10 @@ export type FinancePayable = {
   payments?: Record<string, string>;  // {회차일: 실제 납부일}
   /** 외화 지급에 적용한 환율(1 외화 = ? KRW). 0 = 미입력(그 달 매매기준율로 환산된다). */
   fx_rate?: number;
+  /** 이 지급 건에 직접 적은 수취 계좌(비어 있으면 연결 거래선의 계좌를 쓴다). */
+  bank_name?: string;
+  bank_account?: string;
+  bank_holder?: string;
   notes: string;
   owner_id: number;
   owner: string;
@@ -1542,7 +1546,30 @@ export type FinancePayableSave = {
   /** 이 비용이 걸리는 기간 'YYYY-MM' — 비우면 청구일 한 달에 통째로 선다. */
   accrual_from?: string;
   accrual_to?: string;
+  /** 보낼 계좌 — 세금 가상계좌·임대인 계좌처럼 거래선 명부에 없는 수취인용. */
+  bank_name?: string;
+  bank_account?: string;
+  bank_holder?: string;
   notes?: string;
+};
+
+/** 고지서·거래명세서(사진·PDF) 인식 결과 — Add payable 폼 자동 채우기용. 빈 값 = 못 읽음. */
+export type PayableBillOcr = {
+  category: string;
+  counterparty: string;
+  description: string;
+  amount: number;       // 총액(공급가액 + 부가세)
+  vat_amount: number;
+  currency: string;
+  bill_date: string;
+  due_date: string;
+  accrual_from: string;
+  accrual_to: string;
+  bank_name: string;
+  bank_account: string;
+  bank_holder: string;
+  notes: string;
+  truncated?: boolean;
 };
 
 /** 소개자(컨설턴트) 마스터 — Settings 의 Consultant 탭이 쓰는 한 행. */
