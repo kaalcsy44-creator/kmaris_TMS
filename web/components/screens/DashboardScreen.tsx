@@ -687,14 +687,13 @@ function scheduleMinutesHtml(d: {
   const when = [s.date, scheduleTime({ time_start: s.time_start, time_end: s.time_end })].filter(Boolean).join(" · ");
   const people = splitPeople(s.attendees);
   const items = s.agenda ?? [];
-  const info: [string, string][] = [
-    ["Date / time", v(when)],
-    ["Type", v(s.event_type)],
-    ["Location", v(s.location)],
-    ["Customer", v(d.customer)],
-    ["Attendees", people.length ? people.map(escHtml).join(", ") : "—"],
-    ["Status", escHtml(SCHEDULE_STATUS_LABEL[s.status || "planned"] || "Planned")],
-    ["Prepared by", v(d.owner)],
+  // 개요는 2열(항목 두 쌍씩 한 줄) — 짧은 값이 한 줄을 통째로 먹지 않게. 참석자만 한 줄을 다 쓴다.
+  const cellPair = (k: string, val: string) => `<th>${k}</th><td>${val}</td>`;
+  const infoRows = [
+    cellPair("Date / time", v(when)) + cellPair("Type", v(s.event_type)),
+    cellPair("Location", v(s.location)) + cellPair("Customer", v(d.customer)),
+    cellPair("Status", escHtml(SCHEDULE_STATUS_LABEL[s.status || "planned"] || "Planned")) + cellPair("Prepared by", v(d.owner)),
+    `<th>Attendees</th><td colspan="3">${people.length ? people.map(escHtml).join(", ") : "—"}</td>`,
   ];
   const agendaRows = items.length
     ? items.map((a, i) => `<tr><td class="no">${i + 1}</td><td>${v(a.text)}</td><td>${v(a.result)}</td></tr>`).join("")
@@ -705,6 +704,7 @@ function scheduleMinutesHtml(d: {
 <style>
   @page { size: A4; margin: 14mm 14mm 16mm; }
   * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { margin: 0; padding: 18px 22px; font: 12px/1.5 "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; color: #111827; background: #fff; }
   @media print { body { padding: 0; } }
   .brand { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #0b1f3a; padding-bottom: 6px; }
@@ -713,10 +713,12 @@ function scheduleMinutesHtml(d: {
   h1 { font-size: 19px; margin: 12px 0 10px; color: #0b1f3a; }
   h2 { font-size: 12.5px; margin: 16px 0 6px; color: #0b1f3a; text-transform: uppercase; letter-spacing: .04em; }
   table { width: 100%; border-collapse: collapse; }
-  .info th { width: 110px; text-align: left; font-weight: 700; color: #374151; background: #f3f6fa; }
+  .info { table-layout: fixed; }
+  .info th { width: 92px; text-align: left; font-weight: 700; color: #374151; background: #f3f6fa; }
   th, td { border: 1px solid #d5dde8; padding: 5px 8px; vertical-align: top; white-space: pre-wrap; word-break: break-word; }
-  .agenda thead th { background: #0b1f3a; color: #fff; text-align: left; font-weight: 700; }
-  .agenda td.no, .agenda th.no { width: 34px; text-align: center; }
+  /* 머리글은 옅은 바탕 + 진한 글씨 — 브라우저가 배경을 빼고 찍어도 글씨가 남는다. */
+  .agenda thead th { background: #e8eef6; color: #0b1f3a; text-align: left; font-weight: 700; border-bottom: 2px solid #0b1f3a; }
+  .agenda td.no, .agenda th.no { width: 42px; text-align: center; white-space: nowrap; }
   .agenda td:nth-child(2) { width: 42%; }
   tr { break-inside: avoid; }
   .box { border: 1px solid #d5dde8; border-radius: 4px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; break-inside: avoid; }
@@ -724,9 +726,9 @@ function scheduleMinutesHtml(d: {
   .sign { margin-top: 28px; display: flex; gap: 24px; justify-content: flex-end; font-size: 11px; color: #6b7280; }
   .sign div { width: 150px; border-top: 1px solid #9ca3af; padding-top: 4px; text-align: center; }
 </style></head><body>
-  <div class="brand"><b>K-MARIS · MEETING MINUTES</b><span>${v(when)}</span></div>
+  <div class="brand"><b>K-MARIS</b><span>${v(when)}</span></div>
   <h1>${v(s.title)}</h1>
-  <table class="info">${info.map(([k, val]) => `<tr><th>${k}</th><td>${val}</td></tr>`).join("")}</table>
+  <table class="info">${infoRows.map((r) => `<tr>${r}</tr>`).join("")}</table>
   <h2>Agenda &amp; results</h2>
   <table class="agenda"><thead><tr><th class="no">No.</th><th>Agenda</th><th>Result</th></tr></thead><tbody>${agendaRows}</tbody></table>
   ${block("Outcome / next actions", s.outcome)}
