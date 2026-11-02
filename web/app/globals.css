@@ -20869,3 +20869,17 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
 /* 읽기모드에선 칸을 늘리고 지우는 단추가 할 일이 없다. */
 .form-fieldset.vm-read .sched-x,
 .form-fieldset.vm-read .sched-add { display: none; }
+/* Schedule 읽기모드 — 라벨은 회색 보통 글씨로 낮춰 값과 갈라 보이게(단계 화면 읽기모드와 같은 톤). */
+.form-fieldset.vm-read .sched-form .form-field > span:first-child,
+.form-fieldset.vm-read .sched-form .sched-sub {
+  color: var(--muted, #7b8794);
+  font-weight: 400;
+}
+/* 값은 12.5px. 안건·결과는 .form-field 밖이라 공용 12px 규칙을 못 받고 본문 크기(16px)·
+   굵은 글씨로 커졌다 — 문장이 긴 칸이라 보통 굵기로 둔다. */
+.form-fieldset.vm-read .sched-form .vm-text { font-size: 12.5px; line-height: 1.5; }
+.form-fieldset.vm-read .sched-item .vm-text { font-weight: 400; padding-top: 4px; }
+.form-fieldset.vm-read .sched-item .sched-no { padding-top: 4px; font-weight: 600; }
+/* 빈 칸의 입력 안내문(“Result — …”)은 읽기에선 값처럼 보인다 — 옅은 대시 하나로 바꾼다. */
+.form-fieldset.vm-read .sched-form .vm-text--ph { font-size: 0; }
+.form-fieldset.vm-read .sched-form .vm-text--ph::before { content: "—"; font-size: 12.5px; color: #c4cedb; }
