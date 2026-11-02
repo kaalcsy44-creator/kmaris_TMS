@@ -7,8 +7,9 @@ import type { PermModule } from "@/lib/auth";
 import GlobalSearch from "./GlobalSearch";
 import NotificationBell from "./NotificationBell";
 
-type SubItem = { href: string; label: string };
 // perm: 열람 권한 확인에 쓸 모듈(생략 시 key 를 모듈로 사용).
+type SubItem = { href: string; label: string; key: string; perm?: PermModule };
+// sub 가 있으면 묶음 메뉴 — 누르면 볼 수 있는 첫 하위 화면으로, 호버하면 하위 목록이 펼쳐진다.
 type Item = { href: string; label: string; key: string; perm?: PermModule; sub?: SubItem[] };
 
 // 평면 상단 메뉴 — 페이지 자체가 주요 메뉴. 설정은 우측 톱니 아이콘으로 분리.
@@ -22,10 +23,23 @@ const ITEMS: Item[] = [
   { href: "/project", label: "Projects", key: "projects", perm: "progress" },
   // 업무일지 — 파이프라인(progress) 열람 권한 사용자면 접근 가능.
   // 상대처(Customer·Vendor·Maker)·선박 명부 — 자주 쓰여 Settings 에서 승격. 권한은 settings(마스터 데이터).
-  { href: "/partners", label: "Partners", key: "partners", perm: "settings" },
+  // 묶음 메뉴 — 바깥(고객)을 상대하는 영업(Sales)과 회사 안살림(Office)을 가른다.
+  {
+    href: "/marketing", label: "Sales", key: "sales",
+    sub: [
+      { href: "/marketing", label: "Marketing", key: "marketing" },
+      { href: "/partners", label: "Partners", key: "partners", perm: "settings" },
+    ],
+  },
+  {
+    href: "/schedule", label: "Office", key: "office",
+    sub: [
+      // 일정은 팀 공용 — Dashboard 를 볼 수 있으면 열린다.
+      { href: "/schedule", label: "Schedule", key: "schedule", perm: "dashboard" },
+      { href: "/finance", label: "Finance", key: "finance" },
+    ],
+  },
   { href: "/activity", label: "Activity", key: "activity", perm: "progress" },
-  { href: "/finance", label: "Finance", key: "finance" },
-  { href: "/marketing", label: "Marketing", key: "marketing" },
 ];
 
 export default function TopNav({ active }: { active: string }) {
@@ -34,7 +48,13 @@ export default function TopNav({ active }: { active: string }) {
   const admin = isAdmin();
   const initial = (user?.username ?? "?").charAt(0).toUpperCase();
   // 열람(view) 권한이 있는 메뉴만 노출. (item.key 가 권한 모듈명과 동일)
-  const items = ITEMS.filter((it) => can((it.perm ?? it.key) as PermModule, "view"));
+  // 묶음은 볼 수 있는 하위 화면만 남기고, 하나도 없으면 묶음째 숨긴다.
+  const canView = (it: { key: string; perm?: PermModule }) => can((it.perm ?? it.key) as PermModule, "view");
+  const items = ITEMS.flatMap((it): Item[] => {
+    if (!it.sub) return canView(it) ? [it] : [];
+    const sub = it.sub.filter(canView);
+    return sub.length ? [{ ...it, href: sub[0].href, sub }] : [];
+  });
   const showSettings = admin || can("settings", "view");
 
   return (
@@ -68,17 +88,18 @@ export default function TopNav({ active }: { active: string }) {
               <div key={it.key} className="topnav-item has-sub">
                 <Link
                   href={it.href}
-                  className={`topnav-link${it.key === active ? " on" : ""}`}
+                  className={`topnav-link${it.sub.some((s) => s.key === active) ? " on" : ""}`}
                   onClick={() => setOpen(false)}
                 >
                   {it.label}
+                  <span className="topnav-caret" aria-hidden>▾</span>
                 </Link>
                 <div className="topnav-sub">
                   {it.sub.map((s) => (
                     <Link
                       key={s.href}
                       href={s.href}
-                      className="topnav-sub-link"
+                      className={`topnav-sub-link${s.key === active ? " on" : ""}`}
                       onClick={() => setOpen(false)}
                     >
                       {s.label}
