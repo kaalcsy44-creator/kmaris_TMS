@@ -116,7 +116,7 @@ function mergeCells(cells: { rows: { name: string; amount: number }[]; more: num
 type Line = {
   name: string;
   values: number[];
-  kind?: "sum" | "grand" | "note";
+  kind?: "sum" | "grand" | "note" | "cum";
   /** 합계 밖의 줄(참고용)임을 알리는 꼬리말. */
   hint?: string;
   /** 이 줄의 내역이 details 의 어느 key 에 있는지. 없으면 칸에 툴팁이 붙지 않는다. */
@@ -293,9 +293,20 @@ export default function FinanceProfitTab() {
         .sort((a, b) => Math.abs(sumOf(b.values)) - Math.abs(sumOf(a.values)));
     }
 
+    // 누적 순수익 — 1월부터 그 칸의 마지막 달까지 쌓인 순수익(연초 대비 누계). 구간을
+    // 4월부터 골라도 1~3월의 손익이 빠지지 않게 늘 1월에서 센다. 더하는 값이 아니라
+    // 쌓인 잔액이라 묶을 때도 합하지 않고 칸의 끝달 값을 집는다.
+    const cumMonthly = net.reduce<number[]>((acc, v, i) => [...acc, (acc[i - 1] ?? 0) + v], []);
+    const cumulative: Line = {
+      name: "Cumulative net profit",
+      values: groups.map((g) => cumMonthly[g.months[g.months.length - 1]] ?? 0),
+      kind: "cum",
+      hint: "Jan to date",
+    };
+
     return {
       labels: groups.map((g) => g.label),
-      lines: lines.map((l) => ({ ...l, values: fold(l.values) })),
+      lines: [...lines.map((l) => ({ ...l, values: fold(l.values) })), cumulative],
       details,
       breakdown,
       revenue: fold(revenue),
@@ -443,7 +454,10 @@ export default function FinanceProfitTab() {
                             {cell(v)}
                           </td>
                         ))}
-                        <td className="num tot">{cell(sumOf(l.values))}</td>
+                        {/* 누적 줄의 합계 칸은 더한 값이 아니라 구간 끝의 누계다. */}
+                        <td className="num tot">
+                          {cell(l.kind === "cum" ? l.values[l.values.length - 1] ?? 0 : sumOf(l.values))}
+                        </td>
                       </tr>
                       {/* 펼친 보기 — 그 줄을 이룬 것들이 바로 아래에 한 줄씩. 같은 칸을
                           쓰므로 세로로 훑으면 위 합계가 어떻게 나뉘는지가 그대로 읽힌다. */}

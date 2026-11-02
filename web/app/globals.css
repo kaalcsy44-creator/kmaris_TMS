@@ -16409,6 +16409,16 @@ table.mini.fin-pl tr.fin-pl-grand td {
 }
 table.mini.fin-pl tr.fin-pl-grand .fin-pl-name { background: var(--accent-soft, #eaf3ff); padding-left: 8px; }
 table.mini.fin-pl tr.fin-pl-grand .neg { color: #c0392b; }
+/* 누적 순수익 — 맨 아랫줄 밑에서 '지금까지 얼마가 쌓였나'를 받친다. 월 손익과 헷갈리지 않게
+   굵기는 한 단계 낮추고 바탕만 이어 둔다. */
+table.mini.fin-pl tr.fin-pl-cum td {
+  font-weight: 700;
+  color: var(--navy);
+  background: #f4f8fd;
+  border-bottom: 0;
+}
+table.mini.fin-pl tr.fin-pl-cum .fin-pl-name { background: #f4f8fd; padding-left: 8px; }
+table.mini.fin-pl tr.fin-pl-cum .neg { color: #c0392b; }
 /* 펼친 내역 줄 — 위 줄을 이룬 거래선·항목. 손익 항목이 아니라 그 항목의 안이므로
    한 칸 더 들여 쓰고 글자를 낮춘다(줄 이름이 아니라 '무엇이 들어 있나'의 목록이다). */
 table.mini.fin-pl tr.fin-pl-item > td {
