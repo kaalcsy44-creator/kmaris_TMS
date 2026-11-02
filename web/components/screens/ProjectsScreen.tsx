@@ -1564,14 +1564,26 @@ function PipelineBoard({
   const fitHeight = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
+    // 보드 아래에 붙는 페이지 여백(패딩 등)을 실측해 빼야 문서 전체 세로 스크롤이 생기지 않는다.
+    // 먼저 화면 끝까지 늘려 놓고, 그래도 문서가 넘치는 만큼(=보드 아래 여백)을 다시 뺀다.
     const top = el.getBoundingClientRect().top + window.scrollY;
-    setBoardH(Math.max(320, Math.floor(window.innerHeight - top - 16)));
+    let h = Math.floor(window.innerHeight - top);
+    el.style.height = `${h}px`;
+    const overflow = document.documentElement.scrollHeight - window.innerHeight;
+    if (overflow > 0) h -= overflow;
+    h = Math.max(320, h);
+    el.style.height = `${h}px`;
+    setBoardH(h);
   }, []);
   useLayoutEffect(() => {
     fitHeight();
     window.addEventListener("resize", fitHeight);
     return () => window.removeEventListener("resize", fitHeight);
   }, [fitHeight]);
+  // 데이터가 늦게 들어와 위쪽(툴바 등) 높이가 바뀌어도 다시 맞춘다.
+  useEffect(() => {
+    fitHeight();
+  }, [fitHeight, rows.length, cols.length, compact]);
   const syncEdges = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;

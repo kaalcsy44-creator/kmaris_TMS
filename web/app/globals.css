@@ -10064,7 +10064,12 @@ table.mini .num {
   padding: 8px;
   flex: 1 1 auto;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+  /* 세로 스크롤바 자리를 미리 잡아 둔다 — 안 그러면 스크롤바가 카드 폭을 잠식해
+     단계 안에 가로 스크롤바가 생긴다. */
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
 }
 .pl-board-empty {
   color: var(--muted);
