@@ -20808,7 +20808,7 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
 /* 참석자 — 한 칸에 한 명, 한 줄에 여러 칸이 이어 붙는다. */
 .sched-people { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
 .sched-person { display: inline-flex; align-items: center; gap: 2px; flex: 0 1 170px; min-width: 130px; }
-.sched-person input { flex: 1 1 auto; min-width: 0; }
+.sched-person .combobox { flex: 1 1 auto; min-width: 0; }
 .sched-x { flex: none; padding: 0 5px; line-height: 1.5; color: var(--muted); }
 .sched-add { align-self: center; }
 /* 안건 구역 머리 — 위 구역과 선으로 가른다. */

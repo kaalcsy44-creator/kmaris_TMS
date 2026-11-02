@@ -29,6 +29,7 @@ import type {
 import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen";
 import BriefingTab from "@/components/screens/BriefingTab";
 import { MarketingForm, emptyForm as emptyMarketingForm } from "@/components/screens/MarketingScreen";
+import ComboBox from "@/components/common/ComboBox";
 import { ReplyBadge, FollowUpCell } from "@/components/common/MarketingBadges";
 import { REPLY_STATUSES, replyText } from "@/lib/marketing";
 import {
@@ -941,22 +942,18 @@ function ScheduleForm({
               />
             </label>
             {/* 참석자 — 한 칸에 한 명. 예전 일정에 적은 이름이 드롭다운 후보로 뜨고,
-                처음 만나는 사람은 그냥 적으면 된다(datalist = 고르기 + 직접 입력). */}
+                처음 만나는 사람은 그냥 적으면 된다(앱 공용 ComboBox = 고르기 + 직접 입력).
+                다른 칸에서 이미 고른 이름은 후보에서 뺀다. */}
             <div className="form-field">
               <span>Attendees</span>
-              <datalist id="sched-people">
-                {peopleHistory.map((p) => <option key={p} value={p} />)}
-              </datalist>
               <div className="sched-people">
                 {people.map((p, i) => (
                   <span key={i} className="sched-person">
-                    <input
-                      type="text"
-                      list="sched-people"
+                    <ComboBox
                       value={p}
-                      aria-label={`Attendee ${i + 1}`}
+                      options={peopleHistory.filter((h) => h === p || !people.includes(h))}
                       placeholder={peopleHistory.length ? "Pick or type a name" : "Type a name"}
-                      onChange={(e) => setPeople((list) => list.map((x, j) => (j === i ? e.target.value : x)))}
+                      onChange={(v) => setPeople((list) => list.map((x, j) => (j === i ? v : x)))}
                     />
                     {people.length > 1 ? (
                       <button
