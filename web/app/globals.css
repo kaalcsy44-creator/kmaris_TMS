@@ -20865,7 +20865,8 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
   background: #fff;
 }
 /* Schedule 읽기/편집 토글 줄. */
-.sched-modebar { display: flex; align-items: center; gap: 8px; margin: -4px 0 8px; }
+/* 위쪽 음수 여백 금지 — 본문이 스크롤 상자라 끌어올린 만큼 토글 윗변이 잘린다. */
+.sched-modebar { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding-top: 1px; }
 /* 읽기모드에선 칸을 늘리고 지우는 단추가 할 일이 없다. */
 .form-fieldset.vm-read .sched-x,
 .form-fieldset.vm-read .sched-add { display: none; }
