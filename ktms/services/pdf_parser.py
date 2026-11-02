@@ -658,3 +658,98 @@ def parse_order_pdf_document(pdf_bytes: bytes, customer_names: list[str] | None 
 Dates are YYYY-MM-DD or null."""
     return _ask_claude([_pdf_document_block(pdf_bytes), {"type": "text", "text": prompt}],
                        _ORDER_JSON_SCHEMA)
+
+
+# ── 출장 결과 보고서(Office › Schedule › Business trip 자동 입력) ─────────────────
+# 엑셀 '출장결과보고서' 양식의 네 시트(결과보고서·출장일정·출장경비·업체별 미팅메모) 중 하나를
+# 캡쳐한 이미지(또는 PDF)에서 그 시트의 칸만 읽는다. 어느 시트인지는 화면의 탭이 알려 준다.
+TRIP_SHEETS = ("report", "itinerary", "expenses", "memos")
+TRIP_EXPENSE_CATEGORIES = ("Transport", "Lodging", "Meals", "Entertainment", "Communication", "Other")
+TRIP_PAYMENTS = ("Personal card", "Corporate card", "Cash", "Bank transfer")
+
+
+def _obj(props: dict) -> dict:
+    return {"type": "object", "properties": props, "required": list(props), "additionalProperties": False}
+
+
+def _rows(fields: dict) -> dict:
+    return {"type": "array", "items": _obj(fields)}
+
+
+_S = {"type": "string"}
+_TRIP_SCHEMAS = {
+    "report": _obj({
+        **_nullable_str("title", "date_start", "date_end", "region", "purpose", "visits", "author",
+                        "position", "report_to", "report_date", "opinion", "attachments",
+                        "reviewer", "approver"),
+        "travelers": {"type": "array", "items": _S},
+        "results": _rows({"heading": _S, "detail": _S}),
+        "actions": _rows({"text": _S, "owner": _S, "due": _S, "note": _S}),
+    }),
+    "itinerary": _obj({"items": _rows({k: _S for k in (
+        "date", "time", "org", "place", "people", "activity", "result", "note")})}),
+    "expenses": _obj({"items": _rows({
+        **{k: _S for k in ("date", "user", "category", "detail", "payment", "fx_note", "note")},
+        "amount": {"type": "number"},
+        "receipt": {"type": "boolean"},
+    })}),
+    "memos": _obj({"items": _rows({k: _S for k in (
+        "company", "section", "item", "memo", "insight", "note")})}),
+}
+
+_TRIP_COMMON = (
+    "The attached file is a screenshot, photo or PDF of a K-MARIS business trip report "
+    "(출장 결과 보고서) or one of its sheets. Copy the text exactly as written, in its original "
+    "language — do NOT translate, summarize or invent anything. Use \"\" (or null where allowed) "
+    "for anything not shown. Dates are YYYY-MM-DD; when the year is abbreviated ('26.10.15') or "
+    "missing, infer it from the other dates on the page. Keep line breaks inside a cell as \n.\n"
+)
+_TRIP_INSTRUCTIONS = {
+    "report": _TRIP_COMMON + (
+        "This is the summary sheet. Fields: title = a short trip title (e.g. '부산 출장'), taken from "
+        "the page if printed, otherwise built from region + purpose. date_start / date_end = the trip "
+        "period (출장기간). region = 출장지역. purpose = 출장목적. visits = 방문처 / 미팅 상대. "
+        "author = 작성자, position = 소속 / 직위, report_to = 보고 대상, report_date = 작성일. "
+        "travelers = each person on the trip (from 작성자 / 출장자, split on '/' or ','). "
+        "results = section 02 (주요 출장 결과 및 성과): each numbered heading without its number, "
+        "with the text under it as detail. actions = section 03 (후속 조치 및 제안) table rows: "
+        "text = 내용, owner = 담당자, due = 목표 일정 as written, note = 비고. "
+        "opinion = section 04 (종합 의견 / 요청 사항) in full. attachments = 첨부자료 text. "
+        "reviewer = 검토, approver = 승인 (names only)."
+    ),
+    "itinerary": _TRIP_COMMON + (
+        "This is the itinerary sheet (출장 일정 및 방문 미팅 기록). One item per table row, top to "
+        "bottom. date = 일자 — the date column is merged across rows, so repeat that date on every "
+        "row it covers. time = 시간 / 장소 column (a time range like '09:00–10:00' or a travel leg "
+        "like '김포→김해 항공 이동'); when the time cell is merged over several rows, repeat it. "
+        "org = 방문기관 / 업체, place = 장소, people = 참석자 / 담당자, activity = 논의 / 활동 "
+        "내용, result = 결과 및 후속 조치, note = 비고."
+    ),
+    "expenses": _TRIP_COMMON + (
+        "This is the expense sheet (출장 경비 정산). One item per expense line; SKIP subtotal and "
+        "total rows (… 계, 총 계, Total). date = 지출일, user = 사용자, detail = 사용처 / 내역, "
+        "fx_note = 통화 / 환율 메모, note = 비고. category = exactly one of "
+        + ", ".join(TRIP_EXPENSE_CATEGORIES) + " (교통비/항공/택시/KTX → Transport, 숙박비 → "
+        "Lodging, 식비 → Meals, 접대비 → Entertainment, 통신비 → Communication, else Other). "
+        "payment = exactly one of " + ", ".join(TRIP_PAYMENTS) + " (개인 신용카드 → Personal card, "
+        "법인카드 → Corporate card, 현금 → Cash, 계좌이체 → Bank transfer), \"\" if not shown. "
+        "amount = the KRW amount as a number without separators (0 if not shown). "
+        "receipt = true when 영수증 is 유/O/Yes/✓ or not shown, false when 무/X/No."
+    ),
+    "memos": _TRIP_COMMON + (
+        "This is the meeting memo sheet (업체별 상세 미팅 메모). One item per table row, top to "
+        "bottom. company = 업체 — merged across rows, so repeat it on every row it covers. "
+        "section = 구분, item = 세부 항목, memo = 미팅 메모 정리, insight = 시사점 / 검증 필요, "
+        "note = 비고."
+    ),
+}
+
+
+def parse_trip_sheet(blob: bytes, media_type: str, sheet: str) -> dict:
+    """출장 보고서 한 시트의 캡쳐(이미지) 또는 PDF 에서 그 시트의 칸을 추출."""
+    if sheet not in TRIP_SHEETS:
+        raise ValueError(f"알 수 없는 시트: {sheet}")
+    prompt, schema = _TRIP_INSTRUCTIONS[sheet], _TRIP_SCHEMAS[sheet]
+    if media_type == "application/pdf":
+        return _ask_claude([_pdf_document_block(blob), {"type": "text", "text": prompt}], schema)
+    return _parse_image(blob, media_type, prompt, schema)

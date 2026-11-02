@@ -20967,3 +20967,4 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
 /* ── Office › Schedule 화면 ─────────────────────────────────────────────── */
 .sched-page-bar { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
 .sched-page-bar small { margin-left: 2px; font-size: 11px; opacity: 0.7; }
+.trip-scan { margin-bottom: 10px; }

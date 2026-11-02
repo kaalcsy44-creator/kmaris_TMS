@@ -2480,6 +2480,19 @@ export type TripExpense = {
 };
 export type TripMemo = { company: string; section: string; item: string; memo: string; insight: string; note: string };
 
+/** 출장 보고서 시트 캡쳐 인식 결과 — 시트(탭)마다 모양이 다르다. 못 읽은 칸은 ""/null. */
+export type TripSheet = "report" | "itinerary" | "expenses" | "memos";
+export type TripReportOcr = {
+  title: string | null; date_start: string | null; date_end: string | null; region: string | null;
+  purpose: string | null; visits: string | null; author: string | null; position: string | null;
+  report_to: string | null; report_date: string | null; opinion: string | null; attachments: string | null;
+  reviewer: string | null; approver: string | null;
+  travelers: string[];
+  results: { heading: string; detail: string }[];
+  actions: TripAction[];
+};
+export type TripRowsOcr<T> = { items: T[]; truncated?: boolean };
+
 // ── 전역 검색 ─────────────────────────────────────────────────────────────────
 export type SearchResult = {
   rfq_id: number;

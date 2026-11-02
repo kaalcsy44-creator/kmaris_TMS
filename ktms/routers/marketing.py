@@ -943,3 +943,25 @@ def delete_schedule(row_id: int, user: dict = Depends(get_current_user)):
         return {"ok": True}
     finally:
         s.close()
+
+
+# ── 출장 보고서 자동 입력 — 시트 캡쳐(이미지·PDF)를 읽어 그 탭의 칸을 채운다 ─────────
+from _core import _ocr_image_media_type  # noqa: E402
+from services.pdf_parser import TRIP_SHEETS, parse_trip_sheet  # noqa: E402
+
+
+@app.post("/api/admin/schedule/trip-ocr", dependencies=[Depends(require_token)])
+def ocr_trip_sheet(file: UploadFile = File(...), sheet: str = Form("report")):
+    """출장 보고서 한 시트(결과보고서·출장일정·출장경비·업체별 미팅메모)의 캡쳐를 Claude 비전으로
+    읽어 돌려준다. 어느 시트인지는 화면의 탭이 정한다. 저장은 하지 않는다(사람이 확인하고 저장)."""
+    if sheet not in TRIP_SHEETS:
+        raise HTTPException(status_code=400, detail="sheet 는 report·itinerary·expenses·memos 중 하나입니다.")
+    fname = (file.filename or "").lower()
+    media = _ocr_image_media_type(file) or ("application/pdf" if fname.endswith(".pdf") else None)
+    if not media:
+        raise HTTPException(status_code=400, detail="이미지(PNG·JPG·WEBP) 또는 PDF 파일만 업로드할 수 있습니다.")
+    try:
+        file.file.seek(0)
+        return parse_trip_sheet(file.file.read(), media, sheet)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"출장 보고서 인식 실패: {exc}") from exc

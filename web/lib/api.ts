@@ -81,6 +81,9 @@ import type {
   MarketingOverview,
   ScheduleRow,
   TripReport,
+  TripReportOcr,
+  TripRowsOcr,
+  TripSheet,
   StatisticsData,
   StatDebugData,
   SearchData,
@@ -1354,6 +1357,13 @@ export type ScheduleSave = {
   trip?: TripReport;
 };
 
+// 출장 보고서 시트 캡쳐(이미지·PDF) 인식 — 지금 탭의 칸을 채우는 데 쓴다(저장은 하지 않는다).
+export function parseTripSheet(file: File, sheet: TripSheet): Promise<TripReportOcr | TripRowsOcr<Record<string, unknown>>> {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("sheet", sheet);
+  return postForm("/api/admin/schedule/trip-ocr", fd);
+}
 export function fetchSchedule(): Promise<{ rows: ScheduleRow[] }> {
   return get<{ rows: ScheduleRow[] }>("/api/admin/schedule");
 }

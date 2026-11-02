@@ -11,11 +11,16 @@ import {
   createSchedule,
   updateSchedule,
   deleteSchedule,
+  parseTripSheet,
   type ScheduleSave,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import { canEditDeal, getUser } from "@/lib/auth";
-import type { ScheduleRow, ScheduleAgendaItem, CustomerOption, TripReport } from "@/lib/types";
+import type {
+  ScheduleRow, ScheduleAgendaItem, CustomerOption, TripReport, TripReportOcr, TripRowsOcr,
+  TripStop, TripExpense, TripMemo,
+} from "@/lib/types";
+import { downscaleImageFile, imageFromClipboard } from "@/lib/imagePaste";
 import ComboBox from "@/components/common/ComboBox";
 import { ViewModeProvider, useEditGate, useViewMode, type ViewMode } from "@/lib/viewMode";
 import { confirmDiscard, useDirty } from "@/components/common/editHistory";
@@ -352,6 +357,75 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
   function writeResult(set: (v: string) => void, v: string) {
     set(v);
     if (v.trim() && status === "planned") setStatus("done");
+  }
+
+  /* 출장 보고서 캡쳐 자동 입력 — 지금 탭(시트)의 캡쳐·사진·PDF 를 올리거나 끌어 놓거나 붙여
+     넣으면 그 탭의 칸을 채운다. 표 탭은 읽은 줄을 이미 적은 줄 뒤에 붙이고, 결과보고서 탭은
+     읽어 낸 칸만 덮어쓴다(못 읽은 칸은 적어 둔 값 그대로). 저장은 사람이 확인하고 누른다. */
+  const scanRef = useRef<HTMLInputElement | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState("");
+  const [scanOver, setScanOver] = useState(false);
+  async function scanSheet(file: File | null) {
+    if (!file || scanning) return;
+    const sheet = tripTab;
+    setScanning(true);
+    setErr("");
+    setScanNote("");
+    try {
+      const res = await parseTripSheet(await downscaleImageFile(file, 2400), sheet);
+      const kept = cleanTrip(trip);
+      let added = 0;
+      if (sheet === "report") {
+        const r = res as TripReportOcr;
+        const pick = (v: string | null | undefined, cur: string) => (v && v.trim() ? v.trim() : cur);
+        if (r.title?.trim()) setTitle(r.title.trim());
+        if (r.date_start?.trim()) setDate(r.date_start.trim());
+        if (r.region?.trim()) setLocation(r.region.trim());
+        if (r.opinion?.trim()) setOutcome(r.opinion.trim());
+        const names = (r.travelers ?? []).map((x) => x.trim()).filter(Boolean);
+        if (names.length) setPeople([...new Set(names)]);
+        const results = (r.results ?? []).filter((x) => x.heading.trim() || x.detail.trim());
+        if (results.length) {
+          const mine = agenda.filter((a) => a.text.trim() || a.result.trim());
+          setAgenda([...mine, ...results.map((x) => ({ text: x.heading.trim(), result: x.detail.trim() }))]);
+        }
+        const actions = (r.actions ?? []).filter((a) => a.text.trim());
+        added = results.length + actions.length;
+        setTrip({
+          ...trip,
+          date_end: pick(r.date_end, trip.date_end),
+          purpose: pick(r.purpose, trip.purpose),
+          visits: pick(r.visits, trip.visits),
+          author: pick(r.author, trip.author),
+          position: pick(r.position, trip.position),
+          report_to: pick(r.report_to, trip.report_to),
+          report_date: pick(r.report_date, trip.report_date),
+          attachments: pick(r.attachments, trip.attachments),
+          reviewer: pick(r.reviewer, trip.reviewer),
+          approver: pick(r.approver, trip.approver),
+          actions: [...kept.actions, ...actions].length ? [...kept.actions, ...actions] : trip.actions,
+        });
+      } else {
+        const items = ((res as TripRowsOcr<Record<string, unknown>>).items ?? []) as never[];
+        added = items.length;
+        // 이미 적은 줄(빈 줄 제외) 뒤에 읽은 줄을 붙인다 — 여러 장을 차례로 올려도 이어진다.
+        const fresh = initialTrip({ [sheet]: items } as Partial<TripReport>, { author: "", date: "" });
+        if (sheet === "itinerary") setTrip({ ...trip, itinerary: [...kept.itinerary, ...(items.length ? fresh.itinerary : [])] as TripStop[] });
+        if (sheet === "expenses") setTrip({ ...trip, expenses: [...kept.expenses, ...(items.length ? fresh.expenses : [])] as TripExpense[] });
+        if (sheet === "memos") setTrip({ ...trip, memos: [...kept.memos, ...(items.length ? fresh.memos : [])] as TripMemo[] });
+      }
+      const cut = (res as { truncated?: boolean }).truncated ? " The image was too long — some rows may be missing; upload the rest separately." : "";
+      setScanNote(
+        added || sheet === "report"
+          ? `Filled from ${file.name || "the image"}${sheet === "report" ? "" : ` — ${added} row(s) added`}. Check the values before saving.${cut}`
+          : `Nothing readable for this tab in ${file.name || "the image"}.`
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not read the image");
+    } finally {
+      setScanning(false);
+    }
   }
 
   function setAgendaAt(i: number, patch: Partial<ScheduleAgendaItem>) {
@@ -806,7 +880,16 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
     );
 
   return (
-    <div>
+    <div
+      onPaste={(e) => {
+        if (!isTrip || !gate.editing) return;
+        const f = imageFromClipboard(e);
+        if (f) {
+          e.preventDefault();
+          scanSheet(f);
+        }
+      }}
+    >
       {/* 읽기 ↔ 편집 — 단계 화면과 같은 토글. 저장된 일정에만(새 일정은 쓰는 중이라 편집뿐). */}
       {savedId && canEdit ? (
         <div className="sched-modebar">
@@ -853,6 +936,41 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
             );
           })}
         </div>
+      ) : null}
+      {isTrip && gate.editing ? (
+        <>
+          <input
+            ref={scanRef}
+            type="file"
+            hidden
+            accept="image/png,image/jpeg,image/webp,application/pdf"
+            onChange={(e) => { scanSheet(e.target.files?.[0] ?? null); e.target.value = ""; }}
+          />
+          <button
+            type="button"
+            className={`fin-bill-drop trip-scan${scanOver ? " over" : ""}`}
+            disabled={scanning}
+            onClick={() => scanRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setScanOver(true); }}
+            onDragLeave={() => setScanOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setScanOver(false);
+              scanSheet(e.dataTransfer.files?.[0] ?? null);
+            }}
+            title="Screenshot, photo or PDF of this sheet of the trip report"
+          >
+            {scanning ? (
+              <b>📷 Reading the {TRIP_TABS.find((t) => t.id === tripTab)?.label}…</b>
+            ) : (
+              <>
+                <b>📷 Scan {TRIP_TABS.find((t) => t.id === tripTab)?.label}</b>
+                <span>Upload, drop or paste (Ctrl+V) a screenshot of this sheet to fill this tab</span>
+              </>
+            )}
+          </button>
+          {scanNote ? <p className="hint-inline fin-bill-note">{scanNote}</p> : null}
+        </>
       ) : null}
       <fieldset {...gate.fieldsetProps}>
         {isTrip ? tripBody : planBody}
