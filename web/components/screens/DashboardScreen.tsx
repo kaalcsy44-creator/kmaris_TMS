@@ -30,6 +30,8 @@ import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen"
 import BriefingTab from "@/components/screens/BriefingTab";
 import { MarketingForm, emptyForm as emptyMarketingForm } from "@/components/screens/MarketingScreen";
 import ComboBox from "@/components/common/ComboBox";
+import { ViewModeProvider, useEditGate, useViewMode, type ViewMode } from "@/lib/viewMode";
+import { confirmDiscard, useDirty } from "@/components/common/editHistory";
 import { ReplyBadge, FollowUpCell } from "@/components/common/MarketingBadges";
 import { REPLY_STATUSES, replyText } from "@/lib/marketing";
 import {
@@ -559,7 +561,10 @@ function HomeTab() {
   const order = useHomeOrder(Object.keys(cards));
   const { ids, dragId, onDragStart, onDragOver, onDragEnd } = order;
 
+  // 일정 창에 저장 안 한 변경이 남았는지 — 닫기(×·바깥 클릭) 전에 묻는다.
+  const schedDirty = useRef(false);
   function reloadSchedule() {
+    schedDirty.current = false;
     setSchedAdding(false);
     setSchedEditing(null);
     return refreshSchedule();
@@ -595,18 +600,27 @@ function HomeTab() {
 
       {schedAdding ? (
         // form 레이아웃 — 본문이 세로로 스크롤되고 Save 바가 바닥에 붙는다(넓은 폭은 maxWidth 로).
-        <Modal title="Add schedule" onClose={() => setSchedAdding(false)} form maxWidth={1120}>
-          <ScheduleForm customers={customers ?? []} history={schedRows} canEdit onChanged={reloadSchedule} />
+        <Modal title="Add schedule" onClose={() => { if (confirmDiscard(schedDirty.current)) setSchedAdding(false); }} form maxWidth={1120}>
+          <ScheduleForm
+            customers={customers ?? []}
+            history={schedRows}
+            canEdit
+            dirtyRef={schedDirty}
+            onSaved={refreshSchedule}
+            onDeleted={reloadSchedule}
+          />
         </Modal>
       ) : null}
       {schedEditing ? (
-        <Modal title="Schedule" onClose={() => setSchedEditing(null)} form maxWidth={1120}>
+        <Modal title="Schedule" onClose={() => { if (confirmDiscard(schedDirty.current)) setSchedEditing(null); }} form maxWidth={1120}>
           <ScheduleForm
             row={schedEditing}
             history={schedRows}
             customers={customers ?? []}
             canEdit={canEditDeal(schedEditing.owner_id)}
-            onChanged={reloadSchedule}
+            dirtyRef={schedDirty}
+            onSaved={refreshSchedule}
+            onDeleted={reloadSchedule}
           />
         </Modal>
       ) : null}
@@ -738,20 +752,36 @@ function scheduleMinutesHtml(d: {
 </body></html>`;
 }
 
-function ScheduleForm({
-  row,
-  history,
-  customers,
-  canEdit,
-  onChanged,
-}: {
+type ScheduleFormProps = {
   row?: ScheduleRow;
   /** 전체 일정 — 예전에 적은 참석자를 참석자 칸의 드롭다운 후보로 쓴다. */
   history: ScheduleRow[];
   customers: CustomerOption[];
   canEdit: boolean;
-  onChanged: () => void;
-}) {
+  /** 저장 안 한 변경이 있는지를 창(부모)에 알려 둔다 — 닫기 전에 물어보는 데 쓴다. */
+  dirtyRef: React.MutableRefObject<boolean>;
+  /** 저장 뒤 — 목록만 새로 받는다(창은 그대로 둔다). */
+  onSaved: () => void;
+  /** 삭제 뒤 — 창을 닫고 목록을 새로 받는다. */
+  onDeleted: () => void;
+};
+
+/** 읽기/편집 — 프로젝트 단계 화면과 같은 규약(같은 DOM, 껍데기만 바꿈).
+ *  저장된 일정은 읽기로, 새 일정은 편집으로 연다. */
+function ScheduleForm(props: ScheduleFormProps) {
+  const [mode, setMode] = useState<ViewMode>(props.row ? "read" : "edit");
+  return (
+    <ViewModeProvider mode={mode} setMode={setMode}>
+      <ScheduleEditor {...props} />
+    </ViewModeProvider>
+  );
+}
+
+function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, onDeleted }: ScheduleFormProps) {
+  const { mode, setMode } = useViewMode();
+  const gate = useEditGate(canEdit);
+  // 처음 저장한 새 일정의 id — 그 뒤 저장은 같은 일정을 고친다(창이 닫히지 않으므로).
+  const [savedId, setSavedId] = useState<number | null>(row?.id ?? null);
   const [date, setDate] = useState(row?.date || today());
   const [timeStart, setTimeStart] = useState(row?.time_start ?? "");
   const [timeEnd, setTimeEnd] = useState(row?.time_end ?? "");
@@ -773,7 +803,7 @@ function ScheduleForm({
 
   const valid = title.trim() !== "" && date.trim() !== "";
   // 날짜가 지났는데 아직 '예정'이면 결과를 적을 차례라고 알려 준다.
-  const due = status === "planned" && !!row && date < today();
+  const due = status === "planned" && !!savedId && date < today();
 
   // 예전 일정들에 적힌 참석자 — 자주 만난 사람부터.
   const peopleHistory = useMemo(() => {
@@ -816,6 +846,10 @@ function ScheduleForm({
     };
   }
 
+  // 저장본과 지금 입력이 다른가 — Save 옆 점(•)과 닫기 확인에 쓴다. 기준은 처음 연 값.
+  const { dirty, markClean } = useDirty(body(), "loaded");
+  dirtyRef.current = dirty;
+
   async function save() {
     if (!valid) {
       setErr("날짜와 제목을 입력하세요.");
@@ -828,10 +862,12 @@ function ScheduleForm({
     setBusy(true);
     setErr("");
     try {
-      if (row) await updateSchedule(row.id, body());
-      else await createSchedule(body());
+      if (savedId) await updateSchedule(savedId, body());
+      else setSavedId((await createSchedule(body())).id);
       invalidateCache("dashboard");
-      onChanged();
+      // 창은 닫지 않는다 — 기준값을 지금 내용으로 옮겨 Save 옆 점만 지운다.
+      markClean();
+      onSaved();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -840,13 +876,13 @@ function ScheduleForm({
   }
 
   async function remove() {
-    if (!row) return;
+    if (!savedId) return;
     if (!confirm("Delete this schedule?")) return;
     setBusy(true);
     setErr("");
     try {
-      await deleteSchedule(row.id);
-      onChanged();
+      await deleteSchedule(savedId);
+      onDeleted();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Delete failed");
     } finally {
@@ -870,7 +906,7 @@ function ScheduleForm({
       <div>
         <iframe ref={frameRef} className="sched-minutes" title="Meeting minutes preview" srcDoc={minutesHtml} />
         <div className="form-actions">
-          <button type="button" className="btn" onClick={() => setPreview(false)}>← Back to edit</button>
+          <button type="button" className="btn" onClick={() => setPreview(false)}>← Back</button>
           <button type="button" className="btn primary" onClick={() => frameRef.current?.contentWindow?.print()}>
             🖨 Print
           </button>
@@ -881,7 +917,33 @@ function ScheduleForm({
 
   return (
     <div>
-      <fieldset className="form-fieldset" disabled={!canEdit}>
+      {/* 읽기 ↔ 편집 — 단계 화면과 같은 토글. 저장된 일정에만(새 일정은 쓰는 중이라 편집뿐). */}
+      {savedId && canEdit ? (
+        <div className="sched-modebar">
+          <div className="stage-mode-toggle" role="group" aria-label="View mode">
+            <button
+              type="button"
+              className={mode === "read" ? "on" : ""}
+              aria-pressed={mode === "read"}
+              onClick={() => setMode("read")}
+              title="Read — see what was entered, without editing"
+            >
+              <span aria-hidden>👁 </span>Read
+            </button>
+            <button
+              type="button"
+              className={mode === "edit" ? "on" : ""}
+              aria-pressed={mode === "edit"}
+              onClick={() => setMode("edit")}
+              title="Edit — change and save this schedule"
+            >
+              <span aria-hidden>✎ </span>Edit
+            </button>
+          </div>
+          {dirty ? <span className="hint-inline">Unsaved changes</span> : null}
+        </div>
+      ) : null}
+      <fieldset {...gate.fieldsetProps}>
         {/* 2단 격자 — 왼쪽 칸은 예정(Plan), 오른쪽 칸은 진행 후 기록(Result).
             안건은 줄마다 왼쪽에 안건, 같은 줄 오른쪽에 그 안건의 결과가 선다. */}
         <div className="sched-form">
@@ -1068,14 +1130,16 @@ function ScheduleForm({
                 title="Preview and print as meeting minutes">
           📄 Preview / Print
         </button>
-        {canEdit ? (
-          <button className="btn primary" disabled={busy || !valid} onClick={save}>
-            {busy ? "Working…" : row ? "Save" : "Add schedule"}
+        {/* 저장 뒤 고친 것이 있으면 Save 옆에 점(•) — 앱 전역 규약(RFQ 편집기와 같은 모양). */}
+        {gate.editing ? (
+          <button className="btn primary" disabled={busy || !valid} onClick={save}
+                  title={dirty ? "Unsaved changes" : undefined}>
+            {busy ? "Saving…" : savedId ? (dirty ? "Save •" : "Save") : "Add schedule"}
           </button>
-        ) : (
+        ) : !canEdit ? (
           <span className="hint-inline">View only — created by another PIC</span>
-        )}
-        {row && canEdit ? (
+        ) : null}
+        {savedId && gate.editing ? (
           <button className="btn danger" disabled={busy} onClick={remove} style={{ marginLeft: "auto" }}>
             Delete
           </button>

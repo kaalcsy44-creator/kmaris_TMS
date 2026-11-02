@@ -20864,3 +20864,8 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
   border-radius: 8px;
   background: #fff;
 }
+/* Schedule 읽기/편집 토글 줄. */
+.sched-modebar { display: flex; align-items: center; gap: 8px; margin: -4px 0 8px; }
+/* 읽기모드에선 칸을 늘리고 지우는 단추가 할 일이 없다. */
+.form-fieldset.vm-read .sched-x,
+.form-fieldset.vm-read .sched-add { display: none; }
