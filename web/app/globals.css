@@ -9915,10 +9915,12 @@ table.mini .num {
 /* ── Progress: 칸반 보드 ──────────────────────────────────────────────────── */
 .pl-board-wrap { position: relative; }
 .pl-board {
+  /* 높이는 PipelineBoard 가 화면 아래 끝까지로 맞춘다 — 가로 스크롤바가 첫 화면에 보인다. */
   display: flex;
   gap: 12px;
   align-items: flex-start;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: 4px 2px 12px;
 }
 /* 보드 좌우 이동 — 스크롤 영역의 좌·우 세로면에 붙는 투명 버튼.
@@ -9967,6 +9969,9 @@ table.mini .num {
   /* 각 단계는 담은 하위 열 수만큼만 폭을 차지하고(내용 크기), 넘치는 폭은
      .pl-board 의 가로 스크롤로 처리한다. 카드가 4개 이하인 단계는 1열(≈258px). */
   flex: 0 0 auto;
+  /* 보드 높이를 넘으면 단계 안(.pl-board-list)만 세로 스크롤 — 헤더는 고정. */
+  max-height: 100%;
+  min-height: 0;
   background: var(--page-bg);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -9980,6 +9985,7 @@ table.mini .num {
   --col-w: 242px;
 }
 .pl-board-head {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -9987,6 +9993,21 @@ table.mini .num {
   padding: 8px 10px;
   border-bottom: 1px solid var(--line);
 }
+/* 단계별 배치 열 수(Auto·1~5열) 선택 — 카운트 배지 좌측의 작은 드롭다운. */
+.pl-board-cols {
+  flex: none;
+  height: 20px;
+  padding: 0 2px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--muted);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.pl-board-cols:hover { color: var(--ink); border-color: var(--muted); }
+.pl-board-title + .pl-board-cols { margin-left: auto; }
 .pl-board-title {
   font-size: 12px;
   font-weight: 800;
@@ -10033,15 +10054,17 @@ table.mini .num {
   padding: 1px 7px;
 }
 .pl-board-list {
-  /* 세로 4개까지 채운 뒤 넘치면 단계 내 오른쪽 열이 자동으로 추가된다.
-     행 높이는 카드 내용에 맞추고(min-content), 하위 열 폭은 242px 고정. */
+  /* 하위 열 수(--sub-cols, 단계 헤더에서 1~5열 선택)만큼 왼쪽→오른쪽으로 채운다.
+     행 높이는 카드 내용에 맞추고, 하위 열 폭은 242px 고정. 넘치면 이 안에서만 세로 스크롤. */
   display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(4, min-content);
-  grid-auto-columns: var(--col-w, 242px);
+  grid-template-columns: repeat(var(--sub-cols, 1), var(--col-w, 242px));
+  grid-auto-rows: min-content;
   align-content: start;
   gap: 8px;
   padding: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 .pl-board-empty {
   color: var(--muted);
@@ -10141,6 +10164,7 @@ table.mini .num {
     flex-direction: column;
     overflow-y: auto;
   }
+  .pl-board-cols { display: none; }
 }
 /* 종결 상태 리본 — 카드 최상단 작은 칩(취소=회색). 흐름 배치라 겹침 없음. */
 .pl-card-ribbon {

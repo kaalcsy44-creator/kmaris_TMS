@@ -1532,9 +1532,46 @@ function PipelineBoard({
     c.variant === "cancelled" ? showCancelled : c.variant === "done" ? showDone : true,
   );
 
+  // 단계별 하위 열 수(1~5) — 단계 이름을 키로 사용자별 저장. 미지정이면 카드 4장마다 1열(최대 5).
+  const [subCols, setSubCols] = useState<Record<string, number>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      return JSON.parse(window.localStorage.getItem("ktms:board-cols") || "{}") || {};
+    } catch {
+      return {};
+    }
+  });
+  const setColCount = useCallback((label: string, n: number) => {
+    setSubCols((prev) => {
+      const next = { ...prev };
+      if (n > 0) next[label] = n;
+      else delete next[label];
+      try {
+        window.localStorage.setItem("ktms:board-cols", JSON.stringify(next));
+      } catch {
+        /* 저장 불가(사파리 개인 창 등) — 이번 세션만 유지 */
+      }
+      return next;
+    });
+  }, []);
+
   // 좌우 이동 — 보드 양 옆 세로면의 투명 버튼과 ← → 키가 같은 스크롤을 공유한다.
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [edge, setEdge] = useState({ left: false, right: false });
+  // 보드 높이를 화면 아래 끝에 맞춘다 — 가로 스크롤바가 첫 화면에 보이고,
+  // 넘치는 카드는 단계 안에서만 세로 스크롤된다(단계 헤더는 그대로 고정).
+  const [boardH, setBoardH] = useState<number | null>(null);
+  const fitHeight = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY;
+    setBoardH(Math.max(320, Math.floor(window.innerHeight - top - 16)));
+  }, []);
+  useLayoutEffect(() => {
+    fitHeight();
+    window.addEventListener("resize", fitHeight);
+    return () => window.removeEventListener("resize", fitHeight);
+  }, [fitHeight]);
   const syncEdges = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -1594,11 +1631,18 @@ function PipelineBoard({
       >
         ›
       </button>
-      <div className="pl-board" ref={scrollerRef} onScroll={syncEdges}>
+      <div
+        className="pl-board"
+        ref={scrollerRef}
+        onScroll={syncEdges}
+        style={boardH ? { height: boardH } : undefined}
+      >
         {cols.map((col, ci) => {
           const cards = rows.filter((r) => col.match(r));
           // Cancelled 존은 종결 딜이 하나도 없으면 아예 표시하지 않는다(평소 보드는 깔끔하게).
           if (col.variant === "cancelled" && cards.length === 0) return null;
+          const chosen = subCols[col.label] ?? 0;
+          const nSub = Math.min(chosen || Math.min(5, Math.ceil(cards.length / 4)), Math.max(1, cards.length));
           return (
             <section
               key={ci}
@@ -1606,6 +1650,7 @@ function PipelineBoard({
               className={`pl-board-col${col.variant ? ` ${col.variant}` : ""}${
                 cards.length === 0 ? " is-empty" : ""
               }`}
+              style={{ "--sub-cols": nSub } as React.CSSProperties}
             >
               <header className="pl-board-head">
                 {/* 단계 작업은 카드 클릭 → 프로젝트 팝업에서 처리(별도 작업 페이지 없음). */}
@@ -1615,6 +1660,22 @@ function PipelineBoard({
                   <span className="pl-board-sum" title="Total amount in this stage">
                     {columnSum(cards)}
                   </span>
+                ) : null}
+                {cards.length > 0 ? (
+                  <select
+                    className="pl-board-cols"
+                    value={chosen}
+                    onChange={(e) => setColCount(col.label, Number(e.target.value))}
+                    title="이 단계의 카드 배치 열 수"
+                    aria-label={`${col.label} 배치 열 수`}
+                  >
+                    <option value={0}>Auto</option>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <option key={n} value={n}>
+                        {n}열
+                      </option>
+                    ))}
+                  </select>
                 ) : null}
                 <span className="pl-board-count">{cards.length}</span>
               </header>
