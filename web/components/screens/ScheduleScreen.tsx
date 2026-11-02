@@ -111,7 +111,7 @@ export default function ScheduleScreen() {
   const { data: schedule, refresh } = useCachedData("home:schedule", fetchSchedule);
   const { data: customers } = useCachedData("settings:customers", fetchCustomers);
   const rows = useMemo(() => schedule?.rows ?? [], [schedule]);
-  const [view, setView] = useState<View>("upcoming");
+  const [view, setView] = useState<View>("all");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<ScheduleRow | null>(null);
 
