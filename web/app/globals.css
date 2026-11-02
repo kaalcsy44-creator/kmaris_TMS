@@ -20884,3 +20884,58 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
 /* 빈 칸의 입력 안내문(“Result — …”)은 읽기에선 값처럼 보인다 — 옅은 대시 하나로 바꾼다. */
 .form-fieldset.vm-read .sched-form .vm-text--ph { font-size: 0; }
 .form-fieldset.vm-read .sched-form .vm-text--ph::before { content: "—"; font-size: 12.5px; color: #c4cedb; }
+
+/* ── Home › Schedule › 출장(Business trip) 보고서 — 엑셀 양식의 네 시트를 탭으로 ───────── */
+.trip-tabs { display: flex; gap: 2px; margin: 0 0 10px; border-bottom: 2px solid var(--line); overflow-x: auto; overflow-y: hidden; }
+.trip-tabs button {
+  display: inline-flex; align-items: baseline; gap: 6px; flex: none;
+  padding: 7px 14px 6px; margin-bottom: -2px;
+  border: 0; border-bottom: 2px solid transparent; background: none;
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer;
+}
+.trip-tabs button small { font-size: 11px; font-weight: 400; }
+.trip-tabs button i {
+  font-style: normal; font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 999px;
+  color: var(--navy); background: #e8eef6;
+}
+.trip-tabs button:hover { color: var(--navy); }
+.trip-tabs button.on { color: var(--navy); border-bottom-color: var(--navy); }
+.trip-full { grid-column: 1 / -1; min-width: 0; }
+.trip-quad { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.trip-result { display: flex; flex-direction: column; gap: 3px; }
+.trip-result .sched-item input { flex: 1 1 auto; min-width: 0; font-weight: 600; }
+.trip-result-body { padding-left: 24px; padding-right: 28px; }
+.trip-add-left { align-self: flex-start; margin-left: 24px; }
+.trip-hint { margin: 0 0 6px; font-size: 11.5px; color: var(--muted); }
+.trip-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.trip-sum div { display: flex; flex-direction: column; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: #f8fafc; }
+.trip-sum span { font-size: 11px; color: var(--muted); }
+.trip-sum b { font-size: 15px; color: var(--navy); font-variant-numeric: tabular-nums; }
+/* 시트 표 — 칸 안에 입력칸을 바로 넣는다. 넓은 표는 가로로 스크롤. */
+.trip-table-wrap { display: flex; flex-direction: column; gap: 6px; overflow-x: auto; }
+.trip-table { width: 100%; min-width: 760px; border-collapse: collapse; table-layout: fixed; }
+.trip-table th {
+  padding: 5px 6px; font-size: 11px; font-weight: 700; text-align: left; color: var(--navy);
+  background: #eef3f9; border: 1px solid var(--line); white-space: normal; line-height: 1.25;
+}
+.trip-table td { padding: 2px; border: 1px solid var(--line); vertical-align: top; }
+.trip-table td.no, .trip-table th.no { text-align: center; font-size: 12px; font-weight: 700; color: var(--navy); padding-top: 7px; }
+.trip-table td.chk { text-align: center; vertical-align: middle; }
+.trip-table td.x { text-align: center; border-left: 0; padding-top: 6px; }
+.trip-table input:not([type="checkbox"]),
+.trip-table textarea,
+.trip-table .combobox input {
+  width: 100%; height: auto; min-height: 28px; padding: 4px 6px;
+  border: 1px solid transparent; border-radius: 4px; background: transparent;
+  font: inherit; font-size: 12px; line-height: 1.4; color: var(--ink);
+}
+.trip-table textarea { resize: vertical; field-sizing: content; display: block; }
+.trip-table input:focus, .trip-table textarea:focus { border-color: #9db7d8; background: #fff; outline: none; }
+.trip-table td.num input { text-align: right; font-variant-numeric: tabular-nums; }
+.trip-table tfoot td { padding: 5px 8px; font-size: 12px; font-weight: 700; background: #f6f8fb; }
+.trip-table tfoot tr.total td { background: #e3ebf5; color: var(--navy); }
+.trip-table tfoot td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.form-fieldset.vm-read .trip-table .vm-text { display: block; padding: 4px 6px; font-size: 12px; font-weight: 400; white-space: pre-wrap; }
+@media (max-width: 820px) {
+  .trip-quad { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

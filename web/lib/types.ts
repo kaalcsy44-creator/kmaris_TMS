@@ -2440,6 +2440,8 @@ export type ScheduleRow = {
   minutes: string;
   /** 결과·후속 조치. */
   outcome: string;
+  /** 출장(Business trip) 보고서의 나머지 — 출장이 아니거나 아직 안 적었으면 빈 객체. */
+  trip?: Partial<TripReport>;
   customer_id: number | null;
   customer: string;
   owner_id: number;
@@ -2447,6 +2449,36 @@ export type ScheduleRow = {
 };
 
 export type ScheduleAgendaItem = { text: string; result: string };
+
+/** 출장 결과 보고서 — 엑셀 양식(결과보고서·출장일정·출장경비·업체별 미팅메모)과 같은 묶음.
+ *  제목·시작일·지역(location)·출장자(attendees)·주요 결과(agenda)·종합 의견(outcome)은
+ *  일정의 기존 칸을 그대로 쓰고, 나머지만 여기 담는다. */
+export type TripReport = {
+  date_end: string;       // 출장 마지막 날(시작일은 일정의 date)
+  purpose: string;        // 출장목적
+  visits: string;         // 방문처 / 미팅 상대
+  author: string;         // 작성자
+  position: string;       // 소속 / 직위
+  report_to: string;      // 보고 대상
+  report_date: string;    // 작성일
+  attachments: string;    // 첨부자료
+  reviewer: string;       // 검토
+  approver: string;       // 승인
+  actions: TripAction[];  // 03 후속 조치 및 제안
+  itinerary: TripStop[];  // 출장일정 시트
+  expenses: TripExpense[];// 출장경비 시트
+  memos: TripMemo[];      // 업체별 미팅메모 시트
+};
+export type TripAction = { text: string; owner: string; due: string; note: string };
+export type TripStop = {
+  date: string; time: string; org: string; place: string;
+  people: string; activity: string; result: string; note: string;
+};
+export type TripExpense = {
+  date: string; user: string; category: string; detail: string; payment: string;
+  fx_note: string; amount: number; receipt: boolean; note: string;
+};
+export type TripMemo = { company: string; section: string; item: string; memo: string; insight: string; note: string };
 
 // ── 전역 검색 ─────────────────────────────────────────────────────────────────
 export type SearchResult = {

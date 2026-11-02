@@ -926,6 +926,8 @@ class ScheduleEvent(Base):
     status      = Column(String(12), default="planned")
     minutes     = Column(Text)          # 안건 밖의 기타 진행 내용
     outcome     = Column(Text)          # 결과·후속 조치
+    # 출장(Business trip) 보고서의 나머지 — 개요·후속 조치·일정·경비·업체별 메모(JSON 한 덩어리).
+    trip        = Column(JSON)
     created_at  = Column(DateTime, default=datetime.utcnow)
 
 

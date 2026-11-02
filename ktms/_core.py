@@ -3634,6 +3634,8 @@ class ScheduleEventCreate(BaseModel):
     status: str | None = "planned"
     minutes: str | None = ""
     outcome: str | None = ""
+    # 출장(Business trip) 보고서 — 개요 나머지·후속 조치·일정·경비·업체별 메모. 모양은 화면이 정한다.
+    trip: dict | None = None
 
 
 SCHEDULE_STATUSES = ("planned", "done", "cancelled")
@@ -3669,6 +3671,9 @@ def _schedule_apply(e: ScheduleEvent, body: ScheduleEventCreate) -> None:
     e.status = body.status if body.status in SCHEDULE_STATUSES else "planned"
     e.minutes = body.minutes or ""
     e.outcome = body.outcome or ""
+    # 출장 보고서를 모르는 저장(None)은 적어 둔 보고서를 지키게 둔다.
+    if body.trip is not None:
+        e.trip = body.trip
 
 
 def _schedule_row(e: ScheduleEvent, cust_names: dict, user_names: dict) -> dict:
@@ -3686,6 +3691,7 @@ def _schedule_row(e: ScheduleEvent, cust_names: dict, user_names: dict) -> dict:
         "status": getattr(e, "status", None) or "planned",
         "minutes": getattr(e, "minutes", None) or "",
         "outcome": getattr(e, "outcome", None) or "",
+        "trip": getattr(e, "trip", None) if isinstance(getattr(e, "trip", None), dict) else {},
         "customer_id": e.customer_id,
         "customer": cust_names.get(e.customer_id, "") if e.customer_id else "",
         "owner_id": e.owner_id or 0,

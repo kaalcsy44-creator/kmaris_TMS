@@ -43,6 +43,12 @@ import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import CustomerName from "@/components/common/CustomerName";
 import Modal from "@/components/common/Modal";
 import { DualCurrencyAmount, dualCurrencyText } from "@/components/common/itemTable";
+import {
+  TRIP_TYPE, TRIP_TABS, type TripTab, initialTrip, cleanTrip, tripPeriod, tripReportHtml,
+  tripTotal, tripReceipts, tripVisits,
+  TripActionsTable, TripItineraryTab, TripExpensesTab, TripMemosTab,
+} from "@/components/screens/TripReport";
+import type { TripReport } from "@/lib/types";
 
 function num(n: number) {
   return n.toLocaleString();
@@ -403,7 +409,8 @@ function HomeTab() {
   // 일정 관리 — 대시보드 카드 내에서 직접 등록/수정.
   const scheduleCols: ColumnDef<ScheduleRow>[] = [
     { key: "date", label: "Date", text: (r) => r.date || "", filter: "date" },
-    { key: "time", label: "Time", text: (r) => scheduleTime(r) },
+    // 출장은 시간 대신 기간(끝 날)을 보여 준다.
+    { key: "time", label: "Time", text: (r) => (r.event_type === TRIP_TYPE && r.trip?.date_end ? tripPeriod(r.date, r.trip.date_end) : scheduleTime(r)) },
     { key: "title", label: "Title", text: (r) => r.title || "" },
     { key: "event_type", label: "Type", text: (r) => r.event_type || "", filter: "facet" },
     {
@@ -798,6 +805,12 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
   const [status, setStatus] = useState(row?.status || "planned");
   const [minutes, setMinutes] = useState(row?.minutes ?? "");
   const [outcome, setOutcome] = useState(row?.outcome ?? "");
+  // 출장(Business trip) 보고서 — 유형이 출장일 때만 탭으로 보이고 저장된다.
+  const [trip, setTrip] = useState<TripReport>(() =>
+    initialTrip(row?.trip, { author: row?.owner || getUser()?.username || "", date: row?.date || today() })
+  );
+  const [tripTab, setTripTab] = useState<TripTab>("report");
+  const isTrip = eventType === TRIP_TYPE;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -843,6 +856,7 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
       status,
       minutes,
       outcome,
+      trip: isTrip ? cleanTrip(trip) : undefined,
     };
   }
 
@@ -853,6 +867,10 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
   async function save() {
     if (!valid) {
       setErr("날짜와 제목을 입력하세요.");
+      return;
+    }
+    if (isTrip && trip.date_end && trip.date_end < date) {
+      setErr("출장 종료일이 시작일보다 빠릅니다.");
       return;
     }
     if (timeStart && timeEnd && timeEnd < timeStart) {
@@ -893,13 +911,22 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
   // 미리보기 — 같은 창 안에서 폼 대신 회의록 문서를 보여 준다(저장 전 입력값 그대로).
   const [preview, setPreview] = useState(false);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
-  const minutesHtml = preview
-    ? scheduleMinutesHtml({
-        data: body(),
-        customer: customers.find((c) => c.id === customerId)?.name ?? row?.customer ?? "",
-        owner: row?.owner || getUser()?.username || "",
-      })
-    : "";
+  const customerName = customers.find((c) => c.id === customerId)?.name ?? row?.customer ?? "";
+  // 출장은 엑셀 양식과 같은 출장결과보고서(네 장), 나머지는 회의록 한 장.
+  const minutesHtml = !preview
+    ? ""
+    : isTrip
+      ? tripReportHtml({
+          title: title.trim(),
+          date,
+          region: location.trim(),
+          travelers: [...new Set(people.map((p) => p.trim()).filter(Boolean))],
+          customer: customerName,
+          results: body().agenda ?? [],
+          opinion: outcome,
+          trip,
+        })
+      : scheduleMinutesHtml({ data: body(), customer: customerName, owner: row?.owner || getUser()?.username || "" });
 
   if (preview) {
     return (
@@ -914,6 +941,346 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
       </div>
     );
   }
+
+  // 일반 일정과 출장 보고서가 같이 쓰는 칸들.
+  const dateField = (
+    <label className="form-field sched-date">
+      <span>{isTrip ? "Start date" : "Date"}</span>
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+    </label>
+  );
+  const typeField = (
+    <label className="form-field sched-type">
+      <span>Type</span>
+      <select value={eventType} onChange={(e) => setEventType(e.target.value)}>
+        {SCHEDULE_TYPES.map((t) => (
+          <option key={t} value={t}>{t}</option>
+        ))}
+      </select>
+    </label>
+  );
+  // 한 줄: 제목 · 고객사
+  const titleRow = (
+    <div className="sched-row">
+      <label className="form-field">
+        <span>Title</span>
+        <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
+      </label>
+      <label className="form-field">
+        <span>Customer (optional)</span>
+        <select
+          value={customerId}
+          onChange={(e) => setCustomerId(e.target.value ? Number(e.target.value) : "")}
+        >
+          <option value="">—</option>
+          {customers.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+  /* 참석자 — 한 칸에 한 명. 예전 일정에 적은 이름이 드롭다운 후보로 뜨고,
+     처음 만나는 사람은 그냥 적으면 된다(앱 공용 ComboBox = 고르기 + 직접 입력).
+     다른 칸에서 이미 고른 이름은 후보에서 뺀다. */
+  const peopleField = (
+    <div className="form-field">
+      <span>{isTrip ? "Travelers" : "Attendees"}</span>
+      <div className="sched-people">
+        {people.map((p, i) => (
+          <span key={i} className="sched-person">
+            <ComboBox
+              value={p}
+              options={peopleHistory.filter((h) => h === p || !people.includes(h))}
+              placeholder={peopleHistory.length ? "Pick or type a name" : "Type a name"}
+              onChange={(v) => setPeople((list) => list.map((x, j) => (j === i ? v : x)))}
+            />
+            {people.length > 1 ? (
+              <button
+                type="button"
+                className="btn tiny sched-x"
+                aria-label={`Remove attendee ${i + 1}`}
+                onClick={() => setPeople((list) => list.filter((_, j) => j !== i))}
+              >
+                ×
+              </button>
+            ) : null}
+          </span>
+        ))}
+        <button type="button" className="btn tiny sched-add" onClick={() => setPeople((list) => [...list, ""])}>
+          + Add attendee
+        </button>
+      </div>
+    </div>
+  );
+  const statusField = (
+    <div className="form-field">
+      <span>Status</span>
+      <span className="pl-view-toggle sched-status" role="group" aria-label="Status">
+        {SCHEDULE_STATUS.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            className={status === o.value ? "on" : ""}
+            aria-pressed={status === o.value}
+            onClick={() => setStatus(o.value)}
+          >
+            {o.label}
+          </button>
+        ))}
+      </span>
+      {due ? <span className="hint-inline">This date has passed — record how it went below.</span> : null}
+    </div>
+  );
+
+  /* 2단 격자 — 왼쪽 칸은 예정(Plan), 오른쪽 칸은 진행 후 기록(Result).
+     안건은 줄마다 왼쪽에 안건, 같은 줄 오른쪽에 그 안건의 결과가 선다. */
+  const planBody = (
+    <div className="sched-form">
+      <h4 className="sched-col-title sched-l">Plan</h4>
+      <h4 className="sched-col-title sched-r">Result</h4>
+
+      <section className="sched-l sched-stack">
+        {/* 한 줄: 날짜 · 시간(시작~끝) · 유형 */}
+        <div className="sched-when">
+          {dateField}
+          <div className="form-field sched-time-field">
+            <span>Time (optional)</span>
+            {/* div 로 둔다 — .form-field > span 은 라벨 규칙(block)을 받아 두 칸이 세로로 쌓인다. */}
+            <div className="sched-time">
+              <input type="time" value={timeStart} aria-label="Start time" onChange={(e) => setTimeStart(e.target.value)} />
+              <i className="sched-tilde">~</i>
+              <input type="time" value={timeEnd} aria-label="End time" onChange={(e) => setTimeEnd(e.target.value)} />
+            </div>
+          </div>
+          {typeField}
+        </div>
+        {titleRow}
+        <label className="form-field">
+          <span>Location</span>
+          <input
+            type="text"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="e.g. Seoul office · Busan port · Zoom"
+          />
+        </label>
+        {peopleField}
+      </section>
+
+      <section className="sched-r sched-stack">
+        {statusField}
+        <label className="form-field">
+          <span>Outcome / next actions</span>
+          <textarea
+            rows={6}
+            value={outcome}
+            onChange={(e) => writeResult(setOutcome, e.target.value)}
+            placeholder="Overall conclusion, follow-ups, who does what by when"
+          />
+        </label>
+      </section>
+
+      <div className="sched-l sched-sub">Agenda</div>
+      <div className="sched-r sched-sub">Result per agenda item</div>
+      {agenda.map((a, i) => (
+        <Fragment key={i}>
+          <div className="sched-l sched-item">
+            <span className="sched-no">{i + 1}.</span>
+            <textarea
+              rows={1}
+              value={a.text}
+              aria-label={`Agenda item ${i + 1}`}
+              placeholder="What to discuss"
+              onChange={(e) => setAgendaAt(i, { text: e.target.value })}
+            />
+            <button
+              type="button"
+              className="btn tiny sched-x"
+              aria-label={`Remove agenda item ${i + 1}`}
+              disabled={agenda.length === 1 && !a.text && !a.result}
+              onClick={() =>
+                setAgenda((list) => (list.length > 1 ? list.filter((_, j) => j !== i) : [{ text: "", result: "" }]))
+              }
+            >
+              ×
+            </button>
+          </div>
+          <div className="sched-r sched-item">
+            <span className="sched-no">{i + 1}.</span>
+            <textarea
+              rows={1}
+              value={a.result}
+              aria-label={`Result of agenda item ${i + 1}`}
+              placeholder={a.text ? `Result — ${a.text.split("\n")[0].slice(0, 40)}` : "Result of this item"}
+              onChange={(e) => setAgendaAt(i, { result: e.target.value })}
+            />
+          </div>
+        </Fragment>
+      ))}
+      <div className="sched-l">
+        <button
+          type="button"
+          className="btn tiny sched-add"
+          onClick={() => setAgenda((list) => [...list, { text: "", result: "" }])}
+        >
+          + Add agenda item
+        </button>
+      </div>
+      <div className="sched-r" />
+
+      <label className="form-field sched-r sched-other">
+        <span>Other notes (outside the agenda)</span>
+        <textarea
+          rows={4}
+          value={minutes}
+          onChange={(e) => writeResult(setMinutes, e.target.value)}
+          placeholder="Anything discussed that was not on the agenda"
+        />
+      </label>
+    </div>
+  );
+
+  const tripField = (key: keyof TripReport, label: string, ph = "", type = "text") => (
+    <label className="form-field">
+      <span>{label}</span>
+      <input
+        type={type}
+        value={String(trip[key] ?? "")}
+        placeholder={ph}
+        onChange={(e) => setTrip({ ...trip, [key]: e.target.value })}
+      />
+    </label>
+  );
+  // 탭 옆 숫자 — 시트마다 적은 줄 수(빈 줄 제외).
+  const tripClean = isTrip ? cleanTrip(trip) : null;
+  const tripCounts = {
+    itinerary: tripClean?.itinerary.length ?? 0,
+    expenses: tripClean?.expenses.length ?? 0,
+    memos: tripClean?.memos.length ?? 0,
+  };
+  /* 출장 — 엑셀 '출장결과보고서'와 같은 네 장을 탭으로. 결과보고서 탭은 01 개요 ~ 05 경비 요약 순서.
+     주요 결과(02)는 안건 칸(제목=text, 내용=result)을, 종합 의견(04)은 outcome 칸을 그대로 쓴다. */
+  const tripBody =
+    tripTab === "itinerary" ? (
+      <TripItineraryTab trip={trip} setTrip={setTrip} />
+    ) : tripTab === "expenses" ? (
+      <TripExpensesTab trip={trip} setTrip={setTrip} />
+    ) : tripTab === "memos" ? (
+      <TripMemosTab trip={trip} setTrip={setTrip} />
+    ) : (
+      <div className="sched-form">
+        <h4 className="sched-col-title sched-l">01 Overview · 출장 개요</h4>
+        <h4 className="sched-col-title sched-r">02 Key results · 주요 출장 결과 및 성과</h4>
+
+        <section className="sched-l sched-stack">
+          <div className="sched-when">
+            {dateField}
+            <label className="form-field sched-date">
+              <span>End date</span>
+              <input type="date" value={trip.date_end} min={date} onChange={(e) => setTrip({ ...trip, date_end: e.target.value })} />
+            </label>
+            {typeField}
+          </div>
+          {titleRow}
+          <div className="sched-row">
+            <label className="form-field">
+              <span>Region (출장지역)</span>
+              <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. 부산" />
+            </label>
+            {statusField}
+          </div>
+          <label className="form-field">
+            <span>Purpose (출장목적)</span>
+            <textarea rows={2} value={trip.purpose} onChange={(e) => setTrip({ ...trip, purpose: e.target.value })} />
+          </label>
+          <label className="form-field">
+            <span>Visits / met with (방문처 / 미팅 상대)</span>
+            <textarea rows={2} value={trip.visits} onChange={(e) => setTrip({ ...trip, visits: e.target.value })} />
+          </label>
+          {peopleField}
+          <div className="trip-quad">
+            {tripField("report_date", "Report date (작성일)", "", "date")}
+            {tripField("author", "Author (작성자)")}
+            {tripField("position", "Dept / title (소속/직위)")}
+            {tripField("report_to", "Report to (보고 대상)", "팀 열람용")}
+          </div>
+        </section>
+
+        <section className="sched-r sched-stack">
+          {agenda.map((a, i) => (
+            <div key={i} className="trip-result">
+              <div className="sched-item">
+                <span className="sched-no">{i + 1}.</span>
+                <input
+                  type="text"
+                  value={a.text}
+                  aria-label={`Result heading ${i + 1}`}
+                  placeholder="Heading — e.g. 신규 협력업체 및 공급망 확대"
+                  onChange={(e) => setAgendaAt(i, { text: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="btn tiny sched-x"
+                  aria-label={`Remove result ${i + 1}`}
+                  disabled={agenda.length === 1 && !a.text && !a.result}
+                  onClick={() =>
+                    setAgenda((list) => (list.length > 1 ? list.filter((_, j) => j !== i) : [{ text: "", result: "" }]))
+                  }
+                >
+                  ×
+                </button>
+              </div>
+              <div className="sched-item trip-result-body">
+                <textarea
+                  rows={1}
+                  value={a.result}
+                  aria-label={`Result detail ${i + 1}`}
+                  placeholder="Details"
+                  onChange={(e) => setAgendaAt(i, { result: e.target.value })}
+                />
+              </div>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn tiny sched-add trip-add-left"
+            onClick={() => setAgenda((list) => [...list, { text: "", result: "" }])}
+          >
+            + Add result
+          </button>
+        </section>
+
+        <div className="sched-sub trip-full">03 Follow-up actions · 후속 조치 및 제안</div>
+        <div className="trip-full">
+          <TripActionsTable trip={trip} setTrip={setTrip} />
+        </div>
+
+        <div className="sched-l sched-sub">04 Overall opinion / requests · 종합 의견 / 요청 사항</div>
+        <div className="sched-r sched-sub">05 Expense summary · 출장 경비 요약</div>
+        <label className="form-field sched-l">
+          <textarea
+            rows={5}
+            aria-label="Overall opinion"
+            value={outcome}
+            onChange={(e) => writeResult(setOutcome, e.target.value)}
+            placeholder="출장 전체 소감, 성과 평가, 회사에 요청할 사항"
+          />
+        </label>
+        <section className="sched-r sched-stack">
+          <div className="trip-sum">
+            <div><span>Total (KRW)</span><b>{tripTotal(trip).toLocaleString("ko-KR")}</b></div>
+            <div><span>Receipts</span><b>{tripReceipts(trip)}</b></div>
+            <div><span>Visits</span><b>{tripVisits(trip)}</b></div>
+          </div>
+          {tripField("attachments", "Attachments (첨부자료)", "명함, 영수증 등 관련 증빙 별첨")}
+          <div className="sched-row">
+            {tripField("reviewer", "Reviewed by (검토)")}
+            {tripField("approver", "Approved by (승인)")}
+          </div>
+        </section>
+      </div>
+    );
 
   return (
     <div>
@@ -943,191 +1310,35 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
           {dirty ? <span className="hint-inline">Unsaved changes</span> : null}
         </div>
       ) : null}
-      <fieldset {...gate.fieldsetProps}>
-        {/* 2단 격자 — 왼쪽 칸은 예정(Plan), 오른쪽 칸은 진행 후 기록(Result).
-            안건은 줄마다 왼쪽에 안건, 같은 줄 오른쪽에 그 안건의 결과가 선다. */}
-        <div className="sched-form">
-          <h4 className="sched-col-title sched-l">Plan</h4>
-          <h4 className="sched-col-title sched-r">Result</h4>
-
-          <section className="sched-l sched-stack">
-            {/* 한 줄: 날짜 · 시간(시작~끝) · 유형 */}
-            <div className="sched-when">
-              <label className="form-field sched-date">
-                <span>Date</span>
-                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-              </label>
-              <div className="form-field sched-time-field">
-                <span>Time (optional)</span>
-                {/* div 로 둔다 — .form-field > span 은 라벨 규칙(block)을 받아 두 칸이 세로로 쌓인다. */}
-                <div className="sched-time">
-                  <input type="time" value={timeStart} aria-label="Start time" onChange={(e) => setTimeStart(e.target.value)} />
-                  <i className="sched-tilde">~</i>
-                  <input type="time" value={timeEnd} aria-label="End time" onChange={(e) => setTimeEnd(e.target.value)} />
-                </div>
-              </div>
-              <label className="form-field sched-type">
-                <span>Type</span>
-                <select value={eventType} onChange={(e) => setEventType(e.target.value)}>
-                  {SCHEDULE_TYPES.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            {/* 한 줄: 제목 · 고객사 */}
-            <div className="sched-row">
-              <label className="form-field">
-                <span>Title</span>
-                <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
-              </label>
-              <label className="form-field">
-                <span>Customer (optional)</span>
-                <select
-                  value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value ? Number(e.target.value) : "")}
-                >
-                  <option value="">—</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <label className="form-field">
-              <span>Location</span>
-              <input
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="e.g. Seoul office · Busan port · Zoom"
-              />
-            </label>
-            {/* 참석자 — 한 칸에 한 명. 예전 일정에 적은 이름이 드롭다운 후보로 뜨고,
-                처음 만나는 사람은 그냥 적으면 된다(앱 공용 ComboBox = 고르기 + 직접 입력).
-                다른 칸에서 이미 고른 이름은 후보에서 뺀다. */}
-            <div className="form-field">
-              <span>Attendees</span>
-              <div className="sched-people">
-                {people.map((p, i) => (
-                  <span key={i} className="sched-person">
-                    <ComboBox
-                      value={p}
-                      options={peopleHistory.filter((h) => h === p || !people.includes(h))}
-                      placeholder={peopleHistory.length ? "Pick or type a name" : "Type a name"}
-                      onChange={(v) => setPeople((list) => list.map((x, j) => (j === i ? v : x)))}
-                    />
-                    {people.length > 1 ? (
-                      <button
-                        type="button"
-                        className="btn tiny sched-x"
-                        aria-label={`Remove attendee ${i + 1}`}
-                        onClick={() => setPeople((list) => list.filter((_, j) => j !== i))}
-                      >
-                        ×
-                      </button>
-                    ) : null}
-                  </span>
-                ))}
-                <button type="button" className="btn tiny sched-add" onClick={() => setPeople((list) => [...list, ""])}>
-                  + Add attendee
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <section className="sched-r sched-stack">
-            <div className="form-field">
-              <span>Status</span>
-              <span className="pl-view-toggle sched-status" role="group" aria-label="Status">
-                {SCHEDULE_STATUS.map((o) => (
-                  <button
-                    key={o.value}
-                    type="button"
-                    className={status === o.value ? "on" : ""}
-                    aria-pressed={status === o.value}
-                    onClick={() => setStatus(o.value)}
-                  >
-                    {o.label}
-                  </button>
-                ))}
-              </span>
-              {due ? <span className="hint-inline">This date has passed — record how it went below.</span> : null}
-            </div>
-            <label className="form-field">
-              <span>Outcome / next actions</span>
-              <textarea
-                rows={6}
-                value={outcome}
-                onChange={(e) => writeResult(setOutcome, e.target.value)}
-                placeholder="Overall conclusion, follow-ups, who does what by when"
-              />
-            </label>
-          </section>
-
-          <div className="sched-l sched-sub">Agenda</div>
-          <div className="sched-r sched-sub">Result per agenda item</div>
-          {agenda.map((a, i) => (
-            <Fragment key={i}>
-              <div className="sched-l sched-item">
-                <span className="sched-no">{i + 1}.</span>
-                <textarea
-                  rows={1}
-                  value={a.text}
-                  aria-label={`Agenda item ${i + 1}`}
-                  placeholder="What to discuss"
-                  onChange={(e) => setAgendaAt(i, { text: e.target.value })}
-                />
-                <button
-                  type="button"
-                  className="btn tiny sched-x"
-                  aria-label={`Remove agenda item ${i + 1}`}
-                  disabled={agenda.length === 1 && !a.text && !a.result}
-                  onClick={() =>
-                    setAgenda((list) => (list.length > 1 ? list.filter((_, j) => j !== i) : [{ text: "", result: "" }]))
-                  }
-                >
-                  ×
-                </button>
-              </div>
-              <div className="sched-r sched-item">
-                <span className="sched-no">{i + 1}.</span>
-                <textarea
-                  rows={1}
-                  value={a.result}
-                  aria-label={`Result of agenda item ${i + 1}`}
-                  placeholder={a.text ? `Result — ${a.text.split("\n")[0].slice(0, 40)}` : "Result of this item"}
-                  onChange={(e) => setAgendaAt(i, { result: e.target.value })}
-                />
-              </div>
-            </Fragment>
-          ))}
-          <div className="sched-l">
-            <button
-              type="button"
-              className="btn tiny sched-add"
-              onClick={() => setAgenda((list) => [...list, { text: "", result: "" }])}
-            >
-              + Add agenda item
-            </button>
-          </div>
-          <div className="sched-r" />
-
-          <label className="form-field sched-r sched-other">
-            <span>Other notes (outside the agenda)</span>
-            <textarea
-              rows={4}
-              value={minutes}
-              onChange={(e) => writeResult(setMinutes, e.target.value)}
-              placeholder="Anything discussed that was not on the agenda"
-            />
-          </label>
+      {/* 출장 — 엑셀 시트처럼 네 장을 탭으로 넘긴다. 읽기모드에서도 넘길 수 있게 fieldset 밖에 둔다. */}
+      {isTrip ? (
+        <div className="trip-tabs" role="tablist" aria-label="Trip report sheets">
+          {TRIP_TABS.map((t) => {
+            const n = t.id === "report" ? 0 : tripCounts[t.id];
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={tripTab === t.id}
+                className={tripTab === t.id ? "on" : ""}
+                onClick={() => setTripTab(t.id)}
+              >
+                {t.label}
+                <small>{t.sheet}</small>
+                {n ? <i>{n}</i> : null}
+              </button>
+            );
+          })}
         </div>
+      ) : null}
+      <fieldset {...gate.fieldsetProps}>
+        {isTrip ? tripBody : planBody}
       </fieldset>
       <div className="form-actions">
         {/* 작성자가 아니어도(읽기 전용) 회의록은 보고 인쇄할 수 있다. */}
         <button type="button" className="btn" disabled={busy} onClick={() => setPreview(true)}
-                title="Preview and print as meeting minutes">
+                title={isTrip ? "Preview and print as a business trip report (4 sheets)" : "Preview and print as meeting minutes"}>
           📄 Preview / Print
         </button>
         {/* 저장 뒤 고친 것이 있으면 Save 옆에 점(•) — 앱 전역 규약(RFQ 편집기와 같은 모양). */}

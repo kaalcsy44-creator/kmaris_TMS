@@ -115,6 +115,8 @@ _MIGRATIONS = {
         "status": "VARCHAR(12)",
         "minutes": "TEXT",
         "outcome": "TEXT",
+        # 출장 보고서(개요 나머지·후속 조치·일정·경비·메모). 기존 행은 NULL = 출장 보고서 없음.
+        "trip": "JSON",
     },
     "vessels": {
         "vessel_type": "VARCHAR(60)",

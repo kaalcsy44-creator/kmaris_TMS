@@ -80,6 +80,7 @@ import type {
   MarketingRow,
   MarketingOverview,
   ScheduleRow,
+  TripReport,
   StatisticsData,
   StatDebugData,
   SearchData,
@@ -1349,6 +1350,8 @@ export type ScheduleSave = {
   minutes?: string;
   /** 결과·후속 조치. */
   outcome?: string;
+  /** 출장 보고서 — 출장이 아닌 일정은 보내지 않는다(서버가 적어 둔 값을 지킨다). */
+  trip?: TripReport;
 };
 
 export function fetchSchedule(): Promise<{ rows: ScheduleRow[] }> {
