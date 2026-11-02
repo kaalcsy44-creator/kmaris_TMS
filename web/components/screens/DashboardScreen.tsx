@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   fetchDashboard,
@@ -670,6 +670,71 @@ function initialAgenda(row?: ScheduleRow): ScheduleAgendaItem[] {
   return lines.length ? lines.map((text) => ({ text, result: "" })) : [{ text: "", result: "" }];
 }
 
+const escHtml = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/**
+ * 회의록 한 장(A4 세로) — 미리보기(iframe)와 인쇄가 같은 문서를 쓴다.
+ * 화면 CSS 와 섞이지 않게 스타일을 문서 안에 통째로 담는다(인쇄는 이 문서만 찍는다).
+ */
+function scheduleMinutesHtml(d: {
+  data: ScheduleSave;
+  customer: string;
+  owner: string;
+}): string {
+  const s = d.data;
+  const v = (x: string | undefined) => (x && x.trim() ? escHtml(x.trim()) : "—");
+  const when = [s.date, scheduleTime({ time_start: s.time_start, time_end: s.time_end })].filter(Boolean).join(" · ");
+  const people = splitPeople(s.attendees);
+  const items = s.agenda ?? [];
+  const info: [string, string][] = [
+    ["Date / time", v(when)],
+    ["Type", v(s.event_type)],
+    ["Location", v(s.location)],
+    ["Customer", v(d.customer)],
+    ["Attendees", people.length ? people.map(escHtml).join(", ") : "—"],
+    ["Status", escHtml(SCHEDULE_STATUS_LABEL[s.status || "planned"] || "Planned")],
+    ["Prepared by", v(d.owner)],
+  ];
+  const agendaRows = items.length
+    ? items.map((a, i) => `<tr><td class="no">${i + 1}</td><td>${v(a.text)}</td><td>${v(a.result)}</td></tr>`).join("")
+    : `<tr><td class="no">—</td><td colspan="2" class="muted">No agenda items</td></tr>`;
+  const block = (title: string, body: string | undefined) =>
+    body && body.trim() ? `<h2>${title}</h2><div class="box">${escHtml(body.trim())}</div>` : "";
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${v(s.title)} — minutes</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px 22px; font: 12px/1.5 "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; color: #111827; background: #fff; }
+  @media print { body { padding: 0; } }
+  .brand { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #0b1f3a; padding-bottom: 6px; }
+  .brand b { font-size: 13px; letter-spacing: .06em; color: #0b1f3a; }
+  .brand span { font-size: 11px; color: #6b7280; }
+  h1 { font-size: 19px; margin: 12px 0 10px; color: #0b1f3a; }
+  h2 { font-size: 12.5px; margin: 16px 0 6px; color: #0b1f3a; text-transform: uppercase; letter-spacing: .04em; }
+  table { width: 100%; border-collapse: collapse; }
+  .info th { width: 110px; text-align: left; font-weight: 700; color: #374151; background: #f3f6fa; }
+  th, td { border: 1px solid #d5dde8; padding: 5px 8px; vertical-align: top; white-space: pre-wrap; word-break: break-word; }
+  .agenda thead th { background: #0b1f3a; color: #fff; text-align: left; font-weight: 700; }
+  .agenda td.no, .agenda th.no { width: 34px; text-align: center; }
+  .agenda td:nth-child(2) { width: 42%; }
+  tr { break-inside: avoid; }
+  .box { border: 1px solid #d5dde8; border-radius: 4px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; break-inside: avoid; }
+  .muted { color: #9ca3af; }
+  .sign { margin-top: 28px; display: flex; gap: 24px; justify-content: flex-end; font-size: 11px; color: #6b7280; }
+  .sign div { width: 150px; border-top: 1px solid #9ca3af; padding-top: 4px; text-align: center; }
+</style></head><body>
+  <div class="brand"><b>K-MARIS · MEETING MINUTES</b><span>${v(when)}</span></div>
+  <h1>${v(s.title)}</h1>
+  <table class="info">${info.map(([k, val]) => `<tr><th>${k}</th><td>${val}</td></tr>`).join("")}</table>
+  <h2>Agenda &amp; results</h2>
+  <table class="agenda"><thead><tr><th class="no">No.</th><th>Agenda</th><th>Result</th></tr></thead><tbody>${agendaRows}</tbody></table>
+  ${block("Outcome / next actions", s.outcome)}
+  ${block("Other notes", s.minutes)}
+  <div class="sign"><div>Prepared by</div><div>Reviewed by</div></div>
+</body></html>`;
+}
+
 function ScheduleForm({
   row,
   history,
@@ -784,6 +849,31 @@ function ScheduleForm({
     } finally {
       setBusy(false);
     }
+  }
+
+  // 미리보기 — 같은 창 안에서 폼 대신 회의록 문서를 보여 준다(저장 전 입력값 그대로).
+  const [preview, setPreview] = useState(false);
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const minutesHtml = preview
+    ? scheduleMinutesHtml({
+        data: body(),
+        customer: customers.find((c) => c.id === customerId)?.name ?? row?.customer ?? "",
+        owner: row?.owner || getUser()?.username || "",
+      })
+    : "";
+
+  if (preview) {
+    return (
+      <div>
+        <iframe ref={frameRef} className="sched-minutes" title="Meeting minutes preview" srcDoc={minutesHtml} />
+        <div className="form-actions">
+          <button type="button" className="btn" onClick={() => setPreview(false)}>← Back to edit</button>
+          <button type="button" className="btn primary" onClick={() => frameRef.current?.contentWindow?.print()}>
+            🖨 Print
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -974,6 +1064,11 @@ function ScheduleForm({
         </div>
       </fieldset>
       <div className="form-actions">
+        {/* 작성자가 아니어도(읽기 전용) 회의록은 보고 인쇄할 수 있다. */}
+        <button type="button" className="btn" disabled={busy} onClick={() => setPreview(true)}
+                title="Preview and print as meeting minutes">
+          📄 Preview / Print
+        </button>
         {canEdit ? (
           <button className="btn primary" disabled={busy || !valid} onClick={save}>
             {busy ? "Working…" : row ? "Save" : "Add schedule"}

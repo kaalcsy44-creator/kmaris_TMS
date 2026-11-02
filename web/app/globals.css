@@ -20855,3 +20855,12 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
 }
 .sched-badge.done { color: #166534; background: #dcfce7; }
 .sched-badge.cancelled { color: #6b7280; background: #f3f4f6; text-decoration: line-through; }
+/* Schedule 회의록 미리보기 — A4 한 장을 창 안에서 그대로 본다(인쇄는 이 문서만 찍는다). */
+.sched-minutes {
+  display: block;
+  width: 100%;
+  height: min(70vh, 900px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
