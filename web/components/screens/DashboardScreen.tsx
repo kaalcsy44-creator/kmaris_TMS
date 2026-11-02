@@ -796,28 +796,35 @@ function ScheduleForm({
           <h4 className="sched-col-title sched-r">Result</h4>
 
           <section className="sched-l sched-stack">
+            {/* 한 줄: 날짜 · 시간(시작~끝) · 유형 */}
             <div className="sched-when">
               <label className="form-field sched-date">
                 <span>Date</span>
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
               </label>
-              <div className="form-field">
+              <div className="form-field sched-time-field">
                 <span>Time (optional)</span>
-                <span className="sched-time">
+                {/* div 로 둔다 — .form-field > span 은 라벨 규칙(block)을 받아 두 칸이 세로로 쌓인다. */}
+                <div className="sched-time">
                   <input type="time" value={timeStart} aria-label="Start time" onChange={(e) => setTimeStart(e.target.value)} />
-                  <span className="sched-tilde">~</span>
+                  <i className="sched-tilde">~</i>
                   <input type="time" value={timeEnd} aria-label="End time" onChange={(e) => setTimeEnd(e.target.value)} />
-                </span>
+                </div>
               </div>
-            </div>
-            <div className="sched-row">
-              <label className="form-field">
+              <label className="form-field sched-type">
                 <span>Type</span>
                 <select value={eventType} onChange={(e) => setEventType(e.target.value)}>
                   {SCHEDULE_TYPES.map((t) => (
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
+              </label>
+            </div>
+            {/* 한 줄: 제목 · 고객사 */}
+            <div className="sched-row">
+              <label className="form-field">
+                <span>Title</span>
+                <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
               </label>
               <label className="form-field">
                 <span>Customer (optional)</span>
@@ -832,10 +839,6 @@ function ScheduleForm({
                 </select>
               </label>
             </div>
-            <label className="form-field">
-              <span>Title</span>
-              <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
-            </label>
             <label className="form-field">
               <span>Location</span>
               <input
@@ -918,7 +921,7 @@ function ScheduleForm({
               <div className="sched-l sched-item">
                 <span className="sched-no">{i + 1}.</span>
                 <textarea
-                  rows={2}
+                  rows={1}
                   value={a.text}
                   aria-label={`Agenda item ${i + 1}`}
                   placeholder="What to discuss"
@@ -939,7 +942,7 @@ function ScheduleForm({
               <div className="sched-r sched-item">
                 <span className="sched-no">{i + 1}.</span>
                 <textarea
-                  rows={2}
+                  rows={1}
                   value={a.result}
                   aria-label={`Result of agenda item ${i + 1}`}
                   placeholder={a.text ? `Result — ${a.text.split("\n")[0].slice(0, 40)}` : "Result of this item"}
