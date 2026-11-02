@@ -1340,8 +1340,9 @@ export type ScheduleSave = {
   time_start?: string;
   time_end?: string;
   location?: string;
-  /** 참석자 — 자유 입력(쉼표·줄바꿈 구분). */
+  /** 참석자 — 한 줄에 한 명. */
   attendees?: string;
+  agenda?: { text: string; result: string }[];
   /** planned(예정) / done(진행 완료) / cancelled(취소). */
   status?: string;
   /** 진행 내용(회의록). */

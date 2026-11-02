@@ -2430,8 +2430,10 @@ export type ScheduleRow = {
   time_start: string;
   time_end: string;
   location: string;
-  /** 참석자 — 자유 입력(쉼표·줄바꿈 구분). */
+  /** 참석자 — 한 줄에 한 명(예전 값은 쉼표로 구분돼 있을 수 있다). */
   attendees: string;
+  /** 번호 붙은 안건과 그 안건의 결과. 번호는 순서가 정한다. */
+  agenda: ScheduleAgendaItem[];
   /** planned(예정) / done(진행 완료) / cancelled(취소). */
   status: string;
   /** 진행 내용(회의록). */
@@ -2443,6 +2445,8 @@ export type ScheduleRow = {
   owner_id: number;
   owner: string;
 };
+
+export type ScheduleAgendaItem = { text: string; result: string };
 
 // ── 전역 검색 ─────────────────────────────────────────────────────────────────
 export type SearchResult = {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   fetchDashboard,
@@ -23,7 +23,7 @@ import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import { can, canEditDeal, getUser, isAdmin } from "@/lib/auth";
 import type {
   QtnRow, PipelineRow, ArRow, PoRow, MarketingRow, MarketingOverview,
-  ScheduleRow, CustomerOption, StatisticsData, CurrencyKey, StatCurKey,
+  ScheduleRow, ScheduleAgendaItem, CustomerOption, StatisticsData, CurrencyKey, StatCurKey,
   StatDebugData,
 } from "@/lib/types";
 import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen";
@@ -593,14 +593,16 @@ function HomeTab() {
       })}
 
       {schedAdding ? (
-        <Modal title="Add schedule" onClose={() => setSchedAdding(false)} wide>
-          <ScheduleForm customers={customers ?? []} canEdit onChanged={reloadSchedule} />
+        // form 레이아웃 — 본문이 세로로 스크롤되고 Save 바가 바닥에 붙는다(넓은 폭은 maxWidth 로).
+        <Modal title="Add schedule" onClose={() => setSchedAdding(false)} form maxWidth={1120}>
+          <ScheduleForm customers={customers ?? []} history={schedRows} canEdit onChanged={reloadSchedule} />
         </Modal>
       ) : null}
       {schedEditing ? (
-        <Modal title="Schedule" onClose={() => setSchedEditing(null)} wide>
+        <Modal title="Schedule" onClose={() => setSchedEditing(null)} form maxWidth={1120}>
           <ScheduleForm
             row={schedEditing}
+            history={schedRows}
             customers={customers ?? []}
             canEdit={canEditDeal(schedEditing.owner_id)}
             onChanged={reloadSchedule}
@@ -653,13 +655,31 @@ function scheduleTime(r: { time_start?: string; time_end?: string }): string {
   return r.time_end ? `${r.time_start}–${r.time_end}` : r.time_start;
 }
 
+/** 참석자 칸 값 → 이름 목록. 지금은 한 줄에 한 명이지만 예전 값은 쉼표로 이어져 있다. */
+function splitPeople(s: string | undefined): string[] {
+  return (s || "").split(/[\n,]/).map((x) => x.trim()).filter(Boolean);
+}
+
+/** 안건 목록이 없던 예전 일정 — 평문 안건(notes)을 줄마다 한 항목으로, 앞 번호는 떼고. */
+function initialAgenda(row?: ScheduleRow): ScheduleAgendaItem[] {
+  if (row?.agenda?.length) return row.agenda.map((a) => ({ text: a.text, result: a.result }));
+  const lines = (row?.notes || "")
+    .split("\n")
+    .map((l) => l.replace(/^\s*\d+\s*[.)]\s*/, "").trim())
+    .filter(Boolean);
+  return lines.length ? lines.map((text) => ({ text, result: "" })) : [{ text: "", result: "" }];
+}
+
 function ScheduleForm({
   row,
+  history,
   customers,
   canEdit,
   onChanged,
 }: {
   row?: ScheduleRow;
+  /** 전체 일정 — 예전에 적은 참석자를 참석자 칸의 드롭다운 후보로 쓴다. */
+  history: ScheduleRow[];
   customers: CustomerOption[];
   canEdit: boolean;
   onChanged: () => void;
@@ -671,8 +691,12 @@ function ScheduleForm({
   const [eventType, setEventType] = useState(row?.event_type || "Meeting");
   const [customerId, setCustomerId] = useState<number | "">(row?.customer_id ?? "");
   const [location, setLocation] = useState(row?.location ?? "");
-  const [attendees, setAttendees] = useState(row?.attendees ?? "");
-  const [notes, setNotes] = useState(row?.notes ?? "");
+  // 한 칸에 한 명 — 마지막 칸은 늘 비워 두지 않고 '+ Add attendee' 로 늘린다.
+  const [people, setPeople] = useState<string[]>(() => {
+    const p = splitPeople(row?.attendees);
+    return p.length ? p : [""];
+  });
+  const [agenda, setAgenda] = useState<ScheduleAgendaItem[]>(() => initialAgenda(row));
   const [status, setStatus] = useState(row?.status || "planned");
   const [minutes, setMinutes] = useState(row?.minutes ?? "");
   const [outcome, setOutcome] = useState(row?.outcome ?? "");
@@ -683,23 +707,41 @@ function ScheduleForm({
   // 날짜가 지났는데 아직 '예정'이면 결과를 적을 차례라고 알려 준다.
   const due = status === "planned" && !!row && date < today();
 
+  // 예전 일정들에 적힌 참석자 — 자주 만난 사람부터.
+  const peopleHistory = useMemo(() => {
+    const count = new Map<string, number>();
+    for (const r of history) for (const p of splitPeople(r.attendees)) count.set(p, (count.get(p) ?? 0) + 1);
+    return [...count.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([p]) => p);
+  }, [history]);
+
   /** 회의 내용·결과를 적기 시작하면 '예정'은 '진행 완료'로 넘어간다(취소는 그대로 둔다). */
   function writeResult(set: (v: string) => void, v: string) {
     set(v);
     if (v.trim() && status === "planned") setStatus("done");
   }
 
+  function setAgendaAt(i: number, patch: Partial<ScheduleAgendaItem>) {
+    setAgenda((list) => list.map((a, j) => (j === i ? { ...a, ...patch } : a)));
+    if (patch.result?.trim() && status === "planned") setStatus("done");
+  }
+
   function body(): ScheduleSave {
+    const items = agenda
+      .map((a) => ({ text: a.text.trim(), result: a.result.trim() }))
+      .filter((a) => a.text || a.result);
+    const names = [...new Set(people.map((p) => p.trim()).filter(Boolean))];
     return {
       date,
       time_start: timeStart,
       time_end: timeEnd,
       title: title.trim(),
       event_type: eventType,
-      notes,
+      // 목록의 Notes 열·예전 화면이 읽는 평문 안건 — 번호를 붙여 한 줄씩.
+      notes: items.filter((a) => a.text).map((a, i) => `${i + 1}. ${a.text}`).join("\n"),
+      agenda: items,
       customer_id: customerId === "" ? null : customerId,
       location: location.trim(),
-      attendees: attendees.trim(),
+      attendees: names.join("\n"),
       status,
       minutes,
       outcome,
@@ -747,11 +789,15 @@ function ScheduleForm({
   return (
     <div>
       <fieldset className="form-fieldset" disabled={!canEdit}>
+        {/* 2단 격자 — 왼쪽 칸은 예정(Plan), 오른쪽 칸은 진행 후 기록(Result).
+            안건은 줄마다 왼쪽에 안건, 같은 줄 오른쪽에 그 안건의 결과가 선다. */}
         <div className="sched-form">
-          <section className="sched-col">
-            <h4 className="sched-col-title">Plan</h4>
-            <div className="sched-row">
-              <label className="form-field">
+          <h4 className="sched-col-title sched-l">Plan</h4>
+          <h4 className="sched-col-title sched-r">Result</h4>
+
+          <section className="sched-l sched-stack">
+            <div className="sched-when">
+              <label className="form-field sched-date">
                 <span>Date</span>
                 <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
               </label>
@@ -799,27 +845,44 @@ function ScheduleForm({
                 placeholder="e.g. Seoul office · Busan port · Zoom"
               />
             </label>
-            <label className="form-field">
+            {/* 참석자 — 한 칸에 한 명. 예전 일정에 적은 이름이 드롭다운 후보로 뜨고,
+                처음 만나는 사람은 그냥 적으면 된다(datalist = 고르기 + 직접 입력). */}
+            <div className="form-field">
               <span>Attendees</span>
-              <textarea
-                rows={2}
-                value={attendees}
-                onChange={(e) => setAttendees(e.target.value)}
-                placeholder="e.g. Sam Cho, Season Han (EVERHONEST MARINE)"
-              />
-            </label>
-            <label className="form-field">
-              <span>Agenda / plan</span>
-              <textarea
-                rows={5}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="What to discuss, what to bring"
-              />
-            </label>
+              <datalist id="sched-people">
+                {peopleHistory.map((p) => <option key={p} value={p} />)}
+              </datalist>
+              <div className="sched-people">
+                {people.map((p, i) => (
+                  <span key={i} className="sched-person">
+                    <input
+                      type="text"
+                      list="sched-people"
+                      value={p}
+                      aria-label={`Attendee ${i + 1}`}
+                      placeholder={peopleHistory.length ? "Pick or type a name" : "Type a name"}
+                      onChange={(e) => setPeople((list) => list.map((x, j) => (j === i ? e.target.value : x)))}
+                    />
+                    {people.length > 1 ? (
+                      <button
+                        type="button"
+                        className="btn tiny sched-x"
+                        aria-label={`Remove attendee ${i + 1}`}
+                        onClick={() => setPeople((list) => list.filter((_, j) => j !== i))}
+                      >
+                        ×
+                      </button>
+                    ) : null}
+                  </span>
+                ))}
+                <button type="button" className="btn tiny sched-add" onClick={() => setPeople((list) => [...list, ""])}>
+                  + Add attendee
+                </button>
+              </div>
+            </div>
           </section>
-          <section className="sched-col sched-col--result">
-            <h4 className="sched-col-title">Result</h4>
+
+          <section className="sched-r sched-stack">
             <div className="form-field">
               <span>Status</span>
               <span className="pl-view-toggle sched-status" role="group" aria-label="Status">
@@ -838,24 +901,73 @@ function ScheduleForm({
               {due ? <span className="hint-inline">This date has passed — record how it went below.</span> : null}
             </div>
             <label className="form-field">
-              <span>Meeting notes (what was discussed)</span>
-              <textarea
-                rows={7}
-                value={minutes}
-                onChange={(e) => writeResult(setMinutes, e.target.value)}
-                placeholder="Discussion, figures, what each side said"
-              />
-            </label>
-            <label className="form-field">
               <span>Outcome / next actions</span>
               <textarea
-                rows={5}
+                rows={6}
                 value={outcome}
                 onChange={(e) => writeResult(setOutcome, e.target.value)}
-                placeholder="Agreed points, follow-ups, who does what by when"
+                placeholder="Overall conclusion, follow-ups, who does what by when"
               />
             </label>
           </section>
+
+          <div className="sched-l sched-sub">Agenda</div>
+          <div className="sched-r sched-sub">Result per agenda item</div>
+          {agenda.map((a, i) => (
+            <Fragment key={i}>
+              <div className="sched-l sched-item">
+                <span className="sched-no">{i + 1}.</span>
+                <textarea
+                  rows={2}
+                  value={a.text}
+                  aria-label={`Agenda item ${i + 1}`}
+                  placeholder="What to discuss"
+                  onChange={(e) => setAgendaAt(i, { text: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="btn tiny sched-x"
+                  aria-label={`Remove agenda item ${i + 1}`}
+                  disabled={agenda.length === 1 && !a.text && !a.result}
+                  onClick={() =>
+                    setAgenda((list) => (list.length > 1 ? list.filter((_, j) => j !== i) : [{ text: "", result: "" }]))
+                  }
+                >
+                  ×
+                </button>
+              </div>
+              <div className="sched-r sched-item">
+                <span className="sched-no">{i + 1}.</span>
+                <textarea
+                  rows={2}
+                  value={a.result}
+                  aria-label={`Result of agenda item ${i + 1}`}
+                  placeholder={a.text ? `Result — ${a.text.split("\n")[0].slice(0, 40)}` : "Result of this item"}
+                  onChange={(e) => setAgendaAt(i, { result: e.target.value })}
+                />
+              </div>
+            </Fragment>
+          ))}
+          <div className="sched-l">
+            <button
+              type="button"
+              className="btn tiny sched-add"
+              onClick={() => setAgenda((list) => [...list, { text: "", result: "" }])}
+            >
+              + Add agenda item
+            </button>
+          </div>
+          <div className="sched-r" />
+
+          <label className="form-field sched-r sched-other">
+            <span>Other notes (outside the agenda)</span>
+            <textarea
+              rows={4}
+              value={minutes}
+              onChange={(e) => writeResult(setMinutes, e.target.value)}
+              placeholder="Anything discussed that was not on the agenda"
+            />
+          </label>
         </div>
       </fieldset>
       <div className="form-actions">

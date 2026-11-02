@@ -919,10 +919,12 @@ class ScheduleEvent(Base):
     time_start  = Column(String(5))
     time_end    = Column(String(5))
     location    = Column(String(200))
-    attendees   = Column(Text)
+    attendees   = Column(Text)          # 한 줄에 한 명(줄바꿈 구분)
+    # 번호 붙은 안건과 그 안건의 결과 — [{"text": 안건, "result": 결과}].
+    agenda      = Column(JSON, default=list)
     # 진행 후 기록 — planned(예정) / done(진행 완료) / cancelled(취소).
     status      = Column(String(12), default="planned")
-    minutes     = Column(Text)          # 진행 내용(회의록)
+    minutes     = Column(Text)          # 안건 밖의 기타 진행 내용
     outcome     = Column(Text)          # 결과·후속 조치
     created_at  = Column(DateTime, default=datetime.utcnow)
 

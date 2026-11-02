@@ -109,6 +109,8 @@ _MIGRATIONS = {
         "time_start": "VARCHAR(5)",
         "time_end": "VARCHAR(5)",
         "location": "VARCHAR(200)",
+        # 번호 붙은 안건과 안건별 결과. 기존 행은 NULL = 안건을 notes 평문으로만 적어 둠.
+        "agenda": "JSON",
         "attendees": "TEXT",
         "status": "VARCHAR(12)",
         "minutes": "TEXT",

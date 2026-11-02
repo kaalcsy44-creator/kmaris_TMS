@@ -3629,12 +3629,27 @@ class ScheduleEventCreate(BaseModel):
     time_end: str | None = ""
     location: str | None = ""
     attendees: str | None = ""
+    # [{"text": 안건, "result": 그 안건의 결과}] — 번호는 순서가 정한다.
+    agenda: list[dict] | None = None
     status: str | None = "planned"
     minutes: str | None = ""
     outcome: str | None = ""
 
 
 SCHEDULE_STATUSES = ("planned", "done", "cancelled")
+
+
+def _clean_agenda(raw) -> list[dict]:
+    """안건 목록 정리 — 안건·결과가 둘 다 빈 줄은 버린다."""
+    out = []
+    for it in raw or []:
+        if not isinstance(it, dict):
+            continue
+        text = str(it.get("text") or "").strip()
+        result = str(it.get("result") or "").strip()
+        if text or result:
+            out.append({"text": text, "result": result})
+    return out
 
 
 def _schedule_apply(e: ScheduleEvent, body: ScheduleEventCreate) -> None:
@@ -3648,6 +3663,9 @@ def _schedule_apply(e: ScheduleEvent, body: ScheduleEventCreate) -> None:
     e.time_end = (body.time_end or "").strip()[:5]
     e.location = (body.location or "").strip()[:200]
     e.attendees = (body.attendees or "").strip()
+    # 안건을 모르는 화면이 보낸 저장(None)은 적어 둔 안건을 지키게 둔다.
+    if body.agenda is not None:
+        e.agenda = _clean_agenda(body.agenda)
     e.status = body.status if body.status in SCHEDULE_STATUSES else "planned"
     e.minutes = body.minutes or ""
     e.outcome = body.outcome or ""
@@ -3664,6 +3682,7 @@ def _schedule_row(e: ScheduleEvent, cust_names: dict, user_names: dict) -> dict:
         "time_end": getattr(e, "time_end", None) or "",
         "location": getattr(e, "location", None) or "",
         "attendees": getattr(e, "attendees", None) or "",
+        "agenda": _clean_agenda(getattr(e, "agenda", None)),
         "status": getattr(e, "status", None) or "planned",
         "minutes": getattr(e, "minutes", None) or "",
         "outcome": getattr(e, "outcome", None) or "",
