@@ -20893,7 +20893,6 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
   border: 0; border-bottom: 2px solid transparent; background: none;
   font: inherit; font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer;
 }
-.trip-tabs button small { font-size: 11px; font-weight: 400; }
 .trip-tabs button i {
   font-style: normal; font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 999px;
   color: var(--navy); background: #e8eef6;

@@ -9,15 +9,15 @@ import type { ScheduleAgendaItem, TripAction, TripExpense, TripMemo, TripReport,
 export const TRIP_TYPE = "Business trip";
 
 export type TripTab = "report" | "itinerary" | "expenses" | "memos";
-export const TRIP_TABS: { id: TripTab; label: string; sheet: string }[] = [
-  { id: "report", label: "Trip report", sheet: "출장결과보고서" },
-  { id: "itinerary", label: "Itinerary", sheet: "출장일정" },
-  { id: "expenses", label: "Expenses", sheet: "출장경비" },
-  { id: "memos", label: "Meeting memos", sheet: "업체별 미팅메모" },
+export const TRIP_TABS: { id: TripTab; label: string }[] = [
+  { id: "report", label: "Trip report" },
+  { id: "itinerary", label: "Itinerary" },
+  { id: "expenses", label: "Expenses" },
+  { id: "memos", label: "Meeting memos" },
 ];
 
-export const EXPENSE_CATEGORIES = ["교통비", "숙박비", "식비", "접대비", "통신비", "기타"];
-export const PAYMENT_METHODS = ["개인 신용카드", "법인카드", "현금", "계좌이체"];
+export const EXPENSE_CATEGORIES = ["Transport", "Lodging", "Meals", "Entertainment", "Communication", "Other"];
+export const PAYMENT_METHODS = ["Personal card", "Corporate card", "Cash", "Bank transfer"];
 
 const emptyAction = (): TripAction => ({ text: "", owner: "", due: "", note: "" });
 const emptyStop = (date = ""): TripStop => ({
@@ -88,8 +88,8 @@ export const tripReceipts = (t: TripReport) => t.expenses.filter((e) => e.receip
 /** 출장 활동 건수 — 방문기관/업체를 적은 일정 줄. */
 export const tripVisits = (t: TripReport) => t.itinerary.filter((s) => s.org.trim()).length;
 
-const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
-/** '26.10.15(목)~16(금)' — 엑셀 양식의 출장기간 표기. 달이 바뀌면 끝에도 월을 붙인다. */
+const WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/** '26.10.15(Thu)~16(Fri)' — 엑셀 양식의 출장기간 표기. 달이 바뀌면 끝에도 월을 붙인다. */
 export function tripPeriod(start: string, end: string): string {
   const one = (iso: string, withYm: "full" | "md" | "d") => {
     const d = new Date(`${iso}T00:00:00`);
@@ -218,10 +218,10 @@ export function TripActionsTable({ trip, setTrip }: { trip: TripReport; setTrip:
       make={(p) => ({ ...emptyAction(), owner: p?.owner ?? "" })}
       addLabel="Add action"
       cols={[
-        { key: "text", label: "Action (내용)", kind: "area", ph: "What to do next" },
-        { key: "owner", label: "Owner (담당자)", w: 130 },
-        { key: "due", label: "Target (목표 일정)", w: 120, ph: "11월 1주" },
-        { key: "note", label: "Note (비고)", w: 170 },
+        { key: "text", label: "Action", kind: "area", ph: "What to do next" },
+        { key: "owner", label: "Owner", w: 130 },
+        { key: "due", label: "Target date", w: 120, ph: "e.g. Nov wk 1" },
+        { key: "note", label: "Note", w: 170 },
       ]}
     />
   );
@@ -230,21 +230,21 @@ export function TripActionsTable({ trip, setTrip }: { trip: TripReport; setTrip:
 export function TripItineraryTab({ trip, setTrip }: { trip: TripReport; setTrip: (t: TripReport) => void }) {
   return (
     <>
-      <p className="trip-hint">방문처별로 일시, 논의 내용, 결과 및 후속 행동을 기록하세요. 이동은 Time / move 칸에만 적어도 됩니다.</p>
+      <p className="trip-hint">Record each visit: when, what was discussed, the result and follow-ups. For travel legs, filling in Time / move alone is enough.</p>
       <RowTable<TripStop>
         list={trip.itinerary}
         onChange={(itinerary) => setTrip({ ...trip, itinerary })}
         make={(p) => emptyStop(p?.date ?? "")}
         addLabel="Add row"
         cols={[
-          { key: "date", label: "Date (일자)", w: 128, kind: "date" },
-          { key: "time", label: "Time / move (시간)", w: 120, kind: "area", ph: "09:00–10:00" },
-          { key: "org", label: "Visit (방문기관/업체)", w: 130, kind: "area" },
-          { key: "place", label: "Place (장소)", w: 120, kind: "area" },
-          { key: "people", label: "Attendees (참석자/담당자)", w: 150, kind: "area" },
-          { key: "activity", label: "Discussion (논의/활동 내용)", kind: "area" },
-          { key: "result", label: "Result & follow-up (결과)", kind: "area" },
-          { key: "note", label: "Note (비고)", w: 100, kind: "area" },
+          { key: "date", label: "Date", w: 128, kind: "date" },
+          { key: "time", label: "Time / move", w: 120, kind: "area", ph: "09:00–10:00" },
+          { key: "org", label: "Organization", w: 130, kind: "area" },
+          { key: "place", label: "Place", w: 120, kind: "area" },
+          { key: "people", label: "Attendees", w: 150, kind: "area" },
+          { key: "activity", label: "Discussion / activity", kind: "area" },
+          { key: "result", label: "Result & follow-up", kind: "area" },
+          { key: "note", label: "Note", w: 100, kind: "area" },
         ]}
       />
     </>
@@ -255,36 +255,36 @@ export function TripExpensesTab({ trip, setTrip }: { trip: TripReport; setTrip: 
   const byUser = expenseGroups(trip.expenses);
   return (
     <>
-      <p className="trip-hint">금액은 원화(KRW) 기준 · 해외 결제는 적용 환율로 환산하여 입력하세요.</p>
+      <p className="trip-hint">Enter amounts in KRW · convert foreign payments at the applied exchange rate.</p>
       <RowTable<TripExpense>
         list={trip.expenses}
         onChange={(expenses) => setTrip({ ...trip, expenses })}
         make={(p) => ({ ...emptyExpense(p?.date ?? "", p?.user ?? ""), payment: p?.payment ?? "" })}
         addLabel="Add expense"
         cols={[
-          { key: "date", label: "Date (지출일)", w: 128, kind: "date" },
-          { key: "user", label: "User (사용자)", w: 90 },
-          { key: "category", label: "Category (구분)", w: 110, kind: "combo", options: EXPENSE_CATEGORIES },
-          { key: "detail", label: "Where / what (사용처/내역)", kind: "area" },
-          { key: "payment", label: "Payment (결제 수단)", w: 130, kind: "combo", options: PAYMENT_METHODS },
-          { key: "fx_note", label: "Currency / FX (환율 메모)", w: 110 },
+          { key: "date", label: "Date", w: 128, kind: "date" },
+          { key: "user", label: "User", w: 90 },
+          { key: "category", label: "Category", w: 110, kind: "combo", options: EXPENSE_CATEGORIES },
+          { key: "detail", label: "Vendor / details", kind: "area" },
+          { key: "payment", label: "Payment", w: 130, kind: "combo", options: PAYMENT_METHODS },
+          { key: "fx_note", label: "Currency / FX", w: 110 },
           { key: "amount", label: "Amount KRW", w: 110, kind: "number" },
           { key: "receipt", label: "Receipt", w: 58, kind: "check" },
-          { key: "note", label: "Note (비고)", w: 120 },
+          { key: "note", label: "Note", w: 120 },
         ]}
         foot={
           <tfoot>
             {byUser.length > 1
               ? byUser.map((g) => (
                   <tr key={g.user} className="sub">
-                    <td colSpan={6}>{g.user || "(no user)"} 계</td>
+                    <td colSpan={6}>{g.user || "(no user)"} subtotal</td>
                     <td className="num">{krw(g.total)}</td>
                     <td colSpan={3} />
                   </tr>
                 ))
               : null}
             <tr className="total">
-              <td colSpan={6}>총 계 · receipts {tripReceipts(trip)}</td>
+              <td colSpan={6}>Total · receipts {tripReceipts(trip)}</td>
               <td className="num">{krw(tripTotal(trip))}</td>
               <td colSpan={3} />
             </tr>
@@ -298,19 +298,19 @@ export function TripExpensesTab({ trip, setTrip }: { trip: TripReport; setTrip: 
 export function TripMemosTab({ trip, setTrip }: { trip: TripReport; setTrip: (t: TripReport) => void }) {
   return (
     <>
-      <p className="trip-hint">업체별로 사업 개요·역량·제약 등을 항목별로 정리하고, 시사점/검증할 점을 따로 적어 두세요.</p>
+      <p className="trip-hint">Summarize each company by topic (overview, capabilities, limits) and note insights or points to verify separately.</p>
       <RowTable<TripMemo>
         list={trip.memos}
         onChange={(memos) => setTrip({ ...trip, memos })}
         make={(p) => emptyMemo(p?.company ?? "")}
         addLabel="Add memo"
         cols={[
-          { key: "company", label: "Company (업체)", w: 130 },
-          { key: "section", label: "Section (구분)", w: 100 },
-          { key: "item", label: "Item (세부 항목)", w: 120 },
-          { key: "memo", label: "Memo (미팅 메모 정리)", kind: "area" },
-          { key: "insight", label: "Insight / to verify (시사점)", w: 230, kind: "area" },
-          { key: "note", label: "Note (비고)", w: 100, kind: "area" },
+          { key: "company", label: "Company", w: 130 },
+          { key: "section", label: "Section", w: 100 },
+          { key: "item", label: "Item", w: 120 },
+          { key: "memo", label: "Meeting notes", kind: "area" },
+          { key: "insight", label: "Insight / to verify", w: 230, kind: "area" },
+          { key: "note", label: "Note", w: 100, kind: "area" },
         ]}
       />
     </>
@@ -348,12 +348,12 @@ export function tripReportHtml(d: {
   const overview = `
     <table class="ov">
       <colgroup><col class="k"><col><col class="k"><col><col class="k"><col><col class="k"><col></colgroup>
-      <tr><th>작성일</th><td>${v(t.report_date)}</td><th>작성자</th><td>${v(t.author)}</td>
-          <th>소속 / 직위</th><td>${v(t.position)}</td><th>보고 대상</th><td>${v(t.report_to)}</td></tr>
-      <tr><th>출장기간</th><td colspan="3">${esc(period)}</td><th>출장지역</th><td colspan="3">${v(d.region)}</td></tr>
-      <tr><th>출장목적</th><td colspan="3">${v(t.purpose)}</td><th>방문처 / 미팅 상대</th><td colspan="3">${v(t.visits)}</td></tr>
+      <tr><th>Report date</th><td>${v(t.report_date)}</td><th>Author</th><td>${v(t.author)}</td>
+          <th>Dept / title</th><td>${v(t.position)}</td><th>Report to</th><td>${v(t.report_to)}</td></tr>
+      <tr><th>Period</th><td colspan="3">${esc(period)}</td><th>Region</th><td colspan="3">${v(d.region)}</td></tr>
+      <tr><th>Purpose</th><td colspan="3">${v(t.purpose)}</td><th>Visits / met with</th><td colspan="3">${v(t.visits)}</td></tr>
       ${d.travelers.length || d.customer
-        ? `<tr><th>출장자</th><td colspan="3">${esc(d.travelers.join(", "))}</td><th>관련 고객사</th><td colspan="3">${v(d.customer)}</td></tr>`
+        ? `<tr><th>Travelers</th><td colspan="3">${esc(d.travelers.join(", "))}</td><th>Customer</th><td colspan="3">${v(d.customer)}</td></tr>`
         : ""}
     </table>`;
   const results = d.results.length
@@ -365,19 +365,19 @@ export function tripReportHtml(d: {
   const sheet1 = `
   <section class="sheet">
     <div class="brand"><b>K-MARIS</b><span>${esc(period)}</span></div>
-    <h1>출장 결과 보고서</h1>
-    <div class="subt">BUSINESS TRIP REPORT${d.title ? ` · ${esc(d.title)}` : ""}</div>
-    <h2>01&nbsp; 출장 개요</h2>${overview}
-    <h2>02&nbsp; 주요 출장 결과 및 성과</h2>${results}
-    <h2>03&nbsp; 후속 조치 및 제안</h2>
+    <h1>BUSINESS TRIP REPORT</h1>
+    <div class="subt">${d.title ? esc(d.title) : "&nbsp;"}</div>
+    <h2>01&nbsp; Overview</h2>${overview}
+    <h2>02&nbsp; Key results</h2>${results}
+    <h2>03&nbsp; Follow-up actions</h2>
     <table class="grid"><colgroup><col style="width:42px"><col><col style="width:80px"><col style="width:90px"><col style="width:22%"></colgroup>
-      <thead><tr><th>번호</th><th>내용</th><th>담당자</th><th>목표 일정</th><th>비고</th></tr></thead><tbody>${actions}</tbody></table>
-    <h2>04&nbsp; 종합 의견 / 요청 사항</h2><div class="box">${v(d.opinion) || "&nbsp;"}</div>
-    <h2>05&nbsp; 출장 경비 요약 <small>(상세: 출장경비)</small></h2>
-    <table class="ov"><tr><th>총 경비 (KRW)</th><td class="r">${krw(tripTotal(t))}</td><th>영수증 수</th><td class="r">${tripReceipts(t)}</td>
-      <th>출장 활동 건수</th><td class="r">${tripVisits(t)}</td></tr></table>
-    <p class="att">첨부자료: ${v(t.attachments) || "명함, 영수증 등 관련 증빙 별첨"}</p>
-    <table class="sign"><tr><th>작성자 확인</th><td>${v(t.author)}</td><th>검토</th><td>${v(t.reviewer)}</td><th>승인</th><td>${v(t.approver)}</td></tr></table>
+      <thead><tr><th>No.</th><th>Action</th><th>Owner</th><th>Target date</th><th>Note</th></tr></thead><tbody>${actions}</tbody></table>
+    <h2>04&nbsp; Overall opinion / requests</h2><div class="box">${v(d.opinion) || "&nbsp;"}</div>
+    <h2>05&nbsp; Expense summary <small>(details: Expenses)</small></h2>
+    <table class="ov"><tr><th>Total (KRW)</th><td class="r">${krw(tripTotal(t))}</td><th>Receipts</th><td class="r">${tripReceipts(t)}</td>
+      <th>Visits</th><td class="r">${tripVisits(t)}</td></tr></table>
+    <p class="att">Attachments: ${v(t.attachments) || "Business cards, receipts and other supporting documents"}</p>
+    <table class="sign"><tr><th>Prepared by</th><td>${v(t.author)}</td><th>Reviewed by</th><td>${v(t.reviewer)}</td><th>Approved by</th><td>${v(t.approver)}</td></tr></table>
   </section>`;
 
   // 출장일정 — 같은 날은 일자 칸을, 같은 날 같은 시간대는 시간 칸을 하나로 합친다(엑셀 병합과 같게).
@@ -404,11 +404,11 @@ export function tripReportHtml(d: {
       .join("");
     sheet2 = `
   <section class="sheet wide">
-    <h1>출장 일정 및 방문 미팅 기록</h1>
-    <div class="subt">출장 중 방문처별 일시, 논의 내용, 결과 및 후속 행동</div>
+    <h1>ITINERARY &amp; MEETING LOG</h1>
+    <div class="subt">When, what was discussed, results and follow-ups for each visit</div>
     <table class="grid">
       <colgroup><col style="width:78px"><col style="width:92px"><col style="width:10%"><col style="width:9%"><col style="width:13%"><col><col><col style="width:8%"></colgroup>
-      <thead><tr><th>일자</th><th>시간 / 장소</th><th>방문기관 / 업체</th><th>장소</th><th>참석자 / 담당자</th><th>논의 / 활동 내용</th><th>결과 및 후속 조치</th><th>비고</th></tr></thead>
+      <thead><tr><th>Date</th><th>Time / move</th><th>Organization</th><th>Place</th><th>Attendees</th><th>Discussion / activity</th><th>Result &amp; follow-up</th><th>Note</th></tr></thead>
       <tbody>${body}</tbody></table>
   </section>`;
   }
@@ -417,18 +417,18 @@ export function tripReportHtml(d: {
   if (t.expenses.length) {
     const groups = expenseGroups(t.expenses);
     const line = (e: TripExpense) =>
-      `<tr><td class="c">${v(e.date)}</td><td class="c">${v(e.user)}</td><td class="c">${v(e.category)}</td><td>${v(e.detail)}</td><td class="c">${v(e.payment)}</td><td>${v(e.fx_note)}</td><td class="r">${krw(e.amount)}</td><td class="c">${e.receipt ? "유" : "무"}</td><td>${v(e.note)}</td></tr>`;
+      `<tr><td class="c">${v(e.date)}</td><td class="c">${v(e.user)}</td><td class="c">${v(e.category)}</td><td>${v(e.detail)}</td><td class="c">${v(e.payment)}</td><td>${v(e.fx_note)}</td><td class="r">${krw(e.amount)}</td><td class="c">${e.receipt ? "Yes" : "No"}</td><td>${v(e.note)}</td></tr>`;
     const body = groups
-      .map((g) => g.rows.map(line).join("") + (groups.length > 1 ? `<tr class="sub"><td colspan="6">${v(g.user) || "—"} 계</td><td class="r">${krw(g.total)}</td><td colspan="2"></td></tr>` : ""))
+      .map((g) => g.rows.map(line).join("") + (groups.length > 1 ? `<tr class="sub"><td colspan="6">${v(g.user) || "—"} subtotal</td><td class="r">${krw(g.total)}</td><td colspan="2"></td></tr>` : ""))
       .join("");
     sheet3 = `
   <section class="sheet wide">
-    <h1>출장 경비 정산</h1>
-    <div class="subt">금액은 원화(KRW) 기준 · 해외 결제는 적용 환율로 환산하여 입력</div>
+    <h1>TRAVEL EXPENSES</h1>
+    <div class="subt">Amounts in KRW · foreign payments converted at the applied exchange rate</div>
     <table class="grid">
       <colgroup><col style="width:82px"><col style="width:64px"><col style="width:64px"><col><col style="width:96px"><col style="width:12%"><col style="width:92px"><col style="width:48px"><col style="width:14%"></colgroup>
-      <thead><tr><th>지출일</th><th>사용자</th><th>경비 구분</th><th>사용처 / 내역</th><th>결제 수단</th><th>통화 / 환율 메모</th><th>금액 (KRW)</th><th>영수증</th><th>비고</th></tr></thead>
-      <tbody>${body}<tr class="total"><td colspan="6">총 계</td><td class="r">${krw(tripTotal(t))}</td><td colspan="2"></td></tr></tbody></table>
+      <thead><tr><th>Date</th><th>User</th><th>Category</th><th>Vendor / details</th><th>Payment</th><th>Currency / FX</th><th>Amount (KRW)</th><th>Receipt</th><th>Note</th></tr></thead>
+      <tbody>${body}<tr class="total"><td colspan="6">Total</td><td class="r">${krw(tripTotal(t))}</td><td colspan="2"></td></tr></tbody></table>
   </section>`;
   }
 
@@ -448,16 +448,16 @@ export function tripReportHtml(d: {
       .join("");
     sheet4 = `
   <section class="sheet wide">
-    <h1>${d.title ? `${esc(d.title)} | ` : ""}업체별 상세 미팅 메모</h1>
+    <h1>${d.title ? `${esc(d.title)} | ` : ""}MEETING MEMOS BY COMPANY</h1>
     <div class="subt">${esc(period)}</div>
     <table class="grid">
       <colgroup><col style="width:96px"><col style="width:76px"><col style="width:96px"><col><col style="width:22%"><col style="width:9%"></colgroup>
-      <thead><tr><th>업체</th><th>구분</th><th>세부 항목</th><th>미팅 메모 정리</th><th>시사점 / 검증 필요</th><th>비고</th></tr></thead>
+      <thead><tr><th>Company</th><th>Section</th><th>Item</th><th>Meeting notes</th><th>Insight / to verify</th><th>Note</th></tr></thead>
       <tbody>${body}</tbody></table>
   </section>`;
   }
 
-  return `<!doctype html><html><head><meta charset="utf-8"><title>출장결과보고서${d.title ? ` — ${esc(d.title)}` : ""}</title>
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Business trip report${d.title ? ` — ${esc(d.title)}` : ""}</title>
 <style>
   @page { size: A4; margin: 14mm 13mm 14mm; }
   @page wide { size: A4 landscape; margin: 11mm 11mm 12mm; }

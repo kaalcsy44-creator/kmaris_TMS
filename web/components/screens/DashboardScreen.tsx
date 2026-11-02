@@ -796,7 +796,7 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
   const [eventType, setEventType] = useState(row?.event_type || "Meeting");
   const [customerId, setCustomerId] = useState<number | "">(row?.customer_id ?? "");
   const [location, setLocation] = useState(row?.location ?? "");
-  // 한 칸에 한 명 — 마지막 칸은 늘 비워 두지 않고 '+ Add attendee' 로 늘린다.
+  // 한 칸에 한 명 — 마지막 칸은 늘 비워 두지 않고 '+ Add {isTrip ? "traveler" : "attendee"}' 로 늘린다.
   const [people, setPeople] = useState<string[]>(() => {
     const p = splitPeople(row?.attendees);
     return p.length ? p : [""];
@@ -1008,7 +1008,7 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
           </span>
         ))}
         <button type="button" className="btn tiny sched-add" onClick={() => setPeople((list) => [...list, ""])}>
-          + Add attendee
+          + Add {isTrip ? "traveler" : "attendee"}
         </button>
       </div>
     </div>
@@ -1170,8 +1170,8 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
       <TripMemosTab trip={trip} setTrip={setTrip} />
     ) : (
       <div className="sched-form">
-        <h4 className="sched-col-title sched-l">01 Overview · 출장 개요</h4>
-        <h4 className="sched-col-title sched-r">02 Key results · 주요 출장 결과 및 성과</h4>
+        <h4 className="sched-col-title sched-l">01 Overview</h4>
+        <h4 className="sched-col-title sched-r">02 Key results</h4>
 
         <section className="sched-l sched-stack">
           <div className="sched-when">
@@ -1185,25 +1185,25 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
           {titleRow}
           <div className="sched-row">
             <label className="form-field">
-              <span>Region (출장지역)</span>
-              <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. 부산" />
+              <span>Region</span>
+              <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Busan" />
             </label>
             {statusField}
           </div>
           <label className="form-field">
-            <span>Purpose (출장목적)</span>
+            <span>Purpose</span>
             <textarea rows={2} value={trip.purpose} onChange={(e) => setTrip({ ...trip, purpose: e.target.value })} />
           </label>
           <label className="form-field">
-            <span>Visits / met with (방문처 / 미팅 상대)</span>
+            <span>Visits / met with</span>
             <textarea rows={2} value={trip.visits} onChange={(e) => setTrip({ ...trip, visits: e.target.value })} />
           </label>
           {peopleField}
           <div className="trip-quad">
-            {tripField("report_date", "Report date (작성일)", "", "date")}
-            {tripField("author", "Author (작성자)")}
-            {tripField("position", "Dept / title (소속/직위)")}
-            {tripField("report_to", "Report to (보고 대상)", "팀 열람용")}
+            {tripField("report_date", "Report date", "", "date")}
+            {tripField("author", "Author")}
+            {tripField("position", "Dept / title")}
+            {tripField("report_to", "Report to", "e.g. Team")}
           </div>
         </section>
 
@@ -1216,7 +1216,7 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
                   type="text"
                   value={a.text}
                   aria-label={`Result heading ${i + 1}`}
-                  placeholder="Heading — e.g. 신규 협력업체 및 공급망 확대"
+                  placeholder="Heading — e.g. New partners & supply chain"
                   onChange={(e) => setAgendaAt(i, { text: e.target.value })}
                 />
                 <button
@@ -1251,20 +1251,20 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
           </button>
         </section>
 
-        <div className="sched-sub trip-full">03 Follow-up actions · 후속 조치 및 제안</div>
+        <div className="sched-sub trip-full">03 Follow-up actions</div>
         <div className="trip-full">
           <TripActionsTable trip={trip} setTrip={setTrip} />
         </div>
 
-        <div className="sched-l sched-sub">04 Overall opinion / requests · 종합 의견 / 요청 사항</div>
-        <div className="sched-r sched-sub">05 Expense summary · 출장 경비 요약</div>
+        <div className="sched-l sched-sub">04 Overall opinion / requests</div>
+        <div className="sched-r sched-sub">05 Expense summary</div>
         <label className="form-field sched-l">
           <textarea
             rows={5}
             aria-label="Overall opinion"
             value={outcome}
             onChange={(e) => writeResult(setOutcome, e.target.value)}
-            placeholder="출장 전체 소감, 성과 평가, 회사에 요청할 사항"
+            placeholder="Overall assessment of the trip and any requests to the company"
           />
         </label>
         <section className="sched-r sched-stack">
@@ -1273,10 +1273,10 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
             <div><span>Receipts</span><b>{tripReceipts(trip)}</b></div>
             <div><span>Visits</span><b>{tripVisits(trip)}</b></div>
           </div>
-          {tripField("attachments", "Attachments (첨부자료)", "명함, 영수증 등 관련 증빙 별첨")}
+          {tripField("attachments", "Attachments", "Business cards, receipts, etc.")}
           <div className="sched-row">
-            {tripField("reviewer", "Reviewed by (검토)")}
-            {tripField("approver", "Approved by (승인)")}
+            {tripField("reviewer", "Reviewed by")}
+            {tripField("approver", "Approved by")}
           </div>
         </section>
       </div>
@@ -1325,7 +1325,6 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
                 onClick={() => setTripTab(t.id)}
               >
                 {t.label}
-                <small>{t.sheet}</small>
                 {n ? <i>{n}</i> : null}
               </button>
             );
