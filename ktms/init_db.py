@@ -44,6 +44,8 @@ _MIGRATIONS = {
         "consultant_rate": "FLOAT",
         # 한 문의에서 갈라져 나온 딜들의 묶음 대표 id — 이 값이 같은 딜은 메일을 함께 본다.
         "mail_group_id": "INTEGER",
+        # 함께 받은 고객 담당자(같은 회사의 다른 레코드 id 들) — 대표는 customer_id.
+        "cc_contact_ids": "JSON",
     },
     "quotations": {
         "created_by": "INTEGER",

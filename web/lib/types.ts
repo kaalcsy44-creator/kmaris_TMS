@@ -42,6 +42,8 @@ export type CustomerOption = {
   id: number;
   name: string;
   contact?: string;
+  /** 대표 이메일 — 이름이 같은 담당자 레코드를 가려 고를 때 본다. */
+  email?: string;
   logo?: string;
   uses?: number;
   grade?: CustomerGrade;
@@ -2230,6 +2232,8 @@ export type RfqDetail = {
   contact_person: string;
   customer_contact: string;
   customer_email: string;
+  /** 대표(customer_id) 외에 함께 받은 담당자 레코드 id. */
+  cc_contact_ids?: number[];
   vessel: string;
   vessel_id: number;
   project_title: string;

@@ -254,6 +254,7 @@ def rfq_detail(rfq_id: int):
             "customer_id": r.customer_id or 0,
             "customer_contact": (cust.contact if cust else "") or "",
             "customer_email": (cust.email if cust else "") or "",
+            "cc_contact_ids": _clean_cc_ids(s, r.customer_id, getattr(r, "cc_contact_ids", None)),
             "vessel": vessel.name if vessel else "",
             "vessel_id": r.vessel_id or 0,
             "project_title": getattr(r, "project_title", None) or "",
@@ -334,6 +335,26 @@ def _clean_source_files(src) -> list[dict]:
     return out
 
 
+def _clean_cc_ids(s, customer_id, ids) -> list[int]:
+    """함께 받은 담당자 id 정리 — 대표와 겹치거나, 없거나, 다른 회사인 레코드는 뺀다."""
+    want = []
+    for x in (ids or []):
+        try:
+            i = int(x)
+        except (TypeError, ValueError):
+            continue
+        if i > 0 and i != customer_id and i not in want:
+            want.append(i)
+    if not want or not customer_id:
+        return []
+    main = s.query(Customer).filter_by(id=customer_id).first()
+    if not main:
+        return []
+    ok = {c.id for c in s.query(Customer).filter(Customer.id.in_(want),
+                                                  Customer.name == main.name).all()}
+    return [i for i in want if i in ok]
+
+
 @app.post("/api/admin/rfq", dependencies=[Depends(require_token)])
 def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
     """Customer RFQ 신규 등록. 케이마리스 RFQ No.는 기본적으로 미발급(임시) 상태로
@@ -388,6 +409,7 @@ def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
             consultant_rate=(None if (body.consultant_rate or -1) < 0 else body.consultant_rate),
             notes=(body.notes or "").strip() or None,
             customer_id=cust.id,
+            cc_contact_ids=_clean_cc_ids(s, cust.id, body.cc_contact_ids),
             vessel_id=body.vessel_id,
             date=received_at[:10],
             received_at=received_at,
@@ -464,6 +486,11 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
                 rfq.rfq_no = new_no
         if body.contact_person is not None:
             rfq.contact_person = body.contact_person.strip() or None
+        if body.cc_contact_ids is not None:
+            rfq.cc_contact_ids = _clean_cc_ids(s, rfq.customer_id, body.cc_contact_ids)
+        elif body.customer_id is not None:
+            # 대표만 바꿨을 때 — 다른 회사로 넘어갔으면 남은 동행 담당자는 떼어낸다.
+            rfq.cc_contact_ids = _clean_cc_ids(s, rfq.customer_id, getattr(rfq, "cc_contact_ids", None))
         if body.project_title is not None:
             rfq.project_title = body.project_title.strip() or None
         if body.request_channel is not None:

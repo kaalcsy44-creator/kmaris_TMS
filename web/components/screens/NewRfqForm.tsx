@@ -23,6 +23,7 @@ import { imageFromClipboard } from "@/lib/imagePaste";
 import { useEditGate } from "@/lib/viewMode";
 import CustomerName from "@/components/common/CustomerName";
 import CustomerSelect from "@/components/common/CustomerSelect";
+import ContactMultiSelect from "@/components/common/ContactMultiSelect";
 import VesselOwnerRow from "@/components/common/VesselOwnerRow";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import CategoryCell from "@/components/common/CategoryCell";
@@ -151,6 +152,9 @@ export default function NewRfqForm({
   // customerId 는 "고객사+담당자" 레코드 1건의 id(레코드1=담당자1). 화면에서는 회사명과
   // 담당자를 두 개의 select 로 나눠 고르며, companyName 이 선택한 회사(1단계)를 들고 있다.
   const [customerId, setCustomerId] = useState<number | "">("");
+  // 대표(customerId) 외에 함께 고른 같은 회사 담당자 레코드 id — 한 RFQ 를 여럿이 같이 보낸 경우.
+  const [ccIds, setCcIds] = useState<number[]>([]);
+  const [contactOpen, setContactOpen] = useState(false);
   const [companyName, setCompanyName] = useState("");
   const [vesselId, setVesselId] = useState<number | "">("");
   const [custRfqNo, setCustRfqNo] = useState("");
@@ -424,6 +428,7 @@ export default function NewRfqForm({
     setEditId(null);
     setAssigneeId(0);
     setCustomerId("");
+    setCcIds([]);
     setCompanyName("");
     setVesselId("");
     setCustRfqNo("");
@@ -451,6 +456,7 @@ export default function NewRfqForm({
       setLoadedRfqNo(d.rfq_no && d.rfq_no !== "-" ? d.rfq_no : "");
       setAssigneeId(d.assignee_id ?? 0);
       setCustomerId(d.customer_id || "");
+      setCcIds(Array.isArray(d.cc_contact_ids) ? d.cc_contact_ids : []);
       setCompanyName(customers.find((c) => c.id === d.customer_id)?.name || "");
       setVesselId(d.vessel_id || "");
       setCustRfqNo(d.customer_rfq_no || "");
@@ -513,6 +519,7 @@ export default function NewRfqForm({
     return {
       customer_rfq_no: custRfqNo,
       contact_person: contactPerson,
+      cc_contact_ids: ccContacts.map((c) => c.id),
       received_at: receivedAt || undefined,
       project_title: projectTitle,
       work_type: workType,
@@ -675,6 +682,14 @@ export default function NewRfqForm({
     () => (companyName ? customers.filter((c) => c.name === companyName) : []),
     [customers, companyName]
   );
+  // 함께 고른 담당자 — 지금 회사에 속하고 대표와 겹치지 않는 것만(회사가 바뀌면 저절로 빠진다).
+  const ccContacts = useMemo(
+    () => ccIds
+      .map((id) => companyContacts.find((c) => c.id === id))
+      .filter((c): c is CustomerOption => !!c && c.id !== customerId),
+    [ccIds, companyContacts, customerId]
+  );
+  const mainContact = customerId === "" ? undefined : companyContacts.find((c) => c.id === customerId);
   // 목록 로드·불러오기·빠른등록 등으로 customerId 가 밖에서 정해지면 회사 select 를 맞춰준다.
   useEffect(() => {
     if (customerId === "") return;
@@ -685,6 +700,7 @@ export default function NewRfqForm({
   // 회사를 고르면 담당자 후보를 좁힌다. 담당자가 1명뿐이면 그대로 확정.
   function pickCompany(name: string) {
     setCompanyName(name);
+    setCcIds([]);
     const list = name ? customers.filter((c) => c.name === name) : [];
     if (list.length === 1) {
       setCustomerId(list[0].id);
@@ -700,6 +716,30 @@ export default function NewRfqForm({
     setCustomerId(id);
     const c = id === "" ? undefined : customers.find((x) => x.id === id);
     setContactPerson(c?.contact || "");
+  }
+
+  // 담당자 체크 토글 — 첫 번째로 고른 사람이 대표(문서 Attn·메일 수신)가 되고, 나머지는 함께 받은 사람.
+  // 대표를 풀면 다음 사람이 대표로 올라선다.
+  function toggleContact(id: number) {
+    if (id === customerId) {
+      const [next, ...rest] = ccContacts.map((c) => c.id);
+      pickContact(next ?? "");
+      setCcIds(rest);
+    } else if (ccIds.includes(id)) {
+      setCcIds(ccIds.filter((x) => x !== id));
+    } else if (customerId === "") {
+      pickContact(id);
+    } else {
+      setCcIds([...ccIds, id]);
+    }
+  }
+
+  // 함께 받은 사람을 대표로 — 기존 대표는 함께 받은 사람 맨 앞으로 내려간다.
+  function makeMainContact(id: number) {
+    if (id === customerId) return;
+    const prev = customerId;
+    pickContact(id);
+    setCcIds([...(prev === "" ? [] : [prev]), ...ccIds.filter((x) => x !== id && x !== prev)]);
   }
 
   return (
@@ -855,22 +895,32 @@ export default function NewRfqForm({
             />
           </Field>
           <Field label={companyContacts.length > 1 ? "Customer contact *" : "Customer contact"}>
-            <select
-              value={customerId}
+            {/* 여럿을 함께 고를 수 있다 — 첫 번째(★)가 대표(customer_id·문서 Attn), 나머지는 함께 받은 사람. */}
+            <ContactMultiSelect
+              options={companyContacts}
+              mainId={customerId}
+              ccIds={ccContacts.map((c) => c.id)}
+              onToggle={toggleContact}
+              onMakeMain={makeMainContact}
+              placeholder={companyName ? "Select contact…" : "Select a customer first"}
               disabled={!companyName}
-              onChange={(e) =>
-                pickContact(e.target.value === "" ? "" : Number(e.target.value))
-              }
-            >
-              <option value="">
-                {companyName ? "Select contact…" : "Select a customer first"}
-              </option>
-              {companyContacts.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.contact || "(no contact)"}
-                </option>
-              ))}
-            </select>
+            />
+            {/* 고른 사람들의 이메일 — 누가 받는지 저장 전에 눈으로 확인한다. */}
+            {mainContact || ccContacts.length ? (
+              <ul className="contact-email-list">
+                {[mainContact, ...ccContacts].filter(Boolean).map((c) => (
+                  <li key={c!.id}>
+                    {c!.id === customerId ? <span className="contact-email-main" title="Main contact">★</span> : null}
+                    <span className="contact-email-name">{c!.contact?.trim() || "(no contact)"}</span>
+                    {c!.email?.trim() ? (
+                      <a href={`mailto:${c!.email.trim()}`}>{c!.email.trim()}</a>
+                    ) : (
+                      <span className="contact-email-none">no email</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {/* Auto-fill·기존 저장값이 선택한 담당자와 다를 때만 원래 값을 알려준다. */}
             {contactPerson &&
             customerId !== "" &&

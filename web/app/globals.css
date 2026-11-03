@@ -9328,6 +9328,55 @@ table.mini .num {
   border-top: 1px solid #eef2f7;
 }
 .cust-select-count { font-size: 11.5px; color: #7a8798; }
+/* 고객 담당자 복수 선택(ContactMultiSelect) — 줄마다 이름 + 이메일, 대표는 ★ Main. */
+.contact-multi-val { display: inline-flex; align-items: center; gap: 6px; }
+.contact-multi-more {
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #1d4ed8;
+  background: #e1ebfb;
+  border-radius: 9px;
+}
+.contact-multi-opt { gap: 6px; padding: 4px 6px; }
+.contact-multi-pick {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: 2px 0;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.contact-multi-text { display: flex; flex-direction: column; min-width: 0; }
+.contact-multi-name { font-size: 13px; color: #1b2a41; }
+.contact-multi-email {
+  font-size: 11.5px;
+  color: #6b7a90;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.contact-multi-star {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  font-size: 11px;
+  color: #6b7a90;
+  background: none;
+  border: 1px solid #d7e2ee;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.contact-multi-star.on { color: #b45309; border-color: #f3d9a4; background: #fff8e6; cursor: default; }
+/* 고른 담당자의 이메일 목록 — 필드 바로 아래. */
+.contact-email-list { list-style: none; margin: 4px 0 0; padding: 0; font-size: 11.5px; }
+.contact-email-list li { display: flex; align-items: center; gap: 6px; line-height: 1.6; min-width: 0; }
+.contact-email-list a { color: #1d4ed8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contact-email-main { color: #b45309; }
+.contact-email-name { color: #3b4a60; flex-shrink: 0; }
+.contact-email-none { color: #a0aabb; font-style: italic; }
 .cust-select-foot .btn { padding: 3px 12px; font-size: 12px; }
 /* 담당자 이름(showContact) — 회사명은 같고 사람만 다른 항목을 구분하는 보조 표기.
    회사명이 길면 회사명 쪽이 먼저 줄고 담당자 이름은 끝까지 남게 flex-shrink 를 0 으로. */

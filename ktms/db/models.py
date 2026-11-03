@@ -459,6 +459,8 @@ class RFQ(Base):
     project_title    = Column(String(200))   # 프로젝트 제목(내부 식별용, 선택)
     work_type        = Column(SAEnum(WorkType), default=WorkType.PARTS, nullable=False)  # 업무 타입: 부품공급/서비스
     customer_id      = Column(Integer, ForeignKey("customers.id"))
+    # 대표(customer_id) 외에 함께 받은 담당자 — 같은 회사의 다른 담당자 레코드 id 목록.
+    cc_contact_ids   = Column(JSON, default=list)
     vessel_id        = Column(Integer, ForeignKey("vessels.id"), nullable=True)
     date             = Column(String(10))   # YYYY-MM-DD (수신일)
     received_at      = Column(String(16))   # RFQ 수신 일시 "YYYY-MM-DDTHH:MM" (KST)

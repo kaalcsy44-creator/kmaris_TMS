@@ -1359,6 +1359,8 @@ def customer_options(s) -> list[dict]:
         bad = [str(x).strip() for x in (getattr(c, "bad_emails", None) or []) if str(x).strip()]
         grade = grades.get(c.id, "C")
         out.append({"id": c.id, "name": c.name, "contact": c.contact or "",
+                    # 대표 이메일 — 이름이 같은 담당자 레코드를 고를 때 가려 보는 값.
+                    "email": c.email or "",
                     "logo": getattr(c, "logo", None) or "",
                     "uses": uses.get(c.id, 0),
                     "grade": grade,
@@ -4594,6 +4596,7 @@ class RfqCreate(BaseModel):
     vessel_id: int | None = None
     customer_rfq_no: str | None = ""
     contact_person: str | None = ""    # 고객 담당자
+    cc_contact_ids: list[int] = []     # 대표 외에 함께 받은 담당자 레코드 id
     rfq_no: str | None = None          # K-Maris RFQ No. 수동 지정(비우면 자동 채번)
     received_at: str | None = None     # RFQ 수신 일시 "YYYY-MM-DDTHH:MM"(비우면 현재)
     project_title: str | None = ""
@@ -4618,6 +4621,7 @@ class RfqUpdate(BaseModel):
     customer_rfq_no: str | None = None
     rfq_no: str | None = None           # K-Maris RFQ No. 수동 수정(빈값이면 변경 안 함)
     contact_person: str | None = None
+    cc_contact_ids: list[int] | None = None  # 보내면 함께 받은 담당자 목록 전체 교체
     project_title: str | None = None
     work_type: str | None = None
     request_channel: str | None = None  # 고객 요청 수단

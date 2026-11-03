@@ -288,6 +288,7 @@ export function createRfq(body: {
   vessel_id?: number;
   customer_rfq_no?: string;
   contact_person?: string;
+  cc_contact_ids?: number[];
   rfq_no?: string;
   received_at?: string;
   project_title?: string;
@@ -313,6 +314,8 @@ export function updateRfq(
     customer_rfq_no?: string;
     rfq_no?: string;
     contact_person?: string;
+    // 대표(customer_id) 외에 함께 받은 담당자 — 보내면 목록 전체 교체.
+    cc_contact_ids?: number[];
     project_title?: string;
     work_type?: string;
     request_channel?: string;
