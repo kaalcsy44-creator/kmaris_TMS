@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { lookupVessel, type VesselLookupResult } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { checkVesselSanctions, lookupVessel, type VesselLookupResult } from "@/lib/api";
 import type { VesselSanction } from "@/lib/types";
 
 /* 제재 선박 표시 · IMO 조회 — 선박 목록(Partners › Vessel), 새 선박 등록, RFQ 의 선박 선택이
@@ -32,6 +32,42 @@ export function SanctionWarning({ hits }: { hits?: VesselSanction[] }) {
       <b>⚠ Sanctioned vessel</b> — on {hits.map(hitText).join("; ")}.
       <span className="vs-warn-sub">
         Matched by IMO number. Check with compliance before quoting or supplying.
+      </span>
+    </div>
+  );
+}
+
+/** 편집 창에 늘 서는 제재 상태 — 웹 조회를 다시 하지 않아도 IMO 를 명부에 바로 맞춰
+ *  "걸림 / 깨끗함"을 보여 준다. 깨끗할 때도 말해 줘야 한다: 아무것도 안 보이면 확인을
+ *  안 한 것인지 깨끗한 것인지 구분이 안 된다. */
+export function SanctionStatus({ imo, ownerChecked }: { imo: string; ownerChecked?: string }) {
+  const digits = (imo || "").replace(/\D/g, "");
+  const [res, setRes] = useState<{ imo: string; hits: VesselSanction[]; at: string } | null>(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    if (digits.length !== 7) return;
+    let alive = true;
+    setErr(false);
+    const t = setTimeout(() => {
+      checkVesselSanctions(digits)
+        .then((r) => { if (alive) setRes({ imo: digits, hits: r.sanctions, at: r.updated_at }); })
+        .catch(() => { if (alive) setErr(true); });
+    }, 300);
+    return () => { alive = false; clearTimeout(t); };
+  }, [digits]);
+
+  if (digits.length !== 7) {
+    return <div className="vs-status muted">Enter the 7-digit IMO number to check the sanctions lists.</div>;
+  }
+  if (err) return <div className="vs-status muted">Could not check the sanctions lists right now.</div>;
+  if (!res || res.imo !== digits) return <div className="vs-status muted">Checking sanctions lists…</div>;
+  if (res.hits.length) return <SanctionWarning hits={res.hits} />;
+  return (
+    <div className="vs-status">
+      <span className="vs-clear">✓ Not sanctioned — IMO {digits} is not on US OFAC / UK lists</span>
+      <span className="muted">
+        {res.at ? ` · lists updated ${res.at.slice(0, 10)}` : ""}
+        {ownerChecked ? ` · owner/manager checked ${ownerChecked}` : ""}
       </span>
     </div>
   );

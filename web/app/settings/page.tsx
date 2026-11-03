@@ -122,7 +122,7 @@ import { AgencyBadges, AgencyTagPicker } from "@/components/common/AgencyPicker"
 import { WebsiteScanPanel } from "@/components/common/WebsiteScanPanel";
 import VendorTagSuggestions from "@/components/common/VendorTagSuggestions";
 import CompanyProjects from "@/components/common/CompanyProjects";
-import { LookupNote, SanctionBadge, SanctionWarning, VesselLookupButton } from "@/components/common/VesselSanctions";
+import { LookupNote, SanctionBadge, SanctionStatus, VesselLookupButton } from "@/components/common/VesselSanctions";
 import type { VendorTagSuggestion } from "@/lib/types";
 import RegionCombo from "@/components/common/RegionPicker";
 // 목록의 상대처는 다른 화면과 같은 모양(로고 + 이름)으로 — 같은 회사를 두 표기로 읽지 않도록.
@@ -3540,8 +3540,10 @@ export function VesselsTab() {
             }}
           />
           {lookup && lookup.imo === (form.imo || "").replace(/\D/g, "") ? <LookupNote r={lookup} /> : null}
-          {/* 열어 둔 배가 이미 명부에 올라 있으면 조회하지 않아도 바로 경고. */}
-          {!lookup || lookup.imo !== (form.imo || "").replace(/\D/g, "") ? <SanctionWarning hits={form.sanctions} /> : null}
+          {/* 웹 조회를 다시 하지 않아도 창을 열 때마다 IMO 를 명부에 맞춰 상태를 보여 준다(깨끗해도 표시). */}
+          {!lookup || lookup.imo !== (form.imo || "").replace(/\D/g, "")
+            ? <SanctionStatus imo={form.imo} ownerChecked={form.owner_checked} />
+            : null}
         </div>
       )}
       columns={[

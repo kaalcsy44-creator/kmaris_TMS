@@ -2079,6 +2079,21 @@ def vessel_lookup(body: VesselLookupIn):
     return {"imo": imo, **found, "sanctions": hits}
 
 
+@app.get("/api/admin/settings/vessels/sanctions-check", dependencies=[Depends(require_token)])
+def vessel_sanctions_check(imo: str = ""):
+    """IMO 하나를 제재 명부에만 맞춰 본다(웹 조회 없음, 즉시) — 편집 창을 열 때마다 상태를 보여 주는 용도."""
+    n = _sanctions._norm_imo(imo)
+    if not n:
+        return {"imo": "", "sanctions": [], "updated_at": ""}
+    s = get_session()
+    try:
+        st = _sanctions.status(s)
+        return {"imo": n, "sanctions": _sanctions.check(s, n),
+                "updated_at": (st or {}).get("updated_at", "") if isinstance(st, dict) else ""}
+    finally:
+        s.close()
+
+
 @app.get("/api/admin/settings/vessels/sanctions-status", dependencies=[Depends(require_token)])
 def vessel_sanctions_status():
     s = get_session()

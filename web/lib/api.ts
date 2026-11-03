@@ -1788,6 +1788,12 @@ export type SanctionsStatus = {
 export function fetchSanctionsStatus(): Promise<SanctionsStatus> {
   return get<SanctionsStatus>("/api/admin/settings/vessels/sanctions-status");
 }
+/** IMO 하나를 제재 명부에만 맞춰 본다(웹 조회 없이 즉시). */
+export function checkVesselSanctions(
+  imo: string
+): Promise<{ imo: string; sanctions: VesselSanction[]; updated_at: string }> {
+  return get(`/api/admin/settings/vessels/sanctions-check?imo=${encodeURIComponent(imo)}`);
+}
 export function deleteSettingsVessel(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/settings/vessels/${id}`);
 }
