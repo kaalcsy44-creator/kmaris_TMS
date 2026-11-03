@@ -353,9 +353,18 @@ export default function RfqActionTabs({
     if (initialTab && TABS.some((t) => t.key === initialTab)) setTab(initialTab);
   }, [initialTab]);
 
+  const reloadVendors = useCallback(() => {
+    fetchVendors().then(setVendors).catch(() => undefined);
+  }, []);
   useEffect(() => {
     fetchVendors().then(setVendors).catch(() => setVendors([]));
   }, []);
+  // 메이커에 직접 보내면 그 순간 거래선 명부에 한 줄이 새로 선다 — 처음 받아 둔 목록에는
+  // 그 줄이 없어, 다시 받지 않으면 방금 보낸 RFQ 의 Vendor 칸이 빈칸으로 보인다.
+  const onVrfqChanged = useCallback(() => {
+    reloadVendors();
+    onChanged();
+  }, [reloadVendors, onChanged]);
 
   // 프로젝트 워크스페이스: 내부 탭바 없이 이 프로젝트(rfqId)의 해당 단계 상세를 인라인으로.
   if (embedded) {
@@ -366,7 +375,7 @@ export default function RfqActionTabs({
           <EmbeddedCustomerRfq rfqId={rfqId} onChanged={onChanged} />
         )}
         {tab === "vrfq" && (
-          <EmbeddedVendorRfq rfqId={rfqId} project={project} vendors={vendors} focusId={focusVrfqId} onChanged={onChanged} />
+          <EmbeddedVendorRfq rfqId={rfqId} project={project} vendors={vendors} focusId={focusVrfqId} onChanged={onVrfqChanged} />
         )}
         {tab === "vquote" && (
           <EmbeddedVendorQuote rfqId={rfqId} onChanged={onChanged} />
@@ -405,7 +414,7 @@ export default function RfqActionTabs({
         <VendorRfqList
           projects={rows}
           vendors={vendors}
-          onChanged={onChanged}
+          onChanged={onVrfqChanged}
           autoEditId={autoFor("vrfq")}
           onAutoConsumed={consumeAutoOpen}
         />
@@ -1379,6 +1388,18 @@ function VendorRfqDetailModal({
   const [vendorId, setVendorId] = useState<number | "">("");
   // 고른 담당자들(레코드 id). 첫 사람이 대표 = 저장되는 vendor_id, 나머지는 받는 사람에 함께.
   const [contactIds, setContactIds] = useState<number[]>([]);
+  // 보낸 뒤에도 수신처를 메이커로 고칠 수 있다(발신 화면과 같은 Vendor/Maker 두 갈래).
+  // 메이커를 고르면 저장하는 순간 그 회사를 거래선 명부에 세우고 그 줄로 바꿔 단다.
+  const [party, setParty] = useState<"vendor" | "maker">("vendor");
+  const [makerContactIds, setMakerContactIds] = useState<number[]>([]);
+  const makers = useMakerOptions();
+  const makerOpts = useMemo<VendorOption[]>(
+    () => makers.map((m) => ({
+      id: m.id, name: m.name, contact: m.contact, logo: m.logo || undefined,
+      email: (m.emails?.[0] || m.email || "").trim(),
+    })),
+    [makers]
+  );
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("");
   const [sentAt, setSentAt] = useState("");
@@ -1413,6 +1434,8 @@ function VendorRfqDetailModal({
         setStatus(data.status || "");
         setSentAt(toLocalDt(data.sent_at));
         setItems(data.items || []);
+        setParty("vendor");
+        setMakerContactIds([]);
         const cur = (data.kmaris_rfq_no || "").trim();
         const assigned = !!cur && cur !== "-";
         setNoMode(assigned ? "manual" : "auto");
@@ -1425,7 +1448,7 @@ function VendorRfqDetailModal({
   const readyKey = loadTick ? loadTick : null;
   const hist = useEditHistory({ items }, (v) => setItems(v.items), readyKey);
   const { dirty, markClean } = useDirty(
-    { vendorId, email, status, sentAt, items, noMode, manualNo },
+    { vendorId, makerContactIds, email, status, sentAt, items, noMode, manualNo },
     readyKey
   );
   // Cancel = 편집을 버리고 저장본으로(예전 팝업 모드는 편집 표시만 끄고 고친 값은 남겼다).
@@ -1463,8 +1486,15 @@ function VendorRfqDetailModal({
 
   // 편집값 저장(모달을 닫지 않음) — save()와 Preview(openPreview) 양쪽에서 재사용.
   async function persist() {
+    // 메이커를 골랐으면 그 회사를 거래선 명부에도 세우고(멱등) 그 줄을 이 RFQ 의 벤더로 단다 —
+    // 이후 견적 수신·P/O·지급이 거래선을 타고 흐르기 때문이다(발신 화면과 같은 규칙).
+    let vid: number | "" = vendorId;
+    if (party === "maker" && makerContactIds.length) {
+      const r = await registerMakerAsVendor(makerContactIds[0]);
+      vid = r.vendor.id;
+    }
     await updateVendorRfq(id, {
-      vendor_id: vendorId === "" ? undefined : vendorId,
+      vendor_id: vid === "" ? undefined : vid,
       sent_to_email: email,
       status,
       sent_at: sentAt,
@@ -1489,6 +1519,8 @@ function VendorRfqDetailModal({
     try {
       await persist();
       setEditing(false);
+      // 메이커로 바꿔 달았으면 벤더가 달라졌다 — 저장본을 다시 읽어 그 줄로 보이게 한다.
+      if (party === "maker") loadDetail();
       onChanged();
       onClose();
     } catch (e) {
@@ -1590,19 +1622,52 @@ function VendorRfqDetailModal({
                 </>
               ) : null}
 
-              <div className="form-section-title">This vendor send info</div>
+              <div className="items-head party-head">
+                <div className="form-section-title">
+                  {party === "maker" ? "This maker send info" : "This vendor send info"}
+                </div>
+                <div className="seg-toggle" role="group" aria-label="Who we ask">
+                  <button
+                    type="button"
+                    className={party === "vendor" ? "on" : ""}
+                    onClick={() => { setParty("vendor"); setMakerContactIds([]); }}
+                  >
+                    Vendor
+                  </button>
+                  <button
+                    type="button"
+                    className={party === "maker" ? "on" : ""}
+                    onClick={() => setParty("maker")}
+                  >
+                    Maker
+                  </button>
+                </div>
+              </div>
               <div className="form-grid">
-                {/* 벤더는 회사로 한 번, 담당자는 그 안에서 따로(여럿 가능) 고른다. */}
-                <VendorContactFields
-                  vendors={vendors}
-                  value={contactIds}
-                  onChange={(ids) => {
-                    setContactIds(ids);
-                    setVendorId(ids[0] ?? "");
-                    // 고른 담당자들의 주소로 받는 사람을 채운다(그대로 고쳐 쓸 수 있다).
-                    setEmail(vendorContactEmails(vendors, ids));
-                  }}
-                />
+                {party === "maker" ? (
+                  /* 고르기만 해서는 아무것도 바뀌지 않는다 — Save 하는 순간 거래선으로 선다. */
+                  <VendorContactFields
+                    label="Maker"
+                    vendors={makerOpts}
+                    value={makerContactIds}
+                    onChange={(ids) => {
+                      setMakerContactIds(ids);
+                      setEmail(vendorContactEmails(makerOpts, ids));
+                    }}
+                  />
+                ) : (
+                  /* 벤더는 회사로 한 번, 담당자는 그 안에서 따로(여럿 가능) 고른다. */
+                  <VendorContactFields
+                    vendors={vendors}
+                    value={contactIds}
+                    onChange={(ids) => {
+                      setContactIds(ids);
+                      setVendorId(ids[0] ?? "");
+                      // 고른 담당자들의 주소로 받는 사람을 채운다(그대로 고쳐 쓸 수 있다).
+                      setEmail(vendorContactEmails(vendors, ids));
+                    }}
+                  />
+                )}
                 <div className="form-field">
                   <label>K-Maris RFQ No.</label>
                   {d.kmaris_rfq_no && d.kmaris_rfq_no !== "-" ? (
