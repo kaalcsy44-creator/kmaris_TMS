@@ -99,15 +99,22 @@ export default function VesselOwnerRow({
 
   return (
     <div className="vs-owner-row">
-      {owner || manager ? (
-        <span className="vs-owner-vals">
-          <span><small>Owner</small> {owner || <span className="dash">—</span>}</span>
-          <span><small>ISM manager</small> {manager || <span className="dash">—</span>}</span>
-          {vessel.owner_checked && !unsaved ? <span className="muted">checked {vessel.owner_checked}</span> : null}
-        </span>
-      ) : (
-        <span className="muted">Owner / ISM manager not looked up yet.</span>
-      )}
+      <span className="vs-owner-vals">
+        <span><small>IMO</small> {vessel.imo || <span className="dash">—</span>}</span>
+        {owner || manager ? (
+          <>
+            <span><small>Owner</small> {owner || <span className="dash">—</span>}</span>
+            <span><small>ISM manager</small> {manager || <span className="dash">—</span>}</span>
+            {vessel.owner_checked && !unsaved ? (
+              <span className="vs-looked-up" title="Owner / ISM manager looked up by IMO and saved to the vessel">
+                ✓ Looked up {vessel.owner_checked}
+              </span>
+            ) : null}
+          </>
+        ) : (
+          <span className="muted">Owner / ISM manager not looked up yet.</span>
+        )}
+      </span>
       {editable && hasImo && (!vessel.registered_owner || !vessel.ism_manager) && !unsaved ? (
         <button type="button" className="btn xs" disabled={!!busy} onClick={runLookup}
                 title="Find the registered owner and ISM manager by IMO on public ship pages">

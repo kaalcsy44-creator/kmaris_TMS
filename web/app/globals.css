@@ -20482,6 +20482,7 @@ select.compose-tpl-version {
 .vs-owner-vals { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; }
 .vs-owner-vals small { color: var(--muted); font-size: 11px; text-transform: uppercase;
   letter-spacing: .03em; margin-right: 3px; }
+.vs-looked-up { color: #1f7a3d; font-weight: 600; white-space: nowrap; }
 .vs-owner-row .vs-conf { margin-left: 0; }
 .vs-owner-suggest { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px;
   border-radius: 6px; background: #eef4ff; }
