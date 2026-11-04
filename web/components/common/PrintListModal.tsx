@@ -61,6 +61,7 @@ function PrintPreview({ book, onClose }: { book: PrintBook; onClose: () => void 
   const [busy, setBusy] = useState<"" | "xlsx" | "pdf">("");
   const [err, setErr] = useState("");
   const shown = book.rows.slice(0, PREVIEW_ROWS);
+  const info = (book.info ?? []).filter(([, v]) => v);
   // 칸 폭 — 화면이 준 가중치(width)를 PDF 와 같은 비율로 나눈다. 하나라도 비었으면
   // 글자 길이대로 맡긴다(가중치를 안 준 목록). 브라우저 자동 배분은 숫자 칸을 넓히고
   // 글이 긴 칸을 짓눌러 PDF 와 딴판이 된다.
@@ -102,6 +103,16 @@ function PrintPreview({ book, onClose }: { book: PrintBook; onClose: () => void 
             <b>{(book.heading || `${book.title} LIST`).toUpperCase()}</b>
             <span>{new Date().toISOString().slice(0, 10)}</span>
           </div>
+          {info.length ? (
+            <dl className="plist-info">
+              {info.map(([k, v]) => (
+                <div key={k}>
+                  <dt>{k}</dt>
+                  <dd>{v}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
           <div className="table-wrap plist-wrap">
             <table className={`mini wide plist-table${sized ? " sized" : ""}`}>
               {sized ? (

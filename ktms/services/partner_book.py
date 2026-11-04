@@ -66,6 +66,9 @@ def normalize(book: Dict[str, Any]) -> Dict[str, Any]:
         "subtitle": _cell(book.get("subtitle")),
         # 머리 제목 — 비우면 "<TITLE> LIST". 목록이 아닌 표(견적 비교표)는 제 이름을 쓴다.
         "heading": _cell(book.get("heading")),
+        # 표 위의 항목·값 쌍. 값이 빈 항목은 뺀다 — 종이에 빈 칸을 남길 이유가 없다.
+        "info": [[_cell(p[0]), _cell(p[1])] for p in (book.get("info") or [])
+                 if isinstance(p, (list, tuple)) and len(p) == 2 and _cell(p[1])],
         "columns": columns,
         "rows": rows,
     }
@@ -106,7 +109,21 @@ def make_book_xlsx(book: Dict[str, Any]) -> bytes:
     ws["A2"].font = Font(name="Noto Sans KR", size=9, color="606A76")
     ws.row_dimensions[2].height = 15
 
-    head_row = 4
+    # 머리 정보 — 첫 칸(라인 번호처럼 좁다)에 항목명이 잘리지 않게 앞 두 칸을 합쳐 쓴다.
+    info = b["info"]
+    val_col = min(3, len(cols))
+    for n, (label, value) in enumerate(info):
+        r = 3 + n
+        if val_col > 2:
+            ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=val_col - 1)
+        if len(cols) > val_col:
+            ws.merge_cells(start_row=r, start_column=val_col, end_row=r, end_column=len(cols))
+        ws.cell(row=r, column=1, value=label).font = Font(name="Noto Sans KR", bold=True, size=9)
+        vc = ws.cell(row=r, column=val_col, value=value)
+        vc.font = Font(name="Noto Sans KR", size=9)
+        vc.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    head_row = 4 + len(info)
     for i, c in enumerate(cols, start=1):
         cell = ws.cell(row=head_row, column=i, value=c["label"])
         cell.font = Font(name="Noto Sans KR", bold=True, size=9, color="FFFFFF")
@@ -211,6 +228,25 @@ def make_book_pdf(book: Dict[str, Any]) -> bytes:
                                      "as of " + date.today().strftime("%Y-%m-%d")) if x)
     story.append(_p(caption, s["small"]))
     story.append(Spacer(1, 3 * mm))
+    if b["info"]:
+        # 머리 정보 — 항목·값 두 쌍씩 한 줄. 홀수면 마지막 줄의 오른쪽은 비운다.
+        pairs = b["info"] + [["", ""]] * (len(b["info"]) % 2)
+        info_rows = [[_p("<b>%s</b>" % a[0], s["base"]), _p(a[1], s["base"]),
+                      _p("<b>%s</b>" % z[0] if z[0] else "", s["base"]), _p(z[1], s["base"])]
+                     for a, z in zip(pairs[0::2], pairs[1::2])]
+        info_t = Table(info_rows, colWidths=[BODY_W * x for x in (0.13, 0.37, 0.13, 0.37)])
+        info_t.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.4, MID_GRAY),
+            ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY),
+            ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+            ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+        ]))
+        story.append(info_t)
+        story.append(Spacer(1, 3 * mm))
 
     data = [[_p(c["label"], s["th"]) for c in cols]]
     for r in rows:

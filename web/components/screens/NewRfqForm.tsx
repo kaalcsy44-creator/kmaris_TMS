@@ -25,6 +25,8 @@ import CustomerName from "@/components/common/CustomerName";
 import CustomerSelect from "@/components/common/CustomerSelect";
 import ContactMultiSelect from "@/components/common/ContactMultiSelect";
 import VesselOwnerRow from "@/components/common/VesselOwnerRow";
+import PrintListButton from "@/components/common/PrintListModal";
+import type { PrintBook } from "@/lib/api";
 import { useColumnLayout } from "@/components/common/useColumnLayout";
 import CategoryCell from "@/components/common/CategoryCell";
 import MakerCell from "@/components/common/MakerCell";
@@ -493,6 +495,47 @@ export default function NewRfqForm({
     }
   }
 
+  // 고객에게 보내는 RFQ 라인 목록 — 부분 견적의 라인 번호가 RFQ 의 어느 줄인지 맞춰 보게 한다.
+  // 내부 값(Consultant·Grade·Category)은 싣지 않는다. 아무 줄에도 값이 없는 칸은 뺀다.
+  function buildLinePrint(): PrintBook {
+    const rows = items.filter((it) => it.part_no.trim() || it.description.trim());
+    const vessel = vessels.find((v) => v.id === vesselId);
+    const optional: { key: "type" | "serial_no" | "maker" | "remark"; label: string; width: number }[] = [
+      { key: "type", label: "Type", width: 10 },
+      { key: "serial_no", label: "Serial No.", width: 11 },
+      { key: "maker", label: "Maker", width: 12 },
+      { key: "remark", label: "Remark", width: 20 },
+    ];
+    const shown = optional.filter((c) => rows.some((it) => (it[c.key] || "").trim()));
+    return {
+      title: `RFQ Lines ${loadedRfqNo}`.trim(),
+      heading: "RFQ Line List",
+      info: [
+        ["Customer", companyName || customerName],
+        ["Our Ref.", loadedRfqNo],
+        ["Customer contact", contactPerson],
+        ["Customer RFQ No.", custRfqNo],
+        ["Vessel", [vessel?.name, vessel?.imo ? `IMO ${vessel.imo}` : ""].filter(Boolean).join(" · ")],
+        ["RFQ received", receivedAt.replace("T", " ")],
+        ["Project title", projectTitle],
+      ],
+      columns: [
+        { label: "Line", width: 5, align: "center" },
+        { label: "Part No.", width: 14 },
+        { label: "Description", width: 30 },
+        ...shown.map((c) => ({ label: c.label, width: c.width })),
+        { label: "Qty", width: 5, align: "right" },
+      ],
+      rows: rows.map((it, i) => [
+        it.lid || `#${i + 1}`,
+        it.part_no,
+        it.description,
+        ...shown.map((c) => it[c.key] || ""),
+        it.qty,
+      ]),
+    };
+  }
+
   // 화면의 품목 행 → API 페이로드(내용 없는 행은 버린다).
   // fresh = 다른 딜로 옮겨 심는 중(Copy) — 라인 ID를 떼고 보낸다. 새 딜의 줄은 그
   // 딜에서 새 이름을 받아야 한다. 원본에 남는 줄은 이름을 그대로 들고 있어야 하고
@@ -750,6 +793,8 @@ export default function NewRfqForm({
             <CustomerName name={customerName} />
             <b className="rec-doc-no">{loadedRfqNo}</b>
           </span>
+          {/* Read 모드에서는 품목표 도구 묶음이 숨으므로 문서번호 줄에 둔다. */}
+          <PrintListButton small label="🖨 Preview / Print" build={buildLinePrint} />
         </div>
       ) : null}
       <fieldset {...fieldsetProps}>

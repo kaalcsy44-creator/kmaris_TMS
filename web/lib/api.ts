@@ -1422,6 +1422,8 @@ export type PrintBook = {
   subtitle?: string;
   /** 문서 머리 제목 — 비우면 "<TITLE> LIST". 목록이 아닌 표(견적 비교표)가 쓴다. */
   heading?: string;
+  /** 표 위에 서는 항목·값 쌍(문서처럼 머리 정보가 있는 표). 값이 비면 찍히지 않는다. */
+  info?: [string, string][];
   columns: { label: string; width?: number; align?: "left" | "center" | "right" }[];
   rows: string[][];
 };

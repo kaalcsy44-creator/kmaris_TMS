@@ -1850,6 +1850,8 @@ class PartnerBookPrint(BaseModel):
     subtitle: str = ""
     # 문서 머리 제목 — 비우면 "<TITLE> LIST". 목록이 아닌 표(견적 비교표 등)가 쓴다.
     heading: str = ""
+    # 표 위에 서는 항목·값 쌍 [["Customer", "..."], ...] — 문서처럼 머리 정보가 있는 표가 쓴다.
+    info: list[list[str]] = []
     columns: list[PartnerBookCol] = []
     rows: list[list[str]] = []
 
@@ -1859,6 +1861,7 @@ def _partner_book(body: PartnerBookPrint) -> dict:
         "title": body.title,
         "subtitle": body.subtitle,
         "heading": body.heading,
+        "info": body.info,
         "columns": [c.model_dump() for c in body.columns],
         "rows": body.rows,
     }

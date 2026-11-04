@@ -19457,6 +19457,11 @@ select.compose-tpl-version {
   width: var(--lb-no); min-width: var(--lb-no); max-width: var(--lb-no);
   color: var(--muted);
 }
+.embedded-record-bar.pane-row > .btn.tiny { margin-left: auto; }
+.plist-info { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; margin: 0 0 10px; font-size: 12.5px; }
+.plist-info > div { display: flex; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.plist-info dt { flex: 0 0 118px; color: var(--muted); }
+.plist-info dd { margin: 0; color: var(--ink); }
 .seq-lid { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
 .lb-lid {
   display: inline-block;
