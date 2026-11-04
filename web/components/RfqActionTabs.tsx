@@ -76,6 +76,7 @@ import WorkTypeBadge from "./WorkTypeBadge";
 import FilterTable, { ColumnDef } from "./common/FilterTable";
 import { identityColumns, projectNoColumn, statusColumns } from "./common/identityColumns";
 import VendorName from "./common/VendorName";
+import { invalidateVendorLogos } from "@/lib/vendorLogos";
 import LineBoard from "./common/LineBoard";
 import type { VendorState } from "@/lib/deal";
 import VendorSelect from "./common/VendorSelect";
@@ -361,8 +362,10 @@ export default function RfqActionTabs({
   }, []);
   // 메이커에 직접 보내면 그 순간 거래선 명부에 한 줄이 새로 선다 — 처음 받아 둔 목록에는
   // 그 줄이 없어, 다시 받지 않으면 방금 보낸 RFQ 의 Vendor 칸이 빈칸으로 보인다.
+  // 로고도 같은 까닭이다 — 이름→로고 캐시에 새 줄이 없으면 칩·표 머리에 로고가 안 나온다.
   const onVrfqChanged = useCallback(() => {
     reloadVendors();
+    invalidateVendorLogos();
     onChanged();
   }, [reloadVendors, onChanged]);
 
