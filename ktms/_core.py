@@ -1810,7 +1810,7 @@ def index_doc_by_line(base_items, doc_items, kits: bool = False) -> dict[str, di
             lst = buckets.get(k) if k else None
             if lst:
                 out[key] = lst.pop(0)
-        elif len(rest) == len(doc):
+        elif len(rest) == len(doc) and i < len(rest):
             # 줄 순서로 맞추는 것은 문서 전체가 이름 없는 옛 문서일 때만이다(deal.ts 와 같은
             # 규칙). 이름이 섞여 있으면 남은 줄은 사람이 일부러 안 이은 줄이다 — 벤더가
             # 붙인 운임 같은 줄이 순서만으로 첫 품목의 값이 되면 안 된다.
