@@ -93,6 +93,31 @@ function markEmptyFields(root: HTMLElement | null, on: boolean) {
  *  행이 지워져 짝을 잃은 span 은 다음 훑기에서 치운다. */
 const MIRROR_SKIP = new Set(["checkbox", "radio", "file", "hidden", "button", "submit", "reset", "range", "color", "image"]);
 
+/** 값을 보여주는 버튼(고객·담당자·벤더·분류 선택, 환율 방식, 품목 견적 옵션).
+ *  잠긴 button 안의 글자도 드래그가 안 된다 — 입력칸처럼 span.vm-text 로 비춘다.
+ *  버튼의 class 를 그대로 물려 로고·이름·칸 폭이 같은 모양으로 나온다. */
+const MIRROR_BTN = ".cust-select-btn, .vsel-btn, .cat-pick, .fx-toggle button.on, .lq-opt";
+const BTN_CARET = ".cust-select-caret, .vsel-caret, .cat-pick-caret";
+const BTN_PLACEHOLDER = ".cust-select-placeholder, .vsel-placeholder";
+
+function syncButtonMirror(btn: HTMLButtonElement) {
+  let span = btn.nextElementSibling;
+  if (!(span instanceof HTMLSpanElement && span.classList.contains("vm-text"))) {
+    if (getComputedStyle(btn).display === "none") return;
+    span = document.createElement("span");
+    btn.after(span);
+    btn.setAttribute("data-vm-mirror", "");
+  }
+  const el = span as HTMLSpanElement;
+  const clone = btn.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll(BTN_CARET).forEach((n) => n.remove());
+  const empty = btn.classList.contains("empty") || !!clone.querySelector(BTN_PLACEHOLDER);
+  const cls = `vm-text vm-text--btn ${btn.className}${empty ? " vm-text--ph" : ""}`;
+  if (el.className !== cls) el.className = cls;
+  // 바뀌었을 때만 갈아 끼운다 — 800ms 마다 덮어쓰면 긁어 둔 선택이 풀린다.
+  if (el.innerHTML !== clone.innerHTML) el.replaceChildren(...Array.from(clone.childNodes));
+}
+
 function mirrorText(el: Element): string {
   if (el instanceof HTMLSelectElement) {
     const text = (el.selectedOptions[0]?.textContent || "").trim();
@@ -108,6 +133,11 @@ function syncReadMirrors(root: HTMLElement | null, on: boolean) {
   for (const s of Array.from(root.querySelectorAll<HTMLElement>("span.vm-text"))) {
     const prev = s.previousElementSibling;
     if (!on || !prev || !prev.hasAttribute("data-vm-mirror")) s.remove();
+    else if (prev instanceof HTMLButtonElement && !prev.matches(MIRROR_BTN)) {
+      // 환율 토글처럼 '켜진 버튼'이 옮겨 간 경우 — 예전 짝을 풀어 다시 보이게 한다.
+      prev.removeAttribute("data-vm-mirror");
+      s.remove();
+    }
   }
   if (!on) {
     for (const c of Array.from(root.querySelectorAll("[data-vm-mirror]"))) c.removeAttribute("data-vm-mirror");
@@ -130,6 +160,7 @@ function syncReadMirrors(root: HTMLElement | null, on: boolean) {
     if (span.textContent !== text) span.textContent = text;
     span.classList.toggle("vm-text--ph", !value && !!ph);
   }
+  for (const b of Array.from(root.querySelectorAll<HTMLButtonElement>(`button:is(${MIRROR_BTN})`))) syncButtonMirror(b);
 }
 
 /** 읽기모드에서 값이 길어 좁은 칸 안에서 여러 줄로 접히는 항목은 한 행 전체로 넓힌다.
@@ -266,10 +297,13 @@ function fieldLine(f: HTMLElement): string | null {
   const labelEl = f.querySelector(":scope > label, :scope > span:first-child");
   const label = (labelEl?.textContent || "").trim().replace(/\s+/g, " ");
   const parts: string[] = [];
-  for (const c of Array.from(f.querySelectorAll("input, select, textarea"))) {
+  for (const c of Array.from(f.querySelectorAll("input, select, textarea, span.vm-text--btn"))) {
     // 비춰 둔 칸은 CSS 로 숨겨져 있지만 값의 원본이다.
     if (c instanceof HTMLElement && !c.hasAttribute("data-vm-mirror") && isHidden(c)) continue;
-    const t = controlText(c);
+    // 선택 버튼은 입력칸이 없다 — 비춘 글자가 곧 값이다(자리표시 글은 값이 아니다).
+    const t = c instanceof HTMLSpanElement
+      ? (c.classList.contains("vm-text--ph") ? "" : c.innerText.trim().replace(/\s+/g, " "))
+      : controlText(c);
     if (t) parts.push(t);
   }
   const value = parts.join(" ").trim();
@@ -288,7 +322,7 @@ function tableLines(table: HTMLTableElement): string[] {
       const control = cell.querySelector("input, select, textarea");
       const text = control
         ? controlText(control) ?? ""
-        : (cell.textContent || "").trim().replace(/\s+/g, " ");
+        : (cell.innerText || "").trim().replace(/\s+/g, " ");   // textContent 면 숨긴 버튼과 비춘 글자가 겹친다
       cells.push(text);
     }
     if (cells.some((c) => c !== "")) out.push(cells.join("\t"));

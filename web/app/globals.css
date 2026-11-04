@@ -17397,7 +17397,8 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   font-size: 12px;
 }
 /* 콤보박스의 ▾ 는 고르는 손잡이다 — 읽기에선 고를 수 없으니 감춘다(값만 남긴다). */
-.form-fieldset.vm-read .combobox-toggle {
+.form-fieldset.vm-read .combobox-toggle,
+.form-fieldset.vm-read .mk-cell-toggle {
   display: none;
 }
 .form-fieldset.vm-read .valid-until-row .vu-date {
@@ -17477,6 +17478,24 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   font-weight: 400;
   user-select: none;
   -webkit-user-select: none;
+}
+/* 값 버튼을 비춘 글자(syncButtonMirror). 버튼의 class 를 물려받아 모양은 그대로 따라오고,
+   고를 수 있어 보이던 껍데기만 여기서 벗긴다. */
+.form-fieldset.vm-read .vm-text--btn.cat-pick {
+  border-color: transparent;
+  background: transparent;
+  padding-left: 0;
+}
+.form-fieldset.vm-read .fx-toggle .vm-text--btn {
+  color: var(--muted, #7b8794);
+  font-weight: 400;
+  padding: 0 6px 0 0;
+}
+/* 표 머리 라벨은 열 순서 바꾸기용 draggable 이라 글자를 긁으면 끌기가 시작된다.
+   읽기모드는 폭 조절 핸들도 감추는 화면이다 — 머리글도 글자로 둔다. */
+.form-fieldset.vm-read [draggable="true"] {
+  -webkit-user-drag: none;
+  cursor: text;
 }
 
 /* 읽기 ↔ 편집 토글 — 단계 헤더의 Prev/Next 왼쪽. */
@@ -19709,7 +19728,7 @@ select.compose-tpl-version {
 .lq-lt { color: var(--muted); font-size: 11px; }
 .lq-low { color: #8a4b00; font-size: 11px; font-weight: 700; }
 .lq-on { color: #11824a; font-size: 11px; font-weight: 700; }
-.form-fieldset.vm-read .lq-opt { pointer-events: none; }
+.form-fieldset.vm-read .lq-opt:not(.vm-text) { pointer-events: none; }
 
 /* Basic Info 한 줄에 필드가 셋일 때(벤더 견적 드롭다운이 출처 띠로 옮겨간 뒤). */
 .quote-meta-grid--3 { grid-template-columns: 1.2fr 1.2fr 1.4fr; }
