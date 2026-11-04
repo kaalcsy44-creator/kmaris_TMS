@@ -3124,6 +3124,47 @@ export function PipelineModal({
             우측 토글로 납작한(번호+작은 제목) 바로 접어 세로 공간을 아낀다. */}
         {modalView === "work" ? (
         <div className={`project-stage-tabs-row${stagesCollapsed ? " collapsed" : ""}`}>
+          {/* 폰 전용 요약 스트립 — 카드 10장 대신 중분류 5묶음 + 칸 10개, 글자는 보고 있는 단계 하나만. */}
+          <div className="stage-mini" role="tablist" aria-label="Project stages">
+            <div className="stage-mini-groups">
+              {STAGE_PHASES.map((p, pi) => {
+                const from = STAGE_PHASES.slice(0, pi).reduce((s, x) => s + x.count, 0) + 1;
+                const cells = chain.filter((c) => c.no >= from && c.no < from + p.count);
+                return (
+                  <div key={p.label} className={`stage-mini-group${phaseIndexOfStage(selectedStage) === pi ? " on" : ""}`}>
+                    <span className="stage-mini-phase">{p.label}</span>
+                    <div className="stage-mini-cells">
+                      {cells.map((c) => {
+                        const no = c.no;
+                        const done = no <= r.stage || !!r.stage_done?.includes(no);
+                        const sp = (no === 9 || no === 10) && !c.skip ? r.money_split?.[no === 9 ? "9" : "10"] : undefined;
+                        const half = !!sp && !done && (sp.ar || sp.ap);
+                        const cls = [
+                          "stage-mini-cell",
+                          done ? "done" : "",
+                          half ? "half" : "",
+                          c.skip ? "skip" : "",
+                          selectedStage === no ? "on" : "",
+                        ].filter(Boolean).join(" ");
+                        return (
+                          <button
+                            key={no}
+                            type="button"
+                            className={cls}
+                            aria-pressed={selectedStage === no}
+                            aria-label={`${no}. ${c.label}`}
+                            title={c.label}
+                            onClick={() => setSelectedStage(no)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <b className="stage-mini-now">{chain.find((c) => c.no === selectedStage)?.label ?? ""}</b>
+          </div>
           <div className="project-stage-tabs" role="tablist" aria-label="Project stages" ref={stageStripRef}>
           {chain.map((c) => {
             const no = c.no;

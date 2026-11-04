@@ -11128,6 +11128,56 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   margin: 0;
   border-bottom: 0;
 }
+/* 폰 전용 요약 스트립(640px 이하에서만 켠다). 칸은 눈에 8px 이지만 버튼 자체는 손가락으로
+   누를 수 있게 28px 높이다 — 막대는 ::before 로 그린다. */
+.stage-mini {
+  display: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 2px 0 8px;
+  --sm-fill: var(--blue);
+}
+.pl-modal.service .stage-mini { --sm-fill: #16a05a; }
+.stage-mini-groups { display: flex; gap: 8px; }
+.stage-mini-group { flex: 1 1 0; min-width: 0; }
+.stage-mini-phase {
+  display: block;
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.stage-mini-group.on .stage-mini-phase { color: var(--navy); font-weight: 700; }
+.stage-mini-cells { display: flex; gap: 2px; }
+.stage-mini-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.stage-mini-cell::before {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 8px;
+  border-radius: 2px;
+  background: #dfe5ee;
+}
+.stage-mini-cell.done::before { background: var(--sm-fill); }
+.stage-mini-cell.half::before { background: color-mix(in srgb, var(--sm-fill) 45%, #fff); }
+.stage-mini-cell.skip::before { background: #eef1f5; }
+.stage-mini-cell.on::before { outline: 2px solid var(--navy); outline-offset: 1px; }
+.stage-mini-now {
+  display: block;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--navy);
+}
 /* 접기 토글 — 스트립 우측, 세로 중앙. 스트립 하단 여백(halo용)만큼 맞춰 내려 정렬. */
 .stage-tabs-toggle {
   flex: 0 0 auto;
@@ -11919,8 +11969,8 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   }
   /* 헤더 배치 — 위에서부터
        1) Work/Overview · PIC · Close deal        (order:-2 로 맨 위로 끌어올린다)
-       2) ‹ › + 프로젝트 번호·업무유형 … ✕       (✕ 는 번호 줄 오른쪽 끝)
-       3) 제목·선박명                            (2)줄에서 넘친 만큼 이어서 접힘)
+       2) ‹ › ▾ … ✕                              (프로젝트 이동 손잡이만)
+       3) 프로젝트 번호·업무유형·제목·선박명      (한 행 전체 — 좁은 칸에서 세로로 접히지 않게)
      예전엔 ✕ 까지 1)줄에 두었더니 폭이 모자라 ✕ 혼자 한 줄을 차지했다.
      우측 묶음을 display:contents 로 풀어 ✕ 만 제목 뒤(DOM 순서)에 남긴다.
      DOM 순서(‹› → 제목 → 우측컨트롤)는 그대로 두고 flex order 로만 바꾼다. */
@@ -11951,11 +12001,11 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
     margin-top: -8px;
   }
   .pl-modal-head .pl-modal-close {
-    margin-left: 4px;
+    margin-left: auto;
   }
-  /* 번호와 같은 줄에 남도록 100% 를 풀고 남는 폭을 나눠 갖는다. */
   .pl-modal-head .intl-title {
-    flex: 1 1 0;
+    order: 1;
+    flex: 0 0 100%;
     min-width: 0;
   }
   /* 편집창 탭 바 — 폰에서는 줄바꿈 대신 한 줄 가로 스크롤(탭이 5개인 7단계 문서
@@ -11978,32 +12028,14 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
     padding-left: 0;
     padding-right: 0;
   }
-  /* 상단 단계 스트립 — 좁은 화면에선 균등분할(숫자만) 대신 '번호+제목(2줄)'이 온전히
-     보이는 폭으로 넓히고 가로 스크롤. 현재 단계는 JS 로 화면 중앙에 자동 스크롤된다.
-     (접힌 collapsed 모드는 기존 납작 표시 유지 → :not(.collapsed) 로 한정) */
-  .project-stage-tabs-row:not(.collapsed) .project-stage-tabs button {
-    flex: 0 0 auto;
-    width: 80px;
-    min-height: 0;
-    scroll-snap-align: start;
-  }
-  .project-stage-tabs-row:not(.collapsed) .project-stage-tabs {
-    scroll-snap-type: x proximity;
-  }
-  /* 번호를 제목 위에 쌓아, 제목이 버튼 폭 전체를 쓰도록(좁은 폭에서 가독성↑). */
-  .project-stage-tabs-row:not(.collapsed) .project-stage-tabs .st-head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 3px;
-  }
-  /* 값·완료일시는 숨겨 카드 높이를 낮게 유지(제목 가독성 우선). 상세는 아래 패널에 있음. */
-  .project-stage-tabs-row:not(.collapsed) .project-stage-tabs .st-val,
-  .project-stage-tabs-row:not(.collapsed) .project-stage-tabs .st-at {
+  /* 상단 단계 스트립 — 카드 10장을 가로로 밀어 보는 대신 요약 스트립(.stage-mini)으로 바꾼다.
+     접기 토글은 요약에 접을 것이 없어 함께 감춘다. */
+  .project-stage-tabs-row > .project-stage-tabs,
+  .project-stage-tabs-row > .stage-tabs-toggle {
     display: none;
   }
-  /* 제목 3줄까지 허용해 'Quote Received' 같은 라벨이 잘리지 않게. */
-  .project-stage-tabs-row:not(.collapsed) .project-stage-tabs .st-label {
-    -webkit-line-clamp: 3;
+  .stage-mini {
+    display: block;
   }
 }
 .project-work-head {
