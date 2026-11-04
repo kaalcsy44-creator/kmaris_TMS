@@ -6145,6 +6145,7 @@ function CustomerQuoteItemEditor({
                     ▸
                   </button>
                   {entry.seq}
+                  {it.lid ? <span className="seq-lid" title="Line ID — also printed on the quotation sent to the customer">{it.lid}</span> : null}
                 </td>
                 <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>

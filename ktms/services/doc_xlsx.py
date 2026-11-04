@@ -20,7 +20,7 @@ from services.kmaris_docs import (
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
     pi_decimals, doc_decimals, print_decimals, pi_charges, pi_doc_date, is_service_doc, service_info_rows,
     SERVICE_PI_DECIMALS, cn_view, cn_contact_line, CN_MIN_ITEM_ROWS,
-    is_option_row, item_row_plan,
+    is_option_row, item_row_plan, quote_no_header, quote_no_text,
 )
 
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
@@ -1133,7 +1133,7 @@ def make_quotation_costing_xlsx(
     right = Alignment(horizontal="right", vertical="center")
 
     # No | Part No | Description | Qty | Unit | Cost U/P | Cost Amount | Margin% | U/Price | Amount | Lead Time | Remark
-    HEADERS = ["No.", "Part No.", "Description", "Qty", "Unit",
+    HEADERS = [quote_no_header(data.get("items", [])), "Part No.", "Description", "Qty", "Unit",
                "Cost U/P", "Cost Amount", "Margin %", "U/Price", "Amount", "Lead Time", "Remark"]
     WIDTHS = [5, 18, 34, 7, 7, 13, 14, 9, 13, 15, 14, 20]
     NCOL = len(HEADERS)
@@ -1292,7 +1292,8 @@ def make_quotation_costing_xlsx(
         else:
             u_cell = u_formula if not unit_price else unit_price
         cells = {
-            1: ri, 2: it.get("part_no", ""), 3: it.get("description", ""),
+            1: quote_no_text(ri, it["lid"]) if it.get("lid") else ri,
+            2: it.get("part_no", ""), 3: it.get("description", ""),
             4: qty, 5: it.get("unit", ""),
             6: cost,                                   # Cost U/P (입력, 원가통화)
             7: f"=D{r}*F{r}",                          # Cost Amount = Qty × Cost
@@ -1322,7 +1323,7 @@ def make_quotation_costing_xlsx(
         _desc = str(it.get("description", "") or ""); _rmk = str(it.get("remark", "") or "")
         _dl = sum(max(1, (len(x) + 39) // 40) for x in _desc.split("\n")) if _desc else 1
         _rl = sum(max(1, (len(x) + 25) // 26) for x in _rmk.split("\n")) if _rmk else 1
-        ws.row_dimensions[r].height = 14 * max(_dl, _rl, 1) + 5
+        ws.row_dimensions[r].height = 14 * max(_dl, _rl, 2 if it.get("lid") else 1) + 5
 
     # "Total" 라벨 — A~E 병합, 가운데. 행 전체 글자 크기 12.
     bold16 = Font(name="Noto Sans KR", bold=True, size=12)

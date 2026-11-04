@@ -19457,6 +19457,7 @@ select.compose-tpl-version {
   width: var(--lb-no); min-width: var(--lb-no); max-width: var(--lb-no);
   color: var(--muted);
 }
+.seq-lid { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
 .lb-lid {
   display: inline-block;
   margin-left: 6px;

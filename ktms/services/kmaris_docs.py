@@ -206,6 +206,17 @@ def item_row_plan(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return plan
 
 
+def quote_no_header(items: List[Dict[str, Any]]) -> str:
+    """견적서 No. 칸의 머리 — 딜 라인(lid)이 달린 줄이 있으면 라인 번호도 함께 선다는 표시."""
+    return "No.\nLine" if any(it.get("lid") for it in normalize_items(items)) else "No."
+
+
+def quote_no_text(no: Any, lid: Any) -> str:
+    """견적서 No. 칸 — 순번 밑에 라인 번호. 일부 줄만 견적하면 순번이 RFQ 번호와 어긋나,
+    고객이 자기 RFQ 의 어느 줄인지 맞춰 볼 수 있게 한다. 운임처럼 라인이 없는 줄은 순번만."""
+    return f"{no}\n{lid}" if lid else str(no)
+
+
 def normalize_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """발행용 품목 목록 — 화면에서 "문서에서 제외"(excluded)한 행은 여기서 빠진다.
     PDF·Excel·합계(calc_totals)가 모두 이 함수를 거치므로 제외 규칙은 이 한 곳에만 둔다.
@@ -228,6 +239,7 @@ def normalize_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             {
                 "row_kind": OPTION_ROW_KIND if option else "",
                 "item_no": "" if option else (seq if renumber else (raw.get("item_no") or seq)),
+                "lid": "" if option else str(raw.get("lid") or "").strip(),
                 "part_no": raw.get("part_no", ""),
                 "description": raw.get("description", ""),
                 "maker": raw.get("maker", ""),
@@ -2274,7 +2286,8 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     story += [info, Spacer(1, 4 * mm)]
 
     # ── 품목표 (sales only) — Unit 열 포함, 샘플처럼 최소 6줄의 폼 형태 ──────
-    headers = ["No.", "Part No.", "Description", "Qty", "Unit", "U/Price", "Amount", "Lead Time", "Remark"]
+    headers = [quote_no_header(data.get("items", [])), "Part No.", "Description", "Qty", "Unit",
+               "U/Price", "Amount", "Lead Time", "Remark"]
     widths = [8, 24, 50, 11, 12, 22, 22, 18, 23]
     rows = [[_p(h, s["th"]) for h in headers]]
     # 옵션(대안)이 있으면 옵션 제목행 + 옵션별 Subtotal 로 끊어 적는다. 맨 아래 Total 은
@@ -2300,7 +2313,7 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
         it = entry["item"]
         item_rows.append(r)
         rows.append([
-            _p(str(it["item_no"]), s["tiny"]),
+            _p(quote_no_text(it["item_no"], it.get("lid")), s["tiny"]),
             _p(it["part_no"], s["tiny"]),
             _p(it["description"], s["tiny"]),
             _p(_qnum(it["qty"]), s["tiny"]),
