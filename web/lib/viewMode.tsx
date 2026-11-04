@@ -93,10 +93,10 @@ function markEmptyFields(root: HTMLElement | null, on: boolean) {
  *  행이 지워져 짝을 잃은 span 은 다음 훑기에서 치운다. */
 const MIRROR_SKIP = new Set(["checkbox", "radio", "file", "hidden", "button", "submit", "reset", "range", "color", "image"]);
 
-/** 값을 보여주는 버튼(고객·담당자·벤더·분류 선택, 환율 방식, 품목 견적 옵션).
+/** 값을 보여주는 버튼(고객·담당자·벤더·분류 선택, 환율 방식·양자택일 토글, 품목 견적 옵션).
  *  잠긴 button 안의 글자도 드래그가 안 된다 — 입력칸처럼 span.vm-text 로 비춘다.
  *  버튼의 class 를 그대로 물려 로고·이름·칸 폭이 같은 모양으로 나온다. */
-const MIRROR_BTN = ".cust-select-btn, .vsel-btn, .cat-pick, .fx-toggle button.on, .lq-opt";
+const MIRROR_BTN = ".cust-select-btn, .vsel-btn, .cat-pick, .fx-toggle button.on, .seg-toggle button.on, .lq-opt";
 const BTN_CARET = ".cust-select-caret, .vsel-caret, .cat-pick-caret";
 const BTN_PLACEHOLDER = ".cust-select-placeholder, .vsel-placeholder";
 

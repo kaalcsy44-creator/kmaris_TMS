@@ -17491,6 +17491,22 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   font-weight: 400;
   padding: 0 6px 0 0;
 }
+/* 로고에서 드래그를 시작해도 그림 끌기가 아니라 글자 선택이 되게. */
+.form-fieldset.vm-read .vm-text--btn img {
+  -webkit-user-drag: none;
+}
+/* 양자택일 토글도 환율 방식처럼 고른 쪽만 글자로 남긴다. 범위 전환 버튼은 고르는 도구라 감춘다. */
+.form-fieldset.vm-read .seg-toggle {
+  border: 0;
+  background: none;
+}
+.form-fieldset.vm-read .seg-toggle button:not(.on),
+.form-fieldset.vm-read .po-vendor-scope {
+  display: none;
+}
+.form-fieldset.vm-read .seg-toggle .vm-text--btn {
+  font-size: 12px;
+}
 /* 표 머리 라벨은 열 순서 바꾸기용 draggable 이라 글자를 긁으면 끌기가 시작된다.
    읽기모드는 폭 조절 핸들도 감추는 화면이다 — 머리글도 글자로 둔다. */
 .form-fieldset.vm-read [draggable="true"] {
