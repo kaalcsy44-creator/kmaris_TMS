@@ -1424,6 +1424,8 @@ export type PrintBook = {
   heading?: string;
   /** 표 위에 서는 항목·값 쌍(문서처럼 머리 정보가 있는 표). 값이 비면 찍히지 않는다. */
   info?: [string, string][];
+  /** 한 장 요약 — 세로 A4, 회사 머리 없이, 글자를 줄여 가능한 한 한 장에 담는다. */
+  compact?: boolean;
   columns: { label: string; width?: number; align?: "left" | "center" | "right" }[];
   rows: string[][];
 };

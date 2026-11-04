@@ -508,15 +508,16 @@ export default function NewRfqForm({
     const rows = items.filter((it) => it.part_no.trim() || it.description.trim());
     const vessel = vessels.find((v) => v.id === vesselId);
     const optional: { key: "type" | "serial_no" | "maker"; label: string; width: number }[] = [
-      { key: "type", label: "Type", width: 10 },
-      { key: "serial_no", label: "Serial No.", width: 11 },
-      { key: "maker", label: "Maker", width: 12 },
+      { key: "type", label: "Type", width: 7 },
+      { key: "serial_no", label: "Serial No.", width: 8 },
+      { key: "maker", label: "Maker", width: 8 },
     ];
     const shown = optional.filter((c) => rows.some((it) => (it[c.key] || "").trim()));
     const hasRemark = rows.some((it) => (it.remark || "").trim());
     return {
       title: `RFQ Lines ${loadedRfqNo}`.trim(),
       heading: "RFQ Line List",
+      compact: true,
       info: [
         ["Customer", companyName || customerName],
         ["Our Ref.", loadedRfqNo],
@@ -527,13 +528,13 @@ export default function NewRfqForm({
         ["Project title", projectTitle],
       ],
       columns: [
-        { label: "Line", width: 5, align: "center" },
-        { label: "Part No.", width: 14 },
-        { label: "Description", width: 30 },
+        { label: "Line", width: 4, align: "center" },
+        { label: "Part No.", width: 11 },
+        { label: "Description", width: 27 },
         ...shown.map((c) => ({ label: c.label, width: c.width })),
-        { label: "Qty", width: 5, align: "right" },
+        { label: "Qty", width: 4, align: "right" },
         { label: "Unit", width: 5, align: "center" },
-        ...(hasRemark ? [{ label: "Remark", width: 22 }] : []),
+        ...(hasRemark ? [{ label: "Remark", width: 34 }] : []),
       ],
       rows: rows.map((it, i) => [
         it.lid || `#${i + 1}`,

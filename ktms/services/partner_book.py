@@ -16,7 +16,9 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Spacer, Table, TableStyle
 
@@ -33,6 +35,12 @@ MAX_CELL = 2000
 PAGE_LEFT = 12 * mm
 PAGE_RIGHT = 285 * mm
 BODY_W = PAGE_RIGHT - PAGE_LEFT
+
+# 한 장 요약(compact) — 세로 A4. 줄이 많으면 글자를 이 순서로 줄여 한 장에 담아 본다.
+# 6pt 밑으로는 종이에서 읽기 어려워, 그래도 넘치면 다음 장으로 넘긴다.
+COMPACT_MARGIN = 10 * mm
+COMPACT_W = A4[0] - 2 * COMPACT_MARGIN
+COMPACT_SIZES = (9, 8.5, 8, 7.5, 7, 6.5, 6)
 
 
 def _cell(v: Any) -> str:
@@ -69,6 +77,7 @@ def normalize(book: Dict[str, Any]) -> Dict[str, Any]:
         # 표 위의 항목·값 쌍. 값이 빈 항목은 뺀다 — 종이에 빈 칸을 남길 이유가 없다.
         "info": [[_cell(p[0]), _cell(p[1])] for p in (book.get("info") or [])
                  if isinstance(p, (list, tuple)) and len(p) == 2 and _cell(p[1])],
+        "compact": bool(book.get("compact")),
         "columns": columns,
         "rows": rows,
     }
@@ -155,8 +164,12 @@ def make_book_xlsx(book: Dict[str, Any]) -> bytes:
     ws.freeze_panes = ws.cell(row=head_row + 1, column=1)
     if rows:
         ws.auto_filter.ref = "A%d:%s%d" % (head_row, last, head_row + len(rows))
-    ws.page_setup.orientation = "landscape"
+    ws.page_setup.orientation = "portrait" if b["compact"] else "landscape"
     ws.page_setup.fitToWidth = 1
+    if b["compact"]:
+        ws.page_setup.fitToHeight = 1
+        ws.page_margins.left = ws.page_margins.right = 0.4
+        ws.page_margins.top = ws.page_margins.bottom = 0.4
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     ws.print_title_rows = "%d:%d" % (head_row, head_row)
 
@@ -175,7 +188,8 @@ def _company() -> Dict[str, Any]:
         return {}
 
 
-def _col_widths(cols: List[Dict[str, Any]], rows: List[List[str]]) -> List[float]:
+def _col_widths(cols: List[Dict[str, Any]], rows: List[List[str]],
+                body_w: float = BODY_W) -> List[float]:
     """칸 폭 — 화면이 준 가중치(width)를 쓰되, 안 주면 그 칸의 실제 글자 길이로 나눈다.
 
     긴 주소 한 줄 때문에 다른 칸이 실오라기처럼 눌리지 않도록 길이는 제곱근으로 눌러
@@ -190,22 +204,89 @@ def _col_widths(cols: List[Dict[str, Any]], rows: List[List[str]]) -> List[float
         avg = sum(lens) / len(lens)
         weights.append(max(1.0, max(lens) * 0.35 + avg * 0.65) ** 0.5)
     total = sum(weights) or 1.0
-    floor = BODY_W * 0.04
-    widths = [max(floor, BODY_W * w / total) for w in weights]
+    floor = body_w * 0.04
+    widths = [max(floor, body_w * w / total) for w in weights]
     # 바닥을 깔면 합이 본문 폭을 넘을 수 있다 — 넘친 만큼 넉넉한 칸에서 되돌려 받는다.
-    over = sum(widths) - BODY_W
+    over = sum(widths) - body_w
     if over > 0:
         spare = [max(0.0, w - floor) for w in widths]
         pool = sum(spare)
         if pool > 0:
             widths = [w - over * sp / pool for w, sp in zip(widths, spare)]
         else:
-            widths = [BODY_W / len(widths)] * len(widths)
+            widths = [body_w / len(widths)] * len(widths)
     return widths
+
+
+def _info_table(info: List[List[str]], width: float, style: ParagraphStyle) -> Table:
+    """머리 정보 — 항목·값 두 쌍씩 한 줄. 홀수면 마지막 줄의 오른쪽은 비운다."""
+    pairs = info + [["", ""]] * (len(info) % 2)
+    info_rows = [[_p("<b>%s</b>" % a[0], style), _p(a[1], style),
+                  _p("<b>%s</b>" % z[0] if z[0] else "", style), _p(z[1], style)]
+                 for a, z in zip(pairs[0::2], pairs[1::2])]
+    t = Table(info_rows, colWidths=[width * x for x in (0.16, 0.34, 0.16, 0.34)])
+    t.setStyle(TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.4, MID_GRAY),
+        ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY),
+        ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 2.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+    ]))
+    return t
+
+
+def _compact_pdf(b: Dict[str, Any], size: float) -> tuple[bytes, int]:
+    """세로 A4 한 장 요약을 글자 크기 size 로 만든다. (PDF, 쪽수)"""
+    cols, rows = b["columns"], b["rows"]
+    base = ParagraphStyle("BkBase", parent=_styles()["base"], fontSize=size, leading=size * 1.22)
+    body = {"left": base,
+            "center": ParagraphStyle("BkC", parent=base, alignment=TA_CENTER),
+            "right": ParagraphStyle("BkR", parent=base, alignment=TA_RIGHT)}
+    th = ParagraphStyle("BkTh", parent=_styles()["th"], fontSize=size, leading=size * 1.22)
+    title = ParagraphStyle("BkTitle", parent=base, fontSize=13, leading=16)
+
+    buf = io.BytesIO()
+    doc = BaseDocTemplate(buf, pagesize=A4, leftMargin=COMPACT_MARGIN, rightMargin=COMPACT_MARGIN,
+                          topMargin=COMPACT_MARGIN, bottomMargin=COMPACT_MARGIN,
+                          title=b["heading"] or b["title"])
+    frame = Frame(COMPACT_MARGIN, COMPACT_MARGIN, COMPACT_W, A4[1] - 2 * COMPACT_MARGIN, id="body",
+                  leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
+    doc.addPageTemplates([PageTemplate(id="book", frames=[frame])])
+
+    story: List[Any] = [_p("<b>%s</b>" % (b["heading"] or b["title"]).upper(), title), Spacer(1, 1.5 * mm)]
+    if b["info"]:
+        story += [_info_table(b["info"], COMPACT_W, base), Spacer(1, 2 * mm)]
+    data = [[_p(c["label"], th) for c in cols]]
+    data += [[_p(v, body[cols[i]["align"]]) for i, v in enumerate(r)] for r in rows]
+    table = Table(data, colWidths=_col_widths(cols, rows, COMPACT_W), repeatRows=1)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("GRID", (0, 0), (-1, -1), 0.4, MID_GRAY),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2.5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2.5),
+        ("TOPPADDING", (0, 0), (-1, -1), 1.2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1.6),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT_GRAY]),
+    ]))
+    story.append(table)
+    doc.build(story)
+    return buf.getvalue(), doc.page
 
 
 def make_book_pdf(book: Dict[str, Any]) -> bytes:
     b = normalize(book)
+    if b["compact"]:
+        # 읽기 좋은 크기부터 내려가며 한 장에 들어가는 가장 큰 글자를 찾는다.
+        pdf = b""
+        for size in COMPACT_SIZES:
+            pdf, pages = _compact_pdf(b, size)
+            if pages == 1:
+                break
+        return pdf
     cols, rows = b["columns"], b["rows"]
     s = _styles()
     body = {"left": s["base"], "center": s["center"], "right": s["right"]}
@@ -229,23 +310,7 @@ def make_book_pdf(book: Dict[str, Any]) -> bytes:
     story.append(_p(caption, s["small"]))
     story.append(Spacer(1, 3 * mm))
     if b["info"]:
-        # 머리 정보 — 항목·값 두 쌍씩 한 줄. 홀수면 마지막 줄의 오른쪽은 비운다.
-        pairs = b["info"] + [["", ""]] * (len(b["info"]) % 2)
-        info_rows = [[_p("<b>%s</b>" % a[0], s["base"]), _p(a[1], s["base"]),
-                      _p("<b>%s</b>" % z[0] if z[0] else "", s["base"]), _p(z[1], s["base"])]
-                     for a, z in zip(pairs[0::2], pairs[1::2])]
-        info_t = Table(info_rows, colWidths=[BODY_W * x for x in (0.13, 0.37, 0.13, 0.37)])
-        info_t.setStyle(TableStyle([
-            ("GRID", (0, 0), (-1, -1), 0.4, MID_GRAY),
-            ("BACKGROUND", (0, 0), (0, -1), LIGHT_GRAY),
-            ("BACKGROUND", (2, 0), (2, -1), LIGHT_GRAY),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 3),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-            ("TOPPADDING", (0, 0), (-1, -1), 2.5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
-        ]))
-        story.append(info_t)
+        story.append(_info_table(b["info"], BODY_W, s["base"]))
         story.append(Spacer(1, 3 * mm))
 
     data = [[_p(c["label"], s["th"]) for c in cols]]

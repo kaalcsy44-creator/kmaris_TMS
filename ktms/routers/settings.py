@@ -1852,6 +1852,8 @@ class PartnerBookPrint(BaseModel):
     heading: str = ""
     # 표 위에 서는 항목·값 쌍 [["Customer", "..."], ...] — 문서처럼 머리 정보가 있는 표가 쓴다.
     info: list[list[str]] = []
+    # 한 장 요약 — 세로 A4, 회사 머리 없이, 글자를 줄여 가능한 한 한 장에 담는다.
+    compact: bool = False
     columns: list[PartnerBookCol] = []
     rows: list[list[str]] = []
 
@@ -1862,6 +1864,7 @@ def _partner_book(body: PartnerBookPrint) -> dict:
         "subtitle": body.subtitle,
         "heading": body.heading,
         "info": body.info,
+        "compact": body.compact,
         "columns": [c.model_dump() for c in body.columns],
         "rows": body.rows,
     }
