@@ -4586,6 +4586,8 @@ class RfqItemIn(BaseModel):
     # 고르게 하지만 서버는 값을 강제하지 않는다: 목록이 늘어날 때 옛 딜이 막히지 않게.
     grade: str | None = ""
     qty: float = 1
+    # 수량 단위(EA·SET·BTL…) — 고객 RFQ 에 적힌 그대로. 비어 있어도 된다.
+    unit: str | None = ""
     remark: str | None = ""
     # 품목 분류(선택) — 입력 단계에서 고르면 저장 시 품목 마스터 분류로 반영된다.
     category_id: int | None = None

@@ -46,7 +46,7 @@ import {
 
 // 품목 표에서 폭 조절·숨김 가능한 컬럼(관리번호·순번 열 제외)과 셀 렌더 메타.
 // category 는 텍스트 입력이 아니라 분류 select 셀이다(kind: "category").
-type RfqTextColKey = "part_no" | "description" | "type" | "serial_no" | "maker" | "qty" | "remark";
+type RfqTextColKey = "part_no" | "description" | "type" | "serial_no" | "maker" | "qty" | "unit" | "remark";
 type RfqItemColKey = RfqTextColKey | "category" | "grade";
 const RFQ_ITEM_COLS: {
   key: RfqItemColKey;
@@ -66,6 +66,7 @@ const RFQ_ITEM_COLS: {
   // 제조사 바로 옆 — 둘은 한 질문의 두 쪽이다("누가 만들었나" / "그 상표를 달고 있나").
   { key: "grade", label: "Grade", cellClass: "", kind: "grade" },
   { key: "qty", label: "Qty", cellClass: "num", num: true },
+  { key: "unit", label: "Unit", cellClass: "wrapcell" },
   { key: "remark", label: "Remark", cellClass: "wrapcell" },
   { key: "category", label: "Category", cellClass: "", kind: "category" },
 ];
@@ -77,6 +78,7 @@ const RFQ_ITEM_DEFAULT_W: Record<string, number> = {
   maker: 150,
   grade: 120,
   qty: 84,
+  unit: 84,
   remark: 160,
   category: 150,
 };
@@ -91,6 +93,8 @@ type ItemRow = {
   /** 부품 등급 — Genuine / OEM / Aftermarket / Reconditioned / Used(선택). */
   grade: string;
   qty: string;
+  /** 수량 단위(EA·SET·BTL…) — 고객 RFQ 에 적힌 그대로. */
+  unit: string;
   remark: string;
   /** 품목 분류(선택). 저장 시 품목 마스터 분류로 반영된다. */
   category_id: number | null;
@@ -111,6 +115,7 @@ const EMPTY_ITEM: ItemRow = {
   maker: "",
   grade: "",
   qty: "1",
+  unit: "",
   remark: "",
   category_id: null,
 };
@@ -395,6 +400,7 @@ export default function NewRfqForm({
               maker: it.maker ?? "",
               grade: "",   // 등급은 문서에 적혀 오는 값이 아니다 — 필요하면 수동 선택
               qty: String(it.qty ?? 1),
+              unit: it.unit ?? "",
               remark: it.remark ?? "",
               category_id: null,   // OCR 은 분류를 알 수 없다 — 필요하면 수동 선택
             });
@@ -480,6 +486,7 @@ export default function NewRfqForm({
               maker: it.maker ?? "",
               grade: it.grade ?? "",
               qty: String(it.qty ?? 1),
+              unit: it.unit ?? "",
               remark: it.remark ?? "",
               category_id: it.category_id ?? null,
               lid: it.lid ?? "",
@@ -500,13 +507,13 @@ export default function NewRfqForm({
   function buildLinePrint(): PrintBook {
     const rows = items.filter((it) => it.part_no.trim() || it.description.trim());
     const vessel = vessels.find((v) => v.id === vesselId);
-    const optional: { key: "type" | "serial_no" | "maker" | "remark"; label: string; width: number }[] = [
+    const optional: { key: "type" | "serial_no" | "maker"; label: string; width: number }[] = [
       { key: "type", label: "Type", width: 10 },
       { key: "serial_no", label: "Serial No.", width: 11 },
       { key: "maker", label: "Maker", width: 12 },
-      { key: "remark", label: "Remark", width: 20 },
     ];
     const shown = optional.filter((c) => rows.some((it) => (it[c.key] || "").trim()));
+    const hasRemark = rows.some((it) => (it.remark || "").trim());
     return {
       title: `RFQ Lines ${loadedRfqNo}`.trim(),
       heading: "RFQ Line List",
@@ -525,6 +532,8 @@ export default function NewRfqForm({
         { label: "Description", width: 30 },
         ...shown.map((c) => ({ label: c.label, width: c.width })),
         { label: "Qty", width: 5, align: "right" },
+        { label: "Unit", width: 5, align: "center" },
+        ...(hasRemark ? [{ label: "Remark", width: 22 }] : []),
       ],
       rows: rows.map((it, i) => [
         it.lid || `#${i + 1}`,
@@ -532,6 +541,8 @@ export default function NewRfqForm({
         it.description,
         ...shown.map((c) => it[c.key] || ""),
         it.qty,
+        it.unit,
+        ...(hasRemark ? [it.remark] : []),
       ]),
     };
   }
@@ -551,6 +562,7 @@ export default function NewRfqForm({
         maker: it.maker,
         grade: it.grade,
         qty: Number(it.qty) || 1,
+        unit: it.unit,
         remark: it.remark,
         category_id: it.category_id,
         lid: fresh ? "" : (it.lid || ""),
