@@ -527,6 +527,10 @@ class VendorQuote(Base):
     notes         = Column(Text)
     # Auto-fill 소스 파일 메타(영구 보관). [{"name","media_type","item_count","at"}]
     source_files  = Column(JSON, default=list)
+    # 같은 라인(lid)에 줄이 둘 이상일 때 그 줄들의 뜻. {"L31": "alt"|"set"}.
+    # set = 부품으로 쪼갠 세트(합산), alt = 벤더가 제시한 대안(따로 비교).
+    # 없으면 제조사로 짐작한다(_core.doc_line_alts).
+    line_modes    = Column(JSON, default=dict)
     created_at    = Column(DateTime, default=datetime.utcnow)
 
 
@@ -1107,6 +1111,8 @@ class DealLineAward(Base):
     lid             = Column(String(16), nullable=False)
     # 채택한 벤더 견적. 견적이 지워지면 이 채택도 함께 지운다(라우터에서 정리).
     vendor_quote_id = Column(Integer, ForeignKey("vendor_quotes.id"), index=True)
+    # 그 견적이 이 줄에 대안을 여럿 냈으면 그중 몇 번째인가(0부터). 대안이 없으면 NULL.
+    alt             = Column(Integer)
     # 견적을 거슬러 올라가지 않고도 "누구에게 사기로 했나"를 바로 읽으려는 사본.
     vendor_id       = Column(Integer, ForeignKey("vendors.id"))
     # 채택 시점의 단가·통화·납기 스냅샷. 벤더가 견적을 고쳐 보내도 "그때 무엇을 보고

@@ -786,10 +786,29 @@ export type LineCell = {
   vendor_quote_no?: string;
   /** 벤더가 이 줄을 여러 부품으로 쪼개 견적한 세트면 그 줄 수(단가는 세트 합 ÷ 수량). */
   kit_lines?: number;
+  /** 벤더가 이 줄에 낸 대안들. 있으면 unit_cost 는 그중 최저가다. */
+  alts?: LineAlt[];
+  /** alts 중 최저가의 자리(값이 하나도 없으면 null). */
+  alt_low?: number | null;
+};
+
+/** 벤더가 한 줄에 낸 대안 하나. unit_cost 는 딜 줄 수량 기준(줄 금액 ÷ 딜 수량)이다. */
+export type LineAlt = {
+  idx: number;
+  unit_cost: number | null;
+  lead_time: string;
+  maker: string;
+  part_no: string;
+  description: string;
+  quoted_qty?: number | string | null;
+  quoted_unit: string;
+  quoted_price?: number | string | null;
 };
 
 export type LineAward = {
   vendor_quote_id: number;
+  /** 그 견적의 대안 중 고른 자리. 대안이 없는 줄은 null. */
+  alt?: number | null;
   vendor_id: number;
   vendor: string;
   unit_cost: number | null;
@@ -828,6 +847,8 @@ export type BoardVendor = {
   sent_at: string;
   status: string;
   declined: boolean;
+  /** 품목에 이어지지 않은 견적 줄(운임 등) — 벤더 합계에는 들어간다. */
+  charges?: { description: string; amount: number; currency: string }[];
   quotes: { id: number; vendor_quote_no: string; currency: string; received_at: string }[];
 };
 

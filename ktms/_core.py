@@ -1810,9 +1810,50 @@ def index_doc_by_line(base_items, doc_items, kits: bool = False) -> dict[str, di
             lst = buckets.get(k) if k else None
             if lst:
                 out[key] = lst.pop(0)
-        elif i < len(rest):
+        elif len(rest) == len(doc):
+            # 줄 순서로 맞추는 것은 문서 전체가 이름 없는 옛 문서일 때만이다(deal.ts 와 같은
+            # 규칙). 이름이 섞여 있으면 남은 줄은 사람이 일부러 안 이은 줄이다 — 벤더가
+            # 붙인 운임 같은 줄이 순서만으로 첫 품목의 값이 되면 안 된다.
             out[key] = rest[i]
     return out
+
+
+def doc_line_alts(base_items, doc_items, modes=None) -> dict[str, list[dict]]:
+    """벤더가 한 라인에 대안을 여럿 낸 줄 {lid: [대안, ...]}.
+
+    같은 lid 줄이 여럿이면 세트(부품으로 쪼갠 한 물건, _kit_line)이거나 대안(둘 중 하나를
+    사는 것)이다. 문서만으로는 가를 수 없어 사람이 비교표에서 고른 값(`modes`)을 따르고,
+    고른 적이 없으면 제조사가 갈릴 때 대안으로 본다 — 세트의 부품은 한 제조사 것이다.
+    각 대안의 단가는 세트와 같은 기준(줄 금액 ÷ 딜 줄 수량)이라 다른 벤더 칸과 견줄 수 있다."""
+    base_of = {line_id_of(b): b for b in (base_items or [])
+               if isinstance(b, dict) and line_id_of(b)}
+    groups: dict[str, list[dict]] = {}
+    for d in doc_items or []:
+        if isinstance(d, dict) and not is_option_row(d) and line_id_of(d) in base_of:
+            groups.setdefault(line_id_of(d), []).append(d)
+    out: dict[str, list[dict]] = {}
+    for lid, group in groups.items():
+        if len(group) < 2:
+            continue
+        makers = {str(d.get("maker") or "").strip().upper() for d in group} - {""}
+        mode = (modes or {}).get(lid) or ("alt" if len(makers) > 1 else "set")
+        if mode == "alt":
+            out[lid] = [_alt_line(base_of[lid], d) for d in group]
+    return out
+
+
+def _alt_line(base: dict, d: dict) -> dict:
+    """대안 한 줄 — 값은 세트 한 벌과 같은 계산, 품번·품명은 벤더가 쓴 그대로."""
+    return {
+        **_kit_line(base, [d]),
+        "part_no": d.get("part_no") or "",
+        "description": d.get("description") or "",
+        "kit_lines": 0,
+        "kit_items": None,
+        "quoted_qty": d.get("qty"),
+        "quoted_unit": d.get("unit") or "",
+        "quoted_price": d.get("cost_price") if d.get("cost_price") is not None else d.get("unit_price"),
+    }
 
 
 def _kit_line(base: dict, group: list[dict]) -> dict:
@@ -4407,6 +4448,8 @@ class LineAwardIn(BaseModel):
     """라인 하나의 매입처 채택. vendor_quote_id 를 비우면 그 줄의 채택을 취소한다."""
     lid: str
     vendor_quote_id: int | None = None
+    # 그 견적이 이 줄에 낸 대안 중 몇 번째인가(0부터). 대안이 없는 줄은 비운다.
+    alt: int | None = None
     reason: str | None = ""
 
 
@@ -4957,6 +5000,7 @@ __all__ = [
     "deal_used_line_ids",
     "line_id_of",
     "index_doc_by_line",
+    "doc_line_alts",
     "LineAwardIn",
     "LineAwardsSave",
     "_kst",

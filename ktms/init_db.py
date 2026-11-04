@@ -136,7 +136,12 @@ _MIGRATIONS = {
         # 읽은 구간의 아래쪽 경계(옛 메일 방향). 첫 배포 뒤 추가된 컬럼.
         "backfill_uid": "INTEGER DEFAULT 0",
     },
+    "deal_line_awards": {
+        # 벤더가 한 줄에 낸 대안 중 고른 것(0부터). 기존 행은 NULL = 대안 없음.
+        "alt": "INTEGER",
+    },
     "vendor_quotes": {
+        "line_modes": "JSON",
         "vendor_quote_no": "VARCHAR(100)",
         "received_at": "VARCHAR(16)",
         "valid_until": "VARCHAR(10)",

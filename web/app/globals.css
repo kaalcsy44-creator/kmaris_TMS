@@ -19517,6 +19517,10 @@ select.compose-tpl-version {
 .lb-c.award { background: #e8f6ee; }
 .lb-c.award b { color: #11824a; font-weight: 700; }
 .lb-c.pick { padding: 0; }
+.lb-alt { display: block; font-size: 10.5px; color: var(--muted); }
+.lb-alt b { color: #2f6db5; font-weight: 600; }
+.lb-c.pick button.lb-mode, button.lb-mode { display: block; width: auto; margin: 0 auto 4px; padding: 0 6px;
+  border: 0; background: none; color: #2f6db5; font-size: 10.5px; text-decoration: underline; cursor: pointer; }
 .lb-c.pick button {
   width: 100%;
   height: 100%;

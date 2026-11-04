@@ -47,6 +47,7 @@ from pydantic import BaseModel
 from _core import (
     DealLineAward,
     LineAwardsSave,
+    doc_line_alts,
     index_doc_by_line,
     is_option_row,
     line_id_of,
@@ -1162,6 +1163,45 @@ def _cell_cost(it) -> float | None:
         return None
 
 
+def _cheapest_alt(alts: list[dict]) -> int | None:
+    """값이 있는 대안 중 가장 싼 것의 자리. 값이 하나도 없으면 None."""
+    priced = [(c, i) for i, c in ((i, _cell_cost(a)) for i, a in enumerate(alts))
+              if c is not None and c > 0]
+    return min(priced)[1] if priced else None
+
+
+def _quote_line(lines_src, q, lid: str, alt: int | None) -> tuple[dict, int | None]:
+    """견적 q 에서 라인 lid 로 살 줄과 그 대안 자리. 대안이 있는 줄인데 자리를 안 줬거나
+    (견적을 고쳐) 없는 자리면 가장 싼 대안으로 — 세트로 합산한 값이 원가가 되면 안 된다."""
+    alts = doc_line_alts(lines_src, q.items or [], getattr(q, "line_modes", None)).get(lid)
+    if alts:
+        i = alt if alt is not None and 0 <= alt < len(alts) else (_cheapest_alt(alts) or 0)
+        return alts[i], i
+    return index_doc_by_line(lines_src, q.items or [], kits=True).get(lid) or {}, None
+
+
+def _doc_charges(lines_src, q) -> list[dict]:
+    """견적에서 어느 품목에도 이어지지 않은 줄(운임·포장 등). 어느 줄의 값도 아니지만
+    벤더에게 치를 돈이라 비교표 합계에는 들어가야 한다. 이름 없는 옛 문서는 뺀다 —
+    그 문서의 줄은 품번·순서로 잇는 것이라 '안 이은 줄'이 뜻을 갖지 않는다."""
+    rows = [d for d in (q.items or []) if isinstance(d, dict) and not is_option_row(d)]
+    if not any(line_id_of(d) for d in rows):
+        return []
+    used = {id(d) for d in index_doc_by_line(lines_src, rows).values()}
+    out = []
+    for d in rows:
+        cost = _cell_cost(d)
+        if line_id_of(d) or id(d) in used or not cost:
+            continue
+        try:
+            qty = float(d.get("qty") or 1)
+        except (TypeError, ValueError):
+            qty = 1.0
+        out.append({"description": d.get("description") or d.get("part_no") or "",
+                    "amount": round(cost * qty, 2), "currency": q.currency or "USD"})
+    return out
+
+
 def _line_board(s, rfq) -> dict:
     """딜 1건의 소싱 현황 — 품목 줄 × 물어본 곳 표, 그리고 줄마다의 채택."""
     lines_src = [it for it in (rfq.items or []) if isinstance(it, dict) and not is_option_row(it)]
@@ -1209,6 +1249,9 @@ def _line_board(s, rfq) -> dict:
             "sent_at": vr.sent_at or "",
             "status": vr.status or "",
             "declined": declined,
+            # 같은 운임을 고쳐 다시 보낸 견적이 두 번 더해지지 않게 같은 줄은 하나로 친다.
+            "charges": list({(c["description"], c["amount"], c["currency"]): c
+                             for q in quotes for c in _doc_charges(lines_src, q)}.values()),
             "quotes": [{
                 "id": q.id,
                 "vendor_quote_no": q.vendor_quote_no or "",
@@ -1222,15 +1265,22 @@ def _line_board(s, rfq) -> dict:
         # (같은 줄을 다시 견적해 왔다면 나중 값이 지금 값이다).
         priced: dict[str, tuple] = {}
         for q in quotes:
+            alts = doc_line_alts(lines_src, q.items or [], getattr(q, "line_modes", None))
             for lid, it in index_doc_by_line(lines_src, q.items or [], kits=True).items():
-                priced[lid] = (q, it, _cell_cost(it))
+                priced[lid] = (q, it, _cell_cost(it), alts.get(lid))
         for idx, ln in enumerate(lines):
             key = line_id_of(lines_src[idx]) or ln["lid"]
             hit, got = asked.get(key), priced.get(key)
             if hit is None and got is None:
                 continue
             if got is not None:
-                q, it, cost = got
+                q, it, cost, alts = got
+                low = None
+                if alts:
+                    # 대안이 있는 줄의 값은 그중 가장 싼 것이다 — 합계·최저가는 이 값을 쓴다.
+                    low = _cheapest_alt(alts)
+                    cost = _cell_cost(alts[low]) if low is not None else None
+                    it = {"lead_time": alts[low]["lead_time"] if low is not None else ""}
                 cells.setdefault(ln["lid"], {})[str(vr.id)] = {
                     # 0원은 값이 아니다 — 견적을 못 냈다는 뜻이라 최저가·채택 후보에서 뺀다.
                     "state": "quoted" if cost is not None and cost > 0 else "no_price",
@@ -1242,6 +1292,19 @@ def _line_board(s, rfq) -> dict:
                     "vendor_quote_no": q.vendor_quote_no or "",
                     # 한 줄을 여러 부품으로 쪼개 견적한 세트면 그 줄 수(화면에 "9-line set").
                     "kit_lines": (it.get("kit_lines") or 0) if isinstance(it, dict) else 0,
+                    # 벤더가 낸 대안들 — 화면은 같은 벤더 안에서 열을 나눠 보인다.
+                    "alts": [{
+                        "idx": i,
+                        "unit_cost": _cell_cost(a),
+                        "lead_time": a.get("lead_time") or "",
+                        "maker": a.get("maker") or "",
+                        "part_no": a.get("part_no") or "",
+                        "description": a.get("description") or "",
+                        "quoted_qty": a.get("quoted_qty"),
+                        "quoted_unit": a.get("quoted_unit") or "",
+                        "quoted_price": a.get("quoted_price"),
+                    } for i, a in enumerate(alts or [])],
+                    "alt_low": low,
                 }
             elif declined:
                 cells.setdefault(ln["lid"], {})[str(vr.id)] = {"state": "declined"}
@@ -1276,6 +1339,7 @@ def _line_board(s, rfq) -> dict:
             vid, vname = vendor_of_quote.get(a.vendor_quote_id, (a.vendor_id or 0, ""))
             ln["award"] = {
                 "vendor_quote_id": a.vendor_quote_id,
+                "alt": a.alt,
                 "vendor_id": vid or (a.vendor_id or 0),
                 "vendor": vname or (vendor_names.get(a.vendor_id, "") or ""),
                 "unit_cost": a.unit_cost,
@@ -1375,11 +1439,12 @@ def save_line_awards(rfq_id: int, body: LineAwardsSave, user: dict = Depends(get
                 raise HTTPException(status_code=400, detail="이 딜의 벤더 견적이 아닙니다.")
             # 채택 시점의 값을 사본으로 남긴다 — 벤더가 견적을 고쳐 보내도 무엇을 보고
             # 골랐는지가 남는다(현재가는 vendor_quote_id 를 따라가면 언제든 다시 읽는다).
-            hit = index_doc_by_line(lines_src, q.items or [], kits=True).get(lid) or {}
+            hit, alt = _quote_line(lines_src, q, lid, a.alt)
             if row is None:
                 row = DealLineAward(rfq_id=rfq.id, lid=lid)
                 s.add(row)
             row.vendor_quote_id = q.id
+            row.alt = alt
             row.vendor_id = vendor_of_vrfq.get(q.vendor_rfq_id) or None
             row.unit_cost = _cell_cost(hit)
             row.currency = q.currency or "USD"
@@ -1391,6 +1456,34 @@ def save_line_awards(rfq_id: int, body: LineAwardsSave, user: dict = Depends(get
         s.commit()
         rfq = s.query(RFQ).filter_by(id=rfq_id).first()
         return {"ok": True, "saved": saved, "cleared": cleared, **_line_board(s, rfq)}
+    finally:
+        s.close()
+
+
+class LineModeSave(BaseModel):
+    vendor_quote_id: int
+    lid: str
+    mode: str  # "set" | "alt"
+
+
+@app.put("/api/admin/rfq/{rfq_id}/line-mode", dependencies=[Depends(require_token)])
+def save_line_mode(rfq_id: int, body: LineModeSave):
+    """벤더 견적에서 같은 라인에 달린 여러 줄의 뜻을 정한다 — 세트(합산) 또는 대안(따로 비교).
+    이 견적으로 해 둔 그 줄의 채택은 지운다: 고를 때 보던 값과 다른 값이 되기 때문이다."""
+    if body.mode not in ("set", "alt"):
+        raise HTTPException(status_code=400, detail="mode 는 set 또는 alt 입니다.")
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        q = s.query(VendorQuote).filter_by(id=body.vendor_quote_id).first()
+        vr = s.query(VendorRFQ).filter_by(id=q.vendor_rfq_id).first() if q else None
+        if not rfq or not vr or vr.rfq_id != rfq.id:
+            raise HTTPException(status_code=400, detail="이 딜의 벤더 견적이 아닙니다.")
+        q.line_modes = {**(q.line_modes or {}), body.lid: body.mode}
+        s.query(DealLineAward).filter_by(rfq_id=rfq.id, lid=body.lid, vendor_quote_id=q.id).delete(
+            synchronize_session=False)
+        s.commit()
+        return {"ok": True, **_line_board(s, rfq)}
     finally:
         s.close()
 
@@ -1415,8 +1508,6 @@ def awarded_items(rfq_id: int):
         vq_ids = [a.vendor_quote_id for a in awards.values() if a.vendor_quote_id]
         vq_map = {q.id: q for q in s.query(VendorQuote).filter(VendorQuote.id.in_(vq_ids)).all()} if vq_ids else {}
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
-        # 견적마다 그 문서의 줄을 딜 라인에 붙여 둔다(단가·납기는 벤더가 쓴 것을 쓴다).
-        doc_lines = {qid: index_doc_by_line(lines_src, q.items or [], kits=True) for qid, q in vq_map.items()}
         items, groups, currencies = [], {}, []
         for it in lines_src:
             lid = line_id_of(it)
@@ -1424,7 +1515,8 @@ def awarded_items(rfq_id: int):
             if a is None or not a.vendor_quote_id:
                 continue
             q = vq_map.get(a.vendor_quote_id)
-            hit = (doc_lines.get(a.vendor_quote_id) or {}).get(lid) or {}
+            # 단가·납기는 벤더가 쓴 것을 쓴다. 대안이 있는 줄은 고른 그 대안의 줄이다.
+            hit = _quote_line(lines_src, q, lid, a.alt)[0] if q else {}
             cur = (q.currency if q else a.currency) or "USD"
             if cur not in currencies:
                 currencies.append(cur)

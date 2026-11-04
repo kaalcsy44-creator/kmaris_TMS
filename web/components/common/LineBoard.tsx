@@ -17,8 +17,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchFxRate, fetchLineBoard, saveLineAwards, type PrintBook } from "@/lib/api";
-import type { BoardLine, LineBoard as LineBoardData, LineCell } from "@/lib/types";
+import { fetchFxRate, fetchLineBoard, saveLineAwards, saveLineMode, type PrintBook } from "@/lib/api";
+import type { BoardLine, LineAlt, LineBoard as LineBoardData, LineCell } from "@/lib/types";
 import VendorName from "@/components/common/VendorName";
 import PrintListButton from "@/components/common/PrintListModal";
 
@@ -57,6 +57,21 @@ function today(): string {
 function cmpMoney(v: number, cur: string): string {
   const r = WHOLE.has(cur) ? Math.round(v) : Math.round(v * 100) / 100;
   return money(r, cur);
+}
+
+/** 대안 하나를 칸 하나로 — 나머지 표시·채택 코드가 보통 칸과 같은 길을 타게. */
+function altCell(c: LineCell, a: LineAlt): LineCell {
+  return {
+    ...c,
+    state: a.unit_cost != null && a.unit_cost > 0 ? "quoted" : "no_price",
+    unit_cost: a.unit_cost,
+    lead_time: a.lead_time,
+  };
+}
+
+/** 대안 칸의 설명 — 벤더가 쓴 품번·품명 그대로. */
+function altTitle(a: LineAlt): string {
+  return [a.maker, a.part_no, a.description].filter(Boolean).join(" · ");
 }
 
 function money(v: number | null | undefined, cur?: string): string {
@@ -134,12 +149,28 @@ export default function LineBoard({
   const pickUnsourced = () =>
     setPicked(new Set(lines.filter((l) => l.state === "not_sourced").map((l) => l.lid)));
 
-  async function award(lid: string, vendorQuoteId: number | null) {
+  async function setLineMode(lid: string, vendorQuoteId: number, mode: "set" | "alt") {
     setBusy(true);
     setErr(null);
     setMsg(null);
     try {
-      const d = await saveLineAwards(rfqId, [{ lid, vendor_quote_id: vendorQuoteId }]);
+      const d = await saveLineMode(rfqId, { vendor_quote_id: vendorQuoteId, lid, mode });
+      setData((prev) => ({ ...d, meta: d.meta ?? prev?.meta }));
+      setMsg(mode === "alt" ? `${lid}: shown as separate options.` : `${lid}: added up as one set.`);
+      onChanged?.();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function award(lid: string, vendorQuoteId: number | null, alt: number | null = null) {
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const d = await saveLineAwards(rfqId, [{ lid, vendor_quote_id: vendorQuoteId, alt }]);
       setData((prev) => ({ ...d, meta: d.meta ?? prev?.meta }));
       setMsg(vendorQuoteId ? `${lid} awarded.` : `${lid} cleared.`);
       onChanged?.();
@@ -181,6 +212,19 @@ export default function LineBoard({
   }, [lines]);
 
   // 이 보드에 나온 통화들 — 비교 통화 목록과 환율 조회 대상.
+  // 벤더별 열 수 — 대안을 낸 줄이 있으면 그 벤더 안에서 대안 수만큼 열을 나눈다.
+  const spans = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const v of vendors) {
+      let n = 1;
+      for (const l of lines) n = Math.max(n, cells[l.lid]?.[String(v.vrfq_id)]?.alts?.length ?? 0);
+      m.set(v.vrfq_id, n);
+    }
+    return m;
+  }, [vendors, lines, cells]);
+  const spanOf = (vrfqId: number) => spans.get(vrfqId) ?? 1;
+  const vendorCols = vendors.reduce((n, v) => n + spanOf(v.vrfq_id), 0);
+
   const quoteCurs = useMemo(() => {
     const set = new Set<string>();
     for (const row of Object.values(cells))
@@ -238,18 +282,19 @@ export default function LineBoard({
   // 비교 통화로 본 줄별 최저가(통화가 섞여 서버가 최저가를 못 고른 줄도 여기선 고른다).
   // 값이 온 칸 중 하나라도 환산이 안 되면 그 줄은 고르지 않는다.
   const cmpBest = useMemo(() => {
-    const m = new Map<string, number>();
+    const m = new Map<string, { vrfq: number; alt: number | null }>();
     if (!cmpCur) return m;
     for (const l of lines) {
-      let best: number | null = null;
+      let best: { vrfq: number; alt: number | null } | null = null;
       let bestV: number | null = null;
       let ok = true;
       for (const v of vendors) {
         const c = cells[l.lid]?.[String(v.vrfq_id)];
         if (c?.state !== "quoted" || c.unit_cost == null || Number(c.unit_cost) <= 0) continue;
+        // 칸의 unit_cost 는 대안이 있으면 이미 그중 최저가다.
         const x = conv(c.unit_cost, c.currency);
         if (x == null) { ok = false; break; }
-        if (bestV == null || x < bestV) { bestV = x; best = v.vrfq_id; }
+        if (bestV == null || x < bestV) { bestV = x; best = { vrfq: v.vrfq_id, alt: c.alt_low ?? null }; }
       }
       if (ok && best != null) m.set(l.lid, best);
     }
@@ -257,22 +302,35 @@ export default function LineBoard({
   }, [cmpCur, lines, vendors, cells, conv]);
   // "Take lowest" 대상 — 이름 있는 줄 중 아직 안 고른 줄의 최저가 견적.
   const bestTodo = useMemo(() => {
-    const out: { lid: string; vendor_quote_id: number }[] = [];
+    const out: { lid: string; vendor_quote_id: number; alt: number | null }[] = [];
     for (const l of lines) {
       if (!l.named || l.award) continue;
       if (cmpCur) {
-        const vr = cmpBest.get(l.lid);
-        const id = vr != null ? cells[l.lid]?.[String(vr)]?.vendor_quote_id : undefined;
-        if (id) out.push({ lid: l.lid, vendor_quote_id: id });
+        const b = cmpBest.get(l.lid);
+        const id = b ? cells[l.lid]?.[String(b.vrfq)]?.vendor_quote_id : undefined;
+        if (b && id) out.push({ lid: l.lid, vendor_quote_id: id, alt: b.alt });
       } else if (l.best?.vendor_quote_id) {
-        out.push({ lid: l.lid, vendor_quote_id: l.best.vendor_quote_id });
+        out.push({ lid: l.lid, vendor_quote_id: l.best.vendor_quote_id, alt: l.best.alt_low ?? null });
       }
     }
     return out;
   }, [lines, cells, cmpCur, cmpBest]);
   const bestCount = bestTodo.length;
-  const isBestCell = (l: BoardLine, vrfqId: number) =>
-    cmpCur ? cmpBest.get(l.lid) === vrfqId : !!l.best && l.best.vrfq_id === vrfqId;
+  const isBestCell = (l: BoardLine, vrfqId: number, alt: number | null = null) => {
+    const b = cmpCur ? cmpBest.get(l.lid) : null;
+    if (cmpCur) return !!b && b.vrfq === vrfqId && (b.alt ?? null) === alt;
+    return !!l.best && l.best.vrfq_id === vrfqId && (l.best.alt_low ?? null) === alt;
+  };
+  /** 이 칸(대안이면 그 대안)이 채택된 것인가. */
+  const isAwardCell = (l: BoardLine, c: LineCell | undefined, alt: number | null = null) =>
+    !!l.award && !!c?.vendor_quote_id && l.award.vendor_quote_id === c.vendor_quote_id
+    && (l.award.alt ?? null) === alt;
+  /** 채택된 대안 — 대안 없이 채택된 줄이면 undefined. */
+  const awardedAlt = (l: BoardLine): LineAlt | undefined => {
+    if (l.award?.alt == null) return undefined;
+    const c = Object.values(cells[l.lid] ?? {}).find((x) => x.vendor_quote_id === l.award?.vendor_quote_id);
+    return c?.alts?.find((a) => a.idx === l.award?.alt);
+  };
 
   const cmpTotal = useMemo(() => {
     if (!cmpCur || !awardTotals.length) return null;
@@ -285,7 +343,9 @@ export default function LineBoard({
     return sum;
   }, [cmpCur, awardTotals, conv]);
 
-  // 벤더별 견적 합계(단가×수량) — 값이 온 줄만 센다. 통화가 섞이면 통화별로 따로 더하고,
+  // 벤더별 견적 합계(단가×수량) — 값이 온 줄만 센다. 대안을 낸 줄은 그중 최저가로 세고
+  // (둘 다 사는 것이 아니다), 품목에 안 이어진 운임 같은 줄은 벤더에게 치를 돈이라 더한다.
+  // 통화가 섞이면 통화별로 따로 더하고,
   // 비교 통화를 골랐으면 환산 합계를 한 줄 더 붙인다. 벤더마다 답한 줄 수가 다르면 합계끼리
   // 바로 견줄 수 없으므로 "n/총 lines" 를 함께 보인다.
   const vendorTotals = useMemo(() => {
@@ -299,6 +359,10 @@ export default function LineBoard({
         const cur = (c.currency || "USD").toUpperCase();
         by.set(cur, (by.get(cur) ?? 0) + Number(c.unit_cost) * Number(l.qty || 1));
         n++;
+      }
+      for (const ch of v.charges ?? []) {
+        const cur = (ch.currency || "USD").toUpperCase();
+        by.set(cur, (by.get(cur) ?? 0) + Number(ch.amount));
       }
       const sums = [...by.entries()];
       let cmp: number | null = null;
@@ -315,6 +379,11 @@ export default function LineBoard({
     return out;
   }, [vendors, lines, cells, cmpCur, conv]);
   const hasVendorTotals = [...vendorTotals.values()].some((t) => t.n > 0);
+  const hasCharges = vendors.some((v) => v.charges?.length);
+  const chargeText = (v: LineBoardData["vendors"][number]): string =>
+    (v.charges ?? []).map((c) => money(c.amount, c.currency)).join("\n");
+  const chargeTitle = (v: LineBoardData["vendors"][number]): string =>
+    (v.charges ?? []).map((c) => `${c.description}: ${money(c.amount, c.currency)}`).join("\n");
   /** 합계 칸의 줄들 — 통화별 합계, 환산 합계(필요할 때), 답한 줄 수. */
   const vendorTotalLines = (vrfqId: number): string[] => {
     const t = vendorTotals.get(vrfqId);
@@ -338,8 +407,8 @@ export default function LineBoard({
 
   function buildPrint(): PrintBook {
     const meta = data?.meta;
-    const cellText = (l: BoardLine, vrfqId: number): string => {
-      const c = cells[l.lid]?.[String(vrfqId)];
+    const cellText = (l: BoardLine, vrfqId: number, alt: LineAlt | null = null): string => {
+      const c = alt ? altCell(cells[l.lid][String(vrfqId)], alt) : cells[l.lid]?.[String(vrfqId)];
       if (!c) return "";
       if (c.state === "declined") return "✕ declined";
       if (c.state === "omitted") return "– not quoted";
@@ -347,38 +416,55 @@ export default function LineBoard({
       if (c.state === "sent") return "• waiting";
       // ✓(U+2713) — PDF 글꼴(Noto Sans KR)에 ✔(U+2714) 글리프가 없어 빈 네모로 찍힌다.
       const marks = [
-        l.award && c.vendor_quote_id && l.award.vendor_quote_id === c.vendor_quote_id ? "✓" : "",
-        isBestCell(l, vrfqId) ? "★" : "",
+        isAwardCell(l, c, alt?.idx ?? null) ? "✓" : "",
+        isBestCell(l, vrfqId, alt?.idx ?? null) ? "★" : "",
       ].filter(Boolean).join(" ");
       return [
+        alt ? [`Option ${alt.idx + 1}`, alt.maker].filter(Boolean).join(" · ") : "",
         `${marks ? marks + " " : ""}${money(c.unit_cost, c.currency)}`,
         cmpText(c.unit_cost, c.currency),
         c.lead_time ? `LT ${c.lead_time}` : "",
       ].filter(Boolean).join("\n");
     };
+    /** 벤더 한 곳의 인쇄 칸들 — 화면처럼 대안 수만큼 나눈다. */
+    const vendorCells = (l: BoardLine, vrfqId: number): string[] => {
+      const alts = cells[l.lid]?.[String(vrfqId)]?.alts ?? [];
+      const n = spanOf(vrfqId);
+      if (!alts.length) return [cellText(l, vrfqId), ...Array<string>(n - 1).fill("")];
+      return Array.from({ length: n }, (_, i) => (alts[i] ? cellText(l, vrfqId, alts[i]) : ""));
+    };
+    /** 벤더별로 한 값 + 대안 열 수만큼의 빈 칸 — 합계 줄용. */
+    const footCells = (fn: (v: LineBoardData["vendors"][number]) => string): string[] =>
+      vendors.flatMap((v) => [fn(v), ...Array<string>(spanOf(v.vrfq_id) - 1).fill("")]);
     const lastLabel = mode === "award" ? "Buying from" : "Status";
     const rows: string[][] = lines.map((l) => [
       String(l.no),
       l.part_no || "",
       l.description || "",
       `${Number(l.qty || 1)}${l.unit ? ` ${l.unit}` : ""}`,
-      ...vendors.map((v) => cellText(l, v.vrfq_id)),
+      ...vendors.flatMap((v) => vendorCells(l, v.vrfq_id)),
       l.award
-        ? [l.award.vendor, money(l.award.unit_cost, l.award.currency), cmpText(l.award.unit_cost, l.award.currency)]
+        ? [l.award.vendor, awardedAlt(l) ? `Option ${awardedAlt(l)!.idx + 1}` : "",
+           money(l.award.unit_cost, l.award.currency), cmpText(l.award.unit_cost, l.award.currency)]
             .filter(Boolean).join("\n")
         : STATE_LABEL[l.state],
     ]);
+    if (hasCharges) {
+      rows.push(["", "", "Other charges (not on a line)", "",
+                 ...footCells((v) => (v.charges ?? []).map((c) => `${c.description} ${money(c.amount, c.currency)}`).join("\n")),
+                 ""]);
+    }
     if (hasVendorTotals) {
       rows.push([
         "", "", "Quote total", "",
-        ...vendors.map((v) => vendorTotalLines(v.vrfq_id).join("\n")),
+        ...footCells((v) => vendorTotalLines(v.vrfq_id).join("\n")),
         "",
       ]);
     }
     if (mode === "award" && awardTotals.length) {
       rows.push([
         "", "", "Awarded purchase total", "",
-        ...vendors.map(() => ""),
+        ...footCells(() => ""),
         [
           ...awardTotals.map(([cur, v]) => money(v, cur)),
           cmpTotal != null && (awardTotals.length > 1 || awardTotals[0][0] !== cmpCur) ? `≈ ${cmpMoney(cmpTotal, cmpCur)}` : "",
@@ -404,7 +490,11 @@ export default function LineBoard({
         { label: "Part No.", width: 11 },
         { label: "Description", width: 16 },
         { label: "Qty", width: 4, align: "right" },
-        ...vendors.map((v) => ({ label: `${v.vendor}\n${v.kmaris_rfq_no}`, width: 11, align: "right" as const })),
+        ...vendors.flatMap((v) => Array.from({ length: spanOf(v.vrfq_id) }, (_, i) => ({
+          label: `${v.vendor}${spanOf(v.vrfq_id) > 1 ? ` (${i + 1})` : ""}\n${v.kmaris_rfq_no}`,
+          width: 11,
+          align: "right" as const,
+        }))),
         { label: lastLabel, width: 13 },
       ],
       rows,
@@ -494,7 +584,7 @@ export default function LineBoard({
               <th className="lb-desc">Description</th>
               <th className="lb-qty">Qty</th>
               {vendors.map((v) => (
-                <th key={v.vrfq_id} className={"lb-v" + (v.declined ? " out" : "")}>
+                <th key={v.vrfq_id} colSpan={spanOf(v.vrfq_id)} className={"lb-v" + (v.declined ? " out" : "")}>
                   <VendorName entries={[{ name: v.vendor, state: v.declined ? "declined" : v.quotes.length ? "quoted" : "plain" }]} />
                   <span className="lb-v-no">{v.kmaris_rfq_no}</span>
                 </th>
@@ -524,28 +614,63 @@ export default function LineBoard({
                 <td className="lb-part">{l.part_no || <span className="muted">—</span>}</td>
                 <td className="lb-desc">{l.description || <span className="muted">—</span>}</td>
                 <td className="lb-qty">{Number(l.qty || 1)}{l.unit ? ` ${l.unit}` : ""}</td>
-                {vendors.map((v) => {
+                {vendors.flatMap((v) => {
                   const c = cells[l.lid]?.[String(v.vrfq_id)];
-                  return (
+                  const span = spanOf(v.vrfq_id);
+                  const canMode = mode === "award" && !busy && !!c?.vendor_quote_id;
+                  if (c?.alts?.length) {
+                    const tds = c.alts.map((a) => {
+                      const ac = altCell(c, a);
+                      return (
+                        <Cell
+                          key={`${v.vrfq_id}-${a.idx}`}
+                          cell={ac}
+                          alt={a}
+                          isBest={isBestCell(l, v.vrfq_id, a.idx)}
+                          cmp={ac.state === "quoted" ? cmpText(a.unit_cost, c.currency) : ""}
+                          isAward={isAwardCell(l, c, a.idx)}
+                          canAward={mode === "award" && l.named && !busy && ac.state === "quoted"}
+                          onModeSwitch={a.idx === 0 && canMode
+                            ? () => setLineMode(l.lid, c.vendor_quote_id!, "set") : undefined}
+                          onAward={() => {
+                            const on = isAwardCell(l, c, a.idx);
+                            award(l.lid, on ? null : c.vendor_quote_id!, on ? null : a.idx);
+                          }}
+                        />
+                      );
+                    });
+                    for (let i = c.alts.length; i < span; i++)
+                      tds.push(<td key={`${v.vrfq_id}-pad-${i}`} className="lb-c empty" />);
+                    return tds;
+                  }
+                  return [
                     <Cell
                       key={v.vrfq_id}
                       cell={c}
+                      colSpan={span}
                       isBest={!!c && isBestCell(l, v.vrfq_id)}
                       cmp={c?.state === "quoted" ? cmpText(c.unit_cost, c.currency) : ""}
-                      isAward={!!l.award && !!c?.vendor_quote_id && l.award.vendor_quote_id === c.vendor_quote_id}
+                      isAward={isAwardCell(l, c)}
                       canAward={mode === "award" && l.named && !busy && c?.state === "quoted"}
+                      onModeSwitch={canMode && (c?.kit_lines ?? 0) > 1
+                        ? () => setLineMode(l.lid, c!.vendor_quote_id!, "alt") : undefined}
                       onAward={() => {
                         if (!c?.vendor_quote_id) return;
                         const on = l.award?.vendor_quote_id === c.vendor_quote_id;
                         award(l.lid, on ? null : c.vendor_quote_id);
                       }}
-                    />
-                  );
+                    />,
+                  ];
                 })}
                 <td className="lb-state">
                   {l.award ? (
                     <span className="lb-award">
                       <VendorName name={l.award.vendor} />
+                      {awardedAlt(l) ? (
+                        <span className="lb-alt" title={altTitle(awardedAlt(l)!)}>
+                          Option {awardedAlt(l)!.idx + 1}
+                        </span>
+                      ) : null}
                       <b>{money(l.award.unit_cost, l.award.currency)}</b>
                       {cmpText(l.award.unit_cost, l.award.currency) ? (
                         <span className="lb-cmpv">{cmpText(l.award.unit_cost, l.award.currency)}</span>
@@ -565,6 +690,20 @@ export default function LineBoard({
           </tbody>
           {hasVendorTotals || (mode === "award" && awardTotals.length) ? (
             <tfoot>
+              {hasCharges ? (
+                <tr className="lb-vtotal">
+                  <td className="lb-foot" colSpan={4 + (pickable ? 1 : 0)}>
+                    Other charges (not on a line)
+                  </td>
+                  {vendors.map((v) => (
+                    <td key={v.vrfq_id} colSpan={spanOf(v.vrfq_id)} className="lb-foot lb-c num"
+                        title={chargeTitle(v)}>
+                      {chargeText(v)}
+                    </td>
+                  ))}
+                  <td className="lb-foot" />
+                </tr>
+              ) : null}
               {hasVendorTotals ? (
                 <tr className="lb-vtotal">
                   <td className="lb-foot" colSpan={4 + (pickable ? 1 : 0)}>
@@ -573,7 +712,7 @@ export default function LineBoard({
                   {vendors.map((v) => {
                     const ls = vendorTotalLines(v.vrfq_id);
                     return (
-                      <td key={v.vrfq_id} className="lb-foot lb-c num">
+                      <td key={v.vrfq_id} colSpan={spanOf(v.vrfq_id)} className="lb-foot lb-c num">
                         {ls.length ? (
                           <>
                             <b>{ls[0]}</b>
@@ -591,7 +730,7 @@ export default function LineBoard({
               ) : null}
               {mode === "award" && awardTotals.length ? (
               <tr>
-                <td className="lb-foot" colSpan={4 + (pickable ? 1 : 0) + vendors.length}>
+                <td className="lb-foot" colSpan={4 + (pickable ? 1 : 0) + vendorCols}>
                   Awarded purchase total
                 </td>
                 <td className="lb-foot num">
@@ -628,8 +767,17 @@ function Cell({
   canAward,
   onAward,
   cmp = "",
+  alt,
+  colSpan,
+  onModeSwitch,
 }: {
   cell?: LineCell;
+  /** 벤더가 낸 대안 중 하나를 보이는 칸이면 그 대안. */
+  alt?: LineAlt;
+  /** 이 벤더가 다른 줄에서 대안으로 열을 나눴으면 그 열 수만큼 넓힌다. */
+  colSpan?: number;
+  /** 세트 ↔ 대안 전환. 있으면 칸 아래에 작은 버튼이 선다. */
+  onModeSwitch?: () => void;
   /** 비교 통화 환산 한 줄("≈ $134.28") — 받은 통화 값 아래에 작게. */
   cmp?: string;
   isBest: boolean;
@@ -638,15 +786,24 @@ function Cell({
   onAward: () => void;
 }) {
   // 빈 칸 = 이 벤더에게 이 줄을 묻지 않았다. 0 이나 "없음"과 다른 뜻이라 비워 둔다.
-  if (!cell) return <td className="lb-c empty" />;
+  if (!cell) return <td className="lb-c empty" colSpan={colSpan} />;
   const cls =
     "lb-c c-" + cell.state + (isBest ? " best" : "") + (isAward ? " award" : "");
+  const altLabel = alt ? (
+    <span className="lb-alt"><b>Option {alt.idx + 1}</b>{alt.maker ? ` · ${alt.maker}` : ""}</span>
+  ) : null;
+  // 줄 값은 딜 수량 기준으로 환산돼 있다 — 벤더가 쓴 수량·단가가 다르면 함께 적어 둔다.
+  const altQty = alt && alt.quoted_qty != null && alt.quoted_price != null
+    ? `${Number(alt.quoted_qty)}${alt.quoted_unit ? ` ${alt.quoted_unit}` : ""} × ${money(Number(alt.quoted_price), cell.currency)}`
+    : "";
   const body =
     cell.state === "quoted" ? (
       <>
+        {altLabel}
         <b>{money(cell.unit_cost, cell.currency)}</b>
         {cmp ? <span className="lb-cmpv">{cmp}</span> : null}
         {cell.lead_time ? <span className="lb-lt">{cell.lead_time}</span> : null}
+        {altQty ? <span className="lb-lt">{altQty}</span> : null}
         {cell.kit_lines && cell.kit_lines > 1 ? (
           <span className="lb-lt" title="The vendor priced this line as several parts — the price is the set total per unit">
             {cell.kit_lines}-line set
@@ -658,25 +815,39 @@ function Cell({
     ) : cell.state === "omitted" ? (
       <span className="lb-mark">–</span>
     ) : cell.state === "no_price" ? (
-      <span className="lb-mark">?</span>
+      <>
+        {altLabel}
+        <span className="lb-mark">?</span>
+      </>
     ) : (
       <span className="lb-mark">•</span>
     );
+  const modeBtn = onModeSwitch ? (
+    <button type="button" className="lb-mode" onClick={onModeSwitch}
+            title={alt
+              ? "These lines are parts of one item — add them up as a set"
+              : "These lines are alternatives — compare them in separate columns"}>
+      {alt ? "Add up as set" : "Split as options"}
+    </button>
+  ) : null;
+  const note = alt ? altTitle(alt) : "";
   if (!canAward)
     return (
-      <td className={cls} title={CELL_TITLE[cell.state]}>
+      <td className={cls} colSpan={colSpan} title={note || CELL_TITLE[cell.state]}>
         {body}
+        {modeBtn}
       </td>
     );
   return (
-    <td className={cls + " pick"}>
+    <td className={cls + " pick"} colSpan={colSpan}>
       <button
         type="button"
         onClick={onAward}
-        title={isAward ? "Awarded — click to clear" : "Buy this line here"}
+        title={[note, isAward ? "Awarded — click to clear" : "Buy this line here"].filter(Boolean).join("\n")}
       >
         {body}
       </button>
+      {modeBtn}
     </td>
   );
 }

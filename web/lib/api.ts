@@ -2653,11 +2653,22 @@ export function fetchLineBoard(rfqId: number): Promise<LineBoard> {
   return get<LineBoard>(`/api/admin/rfq/${rfqId}/line-board`);
 }
 
+/** 벤더 견적에서 같은 라인에 달린 여러 줄의 뜻 — 세트(합산) 또는 대안(따로 비교). */
+export function saveLineMode(
+  rfqId: number,
+  body: { vendor_quote_id: number; lid: string; mode: "set" | "alt" }
+): Promise<LineBoard> {
+  return put<LineBoard>(`/api/admin/rfq/${rfqId}/line-mode`, body).then((r) => {
+    invalidateCache("rfq:line-board:");
+    return r;
+  });
+}
+
 /** 줄별 매입처 채택 저장. 보낸 줄만 반영하고, vendor_quote_id 를 비우면 그 줄은 취소한다.
  *  응답은 저장 뒤의 보드 전체라 화면이 다시 조회하지 않아도 된다. */
 export function saveLineAwards(
   rfqId: number,
-  awards: { lid: string; vendor_quote_id: number | null; reason?: string }[]
+  awards: { lid: string; vendor_quote_id: number | null; alt?: number | null; reason?: string }[]
 ): Promise<LineBoard & { ok: boolean; saved: number; cleared: number }> {
   return put<LineBoard & { ok: boolean; saved: number; cleared: number }>(
     `/api/admin/rfq/${rfqId}/line-awards`,
