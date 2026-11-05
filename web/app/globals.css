@@ -11878,6 +11878,9 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   .pane-row,
   .pane-tabs {
     position: static;
+    /* flex 자식은 position:static 이어도 z-index 가 먹는다 — 남겨 두면 스크롤할 때
+       번호 행이 고정된 전환 탭 줄을 덮는다. */
+    z-index: auto;
   }
   .pane-row {
     height: auto;
@@ -11908,7 +11911,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
     flex: 0 0 auto;
     position: sticky;
     top: 0;
-    z-index: 6;
+    z-index: 8;   /* 본문의 고정 요소(저장바 5·표 칸 4)보다 위 */
     gap: 6px;
     margin-bottom: 10px;
     background: #fff;
