@@ -17783,6 +17783,12 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .form-fieldset.vm-read table.mini {
   width: 100% !important;
 }
+/* 좁은 화면 규칙(table.mini.wide → display:block)은 표를 스스로 스크롤하게 만드는 대신
+   안쪽 표가 내용 폭으로 줄어 오른쪽이 빈다. 상자(.table-wrap)가 가로 스크롤을 맡는 표는
+   표 그대로 두어 폭을 칸끼리 나눠 쓰게 한다. */
+.form-fieldset.vm-read .table-wrap > table.mini.wide {
+  display: table;
+}
 /* :not(#vm-read-x) 는 구체성 올리기용(id 1개) — 저장된 컬럼 폭 규칙(.ig-<id> tbody
    td:not(.ig-foot):not(.ig-option-cell):nth-child(n))이 본문 칸에서 이 규칙을 이겨, 읽기
    화면에도 편집 폭(Qty 168px 등)이 그대로 박혀 Remark·Category 가 눌려 있었다. */
