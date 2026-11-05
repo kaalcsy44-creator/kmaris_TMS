@@ -176,6 +176,45 @@ AGG_CACHE_TTL = float(os.environ.get("AGG_CACHE_TTL", "60"))  # 초. 0 이하면
 _AGG_CACHE: dict = {}
 _AGG_CACHE_LOCK = threading.Lock()
 _DATA_GEN = 0  # 성공한 쓰기(POST/PUT/PATCH/DELETE)마다 +1 → 모든 집계 캐시 무효화.
+_AGG_CACHE_MAX = 64  # 키가 (함수·사용자·인자) 조합이라 묶어 두지 않으면 지난 결과가 계속 쌓인다.
+
+
+def _agg_store(key, entry) -> None:
+    """캐시 저장 + 정리. _AGG_CACHE_LOCK 안에서 부른다.
+    다시 쓸 수 없는 항목(만료·지난 세대)을 비우고, 그래도 많으면 곧 만료될 것부터 지운다."""
+    now = time.time()
+    for k in [k for k, v in _AGG_CACHE.items() if v[0] <= now or v[1] != _DATA_GEN]:
+        del _AGG_CACHE[k]
+    _AGG_CACHE[key] = entry
+    while len(_AGG_CACHE) > _AGG_CACHE_MAX:
+        del _AGG_CACHE[min(_AGG_CACHE, key=lambda k: _AGG_CACHE[k][0])]
+
+
+def _start_malloc_tuning() -> None:
+    """glibc 가 잡고 있는 빈 메모리를 운영체제로 돌려준다(Linux 전용, 그 외는 아무것도 안 함).
+    스레드마다 할당 구역(arena)이 생기면 요청이 끝나도 메모리가 프로세스에 남아, 사용량이
+    오르기만 하는 계단이 된다. 구역 수를 줄이고 주기적으로 비운 페이지를 반납한다.
+    DB 를 건드리지 않으므로 Neon 을 깨우지 않는다."""
+    if not sys.platform.startswith("linux") or os.environ.get("MALLOC_TUNE", "1") == "0":
+        return
+    try:
+        import ctypes
+        libc = ctypes.CDLL("libc.so.6")
+        libc.mallopt(-8, 2)  # M_ARENA_MAX — 스레드가 뜨기 전에 불러야 효과가 있다.
+        trim = libc.malloc_trim
+    except (OSError, AttributeError) as exc:
+        print(f"[WARN] malloc tuning unavailable: {exc}", file=sys.stderr)
+        return
+
+    def _loop() -> None:
+        while True:
+            time.sleep(60)
+            trim(0)
+
+    threading.Thread(target=_loop, daemon=True, name="malloc-trim").start()
+
+
+_start_malloc_tuning()
 
 
 def bump_data_generation() -> None:
@@ -206,17 +245,21 @@ def cached_aggregate(ttl: float | None = None):
                 hash(key)
             except TypeError:
                 return fn(*args, **kwargs)  # 캐시 불가한 인자면 그냥 계산.
-            now = time.time()
-            with _AGG_CACHE_LOCK:
-                gen = _DATA_GEN
-                hit = _AGG_CACHE.get(key)
-                if hit and hit[0] > now and hit[1] == gen:
-                    return hit[2]
+            def lookup():
+                with _AGG_CACHE_LOCK:
+                    hit = _AGG_CACHE.get(key)
+                    if hit and hit[0] > time.time() and hit[1] == _DATA_GEN:
+                        return hit
+                return None
+
+            hit = lookup()
+            if hit:
+                return hit[2]
             result = fn(*args, **kwargs)
             with _AGG_CACHE_LOCK:
                 # 계산 도중 쓰기가 있었으면(_DATA_GEN 상승) 저장하되 그 세대로 태그해,
                 # 다음 조회에서 최신 세대와 불일치 → 자동 재계산되게 한다(오염 방지).
-                _AGG_CACHE[key] = (now + eff_ttl, _DATA_GEN, result)
+                _agg_store(key, (time.time() + eff_ttl, _DATA_GEN, result))
             return result
         return wrapper
     return deco
