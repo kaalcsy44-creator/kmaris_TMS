@@ -20109,6 +20109,26 @@ select.compose-tpl-version {
   .ar-inv-bar {
     position: static;
   }
+  /* 넓은 화면의 '편집창만 따로 스크롤' 구조를 이 폭에선 푼다. 안쪽이 스크롤 상자로 남으면
+     (1) Read/Edit 줄이 그 바깥이라 고정을 풀어도 계속 남고, (2) 세로 flex 안에서 탭 줄
+     (Detail·Email)이 4px 로 눌려 사라지며, (3) 본문 칸이 300px 남짓만 남는다.
+     스크롤은 .pl-modal-body 하나로 — 고정되는 것은 전환 탭 줄뿐이다. */
+  .project-stage-pane:has(> .stage-fill) {
+    display: block;
+  }
+  .embedded-workspace.stage-fill {
+    display: block;
+    overflow: visible;
+  }
+  .pl-modal .intl-detail {
+    height: auto;
+    min-height: 100%;
+    flex: none;
+  }
+  .project-workspace-layout {
+    height: auto;
+    flex: none;
+  }
   /* 조작 버튼은 한 줄로 — 여백을 줄여 Read/Edit·Copy·Print·Prev·Next 가 다 들어가게 한다. */
   .stage-pane-nav {
     flex: 1 1 100%;
