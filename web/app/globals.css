@@ -11886,7 +11886,6 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
     height: auto;
     overflow: visible;
   }
-  .pane-row .embedded-record-picker,
   .pane-row .vrfq-head-left,
   .embedded-record-bar.pane-row {
     flex-wrap: wrap;
@@ -11897,12 +11896,6 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
     padding-bottom: 6px;
     /* 이 폭에선 행이 흐름 안에서 여러 줄로 접힌다 — 잘라내면 안 된다. */
     overflow: visible;
-  }
-  /* 좁은 화면에선 가로 스크롤 대신 그냥 접는다(세로로 늘어날 공간이 있다).
-     넘치지 않게 되므로 ‹ › 버튼도 저절로 사라진다. */
-  .rec-strip .embedded-record-picker {
-    flex-wrap: wrap;
-    overflow-x: visible;
   }
   /* 스크롤해도 남는 줄은 이것 하나 — 전환 탭 + Prev/Next. */
   .pl-pane-bar {
@@ -20113,6 +20106,32 @@ select.compose-tpl-version {
   .ar-inv-bar {
     position: static;
   }
+  /* 칩·버튼 줄은 접지 않고 옆으로 민다 — 벤더가 많으면 칩만 몇 줄이 되어 본문이 밀려났다.
+     칩 레인(.rec-strip)이 한 행을 다 쓰고, 버튼 줄도 같은 방식으로 스크롤해 잘리지 않게 한다. */
+  .embedded-record-bar .rec-strip {
+    flex: 1 1 100%;
+  }
+  .rec-strip .embedded-record-picker,
+  .vrfq-head-right,
+  .lb-actions {
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .vrfq-head-right,
+  .lb-actions {
+    flex: 1 1 100%;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    padding-bottom: 2px;
+  }
+  .vrfq-head-right > *,
+  .lb-actions > * {
+    flex: none;
+    white-space: nowrap;
+  }
   /* 넓은 화면의 '편집창만 따로 스크롤' 구조를 이 폭에선 푼다. 안쪽이 스크롤 상자로 남으면
      (1) Read/Edit 줄이 그 바깥이라 고정을 풀어도 계속 남고, (2) 세로 flex 안에서 탭 줄
      (Detail·Email)이 4px 로 눌려 사라지며, (3) 본문 칸이 300px 남짓만 남는다.
@@ -20167,6 +20186,22 @@ select.compose-tpl-version {
   .pl-pane-bar .stage-pane-prev,
   .pl-pane-bar .stage-pane-next {
     padding: 5px 11px;
+  }
+}
+/* 터치 기기는 손가락으로 밀면 되니 ‹ › 와 스크롤바를 뺀다(마우스로 보는 좁은 창에는 남긴다). */
+@media (max-width: 980px) and (hover: none) {
+  .rec-strip-nav {
+    display: none;
+  }
+  .rec-strip::before { left: 0; }
+  .rec-strip::after { right: 0; }
+  .vrfq-head-right,
+  .lb-actions {
+    scrollbar-width: none;
+  }
+  .vrfq-head-right::-webkit-scrollbar,
+  .lb-actions::-webkit-scrollbar {
+    display: none;
   }
 }
 @media (max-width: 480px) {
