@@ -24,8 +24,10 @@ export type ItemCol = {
   phone?: boolean;
 };
 
-/** 폰에서 품목표를 "핵심 칸만" 으로 접을지 — 표마다가 아니라 앱 전체 하나의 스위치. */
-const PHONE_FOLD_KEY = "ktms.itemgrid.phoneFold";
+/** 폰에서 품목표를 "핵심 칸만" 으로 접을지 — 표마다가 아니라 앱 전체 하나의 스위치.
+ *  기본은 PC 와 같은 전체 칸(옆으로 밀어 본다). 접으면 Remark·Lead Time·합계가 사라져
+ *  "없는 값"으로 읽혔다. 기본값이 뒤집혔으므로 예전 저장값을 물려받지 않게 키를 새로 쓴다. */
+const PHONE_FOLD_KEY = "ktms.itemgrid.phoneFold.v2";
 /** 접기가 동작하는 화면 폭 — globals.css 의 품목표 폰 규칙과 같은 경계를 쓴다. */
 const PHONE_MAX = 640;
 
@@ -95,11 +97,11 @@ export function useItemGrid(
   }, [cols]);
   const tableClass = `ig-${tableId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const foldable = useMemo(() => cols.some((c) => c.phone), [cols]);
-  // 기본값은 "접힘". localStorage 는 첫 렌더 뒤에 읽어 서버/클라 첫 그림을 같게 유지한다.
-  const [phoneFold, setPhoneFold] = useState(true);
+  // 기본값은 "펼침". localStorage 는 첫 렌더 뒤에 읽어 서버/클라 첫 그림을 같게 유지한다.
+  const [phoneFold, setPhoneFold] = useState(false);
   useEffect(() => {
     try {
-      setPhoneFold(window.localStorage.getItem(PHONE_FOLD_KEY) !== "0");
+      setPhoneFold(window.localStorage.getItem(PHONE_FOLD_KEY) === "1");
     } catch {
       /* 저장소를 못 읽으면 기본값 유지 */
     }
@@ -262,7 +264,7 @@ export function ItemColsButton({ grid }: { grid: ItemGridApi }) {
       {grid.foldable ? (
         <button
           type="button"
-          className={`ig-fold-btn${grid.phoneFold ? "" : " on"}`}
+          className={`ig-fold-btn${grid.phoneFold ? " on" : ""}`}
           onClick={grid.togglePhoneFold}
           title={
             grid.phoneFold

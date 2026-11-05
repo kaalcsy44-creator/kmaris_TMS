@@ -17326,7 +17326,7 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
     white-space: nowrap;
     cursor: pointer;
   }
-  /* 전체 칸을 펼쳐 둔 상태 — 지금이 "평소와 다른 모드" 임을 눌린 모양으로 알린다. */
+  /* 핵심 칸만 접어 둔 상태 — 지금이 "평소와 다른 모드" 임을 눌린 모양으로 알린다. */
   .ig-fold-btn.on {
     background: var(--navy);
     border-color: var(--navy);
@@ -17833,6 +17833,21 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .form-fieldset.vm-read table.mini td {
   position: static !important;
   box-shadow: none !important;
+}
+/* 폰: 품목표는 전체 칸을 옆으로 민다 — 어느 줄인지 놓치지 않게 번호 칸만 왼쪽에 고정한다.
+   체크박스까지 고정하면 좁은 화면을 그만큼 먹고, 실제 폭이 left:32px 전제보다 넓어 두 칸
+   사이 틈으로 지나가는 글자가 비쳤다. 비교표(.lb-table)와 같은 규칙이다. */
+@media (max-width: 640px) {
+  .table-wrap table.mini.wide.lead-tools :is(th.row-tools, td.row-tools) {
+    position: static;
+  }
+  .table-wrap table.mini.wide.lead-tools :is(th.seq, td.seq) {
+    left: 0;
+  }
+  .form-fieldset.vm-read .table-wrap table.mini.wide.lead-tools :is(th.seq, td.seq) {
+    position: sticky !important;
+    box-shadow: 2px 0 4px -2px rgba(11, 29, 58, 0.18) !important;
+  }
 }
 /* 편집용 컬럼 손잡이(드래그 리사이저)도 읽기 화면에선 잡음이다. */
 .form-fieldset.vm-read .pl-col-resizer {
