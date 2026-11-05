@@ -12036,6 +12036,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   .pane-tabs {
     flex-wrap: nowrap;
     overflow-x: auto;
+    overflow-y: hidden;   /* 가로만 — 안 그러면 탭 줄에 세로 ▲▼ 가 붙는다 */
     padding: 3px 4px 0;
   }
   .pane-tabs button {
@@ -20119,6 +20120,11 @@ select.compose-tpl-version {
   .embedded-workspace.stage-fill {
     display: block;
     overflow: visible;
+  }
+  /* 가로 flex 로 두면 .intl-detail 이 창 높이로 늘려 묶여, 내용이 그 밖으로 넘친다 —
+     고정 줄은 부모가 끝나는 지점(창 한 칸)에서 같이 밀려 올라갔다. */
+  .pl-modal-body:has(> .intl-detail) {
+    display: block;
   }
   .pl-modal .intl-detail {
     height: auto;
