@@ -2893,6 +2893,32 @@ export function PipelineModal({
 
   const isService = (isNewProject ? newWorkType : r.work_type || "부품공급") === "서비스";
   const chain = buildStageChain(r, rSteps);
+  // Prev·Next 는 한 덩이 — 좁은 화면에서 줄이 바뀌어도 둘이 갈라지지 않게.
+  // 넓은 화면은 단계 머리, 좁은 화면은 고정되는 전환 탭 줄에 놓인다.
+  const stageMove = (
+    <span className="stage-pane-move">
+      <button
+        type="button"
+        className="stage-pane-prev"
+        onClick={() => setSelectedStage((s) => Math.max(s - 1, 1))}
+        disabled={selectedStage <= 1}
+        aria-label="Previous stage"
+        title={selectedStage > 1 ? `Prev: ${selectedStage - 1}. ${rSteps[selectedStage - 2] ?? ""}` : undefined}
+      >
+        <span aria-hidden>← </span><span className="spm-word">Prev</span>
+      </button>
+      <button
+        type="button"
+        className="stage-pane-next"
+        onClick={() => setSelectedStage((s) => Math.min(s + 1, rSteps.length))}
+        disabled={selectedStage >= rSteps.length}
+        aria-label="Next stage"
+        title={selectedStage < rSteps.length ? `Next: ${selectedStage + 1}. ${rSteps[selectedStage] ?? ""}` : undefined}
+      >
+        <span className="spm-word">Next</span><span aria-hidden> →</span>
+      </button>
+    </span>
+  );
 
   function onBackdropMouseDown(e: React.MouseEvent<HTMLDivElement>) {
     // 오버레이 스크롤바를 잡은 것은 배경 클릭이 아니다 — 끌어서 화면을 내릴 수 있게 둔다.
@@ -3225,6 +3251,7 @@ export function PipelineModal({
         <div className="pl-modal-body">
           <div className="intl-detail">
             {/* 모바일 전환 탭 — 좁은 화면에서만 노출(데스크톱은 CSS 로 숨김). */}
+            <div className="pl-pane-bar">
             <div className="pl-pane-tabs" role="tablist" aria-label="Panel">
               <button
                 type="button"
@@ -3244,6 +3271,9 @@ export function PipelineModal({
               >
                 {selectedStage}. {rSteps[selectedStage - 1] ?? "Detail"}
               </button>
+            </div>
+            {/* 좁은 화면에선 이 줄만 고정되므로 단계 이동도 여기 둔다(단계 머리의 것은 CSS 로 감춘다). */}
+            {!isNewProject && mobilePane === "stage" ? stageMove : null}
             </div>
             <div
               className={`project-workspace-layout mobile-pane-${mobilePane}${infoCollapsed ? " info-collapsed" : ""}`}
@@ -3406,27 +3436,7 @@ export function PipelineModal({
                       </button>
                     </>
                   ) : null}
-                  {/* Prev·Next 는 한 덩이 — 좁은 화면에서 줄이 바뀌어도 둘이 갈라지지 않게. */}
-                  <span className="stage-pane-move">
-                  <button
-                    type="button"
-                    className="stage-pane-prev"
-                    onClick={() => setSelectedStage((s) => Math.max(s - 1, 1))}
-                    disabled={selectedStage <= 1}
-                    title={selectedStage > 1 ? `Prev: ${selectedStage - 1}. ${rSteps[selectedStage - 2] ?? ""}` : undefined}
-                  >
-                    <span aria-hidden>← </span>Prev
-                  </button>
-                  <button
-                    type="button"
-                    className="stage-pane-next"
-                    onClick={() => setSelectedStage((s) => Math.min(s + 1, rSteps.length))}
-                    disabled={selectedStage >= rSteps.length}
-                    title={selectedStage < rSteps.length ? `Next: ${selectedStage + 1}. ${rSteps[selectedStage] ?? ""}` : undefined}
-                  >
-                    Next<span aria-hidden> →</span>
-                  </button>
-                  </span>
+                  {stageMove}
                 </div>
               ) : null}
             </div>

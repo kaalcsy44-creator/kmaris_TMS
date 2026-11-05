@@ -10892,6 +10892,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   grid-column: 3;
 }
 /* 모바일 전용 정보/단계 전환 탭 — 데스크톱에선 2단 동시 표시라 숨긴다. */
+.pl-pane-bar,
 .pl-pane-tabs {
   display: none;
 }
@@ -11900,14 +11901,23 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
     flex-wrap: wrap;
     overflow-x: visible;
   }
-  .pl-pane-tabs {
+  /* 스크롤해도 남는 줄은 이것 하나 — 전환 탭 + Prev/Next. */
+  .pl-pane-bar {
     display: flex;
+    align-items: center;
     flex: 0 0 auto;
     position: sticky;
     top: 0;
     z-index: 6;
-    gap: 2px;
+    gap: 6px;
     margin-bottom: 10px;
+    background: #fff;
+  }
+  .pl-pane-tabs {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 2px;
     padding: 3px;
     background: #e9eff7;
     border-radius: 10px;
@@ -20091,12 +20101,13 @@ select.compose-tpl-version {
   .stage-pane-head:has(.stage-pane-nav) .stage-pane-title {
     display: none;
   }
+  /* 고정은 전환 탭 줄(.pl-pane-bar)까지만 — Read/Edit 줄까지 붙으면 폰 화면의 본문이 그만큼 준다. */
   .stage-pane-head {
     flex-wrap: wrap;
-    /* 이 폭에선 위의 전환 탭(.pl-pane-tabs, 36px)도 같은 스크롤 상자 맨 위(top:0)에
-       붙는다. 둘 다 0 이면 내려갈 때 헤더가 탭을 덮어 탭은 왼쪽 모서리만 회색으로
-       삐져나왔다 — 헤더는 탭 바로 아래에 붙인다. */
-    top: 36px;
+    position: static;
+  }
+  .ar-inv-bar {
+    position: static;
   }
   /* 조작 버튼은 한 줄로 — 여백을 줄여 Read/Edit·Copy·Print·Prev·Next 가 다 들어가게 한다. */
   .stage-pane-nav {
@@ -20116,14 +20127,27 @@ select.compose-tpl-version {
     margin-right: 0;
     padding: 4px 8px;
   }
-  /* Prev/Next 는 오른쪽 끝에 붙여 둔다 — 늘 같은 자리에서 찾게. */
-  .stage-pane-move {
-    margin-left: auto;
-    gap: 6px;
+  /* Prev/Next 는 전환 탭 줄로 옮겨 간다. */
+  .stage-pane-head .stage-pane-move {
+    display: none;
   }
-  .stage-pane-nav .stage-pane-prev,
-  .stage-pane-nav .stage-pane-next {
+  .pl-pane-bar .stage-pane-move {
+    flex: 0 0 auto;
+    gap: 4px;
+  }
+  .pl-pane-bar .stage-pane-prev,
+  .pl-pane-bar .stage-pane-next {
     padding: 5px 11px;
+  }
+}
+@media (max-width: 480px) {
+  /* 폰 폭에선 탭 글자가 잘리지 않게 Prev/Next 는 화살표만 남긴다. */
+  .pl-pane-bar .spm-word {
+    display: none;
+  }
+  .pl-pane-bar .stage-pane-prev,
+  .pl-pane-bar .stage-pane-next {
+    padding: 5px 10px;
   }
 }
 @media (max-width: 860px) {
