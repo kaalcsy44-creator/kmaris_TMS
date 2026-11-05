@@ -19664,6 +19664,27 @@ select.compose-tpl-version {
   .lb-table { --lb-part: 100px; --lb-desc: 160px; --lb-qty: 68px; }
   .lb-table th.lb-v, .lb-c { min-width: 86px; }
 }
+/* 폰: 왼쪽 붙박이가 네 칸이면 그것만으로 화면이 다 차서 벤더 칸을 볼 수 없다 — 라인 번호만
+   남기고 나머지는 벤더 칸과 함께 민다. PC 는 위 규칙 그대로(품번·품명·수량까지 고정). */
+@media (max-width: 640px) {
+  .lb-table tbody :is(.lb-pick, .lb-part, .lb-desc, .lb-qty) {
+    position: static;
+    box-shadow: none;
+  }
+  /* 머리글은 세로 고정(top)은 유지하고 가로 고정만 푼다. 라인 번호(z 4) 밑으로 지나가게. */
+  .lb-table thead :is(.lb-pick, .lb-part, .lb-desc, .lb-qty) {
+    left: auto;
+    z-index: 3;
+    box-shadow: none;
+  }
+  .lb-table .lb-no {
+    left: 0;
+    box-shadow: 3px 0 5px -3px rgba(15, 23, 42, 0.18);
+  }
+  /* 상태 띠(왼쪽 색 막대)가 있는 줄도 경계 그림자는 같이 낸다. */
+  .lb-row.s-not_sourced .lb-no { box-shadow: inset 3px 0 0 #f0a336, 3px 0 5px -3px rgba(15, 23, 42, 0.18); }
+  .lb-row.s-awarded .lb-no     { box-shadow: inset 3px 0 0 #11824a, 3px 0 5px -3px rgba(15, 23, 42, 0.18); }
+}
 
 /* ── 공급사 견적 취합(VendorQuoteMerge) ────────────────────────────────────
    4단계에서 받은 견적 여러 장을 골라 한 품목표에 싣는 창. 견적 목록·붙일지 갈아
