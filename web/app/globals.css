@@ -11134,7 +11134,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   display: none;
   flex: 1 1 auto;
   min-width: 0;
-  padding: 2px 0 8px;
+  padding: 2px 0 4px;
   --sm-fill: var(--blue);
 }
 .pl-modal.service .stage-mini { --sm-fill: #16a05a; }
@@ -11172,12 +11172,9 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .stage-mini-cell.half::before { background: color-mix(in srgb, var(--sm-fill) 45%, #fff); }
 .stage-mini-cell.skip::before { background: #eef1f5; }
 .stage-mini-cell.on::before { outline: 2px solid var(--navy); outline-offset: 1px; }
-.stage-mini-now {
-  display: block;
-  font-size: 13px;
-  line-height: 1.3;
-  color: var(--navy);
-}
+/* 포커스 테두리가 28px 버튼 전체에 그려지면 묶음 이름과 겹친다 — 막대에만 그린다. */
+.stage-mini-cell:focus { outline: none; }
+.stage-mini-cell:focus-visible::before { outline: 2px solid var(--navy); outline-offset: 1px; }
 /* 접기 토글 — 스트립 우측, 세로 중앙. 스트립 하단 여백(halo용)만큼 맞춰 내려 정렬. */
 .stage-tabs-toggle {
   flex: 0 0 auto;

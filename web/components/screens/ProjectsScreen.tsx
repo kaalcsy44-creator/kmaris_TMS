@@ -3124,7 +3124,7 @@ export function PipelineModal({
             우측 토글로 납작한(번호+작은 제목) 바로 접어 세로 공간을 아낀다. */}
         {modalView === "work" ? (
         <div className={`project-stage-tabs-row${stagesCollapsed ? " collapsed" : ""}`}>
-          {/* 폰 전용 요약 스트립 — 카드 10장 대신 중분류 5묶음 + 칸 10개, 글자는 보고 있는 단계 하나만. */}
+          {/* 폰 전용 요약 스트립 — 카드 10장 대신 중분류 5묶음 + 칸 10개. 단계명은 바로 아래 전환 탭에 있다. */}
           <div className="stage-mini" role="tablist" aria-label="Project stages">
             <div className="stage-mini-groups">
               {STAGE_PHASES.map((p, pi) => {
@@ -3163,7 +3163,6 @@ export function PipelineModal({
                 );
               })}
             </div>
-            <b className="stage-mini-now">{chain.find((c) => c.no === selectedStage)?.label ?? ""}</b>
           </div>
           <div className="project-stage-tabs" role="tablist" aria-label="Project stages" ref={stageStripRef}>
           {chain.map((c) => {
