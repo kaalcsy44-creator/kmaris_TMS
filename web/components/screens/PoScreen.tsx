@@ -1999,6 +1999,8 @@ function VendorPoCreate({
         terms={terms}
         onTerms={setTerms}
         vessel={order?.vessel}
+        vesselImo={order?.vessel_imo}
+        vesselEngineType={order?.vessel_engine_type}
         projectTitle={order?.project_title || order?.project_no}
       />
 

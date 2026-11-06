@@ -281,12 +281,15 @@ def po_work_options():
             "id": v.id,
             "name": v.name,
             "customer_id": v.customer_id,
+            "imo": v.imo or "",
+            "engine_type": v.engine_type or "",
         } for v in s.query(Vessel).order_by(Vessel.name).all()]
         # 이름순 + 거래 빈도(uses) — 자주 거래하는 벤더를 드롭다운 위쪽에 모으는 데 쓴다.
         vendors = vendor_options(s)
 
         cust_names = {c["id"]: c["name"] for c in customers}
         vessel_names = {v["id"]: v["name"] for v in vessels}
+        vessel_by_id = {v["id"]: v for v in vessels}
         user_names = {u.id: u.username for u in s.query(User).all()}
 
         rfqs = []
@@ -347,6 +350,9 @@ def po_work_options():
                 "customer": cust_names.get(o.customer_id, "—"),
                 "vessel_id": _ovid or 0,
                 "vessel": vessel_names.get(_ovid, "") if _ovid else "",
+                # 새 발주서의 IMO No.·Engine Type 칸 기본값(저장된 발주서는 상세 API 가 준다).
+                "vessel_imo": vessel_by_id.get(_ovid, {}).get("imo", ""),
+                "vessel_engine_type": vessel_by_id.get(_ovid, {}).get("engine_type", ""),
                 "po_no": o.po_no or "",
                 "date": o.date or "",
                 "trade_type": o.trade_type or "수출",

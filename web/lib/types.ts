@@ -641,6 +641,9 @@ export type PoWorkOptions = {
     customer: string;
     vessel_id: number | null;
     vessel: string;
+    /** 선박 마스터 값 — 새 발주서의 IMO No.·Engine Type 기본값. */
+    vessel_imo?: string;
+    vessel_engine_type?: string;
     po_no: string;
     date: string;
     trade_type: string;
