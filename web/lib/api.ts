@@ -1784,6 +1784,30 @@ export type VesselLookupResult = {
 export function lookupVessel(imo: string, name = ""): Promise<VesselLookupResult> {
   return post<VesselLookupResult>("/api/admin/settings/vessels/lookup", { imo, name });
 }
+/** 품목 줄 → HS 코드 추천(지난 문서·품목 마스터, 없으면 Claude). 저장하지 않는다. */
+export type HsSuggestLine = {
+  no: number;
+  part_no: string;
+  description: string;
+  maker: string;
+  code: string;
+  alt: string;
+  source: "history" | "master" | "ai" | "";
+  confidence: "high" | "medium" | "low" | "";
+  reason: string;
+};
+export type HsSuggestResult = {
+  lines: HsSuggestLine[];
+  distinct: number;
+  sources: { title: string; url: string }[];
+  note: string;
+};
+export function suggestHsCodes(
+  lines: { part_no?: string; description?: string; maker?: string }[],
+  excludeDoc = "",
+): Promise<HsSuggestResult> {
+  return post<HsSuggestResult>("/api/admin/hs-suggest", { lines, exclude_doc: excludeDoc });
+}
 export type SanctionsStatus = {
   updated_at: string;
   lists: Record<string, { fetched_at: string; vessels: number }>;

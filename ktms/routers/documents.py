@@ -73,6 +73,9 @@ from _core import (
     set_manual_stage,
     shipping_advice_email_body,
 )
+from pydantic import BaseModel
+
+from services import hs_suggest as _hs
 
 
 
@@ -157,6 +160,40 @@ def documents_overview():
         return {"rows": rows}
     finally:
         s.close()
+
+
+class HsSuggestLine(BaseModel):
+    part_no: str | None = ""
+    description: str | None = ""
+    maker: str | None = ""
+
+
+class HsSuggestIn(BaseModel):
+    lines: list[HsSuggestLine] = []
+    exclude_doc: str = ""   # 지금 편집 중인 문서 번호 — 자기 값이 근거가 되지 않게 뺀다
+
+
+@app.post("/api/admin/hs-suggest", dependencies=[Depends(require_token)])
+def hs_suggest(body: HsSuggestIn):
+    """품목 줄 → HS 코드 추천(지난 문서·품목 마스터, 없으면 Claude). 저장하지 않는다."""
+    lines = [{"no": i + 1, "part_no": (l.part_no or "").strip(),
+              "description": (l.description or "").strip(), "maker": (l.maker or "").strip()}
+             for i, l in enumerate(body.lines)]
+    lines = [l for l in lines if l["part_no"] or l["description"]]
+    if not lines:
+        raise HTTPException(status_code=400, detail="Add items first.")
+    s = get_session()
+    try:
+        records = _hs.from_records(s, lines, (body.exclude_doc or "").strip())
+    finally:
+        s.close()  # AI 답을 기다리는 동안 DB 연결을 잡지 않는다
+    ai = None
+    if records["pending"]:
+        try:
+            ai = _hs.classify(records["pending"], records["reference"])
+        except ValueError as exc:
+            raise HTTPException(status_code=502, detail=f"HS suggestion failed: {exc}") from exc
+    return _hs.merge(records, ai)
 
 
 @app.get("/api/admin/documents/{order_id}", dependencies=[Depends(require_token)])

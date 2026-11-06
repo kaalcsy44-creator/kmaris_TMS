@@ -36,6 +36,7 @@ import Modal from "@/components/common/Modal";
 import { ModalTitle } from "@/components/common/BaseMeta";
 import ProjectNo from "@/components/common/ProjectNo";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
+import HsCodeField from "@/components/common/HsCodeField";
 import { useEditGate } from "@/lib/viewMode";
 import {
   amountInputValue,
@@ -1296,7 +1297,7 @@ function ProformaInvoiceTab({
           <CurrencyToggle value={currency} onChange={setCurrency} />
         </label>
         <VatRateSelect value={String(vatRate)} onChange={(v) => setVatRate(num(v))} />
-        <Field label="HS Code (optional)" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
+        <HsCodeField value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} items={includedRows(items)} docNo={data.pi?.pi_no || ""} />
       </div>
       <DocDefaultsHint order={data.order} />
       <BankInfoSection currency={currency} />
@@ -1692,7 +1693,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
           <CurrencyToggle value={currency} onChange={setCurrency} />
         </label>
         <VatRateSelect value={String(vatRate)} onChange={(v) => setVatRate(num(v))} />
-        <Field label="HS Code (optional)" value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} />
+        <HsCodeField value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} items={includedRows(items)} docNo={data.ci?.ci_no || ""} />
       </div>
       <DocDefaultsHint order={data.order} />
       </div>
