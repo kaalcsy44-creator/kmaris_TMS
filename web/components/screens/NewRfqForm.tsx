@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, type RefObject } from "react";
 import { tr } from "@/lib/labels";
 import {
   fetchCustomers,
@@ -270,6 +270,8 @@ export default function NewRfqForm({
   const [showOcr, setShowOcr] = useState(false);
   const [showCust, setShowCust] = useState(false);
   const [showVessel, setShowVessel] = useState(false);
+  // 펼친 New Vessel 패널의 초안 — Save RFQ 가 패널의 Create Vessel 을 대신 눌러 줄 때 쓴다.
+  const vesselDraft = useRef<VesselDraft | null>(null);
   // OCR이 DB에 없는 Customer/선박을 인식하면 해당 빠른등록 패널을 자동으로 펼친다.
   useEffect(() => {
     if (custUnmatched) setShowCust(true);
@@ -588,6 +590,25 @@ export default function NewRfqForm({
     };
   }
 
+  // 선박을 만들고 폼에 고른다. 패널의 Create Vessel 과 Save RFQ 가 함께 쓴다.
+  async function adoptVessel(id: number) {
+    // 목록 새로고침보다 먼저 — 새로고침이 실패해도 재시도가 같은 선박을 또 만들지 않게.
+    setVesselId(id);
+    setVesselHint("");
+    setShowVessel(false);
+    await reloadVessels();
+  }
+
+  // 패널에 입력해 둔 선박이 있으면 RFQ 저장에 앞서 등록한다 — 입력 뒤 곧장 Save RFQ 를 눌러도
+  // 정보(웹 조회 결과 포함)를 잃지 않는다. 등록 실패는 던져서 저장을 멈춘다.
+  async function flushVessel(): Promise<number | ""> {
+    const draft = vesselDraft.current;
+    if (!draft?.pending()) return vesselId;
+    const id = await draft.create();
+    await adoptVessel(id);
+    return id;
+  }
+
   async function submit() {
     if (customerId === "") {
       setErr(companyName ? "Select a customer contact." : "Select a customer.");
@@ -598,22 +619,23 @@ export default function NewRfqForm({
     setMsg(null);
     const cleanItems = toApiItems(items);
     try {
+      const vid = await flushVessel();
       if (editId) {
         await updateRfq(editId, {
           ...headerPayload(),
           customer_id: customerId,
-          vessel_id: vesselId === "" ? 0 : vesselId,
+          vessel_id: vid === "" ? 0 : vid,
           assignee_id: assigneeId,   // 담당자(PIC) 재지정. 0 → 미지정 해제
           items: cleanItems,
           source_files: ocrFiles,
         });
-        setMsg("Updated");
+        setMsg(vid !== vesselId ? "Updated — new vessel registered" : "Updated");
         onCreated?.(""); // 목록·상위 새로고침
       } else {
         const r = await createRfq({
           ...headerPayload(),
           customer_id: customerId,
-          vessel_id: vesselId === "" ? undefined : vesselId,
+          vessel_id: vid === "" ? undefined : vid,
           items: cleanItems,
           source_files: ocrFiles,
         });
@@ -674,10 +696,11 @@ export default function NewRfqForm({
     setCopyBusy(true);
     setCopyErr(null);
     try {
+      const vid = await flushVessel();
       const r = await createRfq({
         ...headerPayload(),
         customer_id: customerId,
-        vessel_id: vesselId === "" ? undefined : vesselId,
+        vessel_id: vid === "" ? undefined : vid,
         items: picked,
         source_files: ocrFiles,
       });
@@ -693,7 +716,7 @@ export default function NewRfqForm({
         await updateRfq(editId, {
           ...headerPayload(),
           customer_id: customerId,
-          vessel_id: vesselId === "" ? 0 : vesselId,
+          vessel_id: vid === "" ? 0 : vid,
           assignee_id: assigneeId,
           items: rest,
           source_files: ocrFiles,
@@ -924,12 +947,9 @@ export default function NewRfqForm({
             unmatchedHint={vesselUnmatched ? vesselHint : ""}
             customers={customers}
             defaultOwnerId={customerId === "" ? undefined : customerId}
-            onCreated={async (id) => {
-              await reloadVessels();
-              setVesselId(id);
-              setVesselHint("");
-              setShowVessel(false);
-            }}
+            draftRef={vesselDraft}
+            saveLabel={canWriteNow ? (editId ? "Save RFQ" : "Create RFQ") : ""}
+            onCreated={adoptVessel}
           />
         </div>
       ) : null}
@@ -1452,17 +1472,30 @@ function QuickCustomerCreate({
   );
 }
 
+/** 펼쳐 둔 New Vessel 패널 — 부모가 저장할 때 들여다보는 창구. */
+type VesselDraft = {
+  /** 사람이 입력한 것이 있는가. OCR 이 미리 채운 이름만으로는 아니다(오인식 선박이 등록되지 않게). */
+  pending: () => boolean;
+  /** 선박을 등록하고 id 를 돌려준다. 이름이 없으면 던진다. */
+  create: () => Promise<number>;
+};
+
 function QuickVesselCreate({
   defaultName,
   unmatchedHint,
   customers,
   defaultOwnerId,
+  draftRef,
+  saveLabel,
   onCreated,
 }: {
   defaultName: string;
   unmatchedHint: string;
   customers: CustomerOption[];
   defaultOwnerId?: number;
+  draftRef: RefObject<VesselDraft | null>;
+  /** 이 패널의 입력을 함께 저장해 주는 단추 이름 — 빈 값이면 안내를 내지 않는다. */
+  saveLabel: string;
   onCreated: (id: number) => void | Promise<void>;
 }) {
   const [name, setName] = useState(defaultName);
@@ -1483,6 +1516,36 @@ function QuickVesselCreate({
     setOwnerId(defaultOwnerId ?? "");
   }, [defaultOwnerId]);
 
+  async function createVessel(): Promise<number> {
+    const r = await createSettingsVessel({
+      name: name.trim(),
+      imo,
+      vessel_type: vesselType,
+      ais_flag: flag,
+      engine_type: engine,
+      hull_no: hull,
+      customer_id: ownerId === "" ? undefined : ownerId,
+      // 조회한 IMO 그대로일 때만 — 번호를 고친 뒤면 다른 배의 선주가 된다.
+      ...(lookup && lookup.imo === imo.replace(/\D/g, "") && (lookup.registered_owner || lookup.ism_manager)
+        ? { registered_owner: lookup.registered_owner || "", ism_manager: lookup.ism_manager || "",
+            owner_checked: new Date().toLocaleDateString("sv-SE") }
+        : {}),
+    });
+    return r.id;
+  }
+
+  useImperativeHandle(draftRef, () => ({
+    pending: () =>
+      !!(imo.trim() || vesselType.trim() || flag.trim() || engine.trim() || hull.trim() || lookup)
+      || name.trim() !== defaultName.trim(),
+    create: () => {
+      if (!name.trim()) {
+        return Promise.reject(new Error("Enter a vessel name, or close the New Vessel panel."));
+      }
+      return createVessel();
+    },
+  }));
+
   async function submit() {
     if (!name.trim()) {
       setErr("Enter a vessel name.");
@@ -1491,21 +1554,7 @@ function QuickVesselCreate({
     setBusy(true);
     setErr(null);
     try {
-      const r = await createSettingsVessel({
-        name: name.trim(),
-        imo,
-        vessel_type: vesselType,
-        ais_flag: flag,
-        engine_type: engine,
-        hull_no: hull,
-        customer_id: ownerId === "" ? undefined : ownerId,
-        // 조회한 IMO 그대로일 때만 — 번호를 고친 뒤면 다른 배의 선주가 된다.
-        ...(lookup && lookup.imo === imo.replace(/\D/g, "") && (lookup.registered_owner || lookup.ism_manager)
-          ? { registered_owner: lookup.registered_owner || "", ism_manager: lookup.ism_manager || "",
-              owner_checked: new Date().toLocaleDateString("sv-SE") }
-          : {}),
-      });
-      await onCreated(r.id);
+      await onCreated(await createVessel());
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Create failed");
     } finally {
@@ -1569,6 +1618,7 @@ function QuickVesselCreate({
         <button className="btn primary" onClick={submit} disabled={busy || !name.trim()}>
           {busy ? "Saving…" : "Create Vessel"}
         </button>
+        {saveLabel ? <span className="hint-inline">{saveLabel} also registers this vessel.</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
     </div>
