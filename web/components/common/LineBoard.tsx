@@ -16,7 +16,7 @@
  * 줄을 둘로 나눈다.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchFxRate, fetchLineBoard, saveLineAwards, saveLineMode, type PrintBook } from "@/lib/api";
 import type { BoardLine, LineAlt, LineBoard as LineBoardData, LineCell } from "@/lib/types";
 import VendorName from "@/components/common/VendorName";
@@ -138,12 +138,31 @@ export default function LineBoard({
   // 옛 딜은 품목 줄에 이름이 없다 — 보기는 되지만 채택은 저장할 곳이 없다.
   const unnamed = data ? data.lines_total - data.lines_named : 0;
 
-  const toggle = (lid: string) =>
+  // 마지막으로 (Shift 없이) 찍은 줄 — Shift 범위 선택의 기준점. 번호가 아니라 lid 로 잡아
+  // 표를 다시 불러와도 어긋나지 않는다.
+  const pickAnchor = useRef<string | null>(null);
+  const toggle = (lid: string, extend: boolean) => {
+    const from = extend && pickAnchor.current !== null
+      ? lines.findIndex((l) => l.lid === pickAnchor.current)
+      : -1;
+    if (from < 0) {
+      pickAnchor.current = lid;
+      setPicked((prev) => {
+        const next = new Set(prev);
+        if (next.has(lid)) next.delete(lid); else next.add(lid);
+        return next;
+      });
+      return;
+    }
+    // 품목표(useRowSelection)와 같이 범위는 켜기만 한다.
+    const to = lines.findIndex((l) => l.lid === lid);
+    const [a, b] = from <= to ? [from, to] : [to, from];
     setPicked((prev) => {
       const next = new Set(prev);
-      if (next.has(lid)) next.delete(lid); else next.add(lid);
+      for (const l of lines.slice(a, b + 1)) next.add(l.lid);
       return next;
     });
+  };
 
   /** 아직 아무 데도 안 물어본 줄만 고른다 — 다음 벤더에게 보낼 후보. */
   const pickUnsourced = () =>
@@ -600,7 +619,10 @@ export default function LineBoard({
                     <input
                       type="checkbox"
                       checked={picked.has(l.lid)}
-                      onChange={() => toggle(l.lid)}
+                      title="Shift-click to select a range"
+                      // Shift 는 click 에서 읽는다 — change 이벤트에는 shiftKey 가 없다.
+                      onClick={(e) => toggle(l.lid, e.shiftKey)}
+                      onChange={() => { /* onClick 이 처리한다 */ }}
                       aria-label={`Select line ${l.no}`}
                     />
                   </td>
