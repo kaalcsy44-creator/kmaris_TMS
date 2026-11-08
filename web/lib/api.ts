@@ -288,6 +288,28 @@ export type RfqDriveFolder = { enabled: boolean; folder_id: string; folder_url: 
 export function fetchRfqDriveFolder(rfqId: number): Promise<RfqDriveFolder> {
   return get<RfqDriveFolder>(`/api/admin/rfq/${rfqId}/drive-folder`);
 }
+/** 서버에 드라이브 연동이 켜져 있는가(신규 RFQ 화면의 첨부 칸 표시용). */
+export function fetchDriveEnabled(): Promise<{ enabled: boolean }> {
+  return get<{ enabled: boolean }>("/api/admin/drive/enabled");
+}
+export type DriveUploadResult = {
+  folder_url: string;
+  rfq_folder_url: string;
+  saved: { name: string; url: string }[];
+  skipped: { name: string; reason: string }[];
+  failed: { name: string; reason: string }[];
+};
+/** 이 파일보다 크면 보내지 않는다(서버도 같은 기준으로 건너뛴다). */
+export const DRIVE_MAX_UPLOAD = 50 * 1024 * 1024;
+/** 접수 첨부를 프로젝트 폴더 `01 RFQ` 에 올린다. 메신저 대화(intakeText)는 `00 접수내용.md`. */
+export function uploadRfqDriveFiles(
+  rfqId: number, files: File[], intakeText = ""
+): Promise<DriveUploadResult> {
+  const fd = new FormData();
+  for (const f of files) fd.append("files", f, f.name || "file");
+  fd.append("intake_text", intakeText);
+  return postForm<DriveUploadResult>(`/api/admin/rfq/${rfqId}/drive-files`, fd);
+}
 /** "폴더 만들기" — 멱등(이미 있으면 그 폴더를 잇는다). 드라이브 실패는 502. */
 export function createRfqDriveFolder(rfqId: number): Promise<RfqDriveFolder> {
   return post<RfqDriveFolder>(`/api/admin/rfq/${rfqId}/drive-folder`, {});

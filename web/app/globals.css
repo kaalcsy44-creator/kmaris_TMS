@@ -7156,6 +7156,46 @@ table.mini.doc-charge-foot tfoot tr.foot-grand :is(.total-label, .total-value) {
   white-space: nowrap;
 }
 
+/* ── 접수 첨부 → 드라이브 01 RFQ (DriveIntakePanel) ──────────────────────── */
+.drive-intake {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 12px;
+  background: #f4f9f4;
+  border: 1px solid #d6e8d6;
+  border-radius: 8px;
+  margin-bottom: 14px;
+}
+.drive-intake-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.drive-intake-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #45526a;
+}
+.drive-intake-text textarea {
+  width: 100%;
+  font: inherit;
+  font-weight: 400;
+  font-size: 12.5px;
+  resize: vertical;
+}
+.drive-intake .ocr-file.too-big .ocr-file-meta,
+.hint-inline.warn {
+  color: #b42318;
+}
+.drive-intake > .btn {
+  align-self: flex-start;
+}
+
 /* ── Auto-fill 소스 파일 목록(업로드·추출한 파일 메타, 영구 보관) ─────────── */
 .ocr-files {
   margin: -6px 0 14px;

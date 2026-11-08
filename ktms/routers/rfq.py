@@ -69,7 +69,7 @@ from _core import (
     require_token,
     steps_for,
 )
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks, Form, UploadFile
 from services.item_ledger import apply_line_categories
 from services import mail_sync
 from services import drive_svc, project_drive
@@ -456,6 +456,39 @@ def rfq_drive_folder(rfq_id: int):
         return project_drive.status(r)
     finally:
         s.close()
+
+
+@app.get("/api/admin/drive/enabled", dependencies=[Depends(require_token)])
+def drive_enabled():
+    """드라이브 연동이 켜져 있는가 — 신규 RFQ 화면이 첨부 칸을 보일지 정한다."""
+    return {"enabled": drive_svc.enabled("PARTS") or drive_svc.enabled("SERVICE")}
+
+
+@app.post("/api/admin/rfq/{rfq_id}/drive-files", dependencies=[Depends(require_token)])
+def upload_rfq_drive_files(rfq_id: int,
+                           files: list[UploadFile] = File(default=[]),
+                           intake_text: str = Form(""),
+                           user: dict = Depends(get_current_user)):
+    """접수 첨부(메일·메신저 무관)를 프로젝트 폴더의 `01 RFQ` 에 올린다.
+
+    메신저 대화를 붙여넣었으면 같은 폴더에 `00 접수내용.md` 로 남긴다. 50MB 초과는 건너뛰고
+    부분 실패를 허용한다 — 응답의 skipped·failed 를 화면이 그대로 보여 준다."""
+    s = get_session()
+    try:
+        if not s.query(RFQ.id).filter_by(id=rfq_id).first():
+            raise HTTPException(status_code=404, detail="RFQ 를 찾을 수 없습니다.")
+    finally:
+        s.close()
+    if not files and not (intake_text or "").strip():
+        raise HTTPException(status_code=400, detail="올릴 파일이나 접수 내용이 없습니다.")
+    items = [(f.filename, f.file, f.size, f.content_type) for f in files]
+    try:
+        return project_drive.save_intake(
+            rfq_id, items, intake_text,
+            by=str(user.get("username") or user.get("name") or ""),
+            at=_kst_iso(datetime.utcnow()).replace("T", " "))
+    except drive_svc.DriveError as exc:
+        raise HTTPException(status_code=502, detail=f"드라이브에 올리지 못했습니다: {exc}")
 
 
 @app.post("/api/admin/rfq/{rfq_id}/drive-folder", dependencies=[Depends(require_token)])

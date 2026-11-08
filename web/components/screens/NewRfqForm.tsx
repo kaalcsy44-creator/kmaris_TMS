@@ -13,7 +13,12 @@ import {
   parseRfqPdf,
   createSettingsCustomer,
   createSettingsVessel,
+  fetchDriveEnabled,
+  uploadRfqDriveFiles,
+  DRIVE_MAX_UPLOAD,
+  type DriveUploadResult,
 } from "@/lib/api";
+import DriveIntakePanel, { EMPTY_INTAKE, intakeSummary, type DriveIntake } from "@/components/common/DriveIntakePanel";
 import type { CustomerOption, SettingsVessel, SettingsConsultant, RfqSourceFile } from "@/lib/types";
 import type { VesselLookupResult } from "@/lib/api";
 import { LookupNote, SanctionWarning, VesselLookupButton } from "@/components/common/VesselSanctions";
@@ -270,6 +275,16 @@ export default function NewRfqForm({
   const [showOcr, setShowOcr] = useState(false);
   const [showCust, setShowCust] = useState(false);
   const [showVessel, setShowVessel] = useState(false);
+  // 접수 첨부 → 드라이브 `01 RFQ`. 저장할 때 함께 올라간다(연동이 꺼져 있으면 칸을 숨긴다).
+  const [driveOn, setDriveOn] = useState(false);
+  const [showDrive, setShowDrive] = useState(false);
+  const [intake, setIntake] = useState<DriveIntake>(EMPTY_INTAKE);
+  const [intakeBusy, setIntakeBusy] = useState(false);
+  const [intakeRes, setIntakeRes] = useState<DriveUploadResult | null>(null);
+  const [intakeErr, setIntakeErr] = useState<string | null>(null);
+  useEffect(() => {
+    fetchDriveEnabled().then((r) => setDriveOn(r.enabled)).catch(() => setDriveOn(false));
+  }, []);
   // 펼친 New Vessel 패널의 초안 — Save RFQ 가 패널의 Create Vessel 을 대신 눌러 줄 때 쓴다.
   const vesselDraft = useRef<VesselDraft | null>(null);
   // OCR이 DB에 없는 Customer/선박을 인식하면 해당 빠른등록 패널을 자동으로 펼친다.
@@ -422,6 +437,8 @@ export default function NewRfqForm({
       }
       // 소스 파일 목록에 누적(중복 파일명은 그대로 추가 — 사용자가 개별 삭제 가능).
       if (newFiles.length) setOcrFiles((prev) => [...prev, ...newFiles]);
+      // 자동입력에 쓴 원본(고객이 보낸 RFQ 문서·캡처)은 드라이브 `01 RFQ` 에도 남긴다.
+      if (driveOn) setIntake((v) => ({ ...v, files: [...v.files, ...files] }));
       setOcrMsg(
         `Extracted: +${collected.length} item(s)${
           files.length > 1 ? ` from ${ok} files` : ""
@@ -459,6 +476,10 @@ export default function NewRfqForm({
     setBusy(true);
     setErr(null);
     setMsg(null);
+    // 다른 딜을 불러오면 올리려고 모아 둔 첨부를 비운다 — 엉뚱한 딜 폴더에 올라가지 않게.
+    setIntake(EMPTY_INTAKE);
+    setIntakeRes(null);
+    setIntakeErr(null);
     try {
       const d = await fetchRfqDetail(id);
       setEditId(id);
@@ -609,6 +630,46 @@ export default function NewRfqForm({
     return id;
   }
 
+  // 모아 둔 접수 첨부를 이 딜의 `01 RFQ` 로 올린다. 저장 메시지에 붙일 한 줄을 돌려준다.
+  // keepOnFail: 실패하면 파일을 남겨 "Upload now" 로 다시 올릴 수 있게(이미 저장된 딜에서만).
+  async function sendIntake(rfqId: number, keepOnFail: boolean): Promise<string> {
+    const big = intake.files.filter((f) => f.size > DRIVE_MAX_UPLOAD);
+    const files = intake.files.filter((f) => f.size <= DRIVE_MAX_UPLOAD);
+    if (!driveOn || (!files.length && !intake.text.trim())) {
+      if (big.length) setIntake(EMPTY_INTAKE);
+      return big.length ? ` · ${big.length} file(s) over 50MB not uploaded` : "";
+    }
+    setIntakeBusy(true);
+    setIntakeErr(null);
+    try {
+      const r = await uploadRfqDriveFiles(rfqId, files, intake.text);
+      const skipped = [...r.skipped, ...big.map((f) => ({ name: f.name, reason: "over 50MB — not sent" }))];
+      const res = { ...r, skipped };
+      setIntakeRes(res);
+      setIntake(EMPTY_INTAKE);
+      return ` · ${intakeSummary(res)}`;
+    } catch (e) {
+      const why = e instanceof Error ? e.message : "Drive upload failed";
+      if (keepOnFail) {
+        setIntakeErr(`${why} — files are kept; press “Upload now” to retry.`);
+      } else {
+        // 새 딜은 저장 뒤 폼이 비워진다 — 남겨 두면 다음 신규 RFQ 에 잘못 올라간다.
+        setIntakeErr(`${why} — not uploaded: ${intake.files.map((f) => f.name).join(", ")}. ` +
+          "Open the project and upload them again.");
+        setIntake(EMPTY_INTAKE);
+      }
+      return " · Drive upload failed";
+    } finally {
+      setIntakeBusy(false);
+    }
+  }
+
+  async function uploadNow() {
+    if (!editId) return;
+    const note = await sendIntake(editId, true);
+    if (note) setMsg(note.replace(/^ · /, ""));
+  }
+
   async function submit() {
     if (customerId === "") {
       setErr(companyName ? "Select a customer contact." : "Select a customer.");
@@ -629,7 +690,9 @@ export default function NewRfqForm({
           items: cleanItems,
           source_files: ocrFiles,
         });
-        setMsg(vid !== vesselId ? "Updated — new vessel registered" : "Updated");
+        const base = vid !== vesselId ? "Updated — new vessel registered" : "Updated";
+        setMsg(base);
+        setMsg(base + (await sendIntake(editId, true)));
         onCreated?.(""); // 목록·상위 새로고침
       } else {
         const r = await createRfq({
@@ -640,7 +703,10 @@ export default function NewRfqForm({
           source_files: ocrFiles,
         });
         setMsg(`Created — ${r.rfq_no}`);
+        // 첨부는 폼을 비우기 전에 올린다(onCreated 가 폼을 닫을 수 있다).
+        const note = await sendIntake(r.id, false);
         resetForm();
+        setMsg(`Created — ${r.rfq_no}${note}`);
         onCreated?.(r.rfq_no);
       }
     } catch (e) {
@@ -849,6 +915,16 @@ export default function NewRfqForm({
         >
           📄 Auto-fill
         </button>
+        {driveOn ? (
+          <button
+            type="button"
+            className={`tool-btn${showDrive || intake.files.length || intake.text.trim() ? " on" : ""}`}
+            onClick={() => setShowDrive((v) => !v)}
+            title="Save intake files and the messenger conversation to this project's Drive folder (01 RFQ)"
+          >
+            📁 Drive files{intake.files.length ? ` (${intake.files.length})` : ""}
+          </button>
+        ) : null}
         <button
           type="button"
           className={`tool-btn${showCust ? " on" : ""}`}
@@ -923,6 +999,18 @@ export default function NewRfqForm({
             ))}
           </ul>
         </div>
+      ) : null}
+
+      {driveOn && (showDrive || intake.files.length > 0 || intakeRes || intakeErr) ? (
+        <DriveIntakePanel
+          value={intake}
+          onChange={setIntake}
+          canUploadNow={!!editId}
+          onUploadNow={uploadNow}
+          busy={intakeBusy}
+          result={intakeRes}
+          error={intakeErr}
+        />
       ) : null}
 
       {showCust ? (

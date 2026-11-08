@@ -97,6 +97,65 @@ def ensure_rfq_folder(rfq_id: int) -> dict:
         s.close()
 
 
+MAX_UPLOAD = 50 * 1024 * 1024     # 이보다 큰 파일은 건너뛰고 경고만 남긴다
+
+
+def intake_markdown(s, rfq: RFQ, text: str, by: str, at: str) -> str:
+    """메신저로 받은 접수 대화를 남기는 글. 메신저 대화는 다른 곳에 기록이 남지 않는다."""
+    cust = s.query(Customer).filter_by(id=rfq.customer_id).first() if rfq.customer_id else None
+    ves = s.query(Vessel).filter_by(id=rfq.vessel_id).first() if rfq.vessel_id else None
+    head = [
+        "# 접수 내용",
+        "",
+        f"- 프로젝트: {rfq.rfq_no} · {rfq.project_title or '-'}",
+        f"- 고객: {(cust.name if cust else '-')}{(' · ' + rfq.contact_person) if rfq.contact_person else ''}",
+        f"- 선박: {ves.name if ves else '-'}",
+        f"- 접수 채널: {rfq.request_channel or '-'}",
+        f"- 접수 일시: {(rfq.received_at or rfq.date or '-').replace('T', ' ')}",
+        f"- 기록: {at} · {by or '-'}",
+        "",
+        "---",
+        "",
+    ]
+    return "\n".join(head) + text.strip() + "\n"
+
+
+def save_intake(rfq_id: int, files: list, text: str = "", *, by: str = "", at: str = "") -> dict:
+    """접수 첨부를 `01 RFQ` 에 올린다. 파일명은 원본 그대로, 같은 이름이면 ' (2)'.
+
+    files: [(파일명, 읽기 가능한 파일 객체, 크기, mime)]. 50MB 초과는 건너뛰고, 한 파일이
+    실패해도 나머지는 계속 올린다(부분 실패 허용). 폴더를 못 만들면 DriveError.
+    """
+    folder = ensure_rfq_folder(rfq_id)
+    rfq_dir = drive_svc.subfolder_id(folder["folder_id"], "RFQ")
+    saved, skipped, failed = [], [], []
+    for name, stream, size, mime in files:
+        name = name or "file"
+        if size is not None and size > MAX_UPLOAD:
+            skipped.append({"name": name, "reason": f"{size / 1024 / 1024:.0f}MB — 50MB 초과"})
+            continue
+        try:
+            up = drive_svc.upload_file(rfq_dir, name, stream, mime or "application/octet-stream")
+            saved.append({"name": up["name"], "url": up["url"]})
+        except drive_svc.DriveError as exc:
+            log.warning("project_drive: %s 업로드 실패 — %s", name, exc)
+            failed.append({"name": name, "reason": str(exc)[:200]})
+    if (text or "").strip():
+        s = get_session()
+        try:
+            rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+            body = intake_markdown(s, rfq, text, by, at)
+        finally:
+            s.close()
+        try:
+            up = drive_svc.upload_text(rfq_dir, "00 접수내용.md", body)
+            saved.append({"name": up["name"], "url": up["url"]})
+        except drive_svc.DriveError as exc:
+            failed.append({"name": "00 접수내용.md", "reason": str(exc)[:200]})
+    return {"folder_url": folder["folder_url"], "rfq_folder_url": drive_svc.folder_url(rfq_dir),
+            "saved": saved, "skipped": skipped, "failed": failed}
+
+
 def ensure_rfq_folder_quietly(rfq_id: int) -> None:
     """등록 직후 백그라운드로 부른다 — 연동이 꺼져 있으면 아무것도 안 하고, 실패는 로그만."""
     s = get_session()
