@@ -71,6 +71,14 @@ services:
       # defaults to https://www.k-maris.com/track).
       - key: TRACKING_BASE_URL
         sync: false
+      # 공유 드라이브 연동(services/drive_svc.py) — 프로젝트 폴더 자동 생성·발행 문서 자동 저장.
+      # 폴더 ID 는 비밀이 아니라 여기에 둔다. 키(DRIVE_SA_KEY_JSON, 서비스 계정 JSON 전체)는
+      # 비밀이라 여기 적지 않고 Render 대시보드에서 직접 추가한다 — 키가 없으면 연동만
+      # 조용히 꺼지고 나머지는 그대로 돈다.
+      - key: DRIVE_PARTS_ROOT_ID
+        value: 1Iy5r6y8tdYjFFtTF0lbT58JV0WOD6tRf
+      - key: DRIVE_SERVICE_ROOT_ID
+        value: 1nSXCAWgyhd_MnOSUiqc6GYz6OZTSNq_X
       # 메일 자동 정리(services/mail_auto.py)는 코드 기본값으로 그냥 돈다 — 아래는
       # 바꾸고 싶을 때만 Render 대시보드에서 직접 추가하면 되는 값들이라 여기서
       # 묻지 않는다(빈 값이 프롬프트로 뜨면 배포마다 걸린다).

@@ -34,3 +34,8 @@ pillow>=10.0.0
 # time, so the API will not start without it.
 reportlab>=4.0.0
 fonttools>=4.53.0
+# services/drive_svc.py — 공유 드라이브에 프로젝트 폴더를 만들고 발행 문서를 올린다.
+# 서비스 계정 토큰(google-auth)과 그 HTTP 전송(requests)만 쓴다. 무거운
+# google-api-python-client 는 일부러 넣지 않는다(Render 512MB).
+google-auth>=2.28.0,<3
+requests>=2.31.0
