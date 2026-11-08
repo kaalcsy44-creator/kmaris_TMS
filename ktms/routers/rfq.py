@@ -69,8 +69,10 @@ from _core import (
     require_token,
     steps_for,
 )
+from fastapi import BackgroundTasks
 from services.item_ledger import apply_line_categories
 from services import mail_sync
+from services import drive_svc, project_drive
 
 
 
@@ -276,6 +278,7 @@ def rfq_detail(rfq_id: int):
             "steps": steps,
             "items": [_item_view(it) for it in (r.items or [])],
             "source_files": getattr(r, "source_files", None) or [],
+            "drive_folder_url": getattr(r, "drive_folder_url", None) or "",
             "vendor_rfqs": vrfq_view,
             "vendor_quotes": vquote_view,
             "quotation": qtn_view,
@@ -356,7 +359,8 @@ def _clean_cc_ids(s, customer_id, ids) -> list[int]:
 
 
 @app.post("/api/admin/rfq", dependencies=[Depends(require_token)])
-def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
+def create_rfq(body: RfqCreate, background: BackgroundTasks,
+               user: dict = Depends(get_current_user)):
     """Customer RFQ 신규 등록. 케이마리스 RFQ No.는 기본적으로 미발급(임시) 상태로
     두고 Vendor RFQ 발신 시점에 부여한다. body.rfq_no 로 수동 선지정도 가능."""
     s = get_session()
@@ -433,9 +437,35 @@ def create_rfq(body: RfqCreate, user: dict = Depends(get_current_user)):
         # 라인에서 고른 분류(선택)를 품목 마스터에 반영 — 뒤에 다시 배정할 일을 없앤다.
         apply_line_categories(s, items)
         s.commit()
+        # 드라이브 프로젝트 폴더는 응답이 나간 뒤에 만든다 — 드라이브가 느리거나 죽어도
+        # 등록은 그대로 끝난다. 실패하면 링크가 빈 채로 남고 화면이 "폴더 만들기"를 띄운다.
+        background.add_task(project_drive.ensure_rfq_folder_quietly, rfq.id)
         return {"ok": True, "id": rfq.id, "rfq_no": _rfq_no_disp(rfq_no)}
     finally:
         s.close()
+
+
+@app.get("/api/admin/rfq/{rfq_id}/drive-folder", dependencies=[Depends(require_token)])
+def rfq_drive_folder(rfq_id: int):
+    """프로젝트 폴더 연결 상태(DB 만 본다 — 드라이브를 부르지 않는다)."""
+    s = get_session()
+    try:
+        r = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not r:
+            raise HTTPException(status_code=404, detail="RFQ 를 찾을 수 없습니다.")
+        return project_drive.status(r)
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/rfq/{rfq_id}/drive-folder", dependencies=[Depends(require_token)])
+def create_rfq_drive_folder(rfq_id: int):
+    """"폴더 만들기" — 등록 때 못 만든 폴더를 다시 시도한다(멱등: 있으면 그것을 잇는다)."""
+    try:
+        out = project_drive.ensure_rfq_folder(rfq_id)
+    except drive_svc.DriveError as exc:
+        raise HTTPException(status_code=502, detail=f"드라이브 폴더를 만들지 못했습니다: {exc}")
+    return {"enabled": True, "folder_id": out["folder_id"], "folder_url": out["folder_url"]}
 
 
 @app.post("/api/admin/rfq/{rfq_id}/assign-no", dependencies=[Depends(require_token)])

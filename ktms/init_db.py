@@ -46,6 +46,9 @@ _MIGRATIONS = {
         "mail_group_id": "INTEGER",
         # 함께 받은 고객 담당자(같은 회사의 다른 레코드 id 들) — 대표는 customer_id.
         "cc_contact_ids": "JSON",
+        # 공유 드라이브 프로젝트 폴더(ID 로 잇고, URL 은 화면에서 바로 열려고 함께 둔다).
+        "drive_folder_id": "VARCHAR(80)",
+        "drive_folder_url": "VARCHAR(300)",
     },
     "quotations": {
         "created_by": "INTEGER",
@@ -78,6 +81,8 @@ _MIGRATIONS = {
         "duty": "VARCHAR(100)",
         # 반송(Address not found)으로 되돌아온 주소들. 기존 행은 NULL = 아직 없음.
         "bad_emails": "JSON",
+        # 약칭(드라이브 폴더명의 고객사 칸). 기존 행은 NULL = 회사명 전체를 쓴다.
+        "short_name": "VARCHAR(80)",
     },
     "vendors": {
         # 대금을 보낼 계좌(회사 단위) — 매입 청구(AP) 지급용. Finance 캘린더 상세 창에서 편집.

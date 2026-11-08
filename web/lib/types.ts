@@ -73,6 +73,8 @@ export type SettingsCustomer = {
   logo: string;
   /** 회사의 역할(Owner·Ship manager·Operator·Agent / Broker·Other, 회사 단위·다중). */
   roles?: string[];
+  /** 약칭(회사 단위) — 드라이브 프로젝트 폴더명의 고객사 칸("261107 Everhonest …"). 비면 name. */
+  short_name: string;
   addresses: string[];   // 본사·지사 주소(첫 값=대표)
   emails: string[];
   phones: string[];
@@ -2277,6 +2279,8 @@ export type RfqDetail = {
   steps: RfqStep[];
   items: RfqItem[];
   source_files: RfqSourceFile[];
+  /** 공유 드라이브 프로젝트 폴더 링크(비면 아직 없음). */
+  drive_folder_url?: string;
   vendor_rfqs: { id: number; vendor: string; at: string }[];
   vendor_quotes: { vendor_quote_no: string; amount: string; at: string }[];
   quotation: { qtn_no: string; amount: string; status: string; at: string } | null;

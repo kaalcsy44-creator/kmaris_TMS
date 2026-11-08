@@ -11467,6 +11467,37 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   font-weight: 600;
   color: var(--navy);
 }
+/* 공유 드라이브 프로젝트 폴더 — 열기(링크) / 만들기(버튼). PIC 칩 옆에 같은 크기로 선다. */
+.drive-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+.drive-chip:hover {
+  background: var(--zebra);
+}
+.drive-chip.create {
+  border-style: dashed;
+  color: var(--muted);
+}
+.drive-chip:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+@media print {
+  .drive-chip { display: none; }
+}
 .pl-pic-chip {
   display: inline-flex;
   align-items: center;

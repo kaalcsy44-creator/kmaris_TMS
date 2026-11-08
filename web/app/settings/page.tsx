@@ -997,7 +997,7 @@ function MyPasswordChange() {
 const EMPTY_CUSTOMER: SettingsCustomer = {
   id: 0, name: "", contact: "", duty: "", contact_phone: "", email: "", country: "", address: "",
   tax_id: "", tax_invoice_email: "", specialization: "", website: "", note: "", payment_terms: "", logo: "",
-  roles: [],
+  roles: [], short_name: "",
   addresses: [], emails: [], phones: [], regions: [], bad_emails: [],
 };
 
@@ -1365,6 +1365,8 @@ export function CustomersTab() {
         onCreateContact={company.createRow}
         onDeleteContact={company.removeRow}
         fields={[
+          // 드라이브 프로젝트 폴더명의 고객사 칸("261107 Everhonest …") — 비우면 회사명 전체.
+          ["short_name", "Short name (Drive folder)"],
           ["tax_id", "Tax ID / Business No."],
           ["tax_invoice_email", "Tax invoice email"],
           ["website", "Website"],

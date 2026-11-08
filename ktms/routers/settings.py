@@ -219,6 +219,7 @@ def settings_customers():
                  "payment_terms": getattr(c, "payment_terms", None) or "",
                  "logo": getattr(c, "logo", None) or "",
                  "roles": [str(x) for x in (getattr(c, "roles", None) or []) if str(x).strip()],
+                 "short_name": getattr(c, "short_name", None) or "",
                  "addresses": _multi_out(getattr(c, "addresses", None), c.address),
                  "emails": _multi_out(getattr(c, "emails", None), c.email),
                  "phones": _multi_out(getattr(c, "phones", None), getattr(c, "contact_phone", None)),
@@ -329,6 +330,9 @@ def create_customer(body: CustomerCreate):
                      payment_terms=body.payment_terms or "",
                      logo=body.logo or "",
                      roles=_clean_roles(body.roles) if body.roles is not None else None)
+        # 약칭은 회사 단위 값 — 이미 있는 회사에 담당자를 더하면 그 회사의 약칭을 물려받는다.
+        mates = _company_rows(s, Customer, c.name)
+        c.short_name = next((m.short_name for m in mates if getattr(m, "short_name", None)), None)
         s.add(c)
         # 다중 주소·이메일·연락처·지역 저장 + 첫 값(대표)을 flat 컬럼에 미러링.
         _apply_multi(c, body.emails, body.phones, body.regions, body.addresses)
@@ -371,6 +375,8 @@ class CompanyInfoSave(BaseModel):
     agencies: list[str] | None = None
     # 고객사의 역할(Owner·Ship manager…) — 고객 창에서만 보낸다. None = 건드리지 않음.
     roles: list[str] | None = None
+    # 약칭(고객사 전용) — 드라이브 프로젝트 폴더명의 고객사 칸. None = 건드리지 않음.
+    short_name: str | None = None
 
 
 CUSTOMER_ROLES = ("Owner", "Ship manager", "Operator", "Agent / Broker", "Other")
@@ -572,6 +578,10 @@ def update_customer_company(body: CompanyInfoSave):
         if body.roles is not None:
             for r in rows:
                 r.roles = _clean_roles(body.roles)
+        if body.short_name is not None:
+            short = " ".join(body.short_name.split())[:80]
+            for r in rows:
+                r.short_name = short or None
         name = _apply_company_info(
             rows, body,
             ("tax_id", "tax_invoice_email", "specialization", "website", "note",

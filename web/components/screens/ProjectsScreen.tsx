@@ -69,6 +69,7 @@ import { PoActionTabs } from "@/components/screens/PoScreen";
 import { DocumentsOverview } from "@/components/screens/DocumentsScreen";
 import { ArOverview } from "@/components/screens/ArScreen";
 import ProjectOverviewScreen from "@/components/screens/ProjectOverviewScreen";
+import DriveFolderChip from "@/components/common/DriveFolderChip";
 import { tr } from "@/lib/labels";
 import { getUser, can, isOwnScoped, isAdmin } from "@/lib/auth";
 
@@ -3051,6 +3052,8 @@ export function PipelineModal({
                 </button>
               </span>
             ) : null}
+            {/* 공유 드라이브의 이 프로젝트 폴더 — 열기, 없으면 만들기. */}
+            {!isNewProject ? <DriveFolderChip rfqId={r.rfq_id} /> : null}
             <span className={`pl-pic-chip${canEditPic ? " editable" : ""}`}>
               <span className="pl-pic-label">PIC</span>
               {canEditPic ? (

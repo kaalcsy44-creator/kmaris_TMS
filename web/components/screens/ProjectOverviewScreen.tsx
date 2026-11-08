@@ -59,6 +59,7 @@ import ActivityNoteForm, {
   type ActivityNoteValue,
 } from "@/components/common/ActivityNoteForm";
 import WorkTypeBadge from "@/components/WorkTypeBadge";
+import DriveFolderChip from "@/components/common/DriveFolderChip";
 
 /**
  * 단계를 Items 표의 열 묶음과 같은 4칸으로 나눈다 — 페이지 전체가 좌→우로
@@ -552,6 +553,7 @@ function Overview({
           ) : null}
         </h1>
         <div className="proj-ov-actions">
+          <DriveFolderChip rfqId={row.rfq_id} />
           <span className="proj-ov-pic">
             <span className="proj-ov-pic-label">PIC</span>
             {row.assignee || "—"}

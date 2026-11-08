@@ -283,6 +283,16 @@ export function fetchRfqDetail(id: number): Promise<RfqDetail> {
   return get<RfqDetail>(`/api/admin/rfq/${id}`);
 }
 
+/** 프로젝트 ↔ 공유 드라이브 폴더. enabled=false 면 서버에 드라이브 연동이 설정되지 않은 것. */
+export type RfqDriveFolder = { enabled: boolean; folder_id: string; folder_url: string };
+export function fetchRfqDriveFolder(rfqId: number): Promise<RfqDriveFolder> {
+  return get<RfqDriveFolder>(`/api/admin/rfq/${rfqId}/drive-folder`);
+}
+/** "폴더 만들기" — 멱등(이미 있으면 그 폴더를 잇는다). 드라이브 실패는 502. */
+export function createRfqDriveFolder(rfqId: number): Promise<RfqDriveFolder> {
+  return post<RfqDriveFolder>(`/api/admin/rfq/${rfqId}/drive-folder`, {});
+}
+
 export function createRfq(body: {
   customer_id: number;
   vessel_id?: number;
@@ -1629,6 +1639,8 @@ export type CompanyInfoSave = {
   agencies?: string[];
   /** 고객사의 역할(Owner·Ship manager…) — 고객 창에서만 보낸다. 안 보내면 건드리지 않는다. */
   roles?: string[];
+  /** 약칭(고객사 전용) — 드라이브 프로젝트 폴더명의 고객사 칸. 안 보내면 건드리지 않는다. */
+  short_name?: string;
 };
 /** 선박 데이터(등록 선주·ISM 관리사)가 가리키지만 아직 안 붙은 고객사 역할. */
 export type CustomerRoleSuggestion = {

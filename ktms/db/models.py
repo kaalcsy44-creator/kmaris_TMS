@@ -133,6 +133,10 @@ class Customer(Base):
     # "Agent / Broker"·"Other" 중 여럿(선주이면서 직접 관리하는 곳이 흔하다). 회사 단위
     # 값이라 Company info 창에서 같은 회사 전 레코드에 한 번에 넣는다. NULL = 아직 분류 전.
     roles      = Column(JSON)
+    # 약칭 — 드라이브 프로젝트 폴더명의 고객사 칸에 쓴다("261107 Everhonest MSC …").
+    # 법인명 전체(EVERHONEST MARINE)는 폴더명에 길고, 사람들이 폴더에 써 온 이름도 이쪽이다.
+    # 회사 단위 값이라 Company info 창에서 같은 회사 전 레코드에 한 번에 넣는다. 비면 name.
+    short_name = Column(String(80))
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -493,6 +497,11 @@ class RFQ(Base):
     # 그 대화는 먼저 붙은 딜 한 곳에만 남고 나머지 형제 딜은 "메일 없음"으로 보였다.
     # 이 열이 같은 딜들은 메일 이력을 함께 본다. NULL = 혼자 서 있는 딜.
     mail_group_id    = Column(Integer, index=True, nullable=True)
+    # 공유 드라이브의 프로젝트 폴더(services/drive_svc.py). 등록 직후 만들어 여기 적는다 —
+    # 비어 있으면 화면이 "폴더 만들기"를 띄운다(드라이브가 실패해도 등록은 막지 않는다).
+    # 폴더 이름이 아니라 ID 로 잇는 까닭: 사람이 폴더 이름을 고치거나 옮겨도 끊기지 않게.
+    drive_folder_id  = Column(String(80))
+    drive_folder_url = Column(String(300))
     created_by       = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at       = Column(DateTime, default=datetime.utcnow)
 
