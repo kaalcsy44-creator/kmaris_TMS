@@ -491,6 +491,27 @@ def upload_rfq_drive_files(rfq_id: int,
         raise HTTPException(status_code=502, detail=f"드라이브에 올리지 못했습니다: {exc}")
 
 
+@app.post("/api/admin/drive/archive", dependencies=[Depends(require_token)])
+def archive_issued_doc(file: UploadFile = File(...), ref: str = Form(...), doc: str = Form(...)):
+    """발행 문서(사람이 **다운로드한 그 파일**)를 프로젝트 폴더에 한 벌 남긴다.
+
+    화면은 다운로드 직후 이 요청을 따로 보낸다(기다리지 않는다) — 드라이브가 실패해도
+    다운로드·발행은 이미 끝나 있다. 미리보기는 부르지 않는다.
+    ref: qtn:ID · order:ID · rfq:ID · vpo:ID · cn:ID — 문서가 속한 프로젝트를 찾는 열쇠.
+    doc: quotation · vendor_po · pi · ci · pl · sa · sm · tax_invoice · credit_note."""
+    if doc not in project_drive.DOC_FOLDER:
+        raise HTTPException(status_code=400, detail=f"보관하지 않는 문서 종류: {doc}")
+    if not (drive_svc.enabled("PARTS") or drive_svc.enabled("SERVICE")):
+        return {"status": "disabled"}
+    if (file.size or 0) > project_drive.MAX_UPLOAD:
+        return {"status": "too_big"}
+    try:
+        return project_drive.archive_doc(ref, doc, file.filename or "document",
+                                         file.file.read(), file.content_type or "")
+    except drive_svc.DriveError as exc:
+        raise HTTPException(status_code=502, detail=f"드라이브에 남기지 못했습니다: {exc}")
+
+
 @app.post("/api/admin/rfq/{rfq_id}/drive-folder", dependencies=[Depends(require_token)])
 def create_rfq_drive_folder(rfq_id: int):
     """"폴더 만들기" — 등록 때 못 만든 폴더를 다시 시도한다(멱등: 있으면 그것을 잇는다)."""

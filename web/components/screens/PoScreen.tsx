@@ -16,6 +16,8 @@ import {
   parseOrderPdf,
   sendVendorPo,
   vendorPoPdfUrl,
+  archiveIssuedDoc,
+  archiveIssuedDocUrl,
   vendorPoXlsxUrl,
   updateOrder,
   deleteOrder,
@@ -954,6 +956,8 @@ function VendorPoPdfPreviewButton({
     a.href = url;
     a.download = saveName;
     a.click();
+    // 미리보기에서 내려받는 순간이 발행이다 — 그 PDF 를 드라이브 03 PO 에도 남긴다.
+    archiveIssuedDocUrl(url, saveName, `vpo:${poId}`, "vendor_po");
   }
 
   // 발주서 Excel — 미리보기(PDF)와 같은 저장본에서 서버가 만든 xlsx 를 내려받는다.
@@ -970,6 +974,7 @@ function VendorPoPdfPreviewButton({
       a.download = filenameFromDisposition(res, saveName.replace(/\.pdf$/i, ".xlsx"));
       a.click();
       URL.revokeObjectURL(xlsxUrl);
+      archiveIssuedDoc(blob, a.download, `vpo:${poId}`, "vendor_po");
     } catch (e) {
       alert(e instanceof Error ? e.message : "Excel download failed");
     }
@@ -1456,6 +1461,7 @@ function VendorPoDetailModal({
             formats={["pdf", "xlsx"]}
             downloadUrl={(f) => (f === "xlsx" ? vendorPoXlsxUrl(id) : vendorPoPdfUrl(id))}
             downloadName={(f) => `${d.po_no || "PurchaseOrder"}.${f}`}
+            archive={{ ref: `vpo:${id}`, doc: "vendor_po" }}
             onPreview={(lang) => previewVendorPo(id, lang)}
             onSend={(p) => sendVendorPo({ ...p, poId: id })}
             rfqId={options.orders.find((o) => o.id === d.order_id)?.rfq_id ?? null}
@@ -2132,6 +2138,7 @@ function VendorPoSend({
     a.download = preview?.pdf_filename ?? `${po?.po_no ?? "PurchaseOrder"}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
+    archiveIssuedDoc(blob, a.download, `vpo:${poId}`, "vendor_po");
   }
 
   if (options.purchase_orders.length === 0) {

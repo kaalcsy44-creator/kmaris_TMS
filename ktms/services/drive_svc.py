@@ -307,19 +307,26 @@ def _numbered(filename: str, n: int) -> str:
     return f"{stem} ({n}){ext}"
 
 
-def _free_name(folder_id: str, filename: str, md5: str | None) -> tuple[str, str | None]:
-    """(올릴 이름, 내용이 같은 기존 파일 ID|None). 덮어쓰지 않도록 ' (n)' 을 붙인다."""
+def _free_name(folder_id: str, filename: str, md5: str | None,
+               prop: tuple[str, str] | None = None) -> tuple[str, str | None]:
+    """(올릴 이름, 내용이 같은 기존 파일 ID|None). 덮어쓰지 않도록 ' (n)' 을 붙인다.
+
+    같다고 보는 기준: md5(바이트가 같을 때) 또는 prop=(키, 값) — 파일에 붙여 둔
+    appProperties 가 같을 때(생성 시각만 다른 같은 문서를 가려낸다)."""
     stem, ext = _split_ext(filename)
     # 같은 이름과 번호 붙은 이름을 한 번에 모은다(이름이 stem 으로 시작하는 것).
     q_stem = stem[:80]
-    siblings = [f for f in _children(folder_id, fields="id,name,md5Checksum,mimeType")
+    siblings = [f for f in _children(folder_id, fields="id,name,md5Checksum,mimeType,appProperties")
                 if f.get("mimeType") != FOLDER_MIME and f["name"].startswith(q_stem)]
     names = {f["name"] for f in siblings}
-    if md5:
+    if md5 or prop:
         pat = re.compile(rf"^{re.escape(stem)}( \(\d+\))?{re.escape(ext)}$")
-        same = next((f for f in siblings if pat.match(f["name"]) and f.get("md5Checksum") == md5), None)
-        if same:
-            return same["name"], same["id"]
+        for f in siblings:
+            if not pat.match(f["name"]):
+                continue
+            if (md5 and f.get("md5Checksum") == md5) or (
+                    prop and (f.get("appProperties") or {}).get(prop[0]) == prop[1]):
+                return f["name"], f["id"]
     n = 1
     while _numbered(filename, n) in names:
         n += 1
@@ -327,7 +334,9 @@ def _free_name(folder_id: str, filename: str, md5: str | None) -> tuple[str, str
 
 
 def upload_file(folder_id: str, filename: str, data: bytes | BinaryIO,
-                mime: str = "application/octet-stream", *, skip_if_same: bool = False) -> dict:
+                mime: str = "application/octet-stream", *, skip_if_same: bool = False,
+                app_properties: dict[str, str] | None = None,
+                skip_if_prop: str | None = None) -> dict:
     """파일 하나를 올린다. 같은 이름이 있으면 ' (2)' 를 붙인다 — 덮어쓰지 않는다.
 
     data 는 bytes 또는 읽기 가능한 파일 객체. 큰 파일도 조각(8MB)으로 나눠 올려
@@ -350,8 +359,11 @@ def upload_file(folder_id: str, filename: str, data: bytes | BinaryIO,
             data.seek(pos)
         md5 = h.hexdigest()
 
+    prop = None
+    if skip_if_prop and app_properties and app_properties.get(skip_if_prop):
+        prop = (skip_if_prop, app_properties[skip_if_prop])
     with _lock_for(folder_id):
-        name, same_id = _free_name(folder_id, filename, md5)
+        name, same_id = _free_name(folder_id, filename, md5, prop)
         if same_id:
             return {"id": same_id, "name": name, "url": file_url(same_id), "skipped": True}
 
@@ -363,7 +375,8 @@ def upload_file(folder_id: str, filename: str, data: bytes | BinaryIO,
 
         init = _call("POST", f"{UPLOAD_API}/files",
                      params={"uploadType": "resumable", "fields": "id,name"},
-                     json_body={"name": name, "parents": [folder_id], "mimeType": mime},
+                     json_body={"name": name, "parents": [folder_id], "mimeType": mime,
+                                **({"appProperties": app_properties} if app_properties else {})},
                      headers={"X-Upload-Content-Type": mime, "X-Upload-Content-Length": str(size)})
         session_url = init.headers["Location"]
 

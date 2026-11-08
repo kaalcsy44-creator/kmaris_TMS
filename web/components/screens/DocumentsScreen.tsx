@@ -6,6 +6,9 @@ import DecimalsSelect, { decimalsOf } from "@/components/common/DecimalsSelect";
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
+  archiveIssuedDoc,
+  archiveIssuedDocUrl,
+  type DriveDoc,
   documentDownloadUrl,
   fetchDocumentDetail,
   fetchProjectDocContext,
@@ -3200,6 +3203,8 @@ function DownloadButton({
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+    const doc = driveDocOf(kind);
+    if (doc) archiveIssuedDoc(blob, filename, driveRefOf({ orderId }), doc);
   }
 
   return (
@@ -3207,6 +3212,16 @@ function DownloadButton({
       {label}
     </button>
   );
+}
+
+// 내려받은 문서를 드라이브 프로젝트 폴더(04 INV)에 남길 때의 종류와 열쇠.
+// 홈택스 업로드용 xlsx(tax/xlsx)는 고객에게 나가는 문서가 아니라 남기지 않는다.
+function driveDocOf(kind: string): DriveDoc | null {
+  const k = kind.split("/")[0];
+  return k === "pi" || k === "ci" || k === "pl" || k === "sm" ? k : null;
+}
+function driveRefOf(t: DocTarget): string {
+  return "orderId" in t ? `order:${t.orderId}` : `rfq:${t.rfqId}`;
 }
 
 // 문서 미리보기 — 다운로드와 동일한 PDF 를 받아 모달 iframe 으로 인라인 표시한다.
@@ -3258,6 +3273,9 @@ function DocPreviewButton({
     a.href = url;
     a.download = saveName;
     a.click();
+    // 미리보기에서 내려받는 순간이 발행이다 — 그 PDF 를 드라이브 04 INV 에도 남긴다.
+    const doc = driveDocOf(kind);
+    if (doc) archiveIssuedDocUrl(url, saveName, driveRefOf(target), doc);
   }
 
   async function saveExcel() {
@@ -3274,6 +3292,8 @@ function DocPreviewButton({
       a.download = filenameFromDisposition(res, saveName.replace(/\.pdf$/i, ".xlsx"));
       a.click();
       URL.revokeObjectURL(excelUrl);
+      const doc = driveDocOf(xlsxKind);
+      if (doc) archiveIssuedDoc(blob, a.download, driveRefOf(target), doc);
     } catch (e) {
       alert(e instanceof Error ? e.message : "Excel download failed");
     }

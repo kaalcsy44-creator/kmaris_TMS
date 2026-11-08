@@ -11,6 +11,8 @@ import {
   fetchClaims,
   fetchCreditNotePdf,
   fetchCreditNoteXlsx,
+  archiveIssuedDoc,
+  archiveIssuedDocUrl,
   fetchFxRate,
   fetchPoWorkOptions,
   updateClaim,
@@ -748,7 +750,9 @@ function CreditNotePreview({ cn, onClose }: { cn: CreditNoteRow; onClose: () => 
     setBusy(true);
     setErr(null);
     try {
-      saveBlob(await fetchCreditNoteXlsx(cn.id), `${name}.xlsx`);
+      const blob = await fetchCreditNoteXlsx(cn.id);
+      saveBlob(blob, `${name}.xlsx`);
+      archiveIssuedDoc(blob, `${name}.xlsx`, `cn:${cn.id}`, "credit_note");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Excel download failed");
     } finally {
@@ -762,6 +766,8 @@ function CreditNotePreview({ cn, onClose }: { cn: CreditNoteRow; onClose: () => 
     a.href = url;
     a.download = `${name}.pdf`;
     a.click();
+    // 내려받는 순간이 발행이다 — 그 PDF 를 드라이브 04 INV 에도 남긴다.
+    archiveIssuedDocUrl(url, `${name}.pdf`, `cn:${cn.id}`, "credit_note");
   }
 
   if (typeof document === "undefined") return null;

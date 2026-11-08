@@ -11,6 +11,7 @@ import {
   fetchDocumentDetail,
   fetchPoWorkOptions,
   previewTaxInvoicePdf,
+  archiveIssuedDocUrl,
   recordArPayment,
   fetchFxRate,
   updateArRecord,
@@ -1973,6 +1974,8 @@ function TaxPreviewButton({ orderId, form }: { orderId: number | null; form: ArF
     a.href = url;
     a.download = `${form.invoice_no || "TAX_INVOICE"}.pdf`;
     a.click();
+    // 대금청구서를 내려받는 순간이 발행이다 — 그 PDF 를 드라이브 04 INV 에도 남긴다.
+    if (orderId != null) archiveIssuedDocUrl(url, a.download, `order:${orderId}`, "tax_invoice");
   }
 
   return (

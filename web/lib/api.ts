@@ -310,6 +310,29 @@ export function uploadRfqDriveFiles(
   fd.append("intake_text", intakeText);
   return postForm<DriveUploadResult>(`/api/admin/rfq/${rfqId}/drive-files`, fd);
 }
+/** 드라이브에 남기는 발행 문서 종류 → 서버가 하위 폴더(02 QTN·03 PO·04 INV)를 고른다. */
+export type DriveDoc =
+  | "quotation" | "vendor_po" | "pi" | "ci" | "pl" | "sa" | "sm" | "tax_invoice" | "credit_note";
+/** 사람이 **다운로드한 그 파일**을 프로젝트 폴더에 한 벌 남긴다(기다리지 않는다).
+ *  ref: "qtn:ID" · "order:ID" · "rfq:ID" · "vpo:ID" · "cn:ID" — 문서가 속한 프로젝트를 찾는 열쇠.
+ *  드라이브가 실패해도 다운로드는 이미 끝났다 — 콘솔에만 남긴다. 미리보기에서는 부르지 않는다.
+ *  같은 내용을 다시 받으면 서버가 건너뛰고, 내용이 바뀐 재발행은 " (2)" 로 따로 남는다. */
+export function archiveIssuedDoc(blob: Blob, filename: string, ref: string, doc: DriveDoc): void {
+  const fd = new FormData();
+  fd.append("file", blob, filename);
+  fd.append("ref", ref);
+  fd.append("doc", doc);
+  postForm<{ status: string; name?: string }>("/api/admin/drive/archive", fd)
+    .then((r) => console.info(`[drive] ${filename}: ${r.status}${r.name && r.name !== filename ? ` → ${r.name}` : ""}`))
+    .catch((e) => console.warn(`[drive] ${filename} not archived`, e));
+}
+/** 화면에 띄운 미리보기(blob: 주소)를 그대로 내려받을 때 — 그 파일을 드라이브에도 남긴다. */
+export function archiveIssuedDocUrl(objectUrl: string, filename: string, ref: string, doc: DriveDoc): void {
+  fetch(objectUrl)
+    .then((r) => r.blob())
+    .then((b) => archiveIssuedDoc(b, filename, ref, doc))
+    .catch((e) => console.warn(`[drive] ${filename} not archived`, e));
+}
 /** "폴더 만들기" — 멱등(이미 있으면 그 폴더를 잇는다). 드라이브 실패는 502. */
 export function createRfqDriveFolder(rfqId: number): Promise<RfqDriveFolder> {
   return post<RfqDriveFolder>(`/api/admin/rfq/${rfqId}/drive-folder`, {});

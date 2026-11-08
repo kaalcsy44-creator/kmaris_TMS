@@ -8,7 +8,11 @@ drive_svc 는 드라이브만 알고, 이 모듈은 KTMS 레코드를 안다 —
 """
 from __future__ import annotations
 
+import hashlib
+import io
 import logging
+import re
+import zipfile
 
 from db.engine import get_session
 from db.models import RFQ, Customer, Vessel
@@ -154,6 +158,103 @@ def save_intake(rfq_id: int, files: list, text: str = "", *, by: str = "", at: s
             failed.append({"name": "00 접수내용.md", "reason": str(exc)[:200]})
     return {"folder_url": folder["folder_url"], "rfq_folder_url": drive_svc.folder_url(rfq_dir),
             "saved": saved, "skipped": skipped, "failed": failed}
+
+
+# ── 발행 문서 보관(다운로드할 때 함께) ─────────────────────────────────────────
+
+# 문서 종류 → 하위 폴더. 고객에게 나가는 문서만 둔다(홈택스 업로드용 xlsx 등 내부 자료 제외).
+DOC_FOLDER = {
+    "quotation": "QTN",
+    "vendor_po": "PO",
+    "pi": "INV", "ci": "INV", "pl": "INV", "sa": "INV", "sm": "INV",
+    "tax_invoice": "INV", "credit_note": "INV",
+}
+
+
+def rfq_id_for(s, ref: str) -> int | None:
+    """'qtn:12' · 'order:5' · 'rfq:9' · 'vpo:3' · 'cn:4' → 그 문서가 속한 프로젝트(RFQ) id."""
+    from db.models import Claim, CreditNote, Order, PurchaseOrder, Quotation
+    from _core import _rfq_for_order
+    kind, _, raw = (ref or "").partition(":")
+    try:
+        key = int(raw)
+    except ValueError:
+        return None
+
+    def by_order(oid):
+        o = s.query(Order).filter_by(id=oid).first() if oid else None
+        r = _rfq_for_order(s, o) if o else None
+        return r.id if r else None
+
+    if kind == "rfq":
+        return key if s.query(RFQ.id).filter_by(id=key).first() else None
+    if kind == "qtn":
+        q = s.query(Quotation).filter_by(id=key).first()
+        return q.rfq_id if q else None
+    if kind == "order":
+        return by_order(key)
+    if kind == "vpo":
+        po = s.query(PurchaseOrder).filter_by(id=key).first()
+        return by_order(po.order_id) if po else None
+    if kind == "cn":
+        cn = s.query(CreditNote).filter_by(id=key).first()
+        if not cn:
+            return None
+        cl = s.query(Claim).filter_by(id=cn.claim_id).first() if cn.claim_id else None
+        return (cl.rfq_id if cl and cl.rfq_id else None) or by_order(cn.order_id)
+    return None
+
+
+_PDF_VOLATILE = re.compile(rb"/(CreationDate|ModDate)\s*\(D:[^)]*\)|/ID\s*\[\s*<[0-9a-fA-F]*>\s*<[0-9a-fA-F]*>\s*\]")
+
+
+def fingerprint(data: bytes, filename: str) -> str:
+    """같은 문서를 다시 받았는지 가리는 지문 — 만든 시각(PDF 날짜·ID, xlsx 속성)을 빼고 잰다.
+
+    PDF·xlsx 는 같은 내용이라도 만들 때마다 시각이 박혀 바이트가 달라진다. 그대로 비교하면
+    "다운로드할 때마다 (2)·(3)…"이 쌓인다."""
+    h = hashlib.sha256()
+    low = (filename or "").lower()
+    if data[:5] == b"%PDF-":
+        h.update(_PDF_VOLATILE.sub(b"", data))
+    elif low.endswith((".xlsx", ".xlsm", ".docx")) and data[:2] == b"PK":
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                for n in sorted(z.namelist()):
+                    if n == "docProps/core.xml":
+                        continue
+                    h.update(n.encode())
+                    h.update(z.read(n))
+        except zipfile.BadZipFile:
+            h.update(data)
+    else:
+        h.update(data)
+    return h.hexdigest()[:40]
+
+
+def archive_doc(ref: str, doc: str, filename: str, data: bytes, mime: str) -> dict:
+    """발행 문서 한 벌을 프로젝트 폴더의 해당 하위 폴더에 남긴다.
+
+    덮어쓰지 않는다 — 내용이 바뀐 재발행은 ' (2)' 로 새로 남고, 내용이 같으면(다시 받기만
+    한 것) 건너뛴다. 반환: {"status": "saved"|"same"|"no_project", "name", "url"}."""
+    key = DOC_FOLDER.get(doc)
+    if key is None:
+        raise drive_svc.DriveError(f"보관하지 않는 문서 종류: {doc}")
+    s = get_session()
+    try:
+        rfq_id = rfq_id_for(s, ref)
+    finally:
+        s.close()
+    if not rfq_id:
+        return {"status": "no_project", "name": filename, "url": ""}
+    folder = ensure_rfq_folder(rfq_id)
+    target = drive_svc.subfolder_id(folder["folder_id"], key)
+    fp = fingerprint(data, filename)
+    up = drive_svc.upload_file(target, filename, data, mime or "application/octet-stream",
+                               app_properties={"ktms_fp": fp, "ktms_doc": doc},
+                               skip_if_prop="ktms_fp")
+    return {"status": "same" if up["skipped"] else "saved", "name": up["name"], "url": up["url"],
+            "folder": key}
 
 
 def ensure_rfq_folder_quietly(rfq_id: int) -> None:

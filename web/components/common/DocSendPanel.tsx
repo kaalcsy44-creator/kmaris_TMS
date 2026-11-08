@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getToken } from "@/lib/auth";
-import { renderEmailPreview, fetchProjectMail } from "@/lib/api";
+import { renderEmailPreview, fetchProjectMail, archiveIssuedDoc, type DriveDoc } from "@/lib/api";
 import type { MailMessage, ProjectMail } from "@/lib/types";
 import CcField from "@/components/common/CcField";
 import SignaturePicker from "@/components/common/SignaturePicker";
@@ -56,7 +56,10 @@ export default function DocSendPanel({
   sentAt,
   onSent,
   templateType,
+  archive,
 }: {
+  /** 다운로드·문서 첨부 발송 때 그 파일을 드라이브 프로젝트 폴더에도 남긴다(미리보기는 제외). */
+  archive?: { ref: string; doc: DriveDoc };
   title?: string;
   formats: DocFormat[]; // 지원 포맷(다운로드·첨부 선택지)
   downloadUrl: (fmt: DocFormat) => string; // 인증 GET URL
@@ -172,12 +175,14 @@ export default function DocSendPanel({
   async function download(fmt: DocFormat) {
     setErr(null);
     try {
-      const url = URL.createObjectURL(await fetchDoc(fmt));
+      const blob = await fetchDoc(fmt);
+      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = downloadName(fmt);
       a.click();
       URL.revokeObjectURL(url);
+      if (archive) archiveIssuedDoc(blob, downloadName(fmt), archive.ref, archive.doc);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "File download failed");
     }
@@ -293,6 +298,12 @@ export default function DocSendPanel({
       setErr(e instanceof Error ? e.message : "Email sending failed");
       setBusy(false);
       return;
+    }
+    // 문서를 붙여 보냈으면 그것도 발행이다 — 같은 저장본으로 만든 파일을 드라이브에 남긴다.
+    if (archive && includeDoc) {
+      fetchDoc(format)
+        .then((blob) => archiveIssuedDoc(blob, downloadName(format), archive.ref, archive.doc))
+        .catch((e) => console.warn("[drive] sent document not archived", e));
     }
     setBusy(false);
     onSent?.();

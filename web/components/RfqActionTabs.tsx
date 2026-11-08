@@ -23,6 +23,7 @@ import {
   type VendorQuoteParseResult,
   createCustomerQuote,
   quotationPdfUrl,
+  archiveIssuedDoc,
   combinedQuotationUrl,
   quotationXlsxUrl,
   previewQuotationEmail,
@@ -2858,7 +2859,10 @@ function CustomerQuoteDetailModal({
     setDlBusy(true);
     setDlErr(null);
     try {
-      saveBlob(await fetchDocBlob(format), format);
+      const blob = await fetchDocBlob(format);
+      saveBlob(blob, format);
+      // 다운로드 = 발행 — 그 파일을 드라이브 02 QTN 에도 남긴다(미리보기는 남기지 않는다).
+      archiveIssuedDoc(blob, `${qtnNo || d?.qtn_no || "Quotation"}.${format}`, `qtn:${id}`, "quotation");
     } catch (e) {
       setDlErr(e instanceof Error ? e.message : "Download failed");
     } finally {
@@ -3239,6 +3243,7 @@ function CustomerQuoteDetailModal({
             formats={["pdf", "xlsx"]}
             downloadUrl={(f) => (f === "xlsx" ? quotationXlsxUrl(id, "quotation") : quotationPdfUrl(id, "quotation"))}
             downloadName={(f) => `${d.qtn_no || "Quotation"}.${f}`}
+            archive={{ ref: `qtn:${id}`, doc: "quotation" }}
             onPreview={(lang) => previewQuotationEmail(id, lang)}
             onSend={(p) => sendQuotationEmail({ ...p, qtnId: id, docType: "quotation" })}
             rfqId={d.rfq_id}
@@ -5326,6 +5331,7 @@ function CustomerQuoteAction({
     a.download = `${qtn.qtn_no}_${docType}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
+    archiveIssuedDoc(blob, a.download, `qtn:${qtn.id}`, docType === "quotation" ? "quotation" : "pi");
   }
 
   async function sendEmail() {
