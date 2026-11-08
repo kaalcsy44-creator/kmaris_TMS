@@ -146,13 +146,27 @@ def build_candidates(out_path: Path) -> None:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "후보"
-    head = ["RFQ id", "RFQ No.", "타입", "수신일", "고객(약칭)", "선박", "프로젝트 제목",
-            "판정", "점수", "1순위 폴더", "위치", "근거", "폴더 링크", "2순위 폴더", "2순위 점수",
-            "확정(O/X)", "직접 지정(폴더 링크)"]
+    # 한 줄 = KTMS 딜 하나. 왼쪽에 딜, 바로 옆에 연결할 폴더를 두어 화면을 옮기지 않고
+    # 둘을 견주게 한다. '참고: 다음 후보'는 비교용일 뿐 연결되지 않는다(맨 뒤로 뺐다).
+    head = ["RFQ id", "KTMS 딜 (번호 · 수신일 · 고객 · 선박 · 제목)", "판정", "확정(O/X)",
+            "연결할 폴더 (추천)", "근거", "직접 지정(폴더 링크)", "폴더 링크", "폴더 위치",
+            "참고: 다음 후보 (연결 안 됨)"]
     ws.append(head)
     bold = Font(bold=True)
     for c in ws[1]:
         c.font = bold
+
+    def why_text(w: dict) -> str:
+        out = []
+        if "날짜차" in w:
+            out.append("날짜 같음" if w["날짜차"] == 0 else f"날짜 {w['날짜차']}일 차이")
+        out.append("고객 일치" if w.get("고객") else "고객 다름")
+        if "선박" in w:
+            v = w["선박"]
+            out.append("선박 일치" if v >= 0.99 else "선박 일부" if v > 0 else "선박 다름")
+        if "제목" in w:
+            out.append(f"제목 {round(w['제목'] * 100)}% 겹침")
+        return " · ".join(out)
     fills = {"확실": "E2F0D9", "후보": "FFF2CC", "없음": "F8CBAD", "연결됨": "DDEBF7"}
     counts = {}
     for r in rows:
@@ -172,16 +186,16 @@ def build_candidates(out_path: Path) -> None:
         else:
             verdict, sc, f1, why, f2 = "없음", "", None, {}, None
         counts[verdict] = counts.get(verdict, 0) + 1
+        deal = " · ".join(x for x in (
+            r["rfq_no"], r["date"].strftime("%y%m%d") if r["date"] else "", r["cust"],
+            r["vessel"] or "(선박 없음)", r["title"] or "(제목 없음)") if x)
         ws.append([
-            r["id"], r["rfq_no"], r["wt"], r["date"].isoformat() if r["date"] else "", r["cust"],
-            r["vessel"], r["title"], verdict, sc,
-            f1["name"] if f1 else "", f1["where"] if f1 else "",
-            ", ".join(f"{k} {v}" for k, v in why.items()) if f1 else "",
-            d.folder_url(f1["id"]) if f1 else "",
-            (f2[0]["name"] if f2 else ""), (f2[1] if f2 else ""),
-            "O" if verdict == "확실" else "", "",
+            r["id"], deal, verdict, "O" if verdict == "확실" else "",
+            f1["name"] if f1 else "", why_text(why) if f1 else "", "",
+            d.folder_url(f1["id"]) if f1 else "", f1["where"] if f1 else "",
+            (f2[0]["name"] if f2 else ""),
         ])
-        ws.cell(ws.max_row, 8).fill = PatternFill("solid", fgColor=fills[verdict])
+        ws.cell(ws.max_row, 3).fill = PatternFill("solid", fgColor=fills[verdict])
 
     ws2 = wb.create_sheet("짝 없는 폴더")
     ws2.append(["폴더", "위치", "링크"])
@@ -189,11 +203,11 @@ def build_candidates(out_path: Path) -> None:
         c.font = bold
     for f in sorted((f for t in trees.values() for f in t if f["id"] not in used), key=lambda x: x["name"]):
         ws2.append([f["name"], f["where"], d.folder_url(f["id"])])
-    for sheet, widths in ((ws, [7, 17, 8, 11, 13, 18, 40, 7, 6, 52, 14, 30, 20, 40, 8, 9, 30]),
-                          (ws2, [60, 16, 50])):
+    for sheet, widths, freeze in ((ws, [7, 70, 7, 9, 62, 40, 30, 22, 13, 50], "C2"),
+                                  (ws2, [60, 16, 50], "A2")):
         for i, w in enumerate(widths, 1):
             sheet.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
-        sheet.freeze_panes = "A2"
+        sheet.freeze_panes = freeze      # 딜 칸은 옆으로 넘겨도 보이게 고정
     wb.save(out_path)
     print("판정:", ", ".join(f"{k} {v}" for k, v in counts.items()))
     print(f"짝 없는 폴더: {ws2.max_row - 1}개")
