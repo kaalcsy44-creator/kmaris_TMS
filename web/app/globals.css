@@ -5162,14 +5162,16 @@ table.mini.wide thead tr.ig-group-row th.grp-sales {
    컬럼 구성 = 1선택 · 2No. · 3Part · 4Description · 5Qty · 6Unit · 7Cost · 8Cost Amount ·
    9Margin · 10Unit Price · 11Amount (부수 필드는 상세 서브행으로 내려가 컬럼이 아니다).
    합계행(tfoot)은 colspan 세그먼트라 nth-child 대신 .foot-purchase/.foot-sales 클래스로 색을 준다. */
-.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(7),
-.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(8) {
+/* 칸 번호(nth-child) 대신 클래스로 — 칸을 넣거나 숨겨도 색이 제 칸을 따라간다. */
+.ig-cquote-items thead tr:not(.ig-group-row) th.th-purchase {
   background: #f8f2e6;
 }
-.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(10),
-.ig-cquote-items thead tr:not(.ig-group-row) th:nth-child(11) {
+.ig-cquote-items thead tr:not(.ig-group-row) th.th-sales {
   background: #e2ecfb;
 }
+/* 줄별 실제 마진 — 계산 칸. 손실이면 붉게. */
+.ig-cquote-items td.actual-margin { color: #12734a; font-weight: 600; white-space: nowrap; }
+.ig-cquote-items td.actual-margin.loss { color: #b42318; }
 /* Qty·Unit 은 짧은 값이므로 일반 규칙(num 104px · 5·6번째 110px)보다 좁게 잡는다 —
    컬럼이 11개로 줄어든 만큼 표가 가로 스크롤 없이 들어가도록.
    선택자에 table.mini.wide.lead-tools 를 그대로 붙인 건 우선순위 때문 —

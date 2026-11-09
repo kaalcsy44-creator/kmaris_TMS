@@ -5839,6 +5839,13 @@ function CustomerQuoteItemEditor({
     const profit = sales - purchaseInSale;
     return { purchase, sales, purchaseInSale, profit, marginPct: sales > 0 ? (profit / sales) * 100 : null };
   };
+  // 한 줄의 실제 마진 % — 합계 마진과 같은 식을 그 줄에만 적용한다. 매출이 0 이면 없음.
+  const lineActualMargin = (it: CustomerQuoteItem): number | null => {
+    const sales = Number(it.amount || 0);
+    if (!(sales > 0)) return null;
+    const cost = convertCurrency(Number(it.cost_price || 0) * Number(it.qty || 1), costCurrency, currency, conv);
+    return ((sales - cost) / sales) * 100;
+  };
   // 옵션(대안)이 있으면 표는 옵션별 Subtotal 로 끊기고, 맨 아래 합계행은 그것들을 모두
   // 더한 Total 이다(lib/quoteOptions.ts · 서버 _counted_rows 와 같은 규칙).
   const plan = optionPlan(items);
@@ -5883,7 +5890,10 @@ function CustomerQuoteItemEditor({
     { key: "unit", label: "Unit" },
     { key: "cost", label: `Cost (${costCur})`, className: "num" },
     { key: "cost_amount", label: `Cost Amount (${costCur})`, className: "num" },
-    { key: "margin", label: "Margin %", className: "num" },
+    { key: "margin", label: "Margin % (set)", className: "num" },
+    // 실제 마진 — (매출 − 매입[판매통화 환산]) ÷ 매출. 올림·단가 직접 수정까지 반영된 결과라
+    // 위의 설정 마진과 다를 수 있다. 계산 칸(입력 없음).
+    { key: "actual_margin", label: "Actual margin %", className: "num" },
     // 줄별 올림 단위 — 비워 두면 Pricing 의 "Round up to" 를 따른다.
     { key: "round", label: "Round up" },
     { key: "unit_price", label: `Unit Price (${saleCur})`, className: "num" },
@@ -5937,9 +5947,11 @@ function CustomerQuoteItemEditor({
   // 두고, 매입 합계는 Cost Amount 칸, 매출 합계는 Amount 칸에 둔다. 그룹행과 같은 방식으로
   // 숨김 컬럼을 건너뛰어 항상 정렬을 맞춘다(.ig-foot → ItemGridStyle nth-child 규칙에서 제외).
   type FootRole = "label" | "purchase" | "margin" | "sales" | "empty";
+  // 합계의 마진은 결과값이라 Actual margin 칸에 둔다(그 칸을 숨겼으면 설정 마진 칸으로).
+  const actualHidden = grid.layout.hidden.has("actual_margin");
   const footRole = (key: string): FootRole =>
     key === "cost_amount" ? "purchase"
-      : key === "margin" ? "margin"
+      : key === "actual_margin" || (key === "margin" && actualHidden) ? "margin"
         : key === "amount" ? "sales"
           : key === "__seq" || key === "part_no" || key === "description" ||
               key === "qty" || key === "unit" ? "label"
@@ -6098,12 +6110,13 @@ function CustomerQuoteItemEditor({
               <ItemTh grid={grid} k="description">Description</ItemTh>
               <ItemTh grid={grid} k="qty" className="num">Qty</ItemTh>
               <ItemTh grid={grid} k="unit">Unit</ItemTh>
-              <ItemTh grid={grid} k="cost" className="num">Cost ({costCur})</ItemTh>
-              <ItemTh grid={grid} k="cost_amount" className="num">Cost Amount ({costCur})</ItemTh>
-              <ItemTh grid={grid} k="margin" className="num">Margin %</ItemTh>
+              <ItemTh grid={grid} k="cost" className="num th-purchase">Cost ({costCur})</ItemTh>
+              <ItemTh grid={grid} k="cost_amount" className="num th-purchase">Cost Amount ({costCur})</ItemTh>
+              <ItemTh grid={grid} k="margin" className="num">Margin % (set)</ItemTh>
+              <ItemTh grid={grid} k="actual_margin" className="num">Actual margin %</ItemTh>
               <ItemTh grid={grid} k="round">Round up</ItemTh>
-              <ItemTh grid={grid} k="unit_price" className="num">Unit Price ({saleCur})</ItemTh>
-              <ItemTh grid={grid} k="amount" className="num">Amount ({saleCur})</ItemTh>
+              <ItemTh grid={grid} k="unit_price" className="num th-sales">Unit Price ({saleCur})</ItemTh>
+              <ItemTh grid={grid} k="amount" className="num th-sales">Amount ({saleCur})</ItemTh>
               <ItemTh grid={grid} k="lead_time">Lead Time</ItemTh>
               <ItemTh grid={grid} k="remark">Remark</ItemTh>
               <ItemTh grid={grid} k="source">Source</ItemTh>
@@ -6167,6 +6180,17 @@ function CustomerQuoteItemEditor({
                   value={it.margin_pct}
                   onChange={(e) => patch(i, "margin_pct", e.target.value)}
                 /></td>
+                {(() => {
+                  const m = lineActualMargin(it);
+                  return (
+                    <td
+                      className={"num actual-margin" + (m != null && m < 0 ? " loss" : "")}
+                      title={m == null ? undefined : "(Amount − Cost Amount) ÷ Amount — after round-up and any price you typed in"}
+                    >
+                      {m == null ? <span className="dash">—</span> : `${m.toFixed(1)}%`}
+                    </td>
+                  );
+                })()}
                 {/* 줄별 올림 단위 — "Auto" 는 Pricing 의 Round up to 를 따른다. */}
                 <td>
                   <select

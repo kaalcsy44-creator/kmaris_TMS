@@ -1132,10 +1132,11 @@ def make_quotation_costing_xlsx(
     left = Alignment(horizontal="left", vertical="center", wrap_text=True)
     right = Alignment(horizontal="right", vertical="center")
 
-    # No | Part No | Description | Qty | Unit | Cost U/P | Cost Amount | Margin% | U/Price | Amount | Lead Time | Remark
+    # No | Part No | Description | Qty | Unit | Cost U/P | Cost Amount | Margin% | Actual Margin% | U/Price | Amount | Lead Time | Remark
+    # Margin % = 줄에 정한 마진(설정값), Actual Margin % = (매출−매입)÷매출 — 올림·단가 직접 수정까지 반영된 결과.
     HEADERS = [quote_no_header(data.get("items", [])), "Part No.", "Description", "Qty", "Unit",
-               "Cost U/P", "Cost Amount", "Margin %", "U/Price", "Amount", "Lead Time", "Remark"]
-    WIDTHS = [5, 18, 34, 7, 7, 13, 14, 9, 13, 15, 14, 20]
+               "Cost U/P", "Cost Amount", "Margin %", "Actual Margin %", "U/Price", "Amount", "Lead Time", "Remark"]
+    WIDTHS = [5, 18, 34, 7, 7, 13, 14, 9, 10, 13, 15, 14, 20]
     NCOL = len(HEADERS)
 
     def merge(r1, c1, r2, c2):
@@ -1181,12 +1182,12 @@ def make_quotation_costing_xlsx(
     if company.get("website"): bits.append(company["website"])
     contact = "   |   ".join(bits)
     # 회사명/주소/연락처 — C~K 가운데 정렬, 진한 회색, 음영 없음.
-    merge(1, 3, 1, 11); cc = ws.cell(1, 3, company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd.")); cc.font = hd_name; cc.alignment = center_wrap
-    merge(2, 3, 2, 11); cc = ws.cell(2, 3, addr); cc.font = hd_addr; cc.alignment = center_wrap
-    merge(3, 3, 3, 11); cc = ws.cell(3, 3, contact); cc.font = hd_addr; cc.alignment = center_wrap
+    merge(1, 3, 1, 12); cc = ws.cell(1, 3, company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd.")); cc.font = hd_name; cc.alignment = center_wrap
+    merge(2, 3, 2, 12); cc = ws.cell(2, 3, addr); cc.font = hd_addr; cc.alignment = center_wrap
+    merge(3, 3, 3, 12); cc = ws.cell(3, 3, contact); cc.font = hd_addr; cc.alignment = center_wrap
     # 슬로건 — 우측 열 L1:L3, 좌측 정렬, 2줄(줄바꿈), 이탤릭 블루.
     tagline = (company.get("tagline", "") or "").replace(". ", ".\n", 1)
-    merge(1, 12, 3, NCOL); cc = ws.cell(1, 12, tagline); cc.font = hd_tag; cc.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    merge(1, 13, 3, NCOL); cc = ws.cell(1, 13, tagline); cc.font = hd_tag; cc.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
     ws.row_dimensions[1].height = 34
     ws.row_dimensions[2].height = 17
     ws.row_dimensions[3].height = 17
@@ -1237,25 +1238,25 @@ def make_quotation_costing_xlsx(
         ("Ship Name", vessel.get("name", ""), "Currency", currency),
         ("Project", data.get("project_title", ""), "VAT", vat_label),
     ]
-    # 원가열(F·G·H)은 기본 숨김이므로 메타는 그 열을 피해 좌(1-5)·우(9-12)에 배치.
+    # 원가열(F·G·H·I)은 기본 숨김이므로 메타는 그 열을 피해 좌(1-5)·우(10-13)에 배치.
     for off, (k1, v1, k2, v2) in enumerate(meta, start=7):
         merge(off, 1, off, 2); merge(off, 3, off, 5)
-        merge(off, 9, off, 10); merge(off, 11, off, NCOL)
-        for col, val, is_label in [(1, k1, True), (3, v1, False), (9, k2, True), (11, v2, False)]:
+        merge(off, 10, off, 11); merge(off, 12, off, NCOL)
+        for col, val, is_label in [(1, k1, True), (3, v1, False), (10, k2, True), (12, v2, False)]:
             cell = ws.cell(off, col, val); cell.alignment = left
             if is_label:
                 cell.fill = gray; cell.font = boldsm
-        for col in (1, 2, 3, 4, 5, 9, 10, 11, 12):
+        for col in (1, 2, 3, 4, 5, 10, 11, 12, 13):
             ws.cell(off, col).border = bdr
         ws.row_dimensions[off].height = 15
 
     # ── PURCHASE 그룹 라벨(원가 열 위) ─────────────────────────────────
     GROUP_ROW = 12
-    merge(GROUP_ROW, 6, GROUP_ROW, 8)
+    merge(GROUP_ROW, 6, GROUP_ROW, 9)
     gc = ws.cell(GROUP_ROW, 6, f"PURCHASE (internal, {cost_cur})"); gc.fill = cost_fill; gc.font = boldsm; gc.alignment = center
     for col in range(1, NCOL + 1):
         ws.cell(GROUP_ROW, col).border = bdr
-        if col < 6 or col > 8:
+        if col < 6 or col > 9:
             ws.cell(GROUP_ROW, col).fill = gray
     ws.row_dimensions[GROUP_ROW].height = 14
 
@@ -1268,7 +1269,7 @@ def make_quotation_costing_xlsx(
     ws.row_dimensions[HROW].height = 24
 
     # 컬럼: A No · B Part · C Desc · D Qty · E Unit · F Cost U/P · G Cost Amount
-    #       · H Margin% · I U/Price · J Amount · K Lead · L Remark
+    #       · H Margin% · I Actual Margin% · J U/Price · K Amount · L Lead · M Remark
     # 품목 한 줄 쓰기 — 옵션 제목행·소계행을 사이에 끼울 수 있게 함수로 뺐다.
     def write_item(r: int, ri: int, it: Dict[str, Any]) -> None:
         qty = _num(it.get("qty", 0))
@@ -1298,21 +1299,23 @@ def make_quotation_costing_xlsx(
             6: cost,                                   # Cost U/P (입력, 원가통화)
             7: f"=D{r}*F{r}",                          # Cost Amount = Qty × Cost
             8: margin_frac,                            # Margin % (입력, 분수)
-            9: u_cell,
-            10: f"=D{r}*I{r}",                         # Amount = Qty × U/Price
-            11: str(it.get("lead_time", "") or ""), 12: it.get("remark", ""),
+            # Actual Margin % = (매출 − 매입[판매통화 환산]) ÷ 매출
+            9: f'=IF(K{r}=0,"",(K{r}-G{r}*{fx_str})/K{r})',
+            10: u_cell,
+            11: f"=D{r}*J{r}",                         # Amount = Qty × U/Price
+            12: str(it.get("lead_time", "") or ""), 13: it.get("remark", ""),
         }
         for ci, val in cells.items():
             cell = ws.cell(r, ci, val); cell.border = bdr
-            if ci in (6, 7, 8):   # 원가열만 연노랑 음영(샘플엔 판매열 zebra 없음)
+            if ci in (6, 7, 8, 9):   # 원가열만 연노랑 음영(샘플엔 판매열 zebra 없음)
                 cell.fill = cost_fill
-            if ci in (4, 9, 10):
+            if ci in (4, 10, 11):
                 cell.alignment = right
-                if ci in (9, 10):
+                if ci in (10, 11):
                     cell.number_format = num_fmt
             elif ci in (6, 7):
                 cell.alignment = right; cell.number_format = cost_fmt
-            elif ci == 8:
+            elif ci in (8, 9):
                 cell.alignment = right; cell.number_format = '0.0%'
             elif ci in (1, 5):
                 cell.alignment = center
@@ -1333,26 +1336,27 @@ def make_quotation_costing_xlsx(
         주면 그 행들(옵션 Subtotal 행)을 더한다 — 총계는 소계를 더해야 겹쳐 세지 않는다."""
         merge(r, 1, r, 5)
         tc = ws.cell(r, 1, label); tc.font = bold16; tc.alignment = center
-        for col in (1, 2, 3, 4, 5, 11, 12):
+        for col in (1, 2, 3, 4, 5, 12, 13):
             ws.cell(r, col).border = bdr
         ws.row_dimensions[r].height = 16
         has_rows = bool(add_rows) if add_rows is not None else l >= f
         if add_rows:
             cost_sum = "=" + "+".join(f"G{x}" for x in add_rows)
-            amt_sum = "=" + "+".join(f"J{x}" for x in add_rows)
+            amt_sum = "=" + "+".join(f"K{x}" for x in add_rows)
         else:
             cost_sum = f"=SUM(G{f}:G{l})" if has_rows else 0
-            amt_sum = f"=SUM(J{f}:J{l})" if has_rows else 0
-        margin_tot = f"=IF(J{r}=0,0,(J{r}-G{r}*{fx_str})/J{r})" if has_rows else 0
-        for col, val, fill in [(6, "", cost_fill), (7, cost_sum, cost_fill), (8, margin_tot, cost_fill),
-                               (9, "", lightblue), (10, amt_sum, lightblue)]:
+            amt_sum = f"=SUM(K{f}:K{l})" if has_rows else 0
+        margin_tot = f"=IF(K{r}=0,0,(K{r}-G{r}*{fx_str})/K{r})" if has_rows else 0
+        # 합계의 마진은 결과값이라 Actual Margin %(I) 칸에 둔다 — Margin %(H)는 줄마다 정한 값이라 비운다.
+        for col, val, fill in [(6, "", cost_fill), (7, cost_sum, cost_fill), (8, "", cost_fill),
+                               (9, margin_tot, cost_fill), (10, "", lightblue), (11, amt_sum, lightblue)]:
             cell = ws.cell(r, col, val); cell.border = bdr; cell.fill = fill
             cell.font = bold16; cell.alignment = right
             if col == 7:
                 cell.number_format = cost_fmt
-            if col == 10:
+            if col == 11:
                 cell.number_format = num_fmt
-            if col == 8:
+            if col == 9:
                 cell.number_format = '0.0%'
 
     def write_option_title(r: int, label: str) -> None:
@@ -1412,7 +1416,7 @@ def make_quotation_costing_xlsx(
             r = HROW + pad
             for ci in range(1, NCOL + 1):
                 cell = ws.cell(r, ci); cell.border = bdr
-                if ci in (6, 7, 8):
+                if ci in (6, 7, 8, 9):
                     cell.fill = cost_fill
             ws.row_dimensions[r].height = 18
         last = HROW + max(ri, MIN_ITEM_ROWS)
@@ -1424,19 +1428,19 @@ def make_quotation_costing_xlsx(
     discount_pct = _num(data.get("discount_pct", 0))
     if discount_pct:
         tot_row = trow
-        for label, val in ((f"Discount ({round(discount_pct, 2):g}%)", f"=-ROUND(J{tot_row}*{discount_pct!r}/100,0)"),
-                           ("Final Total", f"=J{tot_row}+J{tot_row + 1}")):
+        for label, val in ((f"Discount ({round(discount_pct, 2):g}%)", f"=-ROUND(K{tot_row}*{discount_pct!r}/100,0)"),
+                           ("Final Total", f"=K{tot_row}+K{tot_row + 1}")):
             trow += 1
             merge(trow, 1, trow, 5)
             tc = ws.cell(trow, 1, label); tc.font = bold16; tc.alignment = center
             for col in range(1, NCOL + 1):
                 ws.cell(trow, col).border = bdr
-            for col in (6, 7, 8):
+            for col in (6, 7, 8, 9):
                 ws.cell(trow, col).fill = cost_fill
-            vc = ws.cell(trow, 10, val); vc.font = bold16; vc.alignment = right
+            vc = ws.cell(trow, 11, val); vc.font = bold16; vc.alignment = right
             vc.number_format = num_fmt
             if label == "Final Total":
-                for col in (9, 10):
+                for col in (10, 11):
                     ws.cell(trow, col).fill = lightblue
             ws.row_dimensions[trow].height = 16
 
@@ -1503,8 +1507,8 @@ def make_quotation_costing_xlsx(
     fc.font = Font(name="Noto Sans KR", size=9); fc.alignment = center
     last_row = r
 
-    # ── 원가/마진 열(F·G·H)은 기본 숨김(내부 코스팅용) — 필요시 사용자가 펼침 ──
-    for col in ("F", "G", "H"):
+    # ── 원가/마진 열(F·G·H·I)은 기본 숨김(내부 코스팅용) — 필요시 사용자가 펼침 ──
+    for col in ("F", "G", "H", "I"):
         ws.column_dimensions[col].hidden = True
     # A4 세로 1페이지 폭에 맞춰 인쇄(PDF 미리보기와 동일한 세로 규격).
     # 숨긴 원가열은 인쇄 폭 계산에서 제외되어 판매 열만 세로로 깔끔히 맞는다.
