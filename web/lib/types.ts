@@ -3023,6 +3023,8 @@ export type FinanceCalendarItem = {
   order_id: number;
   po_id: number;
   project_no: string;
+  /** 프로젝트 제목 — 메시지 제목(구분 · 내역)에서 내역이 빌 때 쓴다. */
+  project_title?: string;
   account: BankAccount | null;
   account_from: "" | "payable" | "vendor" | "consultant" | "company";
   account_edit: { kind: "payable"; id: number } | { kind: "vendor"; name: string } | null;

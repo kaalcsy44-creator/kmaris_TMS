@@ -3596,7 +3596,11 @@ type MsgLang = "ko" | "en";
 const KO_CAT: Record<string, string> = { "Vendor bill (AP)": "매입 대금(AP)", "Sales (AR)": "매출 대금(AR)" };
 function msgSubject(item: FinanceCalendarItem, ko: boolean): string {
   const cat = ko ? (KO_CAT[item.category] ?? item.category) : item.category;
-  const what = item.description || item.doc_no || item.project_no || "";
+  // 내역이 비면 프로젝트 제목(+번호), 그것도 없으면 문서번호.
+  const proj = item.project_title
+    ? `${item.project_title}${item.project_no ? ` (${item.project_no.replace(/\(.*\)$/, "")})` : ""}`
+    : item.project_no;
+  const what = item.description || proj || item.doc_no || "";
   return [cat, what].filter(Boolean).join(" · ") || item.title;
 }
 
@@ -3731,11 +3735,12 @@ function PaymentRequestModal({ events, onClose }: { events: FinanceCalendarEvent
   }
 
   return (
-    <Modal title={`Payment request — ${events.length} item${events.length === 1 ? "" : "s"}`} onClose={onClose}>
+    <Modal title={`Payment request — ${events.length} item${events.length === 1 ? "" : "s"}`}
+      onClose={onClose} form maxWidth={560}>
       {err ? <div className="action-err">{err}</div> : null}
       {!items && !err ? <div className="state">Loading…</div> : null}
       {items ? (
-        <div className="fin-item-msg">
+        <div className="fin-item-msg fin-req-msg">
           <div className="fin-item-msg-h">
             <span>Message text</span>
             <span className="fin-item-msg-lang">
@@ -3747,7 +3752,7 @@ function PaymentRequestModal({ events, onClose }: { events: FinanceCalendarEvent
             </span>
           </div>
           <textarea value={text} onChange={(e) => setText(e.target.value)}
-            rows={Math.min(24, text.split("\n").length + 1)} spellCheck={false} />
+            rows={Math.min(22, text.split("\n").length + 1)} spellCheck={false} />
           <div className="fin-item-acc-btns">
             <button className="btn sm" onClick={onClose}>Close</button>
             <button className="btn sm primary" onClick={copy}>{copied ? "Copied ✓" : "Copy text"}</button>

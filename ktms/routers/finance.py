@@ -3013,8 +3013,12 @@ def finance_calendar_item(source: str, ref_id: int, occurrence: str = ""):
             out["account"] = ours if (ours["bank_account"] or ours["bank_name"]) else None
             out["account_from"] = "company" if out["account"] else ""
             out["account_edit"] = None   # 우리 계좌는 Settings › Company 에서 고친다
+        out.setdefault("project_title", "")
         if out.get("rfq_id"):
             out["project_no"] = _project_no_map(s).get(out["rfq_id"], "")
+            # 메시지 제목에 쓴다 — 매입 대금은 내역이 비어 있기 쉬워 번호만으론 무슨 돈인지 모른다.
+            rfq = s.query(RFQ).filter_by(id=out["rfq_id"]).first()
+            out["project_title"] = (rfq.project_title or "") if rfq else ""
         return out
     finally:
         s.close()

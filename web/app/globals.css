@@ -21114,6 +21114,10 @@ th.ms-role, td.ms-role { white-space: nowrap; }
 .fin-item-pay { display: flex; align-items: flex-end; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
 .fin-item-paydate { margin: 0 auto 0 0; }
 .fin-item-msg-open { display: flex; justify-content: flex-start; }
+/* 묶음 지급 요청 창 — 메시지 칸이 창 폭을 다 쓰고, 버튼은 오른쪽 끝. */
+.fin-req-msg { width: 100%; box-sizing: border-box; }
+.fin-req-msg textarea { min-height: 280px; max-height: 60vh; box-sizing: border-box; }
+.fin-req-msg .fin-item-acc-btns { display: flex; justify-content: flex-end; gap: 8px; }
 .fin-item-msg { border: 1px solid var(--line-strong); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 .fin-item-msg-h { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-weight: 800; color: #45526a; letter-spacing: 0.04em; text-transform: uppercase; }
 .fin-item-msg-lang { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; text-transform: none; letter-spacing: 0; }
