@@ -50,6 +50,7 @@ from _core import (
     _new_tmp_rfq_no,
     _ocr_image_media_type,
     _pipeline_stage,
+    _assign_project_code,
     _project_no_map,
     _quotation_total,
     _rfq_no_disp,
@@ -431,6 +432,8 @@ def create_rfq(body: RfqCreate, background: BackgroundTasks,
         if body.copy_of and s.get(RFQ, body.copy_of) and body.copy_of not in siblings:
             siblings.append(body.copy_of)
         s.add(rfq)
+        # 프로젝트 번호는 등록 순간 매겨 고정한다(수신시각 순으로 다시 세지 않는다).
+        _assign_project_code(s, rfq)
         if siblings:
             s.flush()          # 묶음 대표를 정하려면 이 딜의 id 가 필요하다
             mates = s.query(RFQ).filter(RFQ.id.in_([*siblings, rfq.id])).all()

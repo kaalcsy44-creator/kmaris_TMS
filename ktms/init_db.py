@@ -49,6 +49,8 @@ _MIGRATIONS = {
         # 공유 드라이브 프로젝트 폴더(ID 로 잇고, URL 은 화면에서 바로 열려고 함께 둔다).
         "drive_folder_id": "VARCHAR(80)",
         "drive_folder_url": "VARCHAR(300)",
+        # 고정 프로젝트 번호 몸통("P-057") — migrate_seed_project_codes 가 채운다.
+        "project_code": "VARCHAR(12)",
     },
     "quotations": {
         "created_by": "INTEGER",
@@ -1624,6 +1626,29 @@ def migrate_seed_mail_groups():
             print(f"[OK] rfqs.mail_group_id seeded: {linked} deal(s) grouped by inquiry.")
         else:
             print("[SKIP] No sibling deals to group.")
+    finally:
+        s.close()
+
+
+def migrate_seed_project_codes():
+    """번호가 없는 딜에 고정 프로젝트 번호를 매긴다(멱등 — 빈 딜만 채운다).
+
+    첫 실행에서는 그때까지 화면에 보이던 번호(수신시각 순 산출값)를 그대로 굳힌다 —
+    이미 밖으로 나간 번호가 하나도 바뀌지 않게. 이후 빈 딜(배포 중 옛 서버가 만든 건
+    등)은 타입별 마지막 번호 다음을 받는다."""
+    eng = get_engine()
+    insp = inspect(eng)
+    if not insp.has_table("rfqs"):
+        return
+    if "project_code" not in {c["name"] for c in insp.get_columns("rfqs")}:
+        return
+    import _core
+    s = get_session()
+    try:
+        n = _core._seed_project_codes(s)
+        if n:
+            s.commit()
+            print(f"[OK] rfqs.project_code seeded: {n} deal(s).")
     finally:
         s.close()
 

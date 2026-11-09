@@ -502,6 +502,11 @@ class RFQ(Base):
     # 폴더 이름이 아니라 ID 로 잇는 까닭: 사람이 폴더 이름을 고치거나 옮겨도 끊기지 않게.
     drive_folder_id  = Column(String(80))
     drive_folder_url = Column(String(300))
+    # 프로젝트 번호 몸통("P-057"·"S-012") — 등록할 때 한 번 매기고 바꾸지 않는다.
+    # 견적서·PDF·메일에 찍혀 밖으로 나가는 이름이라, 수신시각을 고치거나 과거 건을
+    # 늦게 등록해도 움직이면 안 된다(예전엔 수신시각 순으로 매번 다시 세서 밀렸다).
+    # 괄호 날짜(yymmdd)는 저장하지 않고 수신시각에서 붙인다.
+    project_code     = Column(String(12), index=True, nullable=True)
     created_by       = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at       = Column(DateTime, default=datetime.utcnow)
 

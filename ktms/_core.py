@@ -289,7 +289,7 @@ def _sync_schema() -> None:
             migrate_columns, migrate_normalize_incoterms, migrate_backfill_price_history,
             migrate_reset_mail_sync_cursor, migrate_seed_mail_groups,
             migrate_split_stage_dates_to_orders, migrate_seed_line_ids,
-            migrate_merge_tax_stage,
+            migrate_merge_tax_stage, migrate_seed_project_codes,
         )
 
         Base.metadata.create_all(bind=get_engine())
@@ -301,6 +301,7 @@ def _sync_schema() -> None:
         migrate_reset_mail_sync_cursor()  # 메일 동기화 커서 되감기(최신부터 읽도록 고친 뒤 1회)
         migrate_seed_mail_groups()  # 한 문의에서 갈라진 형제 딜을 메일 묶음으로 연결
         migrate_seed_line_ids()  # 기존 딜 품목 줄에 라인 ID 부여 + 벤더 문서에 물려주기
+        migrate_seed_project_codes()  # 프로젝트 번호 고정 — 번호 없는 딜만 채운다(멱등)
     except Exception as exc:  # 스키마 동기화 실패가 앱 기동을 막지 않도록 로그만 남긴다.
         print(f"[WARN] startup schema sync skipped: {exc}", file=sys.stderr)
     try:
@@ -1150,26 +1151,80 @@ def _first_rfq_iso(rfq) -> str:
     return (getattr(rfq, "received_at", None) or "") or _kst_iso(rfq.created_at)
 
 
+def _project_prefix(rfq) -> str:
+    """프로젝트 번호 머리글자 — Service(서비스) = S, 그 외(부품공급 등) = P."""
+    return "S" if _enum_val(rfq.work_type) == WorkType.SERVICE.value else "P"
+
+
+def _code_seq(code: str | None) -> int:
+    """'P-057' → 57. 꼴이 어긋나면 0."""
+    try:
+        return int((code or "").split("-", 1)[1])
+    except (IndexError, ValueError):
+        return 0
+
+
+def _project_codes_plan(rows) -> dict[int, str]:
+    """번호가 아직 없는 딜에 매길 몸통 {rfq_id: 'P-058'} — 타입별 마지막 번호 다음부터,
+    수신시각 순(동률은 id 순). 이미 매긴 번호는 건드리지 않는다. 첫 시드에서는 저장된
+    번호가 하나도 없으므로 예전의 '수신시각 순 산출' 번호와 정확히 같아진다."""
+    top: dict[str, int] = {"P": 0, "S": 0}
+    for r in rows:
+        if r.project_code:
+            p = r.project_code[:1]
+            top[p] = max(top.get(p, 0), _code_seq(r.project_code))
+    pending = sorted((r for r in rows if not r.project_code),
+                     key=lambda r: (_first_rfq_iso(r) or "9999-99-99T99:99", r.id))
+    plan: dict[int, str] = {}
+    for r in pending:
+        p = _project_prefix(r)
+        top[p] = top.get(p, 0) + 1
+        plan[r.id] = f"{p}-{top[p]:03d}"
+    return plan
+
+
+def _seed_project_codes(s) -> int:
+    """번호 없는 딜에 고정 번호를 저장한다(커밋은 부르는 쪽). 매긴 건수를 돌려준다."""
+    rows = s.query(RFQ).all()
+    plan = _project_codes_plan(rows)
+    for r in rows:
+        if r.id in plan:
+            r.project_code = plan[r.id]
+    s._proj_no_cache = None
+    return len(plan)
+
+
+def _assign_project_code(s, rfq) -> None:
+    """새 딜에 다음 번호를 매긴다 — 타입별 지금까지 가장 큰 번호 + 1.
+    지운 딜의 번호는 비워 둔 채 재사용하지 않는다(이미 밖으로 나갔을 수 있다)."""
+    if rfq.project_code:
+        return
+    p = _project_prefix(rfq)
+    codes = [c for (c,) in s.query(RFQ.project_code)
+             .filter(RFQ.project_code.like(f"{p}-%")).all()]
+    rfq.project_code = f"{p}-{max([0, *map(_code_seq, codes)]) + 1:03d}"
+    s._proj_no_cache = None
+
+
 def _project_no_map(s) -> dict[int, str]:
     """프로젝트(=RFQ)별 내부 관리번호 {rfq_id: 'P-001(yymmdd)'}.
-    최초 RFQ 수신 순서대로 업무 타입별 전역 일련번호를 부여한다.
       · Parts(부품공급) → P-001(yymmdd), P-002(yymmdd), …
       · Service(서비스) → S-001(yymmdd), S-002(yymmdd), …
-    (yymmdd = 해당 RFQ 수신일. 수신 일시 동률은 RFQ id 순. 저장값이 아니라 매 조회 시
-    결정적으로 산출한다.) 같은 세션 안에서는 한 번만 계산하고 캐시한다."""
+    몸통(P-001)은 등록할 때 매겨 RFQ.project_code 에 저장된 고정값이다 — 수신시각을
+    고치거나 과거 건을 늦게 등록해도 다른 딜 번호가 밀리지 않는다. 괄호 yymmdd 는
+    수신일이라 수신시각을 고치면 따라 바뀐다. 아직 번호가 없는 딜(시드 전)은
+    _project_codes_plan 과 같은 규칙으로 임시 산출한다. 세션 안에서는 한 번만 계산한다."""
     cached = getattr(s, "_proj_no_cache", None)
     if cached is not None:
         return cached
-    rows = [(_first_rfq_iso(r), r.id,
-             "S" if _enum_val(r.work_type) == WorkType.SERVICE.value else "P")
-            for r in s.query(RFQ).all()]
-    rows.sort(key=lambda t: (t[0] or "9999-99-99T99:99", t[1]))
-    counters: dict[str, int] = {"P": 0, "S": 0}
+    rows = s.query(RFQ).all()
+    plan = _project_codes_plan(rows)
     out: dict[int, str] = {}
-    for iso, rid, prefix in rows:
-        counters[prefix] += 1
+    for r in rows:
+        code = r.project_code or plan.get(r.id, "")
+        iso = _first_rfq_iso(r)
         yymmdd = (iso[2:4] + iso[5:7] + iso[8:10]) if len(iso) >= 10 else "000000"
-        out[rid] = f"{prefix}-{counters[prefix]:03d}({yymmdd})"
+        out[r.id] = f"{code}({yymmdd})"
     try:
         s._proj_no_cache = out
     except Exception:
