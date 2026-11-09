@@ -290,6 +290,8 @@ _MIGRATIONS = {
     "email_messages": {
         # 어느 딜에도 속할 수 없는 메일(회사 소개·인사·자동회신). 미분류 함에서 내린다.
         "not_deal":        "BOOLEAN DEFAULT FALSE",
+        # 이 메일을 읽어 온 사서함(sales@·samcho@…) — 첨부를 다시 받을 때 열 곳.
+        "received_account": "VARCHAR(200)",
     },
     "credit_notes": {
         # 발행 문서(CREDIT NOTE) 한 장을 그대로 채우는 칸 — 실제 발행 양식과 같은 항목.
@@ -1552,6 +1554,35 @@ def migrate_reset_mail_sync_cursor():
     print(f"[OK] reset_mail_sync_cursor applied: {n} folder cursor(s) rewound.")
 
 
+def migrate_backfill_received_account():
+    """메일 계정이 하나이던 때 담은 메일에 그 사서함을 적는다(1회, applied_migrations 마커).
+
+    samcho@ 를 함께 읽기 전까지 메일은 모두 첫 계정(IMAP_USER, 없으면 SMTP_USER)에서
+    왔다. 비워 두면 나중에 첨부를 다시 받을 때 어느 사서함을 열지 모른다."""
+    import os
+    eng = get_engine()
+    insp = inspect(eng)
+    if not insp.has_table("email_messages"):
+        return
+    if "received_account" not in {c["name"] for c in insp.get_columns("email_messages")}:
+        return
+    user = (os.getenv("IMAP_USER", "") or os.getenv("SMTP_USER", "")).strip().lower()
+    if not user:
+        return          # 계정을 모르면 적지 않는다 — 다음 기동 때 다시 시도
+    with eng.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS applied_migrations (name VARCHAR(100) PRIMARY KEY)"))
+        if conn.execute(text(
+                "SELECT 1 FROM applied_migrations WHERE name='backfill_received_account'")).first():
+            return
+        n = conn.execute(text(
+            "UPDATE email_messages SET received_account=:u WHERE received_account IS NULL"),
+            {"u": user}).rowcount
+        conn.execute(text(
+            "INSERT INTO applied_migrations (name) VALUES ('backfill_received_account')"))
+    print(f"[OK] email_messages.received_account backfilled: {n} → {user}")
+
+
 def migrate_seed_mail_groups():
     """한 문의에서 갈라져 나온 딜들을 메일 묶음으로 이어 준다(1회, 멱등).
 
@@ -1776,6 +1807,7 @@ if __name__ == "__main__":
     # 낱말 추측으로 갈린 구분을 사람이 고른 분류로 바로잡는다(추측보다 분류가 정확).
     migrate_item_type_from_category()
     migrate_seed_mail_groups()
+    migrate_backfill_received_account()
     # 취급품목·회사 소개 시드 — note 컬럼이 생긴(migrate_columns) 뒤에 돌아야 한다.
     migrate_seed_vendor_profiles()
     print("Done.")

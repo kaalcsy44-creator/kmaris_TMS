@@ -1078,6 +1078,9 @@ class EmailMessage(Base):
     # 섞여 있으면 처리할 수 없는 줄만 남아 함 자체가 방치된다. 지우지는 않는다 —
     # 거래처와 오간 기록이고, 되돌릴 수 있어야 한다.
     not_deal    = Column(Boolean, default=False)
+    # 이 메일을 읽어 온 사서함(sales@·samcho@…). 같은 메일이 두 곳에 오면 먼저 읽은 쪽.
+    # 첨부 원본은 메일함에만 있으므로, 나중에 다시 받을 때 어느 사서함을 열지 알려 준다.
+    received_account = Column(String(200))
     summary     = Column(Text)                   # Claude 한두 줄 요약(없으면 아직 안 만든 것)
     summarized_at = Column(DateTime)
     created_at  = Column(DateTime, default=datetime.utcnow)

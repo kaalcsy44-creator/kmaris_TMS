@@ -167,6 +167,8 @@ def mail_status():
             "configured": mail_sync.is_configured(),
             "host": mail_sync.mail_config()["host"],
             "account": mail_sync.mail_config()["user"],
+            # 함께 읽는 사서함 전부(첫 계정 + IMAP_USER_2…). 폴더 행의 '계정/폴더'와 짝을 이룬다.
+            "accounts": [a["user"] for a in mail_sync.mail_accounts()],
             "total": s.query(EmailMessage.id).count(),
             "unmatched": _unmatched_count(s),
             # 등록되지 않은 상대가 몇 곳인지 — 대시보드가 회사 메일의 얼마를 담고

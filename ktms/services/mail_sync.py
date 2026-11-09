@@ -26,6 +26,9 @@
   IMAP_SINCE_DAYS(120)  읽어 들일 기간(이보다 오래된 메일은 보지 않는다).
   IMAP_MAX_PER_SYNC(200)  한 번의 동기화에서 가져올 최대 통수(폴더 수로 나눠 쓴다).
     한 번에 다 못 읽으면 남은 통수를 알려 준다 — Sync 를 다시 누르면 이어 읽는다.
+  IMAP_USER_2 · IMAP_PASSWORD_2 (… _5 까지)  함께 읽을 다른 계정(예: samcho@).
+    호스트·폴더·기간·한도는 첫 계정 값을 같이 쓴다. 같은 메일이 두 계정에 와도
+    Message-ID 유일 제약이 한 통만 남긴다 — 먼저 읽은 계정이 received_account 에 적힌다.
 """
 from __future__ import annotations
 
@@ -84,7 +87,11 @@ def is_syncing() -> str:
 
 # ── 설정 ──────────────────────────────────────────────────────────────────────
 
+MAX_ACCOUNTS = 5
+
+
 def mail_config() -> dict:
+    """첫 계정(sales@) 설정 — 계정이 하나이던 때의 호출부가 그대로 쓴다."""
     return {
         "host": os.getenv("IMAP_HOST", "imap.gmail.com"),
         "port": int(os.getenv("IMAP_PORT", "993")),
@@ -93,7 +100,37 @@ def mail_config() -> dict:
         "folders": [f.strip() for f in (os.getenv("IMAP_FOLDERS", "") or "").split(",") if f.strip()],
         "since_days": int(os.getenv("IMAP_SINCE_DAYS", "120")),
         "max_per_sync": int(os.getenv("IMAP_MAX_PER_SYNC", "200")),
+        "index": 0,
     }
+
+
+def mail_accounts() -> list[dict]:
+    """읽을 계정 전부(설정된 것만). 첫 계정이 맨 앞이다.
+
+    둘째부터는 IMAP_USER_n / IMAP_PASSWORD_n 만 따로 받고 나머지는 첫 계정 값을 쓴다
+    — 같은 회사 Workspace 의 다른 사서함이라 서버·폴더 규칙이 같다."""
+    first = mail_config()
+    out = [first] if first["user"] and first["password"] else []
+    seen = {first["user"].strip().lower()}
+    for n in range(2, MAX_ACCOUNTS + 1):
+        user = (os.getenv(f"IMAP_USER_{n}", "") or "").strip()
+        pw = os.getenv(f"IMAP_PASSWORD_{n}", "") or ""
+        if not user or not pw or user.lower() in seen:
+            continue
+        seen.add(user.lower())
+        out.append({**first, "user": user, "password": pw, "index": n - 1})
+    return out
+
+
+_ACCOUNT_KEY = re.compile(r"^[^/\s]+@[^/\s]+/")   # '계정/폴더' 꼴의 상태 열쇠
+
+
+def state_key(cfg: dict, folder: str) -> str:
+    """EmailSyncState 의 열쇠. 첫 계정은 폴더 이름 그대로(예전 행을 그대로 이어 쓴다),
+    다른 계정은 '계정/폴더' — 두 계정이 같은 INBOX 를 읽어도 읽은 위치가 섞이지 않게.
+
+    folder 가 그 표의 기본키라 칸을 더하는 대신 열쇠 값에 계정을 싣는다."""
+    return folder if not cfg.get("index") else f"{cfg['user'].strip().lower()}/{folder}"
 
 
 def is_configured() -> bool:
@@ -215,6 +252,7 @@ def own_addresses(s) -> set[str]:
     메일 계정 + 로그인 사용자들의 주소."""
     cfg = mail_config()
     out = {a.strip().lower() for a in (cfg["user"], os.getenv("SMTP_FROM", "")) if a}
+    out |= {a["user"].strip().lower() for a in mail_accounts()}
     # SMTP_FROM 은 "이름 <주소>" 형태일 수 있다 — 주소만 남긴다.
     out = {re.sub(r"^.*<|>.*$", "", a).strip() for a in out}
     for (mail,) in s.query(User.email).all():
@@ -433,41 +471,48 @@ def fetch_address(s, addr: str, rfq_id: int | None = None, limit: int = 300) -> 
     a = _clean_addr(addr)
     if not _ADDR_SAFE.match(a):
         raise ValueError("메일 주소가 아닙니다.")
-    cfg = mail_config()
-    if not cfg["user"] or not cfg["password"]:
+    accounts = mail_accounts()
+    if not accounts:
         raise RuntimeError("IMAP 계정이 설정되지 않았습니다.")
     own = own_addresses(s)
     parties = party_index(s)
     docs = doc_no_index(s)
     vessels = vessel_index(s)
     linked = {a: int(rfq_id)} if rfq_id else {}
-    since = (datetime.now(timezone.utc) - timedelta(days=cfg["since_days"])).strftime("%d-%b-%Y")
-    crit = f'(SINCE {since} OR OR FROM "{a}" TO "{a}" CC "{a}")'
     out = {"scanned": 0, "stored": 0, "dup": 0, "skipped": 0}
 
-    conn = _connect(cfg)
-    try:
-        for folder in _folders(conn, cfg):
-            typ, _ = conn.select(f'"{folder}"', readonly=True)
-            if typ != "OK":
-                continue
-            typ, data = conn.uid("SEARCH", None, crit)
-            if typ != "OK" or not data or not data[0]:
-                continue
-            uids = sorted(int(x) for x in data[0].split())[-max(1, limit):]
-            for uid in uids:
-                typ, raw = conn.uid("FETCH", str(uid), "(RFC822)")
-                if typ != "OK" or not raw or not isinstance(raw[0], tuple):
-                    continue
-                out["scanned"] += 1
-                out[_store_message(s, email.message_from_bytes(raw[0][1]), folder, own,
-                                   parties, docs, None, vessels, linked)] += 1
-            s.commit()
-    finally:
+    for i, cfg in enumerate(accounts):
+        since = (datetime.now(timezone.utc) - timedelta(days=cfg["since_days"])).strftime("%d-%b-%Y")
+        crit = f'(SINCE {since} OR OR FROM "{a}" TO "{a}" CC "{a}")'
         try:
-            conn.logout()
+            conn = _connect(cfg)
         except Exception:
-            pass
+            if i == 0:
+                raise            # 첫 계정이 막힌 건 예전처럼 알린다
+            continue             # 다른 계정이 막혀도 이미 찾은 것은 살린다
+        try:
+            for folder in _folders(conn, cfg):
+                typ, _ = conn.select(f'"{folder}"', readonly=True)
+                if typ != "OK":
+                    continue
+                typ, data = conn.uid("SEARCH", None, crit)
+                if typ != "OK" or not data or not data[0]:
+                    continue
+                uids = sorted(int(x) for x in data[0].split())[-max(1, limit):]
+                for uid in uids:
+                    typ, raw = conn.uid("FETCH", str(uid), "(RFC822)")
+                    if typ != "OK" or not raw or not isinstance(raw[0], tuple):
+                        continue
+                    out["scanned"] += 1
+                    out[_store_message(s, email.message_from_bytes(raw[0][1]), folder, own,
+                                       parties, docs, None, vessels, linked,
+                                       account=cfg["user"])] += 1
+                s.commit()
+        finally:
+            try:
+                conn.logout()
+            except Exception:
+                pass
     return out
 
 
@@ -490,10 +535,20 @@ def scan_marketing_inbox(s, max_fetch: int = 400) -> dict:
     out = {"scanned": 0, "picked": 0, "stored": 0, "dup": 0, "skipped": 0}
     if not marketing:
         return out
-    cfg = mail_config()
-    if not cfg["user"] or not cfg["password"]:
+    accounts = mail_accounts()
+    if not accounts:
         raise RuntimeError("IMAP 계정이 설정되지 않았습니다 — IMAP_USER/IMAP_PASSWORD "
                            "(또는 SMTP_USER/SMTP_PASSWORD) 환경변수를 확인하세요.")
+    for i, cfg in enumerate(accounts):
+        try:
+            _scan_marketing_account(s, cfg, marketing, max_fetch, out)
+        except Exception:
+            if i == 0:
+                raise            # 첫 계정이 막힌 건 예전처럼 알린다
+    return out
+
+
+def _scan_marketing_account(s, cfg: dict, marketing: set[str], max_fetch: int, out: dict) -> None:
     own = own_addresses(s)
     parties = party_index(s)
     docs = doc_no_index(s)
@@ -542,7 +597,7 @@ def scan_marketing_inbox(s, max_fetch: int = 400) -> dict:
                 out["picked"] += 1
                 outcome = _store_message(
                     s, email.message_from_bytes(raw[0][1]), folder, own, parties, docs,
-                    None, vessels, linked, marketing, blast_subjects)
+                    None, vessels, linked, marketing, blast_subjects, account=cfg["user"])
                 out[outcome] += 1
             s.commit()
     finally:
@@ -550,7 +605,6 @@ def scan_marketing_inbox(s, max_fetch: int = 400) -> dict:
             conn.logout()
         except Exception:
             pass
-    return out
 
 
 def _merge_unknown(s, found: dict[str, dict]) -> None:
@@ -1135,8 +1189,11 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
                    vessels: dict[str, set[int]] | None = None,
                    linked: dict[str, int] | None = None,
                    marketing: set[str] | None = None,
-                   blast_subjects: set[str] | None = None) -> str:
+                   blast_subjects: set[str] | None = None,
+                   account: str = "") -> str:
     """메일 1통 저장. 반환: stored | skipped(관계없는 메일) | dup(이미 있음).
+
+    account 는 이 메일을 읽어 온 사서함 — 첨부를 나중에 다시 받을 때 어디를 열지 안다.
 
     unknown 을 넘기면 저장하지 않은 메일의 상대 주소를 거기에 세어 둔다 — 아직
     등록하지 않은 거래처를 나중에 화면에서 찾아낼 수 있게.
@@ -1230,6 +1287,7 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
         # 홍보 메일의 답장만으로 담은 통은 딜 메일이 아니다 — 미분류 함에 줄만 쌓이지
         # 않게 내려 둔다. 마케팅 화면이 대신 이 메일을 활동에 붙여 보여 준다.
         not_deal=mkt_only,
+        received_account=(account or "").strip().lower()[:200] or None,
     )
     # 유일 제약은 마지막 방어선으로 남겨 둔다 — 앞의 조회를 빠져나간 중복(같은 메일이
     # 두 폴더에 있거나, 잘린 Message-ID 가 겹치는 경우)이 한 통이라도 있으면 폴더 전체가
@@ -1263,24 +1321,68 @@ def sync_mailbox(s, folder_limit: int | None = None) -> dict:
 
 
 def _sync_mailbox(s, folder_limit: int | None = None) -> dict:
-    cfg = mail_config()
-    if not cfg["user"] or not cfg["password"]:
+    accounts = mail_accounts()
+    if not accounts:
         raise RuntimeError("IMAP 계정이 설정되지 않았습니다 — IMAP_USER/IMAP_PASSWORD "
                            "(또는 SMTP_USER/SMTP_PASSWORD) 환경변수를 확인하세요.")
-    own = own_addresses(s)
-    parties = party_index(s)
-    docs = doc_no_index(s)
-    vessels = vessel_index(s)
-    linked = address_link_map(s)
-    marketing = marketing_addresses(s)
-    blast_subjects = marketing_subject_keys(s)
-    budget = folder_limit or cfg["max_per_sync"]
+    ctx = {
+        "own": own_addresses(s),
+        "parties": party_index(s),
+        "docs": doc_no_index(s),
+        "vessels": vessel_index(s),
+        "linked": address_link_map(s),
+        "marketing": marketing_addresses(s),
+        "blast_subjects": marketing_subject_keys(s),
+    }
     # scanned = 훑은 통수. stored 가 0 일 때 "메일함을 못 읽은 것"인지 "읽었지만 등록된
     # 거래처와 오간 게 없던 것"인지 화면이 구분해 말할 수 있어야 한다.
-    result = {"scanned": 0, "stored": 0, "skipped": 0, "dup": 0, "pending": 0, "folders": {}}
-    # 이번에 버린 메일의 상대 주소 — 폴더를 다 돌고 나서 한 번에 합친다.
+    result = {"scanned": 0, "stored": 0, "skipped": 0, "dup": 0, "pending": 0, "folders": {},
+              "accounts": {}}
+    # 이번에 버린 메일의 상대 주소 — 계정·폴더를 다 돌고 나서 한 번에 합친다.
     unknown: dict[str, dict] = {}
+    for cfg in accounts:
+        # 한 계정이 막혀도(앱 비밀번호 만료·IMAP 꺼짐) 다른 계정은 끝까지 읽는다.
+        try:
+            _sync_account(s, cfg, folder_limit, ctx, result, unknown)
+            result["accounts"][cfg["user"]] = "ok"
+        except Exception as exc:
+            s.rollback()
+            msg = f"{type(exc).__name__}: {exc}"[:300]
+            result["accounts"][cfg["user"]] = msg
+            _note_account_error(s, cfg, msg)
+    # 하나도 못 읽었으면 예전처럼 실패로 알린다 — 화면이 "0통 담음"을 성공으로 보이면 안 된다.
+    if all(v != "ok" for v in result["accounts"].values()):
+        raise RuntimeError(next(iter(result["accounts"].values())))
+    try:
+        _merge_unknown(s, unknown)
+        s.commit()
+    except Exception:          # 집계는 부수적인 것 — 실패해도 동기화 결과는 살린다
+        s.rollback()
+    return result
 
+
+def _note_account_error(s, cfg: dict, msg: str) -> None:
+    """접속부터 막힌 계정 — 그 계정의 상태 행에 사유를 남겨 메일 화면이 보여 주게 한다."""
+    try:
+        prefix = state_key(cfg, "")          # 첫 계정은 "" — 계정 접두가 없는 행이 그 계정 것
+        rows = [st for st in s.query(EmailSyncState).all()
+                if (st.folder.startswith(prefix) if prefix else not _ACCOUNT_KEY.match(st.folder))]
+        if not rows:
+            rows = [EmailSyncState(folder=state_key(cfg, "INBOX"), last_uid=0)]
+            s.add(rows[0])
+        for st in rows:
+            st.last_error = msg
+        s.commit()
+    except Exception:
+        s.rollback()
+
+
+def _sync_account(s, cfg: dict, folder_limit: int | None, ctx: dict,
+                  result: dict, unknown: dict[str, dict]) -> None:
+    own, parties, docs = ctx["own"], ctx["parties"], ctx["docs"]
+    vessels, linked = ctx["vessels"], ctx["linked"]
+    marketing, blast_subjects = ctx["marketing"], ctx["blast_subjects"]
+    budget = folder_limit or cfg["max_per_sync"]
     conn = _connect(cfg)
     try:
         folders = _folders(conn, cfg)
@@ -1288,9 +1390,10 @@ def _sync_mailbox(s, folder_limit: int | None = None) -> dict:
         # 한 통도 못 읽는다 — 그러면 발신 이력이 통째로 비어 보인다.
         budget = max(1, budget // max(1, len(folders)))
         for folder in folders:
-            state = s.query(EmailSyncState).filter_by(folder=folder).first()
+            key = state_key(cfg, folder)
+            state = s.query(EmailSyncState).filter_by(folder=key).first()
             if not state:
-                state = EmailSyncState(folder=folder, last_uid=0)
+                state = EmailSyncState(folder=key, last_uid=0)
                 s.add(state)
                 s.flush()   # 아래 세이브포인트가 되돌려 버리지 않게 먼저 확정한다
             try:
@@ -1317,7 +1420,8 @@ def _sync_mailbox(s, folder_limit: int | None = None) -> dict:
                         continue
                     outcome = _store_message(
                         s, email.message_from_bytes(data[0][1]), folder, own, parties, docs,
-                        unknown, vessels, linked, marketing, blast_subjects)
+                        unknown, vessels, linked, marketing, blast_subjects,
+                        account=cfg["user"])
                     counts[outcome] += 1
                     result[outcome] += 1
                 # 읽은 구간 [backfill_uid, last_uid] 를 이번에 집은 만큼 넓힌다.
@@ -1331,23 +1435,17 @@ def _sync_mailbox(s, folder_limit: int | None = None) -> dict:
                 result["scanned"] += counts["scanned"]
                 state.last_synced_at = datetime.utcnow()
                 state.last_error = ""
-                result["folders"][folder] = counts
+                result["folders"][key] = counts
                 s.commit()
             except Exception as exc:       # 한 폴더가 막혀도 나머지는 읽는다
                 s.rollback()
-                state = s.query(EmailSyncState).filter_by(folder=folder).first()
+                state = s.query(EmailSyncState).filter_by(folder=key).first()
                 if state:
                     state.last_error = str(exc)[:500]
                     s.commit()
-                result["folders"][folder] = {"error": str(exc)[:200]}
+                result["folders"][key] = {"error": str(exc)[:200]}
     finally:
         try:
             conn.logout()
         except Exception:
             pass
-    try:
-        _merge_unknown(s, unknown)
-        s.commit()
-    except Exception:          # 집계는 부수적인 것 — 실패해도 동기화 결과는 살린다
-        s.rollback()
-    return result
