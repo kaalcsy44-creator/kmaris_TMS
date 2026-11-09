@@ -14827,6 +14827,15 @@ select.sig-owner-pick,
   .proj-ov-tlcols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 620px) { .proj-ov-tlcols { grid-template-columns: 1fr; } }
+/* 4칸이 나란할 때는 칸마다 따로 스크롤한다. 높이 상한(--fs-h)은 처음 연 화면의 아래 끝까지
+   (useFirstScreenHeight 가 잼) — 활동이 긴 칸 하나 때문에 표 전체가 길어지지 않게.
+   칸 머리는 고정, 목록만 스크롤. 인쇄에선 상한을 풀어 다 나오게 한다. */
+@media screen and (min-width: 1101px) {
+  .ov-tlcol { display: flex; flex-direction: column; min-height: 0;
+    max-height: calc(var(--fs-h, 100000px) - 2px); }
+  .ov-tlcol > .proj-ov-tl { flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    overscroll-behavior: contain; scrollbar-width: thin; }
+}
 /* 칸마다 옅은 바탕을 깔아 4칸이 "세로 줄"로 보이게 한다 — 아래 Items 표의 같은 톤과
    이어져, 25/50/75% 로 맞춰 둔 정렬이 설명 없이도 눈에 보인다. */
 .ov-tlcol { min-width: 0; background: var(--ov-bg); }

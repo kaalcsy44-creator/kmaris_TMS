@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   fetchPipeline,
@@ -765,6 +765,49 @@ function renderMailRow(m: MailMessage, key: string) {
  * 자동 이벤트(단계 완료)는 buildActivities 가 만든 것을 그대로 쓴다 — 상대(from/to)
  * 표기 규칙이 업무일지 화면과 갈라지지 않게 하기 위해서다.
  */
+/**
+ * 요소가 "첫 화면"(스크롤 맨 위 기준) 안에서 쓸 수 있는 높이를 재서 --fs-h 로 얹는다.
+ * Stages 4칸이 각자 스크롤되고, 칸 높이는 처음 열었을 때 화면 아래 끝까지만 차게 한다 —
+ * 활동이 많은 딜에서 단계표가 길게 늘어나 아래 Items 표를 밀어내지 않게.
+ * 기준 화면은 가장 가까운 스크롤 부모(팝업 본문)이고, 없으면 브라우저 창이다.
+ * 위쪽 내용(벤더 줄 등)이 늦게 채워져도 따라가도록 부모 크기 변화를 지켜본다.
+ */
+function useFirstScreenHeight<T extends HTMLElement>(active: boolean) {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!active || !el) return;
+    let sp: HTMLElement | null = el.parentElement;
+    while (sp) {
+      const oy = getComputedStyle(sp).overflowY;
+      if ((oy === "auto" || oy === "scroll") && sp.scrollHeight > sp.clientHeight - 1) break;
+      sp = sp.parentElement;
+    }
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      let avail: number;
+      if (sp && sp !== document.documentElement && sp !== document.body) {
+        const pr = sp.getBoundingClientRect();
+        const top = r.top - pr.top + sp.scrollTop;
+        avail = sp.clientHeight - top;
+      } else {
+        avail = window.innerHeight - (r.top + window.scrollY);
+      }
+      el.style.setProperty("--fs-h", `${Math.max(260, Math.floor(avail - 14))}px`);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const ro = new ResizeObserver(measure);
+    if (sp) ro.observe(sp);
+    if (el.parentElement?.parentElement) ro.observe(el.parentElement.parentElement);
+    return () => {
+      window.removeEventListener("resize", measure);
+      ro.disconnect();
+    };
+  }, [active]);
+  return ref;
+}
+
 function StageTimeline({
   row,
   chain,
@@ -817,6 +860,7 @@ function StageTimeline({
     mailOf.set(s, [...(mailOf.get(s) ?? []), m]);
   }
   const done = Math.max(0, Math.min(row.stage, chain.length));
+  const colsRef = useFirstScreenHeight<HTMLDivElement>(fold.open);
 
   return (
     <section className={`proj-ov-sec${fold.open ? "" : " folded"}`}>
@@ -837,7 +881,7 @@ function StageTimeline({
           Activity Log →
         </Link>
       </h2>
-      <div className="proj-ov-tlcols">
+      <div className="proj-ov-tlcols" ref={colsRef}>
         {STAGE_COLUMNS.map((col) => (
           <div key={col.label} className={`ov-tlcol ${col.tone}`}>
             <div className="ov-tlcol-h">{col.label}</div>
