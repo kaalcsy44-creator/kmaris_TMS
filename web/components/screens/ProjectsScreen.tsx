@@ -71,6 +71,7 @@ import { DocumentsOverview } from "@/components/screens/DocumentsScreen";
 import { ArOverview } from "@/components/screens/ArScreen";
 import ProjectOverviewScreen from "@/components/screens/ProjectOverviewScreen";
 import DriveFolderChip from "@/components/common/DriveFolderChip";
+import DealPartiesLine from "@/components/common/DealPartiesLine";
 import { tr } from "@/lib/labels";
 import { getUser, can, isOwnScoped, isAdmin } from "@/lib/auth";
 
@@ -3165,6 +3166,8 @@ export function PipelineModal({
         {/* 단계 스트립 — 진행상태(완료 음영/현재)와 탐색(선택)을 통합하고, 각 단계의
             주요 결과물(번호·Vendor·금액 등)과 완료 일시를 카드에 함께 노출한다.
             우측 토글로 납작한(번호+작은 제목) 바로 접어 세로 공간을 아낀다. */}
+        {/* 거래 상대(고객·벤더·거래구분) — 개요 머리의 그 줄을 작업 화면에도 고정해 둔다. */}
+        {modalView === "work" && !isNewProject ? <DealPartiesLine row={r} /> : null}
         {modalView === "work" ? (
         <div className={`project-stage-tabs-row${stagesCollapsed ? " collapsed" : ""}`}>
           {/* 폰 전용 요약 스트립 — 카드 10장 대신 중분류 5묶음 + 칸 10개. 단계명은 바로 아래 전환 탭에 있다. */}
