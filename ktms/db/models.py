@@ -1102,6 +1102,33 @@ class EmailSyncState(Base):
     last_error   = Column(Text)
 
 
+class RfqCandidate(Base):
+    """RFQ 후보 — 딜에 붙지 않은 받은 메일을 '새 RFQ 인가' 판정한 결과(services/rfq_detect.py).
+
+    메일 한 통에 한 줄(email_id 유일). RFQ 가 아니라고 본 메일도 남긴다 — 같은 메일을
+    다시 판정하지 않기 위해서다. 화면의 후보 목록은 is_rfq 이고 status=pending 인 줄만 본다.
+    자동 승인은 없다: 사람이 승인해야 프로젝트·드라이브 폴더가 생긴다."""
+    __tablename__ = "rfq_candidates"
+    id             = Column(Integer, primary_key=True)
+    email_id       = Column(Integer, ForeignKey("email_messages.id"), unique=True, index=True)
+    is_rfq         = Column(Boolean, default=False)
+    confidence     = Column(Float, default=0.0)
+    customer_id    = Column(Integer, ForeignKey("customers.id"), nullable=True)
+    customer_guess = Column(String(200))     # 고객사 명부에 없을 때 메일에서 읽은 이름
+    vessel_id      = Column(Integer, ForeignKey("vessels.id"), nullable=True)
+    vessel         = Column(String(120))     # 메일에서 읽은 선박명(명부에 없을 수 있다)
+    item_title     = Column(String(200))     # 프로젝트 제목 제안(메이커·장비·부품)
+    work_type      = Column(String(10))      # PARTS | SERVICE
+    folder_name    = Column(String(200))     # 제안 드라이브 폴더명 — yymmdd 약칭 선박 제목
+    reason         = Column(String(400))     # 판정 근거 한 줄(한국어)
+    status         = Column(String(12), default="pending")   # pending | approved | rejected
+    rfq_id         = Column(Integer, ForeignKey("rfqs.id"), nullable=True)   # 승인으로 생긴 딜
+    model          = Column(String(60))
+    decided_by     = Column(Integer, ForeignKey("users.id"), nullable=True)
+    decided_at     = Column(DateTime)
+    created_at     = Column(DateTime, default=datetime.utcnow)
+
+
 class DealLineAward(Base):
     """딜의 품목 줄 하나를 어느 벤더 견적에서 살지 — 라인별 매입처 채택.
 
