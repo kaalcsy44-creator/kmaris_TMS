@@ -20963,12 +20963,25 @@ select.compose-tpl-version {
 .vs-warn-row { grid-column: 1 / -1; }
 .vs-warn-row .vs-warn { margin: 0; }
 /* 1단계 Vessel 밑 선주·ISM 관리사 띠 */
-.vs-owner-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
-  margin-top: -4px; font-size: 12.5px; color: var(--ink); }
-.vs-owner-vals { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; }
+/* Vessel 칸 안, 선박명 바로 밑에 [작은 라벨 | 값] 두 칸으로 한 줄에 하나씩 쌓는다. */
+.vs-owner-row { display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  margin-top: 6px; font-size: 12.5px; color: var(--ink); min-width: 0; }
+.vs-owner-vals { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px;
+  align-items: baseline; min-width: 0; }
+.vs-owner-vals > span { display: contents; }
+.vs-owner-vals > span.muted, .vs-owner-vals > .vs-looked-up { display: block; grid-column: 1 / -1; }
 .vs-owner-vals small { color: var(--muted); font-size: 11px; text-transform: uppercase;
-  letter-spacing: .03em; margin-right: 3px; }
+  letter-spacing: .03em; white-space: nowrap; }
 .vs-looked-up { color: #1f7a3d; font-weight: 600; white-space: nowrap; }
+/* 읽기모드 [라벨 | 값] 격자에서 덧붙인 목록이 좁은 라벨 칸으로 떨어지지 않고 값 칸(2열)에
+   이어진다 — 담당자 이메일이 라벨 칸 폭에 눌려 안 보이던 문제. */
+.form-fieldset.vm-read .received-fields .form-field > :is(.vs-owner-row, .contact-email-list) {
+  grid-column: 2;
+}
+/* 읽기모드에서 담당자가 한 명이면 이름은 위 값과 겹친다 — 이메일만 남긴다. */
+.form-fieldset.vm-read .contact-email-list li:only-child > :is(.contact-email-main, .contact-email-name) {
+  display: none;
+}
 .vs-owner-row .vs-conf { margin-left: 0; }
 .vs-owner-suggest { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px;
   border-radius: 6px; background: #eef4ff; }

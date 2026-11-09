@@ -199,6 +199,8 @@ function widenLongFields(root: HTMLElement | null, on: boolean, reset = false) {
     const wraps = vals.some((v) => {
       const text = (v.textContent || "").trim();
       if (!text || text.includes("\n") || v.offsetParent === null) return false;
+      // 일부러 한 줄에 하나씩 쌓은 목록(담당자 이메일, 선주·관리사)은 접힌 게 아니다.
+      if (v.classList.contains("vm-stack")) return false;
       // 글자 마디(text node)만 본다 — 로고·아이콘 상자는 글자와 높이가 달라 줄로 세면 안 된다.
       const rects: DOMRect[] = [];
       const walker = document.createTreeWalker(v, NodeFilter.SHOW_TEXT);

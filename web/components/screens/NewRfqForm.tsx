@@ -1073,7 +1073,7 @@ export default function NewRfqForm({
             />
             {/* 고른 사람들의 이메일 — 누가 받는지 저장 전에 눈으로 확인한다. */}
             {mainContact || ccContacts.length ? (
-              <ul className="contact-email-list">
+              <ul className="contact-email-list vm-stack">
                 {[mainContact, ...ccContacts].filter(Boolean).map((c) => (
                   <li key={c!.id}>
                     {c!.id === customerId ? <span className="contact-email-main" title="Main contact">★</span> : null}
@@ -1110,22 +1110,22 @@ export default function NewRfqForm({
                 </option>
               ))}
             </select>
+            {/* 고른 배의 IMO·등록 선주·ISM 관리사 — Vessel 값 바로 밑에 같은 열로 세로로 쌓는다.
+                비어 있으면 IMO 로 찾아 보고, 그중 우리 고객이 있으면(고객이 아직 비었을 때) 제안한다. */}
+            {(() => {
+              const v = vessels.find((x) => x.id === vesselId);
+              return v ? (
+                <VesselOwnerRow
+                  vessel={v}
+                  companies={companyOptions}
+                  companyName={companyName}
+                  editable={canEditThis}
+                  onPickCompany={pickCompany}
+                  onVesselSaved={async () => { await reloadVessels(); }}
+                />
+              ) : null;
+            })()}
           </Field>
-          {/* 고른 배의 등록 선주·ISM 관리사 — 비어 있으면 IMO 로 찾아 보고, 그중 우리 고객이 있으면
-              (고객이 아직 비었을 때) 고객으로 제안한다. 한 행 전체를 쓰는 띠. */}
-          {(() => {
-            const v = vessels.find((x) => x.id === vesselId);
-            return v ? (
-              <VesselOwnerRow
-                vessel={v}
-                companies={companyOptions}
-                companyName={companyName}
-                editable={canEditThis}
-                onPickCompany={pickCompany}
-                onVesselSaved={async () => { await reloadVessels(); }}
-              />
-            ) : null;
-          })()}
           {/* 제재 명부(US OFAC · UK)에 오른 배 — 경고만 하고 진행은 막지 않는다. 좁은 Vessel
               칸 안에 넣으면 세로로 길게 접혀, 그 아래 한 행 전체를 쓰는 띠로 세운다. */}
           {vessels.find((v) => v.id === vesselId)?.sanctions?.length ? (

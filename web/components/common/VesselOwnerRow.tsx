@@ -98,7 +98,7 @@ export default function VesselOwnerRow({
   }
 
   return (
-    <div className="vs-owner-row">
+    <div className="vs-owner-row vm-stack">
       <span className="vs-owner-vals">
         <span><small>IMO</small> {vessel.imo || <span className="dash">—</span>}</span>
         {owner || manager ? (
