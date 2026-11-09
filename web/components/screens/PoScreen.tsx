@@ -1310,6 +1310,8 @@ function VendorPoDetailModal({
     if (v) setVendorId(v.id);
     // 발주서 머리의 Quotation No. — 이 발주의 근거가 된 견적번호를 그대로 물려받는다.
     setTerms((t) => ({ ...t, vendor_quote_no: vq.vendor_quote_no || t.vendor_quote_no }));
+    // 단가를 불러오면 그 단가의 통화도 함께 — 안 그러면 KRW 단가가 USD 로 찍힌다.
+    if (vq.currency) setCurrency(vq.currency);
     setErr(null);
   }
 
@@ -1871,6 +1873,8 @@ function VendorPoCreate({
   const [err, setErr] = useState<string | null>(null);
   // 편집 뷰(VendorPoDetailModal)와 동일한 Detail/Email 탭 구조.
   const [tab, setTab] = useState<DetailTab>("edit");
+  // 사람이 통화를 직접 고쳤는가 — 고쳤으면 공급사 견적 통화로 다시 덮지 않는다.
+  const curTouched = useRef(false);
 
   const order = options.orders.find((o) => o.id === orderId);
   // 벤더 전체 — 담당자 칸이 같은 회사 레코드를 찾는 데 쓴다. Supplier 목록 자체는
@@ -1885,11 +1889,25 @@ function VendorPoCreate({
   useEffect(() => {
     if (order) {
       setItems(order.items.length ? order.items.map(normalizeItem) : [blankItem()]);
-      // 발주 통화 기본값은 오더 통화(KRW 오더면 KRW). 사용자가 토글로 바꿀 수 있다.
+      // 잠정 기본값은 오더 통화. 공급사 견적이 있으면 아래에서 그 통화로 바뀐다.
+      curTouched.current = false;
       setCurrency(order.currency || "USD");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
+
+  // 발주 통화 = 그 공급사가 견적한 통화. 오더(고객 P/O)는 고객에게 판 통화라 다를 수 있다
+  // — USD 로 수출하는 딜이라도 국내 공급사에서는 KRW 로 산다. 사람이 통화를 직접 고쳤으면
+  // 덮지 않는다.
+  useEffect(() => {
+    if (curTouched.current || vendorId === "") return;
+    const v = options.vendors.find((x) => x.id === vendorId);
+    const mine = vendorQuotes
+      .filter((q) => (q.vendor_id && q.vendor_id === vendorId) || (v && q.vendor === v.name))
+      .sort((a, b) => (b.received_at || b.received_date || "").localeCompare(a.received_at || a.received_date || ""));
+    if (mine[0]?.currency) setCurrency(mine[0].currency);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendorId, vendorQuotes]);
 
   // 선택 오더의 프로젝트(RFQ)에서 3단계에 수신한 공급사 견적들 — "Load vendor quote"용.
   useEffect(() => {
@@ -1910,6 +1928,11 @@ function VendorPoCreate({
     if (v) setVendorId(v.id);
     // 발주서 머리의 Quotation No. — 이 발주의 근거가 된 견적번호를 그대로 물려받는다.
     setTerms((t) => ({ ...t, vendor_quote_no: vq.vendor_quote_no || t.vendor_quote_no }));
+    // 단가를 불러오면 그 단가의 통화도 함께 — 안 그러면 KRW 단가가 USD 로 찍힌다.
+    if (vq.currency) {
+      setCurrency(vq.currency);
+      curTouched.current = true;
+    }
     setErr(null);
     setMsg(`Loaded ${vq.items.length} item(s) from vendor quote ${vq.vendor_quote_no} (${vq.vendor}).`);
   }
@@ -2001,7 +2024,7 @@ function VendorPoCreate({
         date={date}
         onDate={setDate}
         currency={currency}
-        onCurrency={setCurrency}
+        onCurrency={(v) => { curTouched.current = true; setCurrency(v); }}
         terms={terms}
         onTerms={setTerms}
         vessel={order?.vessel}
