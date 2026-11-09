@@ -16604,6 +16604,19 @@ table.mini tfoot .fin-foot-name { text-align: left; }
 .fin-cal-cell.today { box-shadow: inset 0 0 0 2px var(--blue); }
 .fin-cal-date { font-size: 12px; font-weight: 700; color: #55627a; }
 .fin-cal-events { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* 고를 수 있는 지급 건 — 칸 왼쪽에 작은 체크박스. 고른 칸은 테두리로 표시. */
+.fin-ev-pick { display: flex; align-items: center; gap: 3px; min-width: 0; border-radius: 5px; }
+.fin-ev-pick > input { flex: none; margin: 0; width: 12px; height: 12px; cursor: pointer; }
+.fin-ev-pick > .fin-ev { flex: 1 1 auto; }
+.fin-ev-pick.on > .fin-ev { box-shadow: inset 0 0 0 1.5px #b45309; }
+/* 고른 건 요약 줄 — 달력 위. 아무것도 안 골랐으면 한 줄 안내만. */
+.fin-cal-picked {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 8px; padding: 6px 10px; border-radius: 8px;
+  background: #fdf1dd; color: #6b4500; font-size: 13px;
+}
+.fin-cal-picked > span { margin-right: auto; }
+.fin-cal-picked.hint { background: none; color: var(--muted); font-size: 12px; padding: 0 2px; }
 .fin-ev {
   display: flex; justify-content: space-between; gap: 4px; align-items: baseline;
   border: 0; border-radius: 5px; padding: 2px 5px; cursor: pointer; text-align: left;

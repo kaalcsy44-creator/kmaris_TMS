@@ -3370,14 +3370,50 @@ function CalendarTab() {
   // 처리·취소도 그 창 안에서 한다 — 예전처럼 누르자마자 납부 처리로 가지 않는다.
   const [openEvent, setOpenEvent] = useState<FinanceCalendarEvent | null>(null);
 
+  // 체크한 지급 건 — 골라서 한 번에 자금 집행 요청 메시지를 만든다. 아직 안 나간 '나가는
+  // 돈'만 고를 수 있다(들어오는 돈·이미 지급한 건은 요청할 일이 없다). 달을 넘겨도 유지한다.
+  const evKey = (e: FinanceCalendarEvent) => `${e.source || "manual"}:${e.ref_id}:${e.occurrence || e.date}`;
+  const selectable = (e: FinanceCalendarEvent) => e.kind === "payable" && !e.paid && !e.actual;
+  const [picked, setPicked] = useState<Map<string, FinanceCalendarEvent>>(new Map());
+  const [requestOpen, setRequestOpen] = useState(false);
+  const togglePick = (e: FinanceCalendarEvent) =>
+    setPicked((cur) => {
+      const next = new Map(cur);
+      const k = evKey(e);
+      if (next.has(k)) next.delete(k);
+      else next.set(k, e);
+      return next;
+    });
+  const pickedTotal = useMemo(() => {
+    const t = new Map<string, number>();
+    for (const e of picked.values()) t.set(e.currency, (t.get(e.currency) ?? 0) + e.amount);
+    return Array.from(t, ([c, v]) => money(v, c)).join(" + ");
+  }, [picked]);
+
   const monthLabel = new Date(month.y, month.m, 1).toLocaleDateString("en-US", { year: "numeric", month: "long" });
   const shift = (delta: number) => setMonth((cur) => {
     const d = new Date(cur.y, cur.m + delta, 1);
     return { y: d.getFullYear(), m: d.getMonth() };
   });
 
-  // 한 건의 칸 — 표(달력)와 좁은 화면의 일정 목록이 같은 단추를 쓴다.
-  const eventButton = (e: FinanceCalendarEvent, key: number) => (
+  // 한 건의 칸 — 표(달력)와 좁은 화면의 일정 목록이 같은 단추를 쓴다. 고를 수 있는 건
+  // (안 나간 지급)은 왼쪽에 체크박스가 붙는다 — 누르면 상세 창이 아니라 선택만 바뀐다.
+  const eventButton = (e: FinanceCalendarEvent, key: number) =>
+    selectable(e) ? (
+      <div key={key} className={`fin-ev-pick${picked.has(evKey(e)) ? " on" : ""}`}>
+        <input
+          type="checkbox"
+          checked={picked.has(evKey(e))}
+          onChange={() => togglePick(e)}
+          aria-label={`Select ${e.title} for a payment request`}
+          title="Select for a payment request"
+        />
+        {eventCore(e)}
+      </div>
+    ) : (
+      eventCore(e, key)
+    );
+  const eventCore = (e: FinanceCalendarEvent, key?: number) => (
     <button
       key={key}
       type="button"
@@ -3434,6 +3470,20 @@ function CalendarTab() {
         </div>
       </div>
       {error && !data ? <div className="state error">API error: {error.message}</div> : null}
+      {/* 고른 지급 건 — 한 번에 자금 집행 요청 메시지로. */}
+      {picked.size ? (
+        <div className="fin-cal-picked">
+          <span>
+            <b>{picked.size}</b> payment{picked.size === 1 ? "" : "s"} selected · {pickedTotal}
+          </span>
+          <button className="btn sm" onClick={() => setPicked(new Map())}>Clear</button>
+          <button className="btn sm primary" onClick={() => setRequestOpen(true)}>💬 Payment request…</button>
+        </div>
+      ) : (
+        <div className="fin-cal-picked hint">
+          Tick unpaid outgoing items to send one payment request for all of them.
+        </div>
+      )}
       <div className="fin-cal-grid">
         {DOW_SHORT.map((d) => (
           <div key={d} className="fin-cal-dow">{d}</div>
@@ -3473,6 +3523,9 @@ function CalendarTab() {
       <p className="hint-inline" style={{ display: "block", marginTop: 8 }}>
         Colour is the direction of the money — blue comes in, amber goes out — dark text is money still to move, faded text is money that has already moved (✓ marks the day it really moved), and a solid block is a scheduled date now overdue. Every item sits on its scheduled date until it settles, then it also appears on the day the money actually moved, as its own line even when that is the same day — the scheduled entry is struck through and the ✓ entry is the real date. Click any item to see its details and the bank account the money goes to (for money coming in, our own account). Your own costs are marked paid from that window — you enter the date it was really paid, which may differ from the scheduled date (recurring items settle one occurrence at a time). Customer invoices (AR) and vendor bills (AP) are managed from the project stages instead — both on stage 10, the Receivable tab for collections and the Payable tab for vendor payments.
       </p>
+      {requestOpen && picked.size ? (
+        <PaymentRequestModal events={Array.from(picked.values())} onClose={() => setRequestOpen(false)} />
+      ) : null}
       {openEvent ? (
         <CalendarItemModal
           ev={openEvent}
@@ -3537,6 +3590,16 @@ function vatTag(item: FinanceCalendarItem, lang: MsgLang): string {
 // 상세 창 내용을 메시지 글로 — 지급 요청(나가는 돈)·입금 안내(들어오는 돈)·완료 알림.
 // 창에 보이는 값만 쓴다(새로 묻지 않는다). 빈 칸은 줄째 뺀다.
 type MsgLang = "ko" | "en";
+
+// 메시지 제목 — "구분 · 내역"(예: 세금 · 근로소득세 10월). 받는 사람이 무슨 돈인지 첫 줄에서
+// 알아보게 한다. 거래처(국세청)는 본문의 지급처 줄로 내린다. 내역이 비면 문서번호·프로젝트로.
+const KO_CAT: Record<string, string> = { "Vendor bill (AP)": "매입 대금(AP)", "Sales (AR)": "매출 대금(AR)" };
+function msgSubject(item: FinanceCalendarItem, ko: boolean): string {
+  const cat = ko ? (KO_CAT[item.category] ?? item.category) : item.category;
+  const what = item.description || item.doc_no || item.project_no || "";
+  return [cat, what].filter(Boolean).join(" · ") || item.title;
+}
+
 function calendarItemMessage(item: FinanceCalendarItem, lang: MsgLang): string {
   const ko = lang === "ko";
   const isIn = item.direction === "in";
@@ -3546,10 +3609,11 @@ function calendarItemMessage(item: FinanceCalendarItem, lang: MsgLang): string {
     : (item.paid ? (ko ? "지급 완료" : "Payment made") : (ko ? "지급 요청" : "Payment request"));
   const amount = item.paid ? item.invoice_amount : (item.outstanding || item.invoice_amount);
   const L = (k: string, e: string) => (ko ? k : e);
-  const lines: string[] = [`[${head}] ${item.title}`];
+  const lines: string[] = [`[${head}] ${msgSubject(item, ko)}`];
   const add = (label: string, v?: string | number | null) => {
     if (v !== undefined && v !== null && v !== "" && v !== 0) lines.push(`${label}: ${v}`);
   };
+  add(isIn ? L("입금처", "From") : L("지급처", "Payee"), item.title);
   add(L("금액", "Amount"), `${money(amount, cur)}${vatTag(item, lang) ? ` (${vatTag(item, lang)})` : ""}`);
   if (item.vat_basis === "included" && item.vat_amount)
     add(L("공급가액 / 부가세", "Net / VAT"), `${money(item.supply_amount ?? 0, cur)} / ${money(item.vat_amount, cur)}`);
@@ -3558,9 +3622,6 @@ function calendarItemMessage(item: FinanceCalendarItem, lang: MsgLang): string {
   if (item.paid) add(isIn ? L("입금일", "Received on") : L("지급일", "Paid on"), item.paid_on);
   else add(isIn ? L("입금 예정일", "Due date") : L("지급 예정일", "Due date"),
     `${item.due_date}${item.overdue ? L(" (기한 지남)", " (overdue)") : ""}`);
-  const KO_CAT: Record<string, string> = { "Vendor bill (AP)": "매입 대금(AP)", "Sales (AR)": "매출 대금(AR)" };
-  add(L("구분", "Type"), ko ? (KO_CAT[item.category] ?? item.category) : item.category);
-  add(L("내역", "Description"), item.description);
   add(item.doc_label === "Invoice No." ? L("인보이스 번호", "Invoice No.") : L("청구서 번호", "Bill No."), item.doc_no);
   if (item.ci_no && item.ci_no !== item.doc_no) add("CI No.", item.ci_no);
   add(L("고객 P/O", "Customer P/O"), item.customer_po);
@@ -3585,6 +3646,116 @@ function calendarItemMessage(item: FinanceCalendarItem, lang: MsgLang): string {
     lines.push(`${L("메모", "Note")}: ${item.notes}`);
   }
   return lines.join("\n");
+}
+
+// 여러 건을 한 번에 — 자금 담당자에게 보내는 자금 집행 요청. 건마다 제목(구분 · 내역)을
+// 머리로 세우고 지급처·금액·예정일·입금 계좌를 붙인다. 맨 위에 건수와 통화별 합계.
+function batchPaymentMessage(items: FinanceCalendarItem[], lang: MsgLang): string {
+  const ko = lang === "ko";
+  const L = (k: string, e: string) => (ko ? k : e);
+  const amt = (it: FinanceCalendarItem) => it.outstanding || it.invoice_amount;
+  const totals = new Map<string, number>();
+  for (const it of items) totals.set(it.currency, (totals.get(it.currency) ?? 0) + amt(it));
+  const sum = Array.from(totals, ([c, v]) => money(v, c)).join(" + ");
+  const lines: string[] = [
+    ko ? `[자금 집행 요청] ${items.length}건 · 합계 ${sum}` : `[Payment request] ${items.length} item(s) · total ${sum}`,
+  ];
+  items.forEach((it, i) => {
+    lines.push("");
+    lines.push(`${i + 1}. ${msgSubject(it, ko)}`);
+    const add = (label: string, v?: string | number | null) => {
+      if (v !== undefined && v !== null && v !== "" && v !== 0) lines.push(`   ${label}: ${v}`);
+    };
+    add(L("지급처", "Payee"), it.title);
+    add(L("금액", "Amount"), `${money(amt(it), it.currency)}${vatTag(it, lang) ? ` (${vatTag(it, lang)})` : ""}`);
+    add(L("지급 예정일", "Due date"), `${it.due_date}${it.overdue ? L(" (기한 지남)", " (overdue)") : ""}`);
+    add(it.doc_label === "Invoice No." ? L("인보이스 번호", "Invoice No.") : L("청구서 번호", "Bill No."), it.doc_no);
+    add(L("발주 번호", "Vendor P/O"), it.po_no);
+    if (it.source === "ap")
+      add(L("세금계산서", "Tax invoice"), it.tax_received ? L("수취", "Received") : L("미수취", "Not yet received"));
+    const a = it.account;
+    if (a && (a.bank_account || a.bank_name)) {
+      add(L("입금 계좌", "Pay to"),
+        `${[a.bank_name, a.bank_account].filter(Boolean).join(" ")}${a.bank_holder ? ` (${L("예금주", "holder")} ${a.bank_holder})` : ""}`);
+      if (a.swift) add("SWIFT", a.swift);
+    } else {
+      add(L("입금 계좌", "Pay to"), L("미등록 — 확인 필요", "not on file — please confirm"));
+    }
+  });
+  return lines.join("\n");
+}
+
+// 달력 칸 하나를 상세 조회 열쇠로 — 상세 창과 같은 규칙(반복 지급·기타수입은 회차 날짜).
+function calendarItemKey(ev: FinanceCalendarEvent): { source: string; occurrence: string } {
+  const source = ev.source && ev.source !== "manual" ? ev.source : "payable";
+  const occurrence = ev.occurrence || (ev.actual ? ev.scheduled : ev.date) || "";
+  return { source, occurrence };
+}
+function fetchCalendarItemFor(ev: FinanceCalendarEvent) {
+  const { source, occurrence } = calendarItemKey(ev);
+  return fetchFinanceCalendarItem(source, ev.ref_id,
+    source === "payable" || source === "income" ? occurrence : null);
+}
+
+/** 체크한 지급 건들을 한 메시지로 — 자금 담당자에게 보내는 자금 집행 요청. */
+function PaymentRequestModal({ events, onClose }: { events: FinanceCalendarEvent[]; onClose: () => void }) {
+  const [items, setItems] = useState<FinanceCalendarItem[] | null>(null);
+  const [err, setErr] = useState("");
+  const [lang, setLang] = useState<MsgLang>("ko");
+  const [text, setText] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    Promise.all(events.map(fetchCalendarItemFor))
+      .then((rows) => {
+        // 예정일 순 — 담당자가 급한 것부터 본다.
+        const sorted = [...rows].sort((a, b) => (a.due_date || "").localeCompare(b.due_date || ""));
+        setItems(sorted);
+        setText(batchPaymentMessage(sorted, lang));
+      })
+      .catch((e: Error) => setErr(e.message));
+  }, [events]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  function switchLang(l: MsgLang) {
+    setLang(l);
+    if (items) setText(batchPaymentMessage(items, l));
+  }
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setErr("Could not copy — select the text and copy it by hand.");
+    }
+  }
+
+  return (
+    <Modal title={`Payment request — ${events.length} item${events.length === 1 ? "" : "s"}`} onClose={onClose}>
+      {err ? <div className="action-err">{err}</div> : null}
+      {!items && !err ? <div className="state">Loading…</div> : null}
+      {items ? (
+        <div className="fin-item-msg">
+          <div className="fin-item-msg-h">
+            <span>Message text</span>
+            <span className="fin-item-msg-lang">
+              {(["ko", "en"] as MsgLang[]).map((l) => (
+                <button key={l} className={lang === l ? "on" : ""} onClick={() => switchLang(l)}>
+                  {l === "ko" ? "한글" : "English"}
+                </button>
+              ))}
+            </span>
+          </div>
+          <textarea value={text} onChange={(e) => setText(e.target.value)}
+            rows={Math.min(24, text.split("\n").length + 1)} spellCheck={false} />
+          <div className="fin-item-acc-btns">
+            <button className="btn sm" onClick={onClose}>Close</button>
+            <button className="btn sm primary" onClick={copy}>{copied ? "Copied ✓" : "Copy text"}</button>
+          </div>
+        </div>
+      ) : null}
+    </Modal>
+  );
 }
 
 function CalendarItemModal({ ev, onClose, onChanged }: {
