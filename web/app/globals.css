@@ -19933,6 +19933,27 @@ select.compose-tpl-version {
   color: #b5751a;
 }
 .lb-foot { background: #f8fafc; font-weight: 600; }
+/* 합계 줄은 표 아래에 붙박이 — 줄을 내려 보는 동안에도 벤더별 합계가 보인다. */
+.lb-table tfoot { position: sticky; bottom: 0; z-index: 3; box-shadow: 0 -3px 5px -3px rgba(15, 23, 42, 0.18); }
+
+/* ── 전체 화면 ─────────────────────────────────────────────
+   팝업 스크롤 안에 표 스크롤이 겹치면 머리글이 화면 밖으로 나간다. body 로 띄운 창 하나가
+   화면을 다 쓰고 스크롤은 표 안 하나뿐 — 머리글·왼쪽 품목 칸·합계 줄이 늘 보인다.
+   스테이지 팝업(100~200) 위, 미리보기·인쇄 모달(1000+) 아래. */
+.lb-full-backdrop {
+  position: fixed; inset: 0; z-index: 900;
+  background: rgba(11, 29, 58, 0.45);
+  padding: 14px;
+  display: flex;
+}
+.lb.lb-full {
+  flex: 1 1 auto; margin: 0; max-height: none; min-width: 0;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.35);
+}
+.lb.lb-placeholder {
+  padding: 10px 12px; font-size: 12.5px; color: var(--muted);
+  display: block; max-height: none;
+}
 .lb-foot.num { text-align: right; }
 /* 벤더별 견적 합계 — 위 칸들과 같은 가운데 정렬, 굵은 합계 아래에 환산값·답한 줄 수. */
 .lb-vtotal .lb-foot.lb-c { text-align: center; border-top: 2px solid var(--line); }

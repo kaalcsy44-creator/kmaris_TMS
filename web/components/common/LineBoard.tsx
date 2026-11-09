@@ -17,6 +17,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { fetchFxRate, fetchLineBoard, saveLineAwards, saveLineMode, type PrintBook } from "@/lib/api";
 import type { BoardLine, LineAlt, LineBoard as LineBoardData, LineCell } from "@/lib/types";
 import VendorName from "@/components/common/VendorName";
@@ -109,6 +110,17 @@ export default function LineBoard({
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  /* 전체 화면 — 줄이 많으면 팝업 스크롤 안에 표 스크롤이 겹쳐 머리글(벤더 이름)이 화면 밖으로
+     나간다. 화면을 다 쓰는 창으로 띄워 스크롤을 하나로 만든다. Esc 로 닫는다. */
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopImmediatePropagation(); e.stopPropagation(); setFull(false); }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [full]);
   // 비교 통화 — 빈 값이면 받은 통화 그대로만. 견적 통화는 언제나 칸의 주 표시로 남고,
   // 고르면 그 아래에 환산값이 붙는다(오늘자 매매기준율, KRW 를 거쳐 교차 환산).
   const [cmpCur, setCmpCur] = useState("");
@@ -529,8 +541,8 @@ export default function LineBoard({
   /* 고르기 칸이 있는지 — 왼쪽 붙박이 칸들의 left 오프셋이 이 한 칸만큼 밀린다. */
   const pickable = mode === "coverage" && !!onSendSelected;
 
-  return (
-    <div className="lb">
+  const board = (
+    <div className={"lb" + (full ? " lb-full" : "")} role={full ? "dialog" : undefined}>
       <div className="lb-bar">
         <div className="lb-counts">
           <Badge n={s.not_sourced} label="not sourced" tone="warn" />
@@ -575,6 +587,10 @@ export default function LineBoard({
               Take lowest for {bestCount}
             </button>
           ) : null}
+          <button type="button" className="btn sm" onClick={() => setFull(!full)}
+                  title={full ? "Back to the stage view (Esc)" : "Open the table full screen — one scroll, header and totals stay in view"}>
+            {full ? "✕ Close" : "⛶ Full screen"}
+          </button>
         </div>
       </div>
 
@@ -770,6 +786,19 @@ export default function LineBoard({
         </table>
       </div>
     </div>
+  );
+  if (!full) return board;
+  return (
+    <>
+      {/* 제자리는 비워 두되 높이를 남겨, 닫았을 때 아래 내용이 튀지 않게 한다. */}
+      <div className="lb lb-placeholder">⛶ Showing full screen — <button type="button" className="link-btn" onClick={() => setFull(false)}>back here</button></div>
+      {createPortal(
+        <div className="lb-full-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setFull(false); }}>
+          {board}
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 
