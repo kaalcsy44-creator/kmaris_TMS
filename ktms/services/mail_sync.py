@@ -229,6 +229,102 @@ def body_and_attachments(msg: Message) -> tuple[str, list[dict]]:
     return body.replace("\r\n", "\n").strip(), attachments
 
 
+def attachment_files(msg: Message) -> list[tuple[str, bytes, str]]:
+    """첨부 원본 [(파일명, 바이트, MIME)] — 승인한 RFQ 의 첨부를 드라이브에 올릴 때 쓴다.
+
+    서명에 박힌 작은 인라인 그림(image001.png 같은 것)은 뺀다 — 폴더만 어지럽힌다."""
+    out: list[tuple[str, bytes, str]] = []
+    for part in msg.walk() if msg.is_multipart() else [msg]:
+        if part.get_content_maintype() == "multipart":
+            continue
+        disp = (part.get("Content-Disposition") or "").lower()
+        filename = part.get_filename()
+        if not ("attachment" in disp or filename):
+            continue
+        try:
+            name = str(make_header(decode_header(filename))) if filename else "attachment"
+        except Exception:
+            name = str(filename or "attachment")
+        raw = part.get_payload(decode=True) or b""
+        ctype = part.get_content_type() or "application/octet-stream"
+        if ctype.startswith("image/") and "attachment" not in disp and len(raw) < 50_000:
+            continue
+        out.append((name, raw, ctype))
+    return out
+
+
+# 등록되지 않은 주소에서 온 메일이라도 RFQ 처럼 보이면 담는다 — 새 고객의 첫 문의가
+# 바로 그런 메일이다. 담은 통은 not_deal(미분류 함에 쌓지 않음) + match_by='rfq_probe' 로
+# 두고, RFQ 판정(rfq_detect)이 후보로 올릴지 정한다.
+_RFQ_STRONG = re.compile(
+    r"\b(rfq|r\.f\.q|requisition|request\s+for\s+quot\w*|quotation\s+request|enquiry|inquiry"
+    r"|pls\s+quote|please\s+quote)\b|견적\s*(요청|의뢰|문의)|询价|報價|报价", re.I)
+_RFQ_WEAK = re.compile(r"\b(quote|quotation|spares?|parts|price|offer)\b|견적|부품|询价|报价", re.I)
+
+
+def rfq_signal(msg: Message, from_addr: str) -> bool:
+    """미등록 발신자의 메일을 RFQ 후보로 담을 만한가 — 값싼 겉보기 검사(판정은 Claude 가 한다).
+
+    제목에 RFQ·requisition·견적요청 같은 말이 있거나, 첨부가 있고 제목·본문 앞머리에
+    견적·부품 같은 말이 있으면 담는다. 반송·no-reply 는 뺀다."""
+    if not from_addr or _DAEMON_RE.search(from_addr):
+        return False
+    subject = _hdr(msg, "Subject")
+    if _RFQ_STRONG.search(subject):
+        return True
+    body, attachments = body_and_attachments(msg)
+    if not attachments:
+        return False
+    return bool(_RFQ_WEAK.search(f"{subject}\n{body[:2000]}"))
+
+
+def fetch_raw_message(message_id: str, account: str = "") -> bytes | None:
+    """메일 원본(RFC822)을 메일함에서 다시 받는다 — 첨부는 DB 에 담지 않기 때문이다.
+
+    받아 온 사서함(account)부터, 받은편지함·보낸편지함·전체보관함 순으로 Message-ID 로
+    찾는다. 메일함은 읽기만 한다(readonly select)."""
+    mid = (message_id or "").strip()
+    if not mid:
+        return None
+    accounts = mail_accounts()
+    acct = (account or "").strip().lower()
+    accounts.sort(key=lambda c: c["user"].strip().lower() != acct)
+    for cfg in accounts:
+        try:
+            conn = _connect(cfg)
+        except Exception:
+            continue
+        try:
+            folders = list(_folders(conn, cfg))
+            try:
+                typ, data = conn.list()
+                for raw in (data or []) if typ == "OK" else []:
+                    line = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else str(raw)
+                    if "\\All" in line:
+                        name = line.split(' "/" ')[-1].strip().strip('"')
+                        if name and name not in folders:
+                            folders.append(name)
+            except Exception:
+                pass
+            for folder in folders:
+                typ, _ = conn.select(f'"{folder}"', readonly=True)
+                if typ != "OK":
+                    continue
+                typ, data = conn.uid("SEARCH", None, "HEADER", "Message-ID", f'"{mid}"')
+                if typ != "OK" or not data or not data[0]:
+                    continue
+                uid = data[0].split()[-1].decode()
+                typ, raw = conn.uid("FETCH", uid, "(RFC822)")
+                if typ == "OK" and raw and isinstance(raw[0], tuple):
+                    return raw[0][1]
+        finally:
+            try:
+                conn.logout()
+            except Exception:
+                pass
+    return None
+
+
 def sent_at_kst(msg: Message) -> str:
     """Date 헤더 → KST 'YYYY-MM-DDTHH:MM'. 못 읽으면 빈 문자열."""
     raw = msg.get("Date")
@@ -1235,6 +1331,7 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
         if bounced_for in (parties or {}):
             bounced_for = ""
         mkt = mkt or bool(bounced_for)
+    probe = False
     if not party and not known_thread and link_rfq is None and not mkt:
         # 등록된 거래처와도, 담아 둔 스레드와도 무관한 메일. 버리되 상대는 세어 둔다 —
         # 받은 메일이면 보낸 사람이, 보낸 메일이면 받는 사람이 '아직 모르는 거래처'다.
@@ -1242,7 +1339,10 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
             addrs = ([from_addr] if direction == "in" else to_addrs)
             _note_unknown(unknown, [a for a in addrs if a and a not in own],
                           msg, sent_at_kst(msg))
-        return "skipped"
+        # 다만 RFQ 처럼 보이는 받은 메일은 담는다 — 새 고객의 첫 문의일 수 있다.
+        if not (direction == "in" and rfq_signal(msg, from_addr)):
+            return "skipped"
+        probe = True
 
     subject = _hdr(msg, "Subject")
     body, attachments = body_and_attachments(msg)
@@ -1264,6 +1364,9 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
     # 붙여 둔 딜은 마지막 수단이다 — 스레드·문서번호·선박이 다른 딜을 가리키면 그쪽이 옳다.
     if rfq_id is None and link_rfq is not None:
         rfq_id, match_by = link_rfq, "address"
+    # RFQ 신호로만 담은 미등록 발신자 메일 — 딜에 붙지 않았으면 미분류 함에 쌓지 않고
+    # RFQ 판정에만 넘긴다(아니라고 판정돼도 이 표시로 남아 다시 미분류에 오르지 않는다).
+    probe_only = probe and rfq_id is None
 
     row = EmailMessage(
         message_id=message_id,
@@ -1283,10 +1386,10 @@ def _store_message(s, msg: Message, folder: str, own: set[str],
         rfq_id=rfq_id,
         customer_id=party[1] if party and party[0] == "customer" else None,
         vendor_id=party[1] if party and party[0] == "vendor" else None,
-        match_by=match_by or ("marketing" if mkt_only else None),
+        match_by=match_by or ("marketing" if mkt_only else "rfq_probe" if probe_only else None),
         # 홍보 메일의 답장만으로 담은 통은 딜 메일이 아니다 — 미분류 함에 줄만 쌓이지
         # 않게 내려 둔다. 마케팅 화면이 대신 이 메일을 활동에 붙여 보여 준다.
-        not_deal=mkt_only,
+        not_deal=mkt_only or probe_only,
         received_account=(account or "").strip().lower()[:200] or None,
     )
     # 유일 제약은 마지막 방어선으로 남겨 둔다 — 앞의 조회를 빠져나간 중복(같은 메일이

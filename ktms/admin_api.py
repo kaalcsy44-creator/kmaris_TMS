@@ -24,4 +24,5 @@ from routers import (  # noqa: F401  (import side effect: registers routes)
     settings,
     notifications,
     network,
+    rfq_intake,
 )

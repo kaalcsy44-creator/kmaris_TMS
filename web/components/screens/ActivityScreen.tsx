@@ -163,7 +163,8 @@ export default function ActivityScreen() {
     () => (params.get("view") === "mail" ? "mail" : "deal"),
   );
   const mailQueue: MailQueue =
-    params.get("queue") === "unknown" ? "unknown"
+    params.get("queue") === "rfq" ? "rfq"
+      : params.get("queue") === "unknown" ? "unknown"
       : params.get("queue") === "filed" ? "filed"
       : params.get("queue") === "promo" ? "promo"
       : "unmatched";

@@ -310,6 +310,72 @@ export function uploadRfqDriveFiles(
   fd.append("intake_text", intakeText);
   return postForm<DriveUploadResult>(`/api/admin/rfq/${rfqId}/drive-files`, fd);
 }
+/** RFQ 후보 — 받은 메일에서 찾은 새 RFQ(services/rfq_detect.py). 승인해야 프로젝트가 선다. */
+export type RfqCandidate = {
+  id: number;
+  email_id: number;
+  status: "pending" | "approved" | "rejected";
+  confidence: number;
+  /** 판정 근거 한 줄(한국어). */
+  reason: string;
+  subject: string;
+  from_name: string;
+  from_addr: string;
+  sent_at: string;
+  /** 이 메일을 읽어 온 사서함(sales@ · samcho@). */
+  account: string;
+  attachments: string[];
+  preview: string;
+  body: string;
+  customer_id: number;
+  customer_name: string;
+  customer_contact: string;
+  customer_short: string;
+  /** 명부에 없을 때 메일에서 읽은 회사 이름. */
+  customer_guess: string;
+  vessel_id: number;
+  vessel: string;
+  item_title: string;
+  work_type: "PARTS" | "SERVICE";
+  folder_name: string;
+  rfq_id: number;
+  rfq_no: string;
+  folder_url: string;
+};
+export function fetchRfqCandidates(status = "pending"): Promise<{ rows: RfqCandidate[] }> {
+  return get(`/api/admin/rfq-candidates?status=${encodeURIComponent(status)}`);
+}
+export function runRfqDetection(): Promise<{ judged: number; candidates: number }> {
+  return post("/api/admin/rfq-candidates/run", {});
+}
+export function rejectRfqCandidate(id: number): Promise<{ ok: boolean }> {
+  return post(`/api/admin/rfq-candidates/${id}/reject`, {});
+}
+export type RfqApproveResult = {
+  ok: boolean;
+  rfq_id: number;
+  rfq_no: string;
+  folder_url: string;
+  saved: { name: string; url: string }[];
+  skipped: { name: string; reason: string }[];
+  failed: { name: string; reason: string }[];
+  drive_error: string;
+};
+export function approveRfqCandidate(
+  id: number,
+  body: {
+    customer_id?: number;
+    new_customer?: { name: string; contact?: string; email?: string; short_name?: string };
+    vessel_id?: number;
+    vessel_name?: string;
+    project_title: string;
+    work_type: "PARTS" | "SERVICE";
+    customer_rfq_no?: string;
+  }
+): Promise<RfqApproveResult> {
+  return post(`/api/admin/rfq-candidates/${id}/approve`, body);
+}
+
 /** 드라이브에 남기는 발행 문서 종류 → 서버가 하위 폴더(02 QTN·03 PO·04 INV)를 고른다. */
 export type DriveDoc =
   | "quotation" | "vendor_po" | "pi" | "ci" | "pl" | "sa" | "sm" | "tax_invoice" | "credit_note";

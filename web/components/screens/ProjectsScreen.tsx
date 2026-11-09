@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   fetchPipeline,
+  fetchRfqCandidates,
   fetchRfqOverview,
   fetchPoWorkOptions,
   fetchCustomers,
@@ -134,6 +135,11 @@ export default function ProjectsScreen({ onFill }: { onFill?: (fill: boolean) =>
   const [tab, setTab] = useState<Tab>("internal");
   // 신규 RFQ 등록 팝업 — 화면 우측 하단 버튼으로 연다.
   const [newRfqOpen, setNewRfqOpen] = useState(false);
+  // 메일함에서 찾은 RFQ 후보 수 — 0 이면 버튼을 띄우지 않는다.
+  const [rfqInbox, setRfqInbox] = useState(0);
+  useEffect(() => {
+    fetchRfqCandidates("pending").then((r) => setRfqInbox(r.rows.length)).catch(() => setRfqInbox(0));
+  }, []);
   // 딥링크(?rfq=<id> | ?order=<id> [&stage=N]) — 대시보드·전역검색 등에서 넘어오면
   // 내부확인용 목록의 해당 프로젝트 팝업을 그 단계로 연다. (모든 단계 작업의 단일 진입점)
   const router = useRouter();
@@ -274,6 +280,14 @@ export default function ProjectsScreen({ onFill }: { onFill?: (fill: boolean) =>
         </>
       )}
 
+      {/* 메일함에서 찾은 새 RFQ 후보 — 있을 때만 New RFQ 버튼 위에 뜬다. 누르면 메일 정리함의
+          RFQ 후보 함으로 가서 승인 한 번에 프로젝트·드라이브 폴더를 세운다. */}
+      {can("rfq", "create") && rfqInbox > 0 ? (
+        <Link className="progress-fab rfq-inbox-fab" href="/activity?view=mail&queue=rfq"
+              title="New RFQs found in the mailbox — review and approve">
+          📥 {rfqInbox} RFQ{rfqInbox === 1 ? "" : "s"} in mail
+        </Link>
+      ) : null}
       {/* 신규 RFQ 등록 — 화면 우측 하단 플로팅 버튼 → 기본정보 입력 팝업. */}
       {can("rfq", "create") ? (
         <button

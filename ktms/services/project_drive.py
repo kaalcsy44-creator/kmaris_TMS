@@ -124,7 +124,8 @@ def intake_markdown(s, rfq: RFQ, text: str, by: str, at: str) -> str:
     return "\n".join(head) + text.strip() + "\n"
 
 
-def save_intake(rfq_id: int, files: list, text: str = "", *, by: str = "", at: str = "") -> dict:
+def save_intake(rfq_id: int, files: list, text: str = "", *, by: str = "", at: str = "",
+                text_name: str = "00 접수내용.md", raw_text: bool = False) -> dict:
     """접수 첨부를 `01 RFQ` 에 올린다. 파일명은 원본 그대로, 같은 이름이면 ' (2)'.
 
     files: [(파일명, 읽기 가능한 파일 객체, 크기, mime)]. 50MB 초과는 건너뛰고, 한 파일이
@@ -145,17 +146,20 @@ def save_intake(rfq_id: int, files: list, text: str = "", *, by: str = "", at: s
             log.warning("project_drive: %s 업로드 실패 — %s", name, exc)
             failed.append({"name": name, "reason": str(exc)[:200]})
     if (text or "").strip():
-        s = get_session()
+        if raw_text:
+            body = text          # 머리글을 이미 갖춘 글(메일 본문 등)은 그대로
+        else:
+            s = get_session()
+            try:
+                rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+                body = intake_markdown(s, rfq, text, by, at)
+            finally:
+                s.close()
         try:
-            rfq = s.query(RFQ).filter_by(id=rfq_id).first()
-            body = intake_markdown(s, rfq, text, by, at)
-        finally:
-            s.close()
-        try:
-            up = drive_svc.upload_text(rfq_dir, "00 접수내용.md", body)
+            up = drive_svc.upload_text(rfq_dir, text_name, body)
             saved.append({"name": up["name"], "url": up["url"]})
         except drive_svc.DriveError as exc:
-            failed.append({"name": "00 접수내용.md", "reason": str(exc)[:200]})
+            failed.append({"name": text_name, "reason": str(exc)[:200]})
     return {"folder_url": folder["folder_url"], "rfq_folder_url": drive_svc.folder_url(rfq_dir),
             "saved": saved, "skipped": skipped, "failed": failed}
 

@@ -9,7 +9,8 @@
   1) 메일함 읽기(sync_mailbox)
   2) 근거가 분명한 것 자동 배정(auto_match)
   3) 새 메일 요약 채우기(ensure_summaries)
-  4) 대시보드 카드의 AI 요약 채우기(build_project_rollup — 딜 하나당 호출 1회)
+  4) 새 RFQ 후보 판정(rfq_detect — 메일 한 통당 호출 1회, 승인은 사람이)
+  5) 대시보드 카드의 AI 요약 채우기(build_project_rollup — 딜 하나당 호출 1회)
 
 **"몇 시에 잠들었다 깨는" 방식이 아니라, 자주 깨어 "오늘 몫을 아직 안 했나"를 보는
 방식이다.** 서버가 새벽에 재시작되면 잠들어 있던 타이머는 그대로 사라지지만, 이
@@ -28,7 +29,7 @@ from __future__ import annotations
 import os
 import sys
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from db.models import AppSetting, EmailMessage
 from services import mail_sync, marketing_reply
@@ -37,6 +38,8 @@ from services.mail_summary import ROLLUP_KEY, build_project_rollup, ensure_summa
 STATE_KEY = "mail_auto_sync"      # {last_run_date, last_run_at, result, error}
 # 한 번의 자동 실행에서 요약을 채울 메일 수 상한(딜에 붙은 것 우선).
 _SUMMARY_LIMIT = 60
+# 하루 한 번 RFQ 후보 판정에 넘길 최대 통수(통당 Claude 호출 1회).
+_RFQ_DETECT_LIMIT = int(os.getenv("RFQ_DETECT_LIMIT", "40") or 40)
 
 _thread: threading.Thread | None = None
 # 이 프로세스가 오늘 몫을 끝낸 날짜(KST, 'YYYY-MM-DD'). DB 조회를 아끼기 위한 기억일
@@ -168,6 +171,16 @@ def run_once(s) -> dict:
         out["summarized"] = ensure_summaries(s, fresh, limit=_SUMMARY_LIMIT)
     except Exception as exc:
         out["error"] = (out["error"] or "") + f" summaries: {exc}"[:200]
+
+    # 새 RFQ 후보 — 딜에 안 붙은 받은 메일을 판정해 RFQ 후보 함에 올린다(services/rfq_detect.py).
+    # 승인은 사람이 한다. 최근 2주 메일만, 한 번에 RFQ_DETECT_LIMIT 통까지.
+    try:
+        from services import rfq_detect
+        since = (now - timedelta(days=14)).strftime("%Y-%m-%d")
+        out["rfq_detect"] = rfq_detect.run(s, since=since, limit=_RFQ_DETECT_LIMIT)
+    except Exception as exc:
+        s.rollback()
+        out["error"] = (out["error"] or "") + f" rfq-detect: {exc}"[:200]
 
     try:
         out["digests"] = _write_digests(s, config()["digests"])

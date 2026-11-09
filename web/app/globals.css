@@ -4442,6 +4442,144 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.on {
 .progress-fab:hover {
   background: #00468c;
 }
+/* 메일함에서 찾은 RFQ 후보 — New RFQ 버튼 바로 위에 뜬다. */
+.rfq-inbox-fab {
+  bottom: 70px;
+  background: #b45309;
+  text-decoration: none;
+}
+.rfq-inbox-fab:hover {
+  background: #92400e;
+}
+.umail-rfq-hot:not(.primary) {
+  border-color: #b45309;
+  color: #b45309;
+}
+
+/* ── RFQ 후보 함 (RfqCandidatesPanel) ─────────────────────────────────────── */
+.rfqc {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rfqc-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  justify-content: space-between;
+}
+.rfqc-card {
+  border: 1px solid var(--line);
+  border-left: 4px solid #b45309;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rfqc-card.done {
+  border-left-color: #15803d;
+  background: #f6fbf7;
+}
+.rfqc-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.rfqc-conf {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+}
+.rfqc-conf.high {
+  background: #dcfce7;
+  color: #166534;
+}
+.rfqc-subj {
+  font-size: 13.5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rfqc-meta,
+.rfqc-atts {
+  font-size: 12px;
+  color: var(--muted);
+}
+.rfqc-reason {
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.rfqc-body {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 12px;
+  background: var(--zebra);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 0;
+}
+.rfqc-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px 10px;
+}
+.rfqc-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #45526a;
+}
+.rfqc-form label.wide {
+  grid-column: span 2;
+}
+.rfqc-form input,
+.rfqc-form select {
+  font: inherit;
+  font-weight: 400;
+  font-size: 13px;
+  min-width: 0;
+}
+.rfqc-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.rfqc-folder {
+  flex: 1 1 260px;
+  min-width: 0;
+  font-size: 12px;
+  color: #45526a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.link-btn {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--blue);
+  cursor: pointer;
+}
+@media (max-width: 640px) {
+  .rfqc-form label.wide {
+    grid-column: auto;
+  }
+}
 /* 신규 RFQ 등록 모드 — 좌측 정보 패널 안내문. */
 .intl-new-hint {
   padding: 6px 2px;

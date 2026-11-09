@@ -6,6 +6,7 @@ import {
   autoMatchMail,
   dismissPromoCandidate,
   fetchMailStatus,
+  fetchRfqCandidates,
   fetchPromoCandidates,
   fetchUnmatchedMail,
   logMailAsPromo,
@@ -18,6 +19,7 @@ import { isAdmin } from "@/lib/auth";
 import ProjectPicker, { type ProjectPickOption } from "@/components/common/ProjectPicker";
 import PartyName from "@/components/common/PartyName";
 import UnknownAddressPanel from "@/components/common/UnknownAddressPanel";
+import RfqCandidatesPanel from "@/components/common/RfqCandidatesPanel";
 
 // 메일 정리함 — 메일함에서 가져왔지만 아직 딜에 자리 잡지 못한 것들.
 //
@@ -43,7 +45,8 @@ import UnknownAddressPanel from "@/components/common/UnknownAddressPanel";
 // 붙이고, 근거가 모자란 대화에는 추천 딜만 달아 둔다(붙이지는 않는다) — 추측으로
 // 붙은 이력은 비어 있는 것보다 나쁘기 때문이다. 확정은 사람이 한 번 누른다.
 // 화면 문구는 나머지 화면과 같이 영문으로 쓴다(주석만 국문).
-export type MailQueue = "unmatched" | "filed" | "promo" | "unknown";
+//   RFQ          — 메일함에서 찾은 새 RFQ 후보(맨 앞). 승인하면 프로젝트·드라이브 폴더가 선다.
+export type MailQueue = "rfq" | "unmatched" | "filed" | "promo" | "unknown";
 
 export default function UnmatchedMailPanel({
   projects,
@@ -74,6 +77,11 @@ export default function UnmatchedMailPanel({
   const showPromo = queue === "promo";
   const [filedCount, setFiledCount] = useState(0);
   const [promoCount, setPromoCount] = useState(0);
+  // RFQ 후보 수 — 함을 열지 않아도 탭에 보이게 한 번 받아 둔다.
+  const [rfqCount, setRfqCount] = useState<number | null>(null);
+  useEffect(() => {
+    fetchRfqCandidates("pending").then((r) => setRfqCount(r.rows.length)).catch(() => setRfqCount(null));
+  }, []);
   // 홍보 후보 함에서 체크해 둔 대화 — 한 번에 등록한다.
   const [promoSel, setPromoSel] = useState<Record<string, boolean>>({});
   const admin = isAdmin();
@@ -246,7 +254,12 @@ export default function UnmatchedMailPanel({
     <div className="umail">
       <div className="umail-head">
         <span className="act-count">
-          {queue === "unknown" ? (
+          {queue === "rfq" ? (
+            <>
+              RFQ candidates · {rfqCount ?? "…"}
+              <span className="umail-total"> · new RFQs found in the mailbox, waiting for approval</span>
+            </>
+          ) : queue === "unknown" ? (
             <>
               unregistered counterparts · {unknownCount}
               <span className="umail-total"> · none of their mail is stored</span>
@@ -290,6 +303,15 @@ export default function UnmatchedMailPanel({
           {/* 함 고르기. 셋을 한 줄에 두면 "무엇이 얼마나 남았나"가 한눈에 보이고,
               내려 둔 대화도 등록 안 된 상대도 되돌릴 수 있는 것이 된다. */}
           <div className="umail-queues" role="tablist">
+            {/* 새 RFQ 후보 — 메일함 정리의 맨 앞 단계라 첫 자리에 둔다. */}
+            <button
+              className={`btn sm${queue === "rfq" ? " primary" : ""}${rfqCount ? " umail-rfq-hot" : ""}`}
+              disabled={busy}
+              title="New RFQs found in the mailbox — approve to register the project and its Drive folder"
+              onClick={() => setQueue("rfq")}
+            >
+              📥 RFQ candidates{rfqCount != null ? ` (${rfqCount})` : ""}
+            </button>
             <button
               className={`btn sm${queue === "unmatched" ? " primary" : ""}`}
               disabled={busy}
@@ -368,7 +390,9 @@ export default function UnmatchedMailPanel({
         <div key={e} className="action-err">{e}</div>
       ))}
 
-      {queue === "unknown" ? (
+      {queue === "rfq" ? (
+        <RfqCandidatesPanel onCountChange={setRfqCount} />
+      ) : queue === "unknown" ? (
         // 등록되지 않은 상대 — 담기지도 않은 메일이라 표 모양이 아주 다르다(대화가
         // 아니라 주소 단위). 같은 함 줄 아래에 두되 그리는 일은 따로 맡긴다.
         <UnknownAddressPanel projects={projects} onChanged={load} />
