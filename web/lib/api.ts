@@ -423,6 +423,8 @@ export function createRfq(body: {
   // 가리키던 줄이 저장할 때마다 사라진다.
   items: { part_no: string; description: string; type?: string; serial_no?: string; qty: number; remark?: string; category_id?: number | null; row_kind?: string; lid?: string }[];
   source_files?: { name: string; media_type?: string; item_count: number; at?: string }[];
+  /** Copy as new 의 원본 딜 id — 메일 이력 묶음을 원본과 잇는다(수신시각은 복사 시각). */
+  copy_of?: number;
 }): Promise<{ ok: boolean; id: number; rfq_no: string }> {
   return post("/api/admin/rfq", body);
 }

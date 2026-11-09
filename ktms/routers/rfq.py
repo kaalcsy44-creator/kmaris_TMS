@@ -427,6 +427,9 @@ def create_rfq(body: RfqCreate, background: BackgroundTasks,
         # 제조사별로 쪼개 세운 형제다(P-024 MURR / P-025 PARKER …). 대화는 하나뿐이므로
         # 메일 이력을 함께 보게 묶는다 — 안 묶으면 나중에 세운 딜은 늘 "메일 없음"이 된다.
         siblings = mail_sync.group_siblings(s, cust.id, received_at)
+        # 복사본은 수신시각이 원본과 다르므로 위 규칙으로는 안 묶인다 — 원본을 직접 잇는다.
+        if body.copy_of and s.get(RFQ, body.copy_of) and body.copy_of not in siblings:
+            siblings.append(body.copy_of)
         s.add(rfq)
         if siblings:
             s.flush()          # 묶음 대표를 정하려면 이 딜의 id 가 필요하다

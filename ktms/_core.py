@@ -4695,6 +4695,10 @@ class RfqCreate(BaseModel):
     notes: str | None = ""             # 내부 메모(자유 서술)
     items: list[RfqItemIn] = []
     source_files: list[RfqSourceFileIn] = []   # Auto-fill 소스 파일 메타(영구 보관)
+    # Copy as new 의 원본 딜 id. 주면 메일 이력 묶음(mail_group_id)을 원본과 잇는다.
+    # 복사본의 수신시각은 복사한 시각이다 — 원본 시각을 옮겨 적으면 프로젝트 번호
+    # (수신시각 순 산출)가 원본 바로 뒤로 끼어들어 이후 딜 번호가 전부 하나씩 밀린다.
+    copy_of: int | None = None
 
 
 class RfqAssignNo(BaseModel):

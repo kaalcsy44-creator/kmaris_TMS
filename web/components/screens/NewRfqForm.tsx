@@ -765,6 +765,10 @@ export default function NewRfqForm({
       const vid = await flushVessel();
       const r = await createRfq({
         ...headerPayload(),
+        // 수신시각은 원본에서 옮기지 않는다(서버가 지금 시각으로) — 프로젝트 번호가
+        // 수신시각 순이라, 원본 시각을 쓰면 원본 바로 뒤로 끼어들어 뒤 딜 번호가 밀린다.
+        received_at: undefined,
+        copy_of: editId ?? undefined,
         customer_id: customerId,
         vessel_id: vid === "" ? undefined : vid,
         items: picked,
