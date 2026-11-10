@@ -383,7 +383,11 @@ export type DriveDoc =
  *  ref: "qtn:ID" · "order:ID" · "rfq:ID" · "vpo:ID" · "cn:ID" — 문서가 속한 프로젝트를 찾는 열쇠.
  *  드라이브가 실패해도 다운로드는 이미 끝났다 — 콘솔에만 남긴다. 미리보기에서는 부르지 않는다.
  *  같은 내용을 다시 받으면 서버가 건너뛰고, 내용이 바뀐 재발행은 " (2)" 로 따로 남는다. */
+// 2026-11-10 사용자 요청으로 다운로드 시 드라이브 자동 저장을 멈췄다(서버도 DRIVE_AUTO_ARCHIVE=1 일 때만 받는다).
+const DRIVE_AUTO_ARCHIVE = false;
+
 export function archiveIssuedDoc(blob: Blob, filename: string, ref: string, doc: DriveDoc): void {
+  if (!DRIVE_AUTO_ARCHIVE) return;
   const fd = new FormData();
   fd.append("file", blob, filename);
   fd.append("ref", ref);

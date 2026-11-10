@@ -1,5 +1,6 @@
 """K-Maris TMS — rfq routes (split from admin_api.py; behavior unchanged)."""
 from __future__ import annotations
+import os
 
 from _core import (
     Consultant,
@@ -507,6 +508,10 @@ def archive_issued_doc(file: UploadFile = File(...), ref: str = Form(...), doc: 
     doc: quotation · vendor_po · pi · ci · pl · sa · sm · tax_invoice · credit_note."""
     if doc not in project_drive.DOC_FOLDER:
         raise HTTPException(status_code=400, detail=f"보관하지 않는 문서 종류: {doc}")
+    # 2026-11-10 사용자 요청으로 "다운로드 시 드라이브 자동 저장"을 멈췄다. 다시 켜려면
+    # 환경변수 DRIVE_AUTO_ARCHIVE=1 (옛 화면이 계속 보내도 여기서 막힌다).
+    if os.getenv("DRIVE_AUTO_ARCHIVE", "").strip() != "1":
+        return {"status": "paused"}
     if not (drive_svc.enabled("PARTS") or drive_svc.enabled("SERVICE")):
         return {"status": "disabled"}
     if (file.size or 0) > project_drive.MAX_UPLOAD:
