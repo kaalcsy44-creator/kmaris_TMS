@@ -753,10 +753,12 @@ def _counted_rows(items) -> list:
     """금액을 셀 때 실제로 세는 행 — 제외행과 옵션 구분행(제목 줄)을 뺀 나머지 전부.
 
     옵션(대안)은 문서에서 옵션별 Subtotal 로 끊어 보이고, 총계(Total)는 그 Subtotal 들을
-    모두 더한 값이다 — services.kmaris_docs.counted_items 와 같은 규칙."""
+    모두 더한 값이다 — services.kmaris_docs.counted_items 와 같은 규칙.
+    같은 라인(lid)의 대안 줄 중 합계에서 뺀 줄(alt_off)은 문서엔 찍히지만 세지 않는다."""
     return [
         i for i in (items or [])
         if isinstance(i, dict) and not i.get("excluded") and not is_option_row(i)
+        and not i.get("alt_off")
     ]
 
 
@@ -3486,6 +3488,8 @@ def _doc_items_from_quotation(quo) -> list[dict]:
     out: list[dict] = []
     for it in (quo.items or []) if quo else []:
         if not isinstance(it, dict):
+            continue
+        if it.get("alt_off"):   # 합계에서 뺀 대안 줄 — 청구 대상이 아니다
             continue
         out.append({
             "part_no": it.get("part_no") or "",

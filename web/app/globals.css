@@ -19865,6 +19865,14 @@ select.compose-tpl-version {
 .plist-info dt { flex: 0 0 118px; color: var(--muted); }
 .plist-info dd { margin: 0; color: var(--ink); }
 .seq-lid { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+/* 같은 라인 대안/세트 — No. 칸 안 작은 표식(고객 견적 편집기). 합계에서 뺀 줄은 금액을 흐리게. */
+.line-alt { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 3px; }
+.line-mode { font: 600 9.5px var(--mono); padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; background: #fff; color: var(--muted); cursor: pointer; line-height: 15px; }
+.line-mode.set { background: #eaf3ff; color: #0055a8; border-color: #b9d4f2; }
+.line-pick { display: inline-flex; align-items: center; gap: 2px; font-size: 10px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.line-pick input { margin: 0; width: 11px; height: 11px; }
+tr.alt-off td.num, tr.alt-off td .num { color: #9aa3b2; }
+tr.alt-off .line-pick { color: #b25f00; }
 .lb-lid {
   display: inline-block;
   margin-left: 6px;

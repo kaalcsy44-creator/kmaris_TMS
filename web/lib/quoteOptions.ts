@@ -16,6 +16,9 @@ export type OptionRowLike = {
   qty?: number | null;
   amount?: number | null;
   cost_price?: number | null;
+  lid?: string | null;
+  line_mode?: "alt" | "set" | null;
+  alt_off?: boolean | null;
 };
 
 export function isOptionRow(it: OptionRowLike | null | undefined): boolean {
@@ -67,12 +70,50 @@ export function optionBlocks<T extends OptionRowLike>(items: readonly T[] | null
   return blocks;
 }
 
-/** 집계(견적 금액·마진·딜 금액)에 쓸 품목 — 옵션 구분행만 뺀 **전체** 품목.
+/** 집계(견적 금액·마진·딜 금액)에 쓸 품목 — 옵션 구분행과, 같은 라인의 대안 중 합계에서
+ *  뺀 줄(alt_off)을 뺀 나머지.
  *
  *  옵션마다 Subtotal 을 세우고 맨 아래 Total 은 그것들을 모두 더한 값이다. 서버의
  *  _counted_rows 와 같은 규칙이라, 화면의 Final 과 목록·마진의 숫자가 한 값이 된다. */
 export function countedItems<T extends OptionRowLike>(items: readonly T[] | null | undefined): T[] {
-  return (items || []).filter((it) => !isOptionRow(it));
+  return (items || []).filter((it) => !isOptionRow(it) && !it.alt_off);
+}
+
+/** 같은 라인(lid) 줄 묶음 — 두 줄 이상인 라인만. 값은 원본 배열 위치(위에서부터). */
+export function lineGroups<T extends OptionRowLike>(items: readonly T[]): Map<string, number[]> {
+  const by = new Map<string, number[]>();
+  items.forEach((it, i) => {
+    const lid = String(it.lid || "").trim();
+    if (!lid || isOptionRow(it)) return;
+    by.set(lid, [...(by.get(lid) || []), i]);
+  });
+  for (const [k, v] of by) if (v.length < 2) by.delete(k);
+  return by;
+}
+
+/** 같은 라인 묶음의 대안/세트 표식을 맞춘다 — 고객 견적 편집기 전용.
+ *  · 세트(set): 모두 합계에 넣는다(alt_off 해제).
+ *  · 대안(alt, 기본): 합계에 넣는 줄은 정확히 하나 — 지금 넣고 있는 첫 줄, 없으면 맨 위 줄.
+ *  · 한 줄뿐인 라인: 표식을 지운다(대안이 아니다).
+ *  바뀐 게 없으면 같은 배열을 돌려준다(편집기 useEffect 가 무한히 돌지 않게). */
+export function applyLineAlts<T extends OptionRowLike>(items: readonly T[]): T[] {
+  const groups = lineGroups(items);
+  const inGroup = new Set<number>();
+  const patch = new Map<number, Partial<OptionRowLike>>();
+  for (const idx of groups.values()) {
+    idx.forEach((i) => inGroup.add(i));
+    const mode = idx.map((i) => items[i].line_mode).find((m) => m === "set" || m === "alt") || "alt";
+    const keep = mode === "set" ? -1 : (idx.find((i) => !items[i].alt_off) ?? idx[0]);
+    for (const i of idx) {
+      const off = mode === "alt" && i !== keep;
+      if (items[i].line_mode !== mode || Boolean(items[i].alt_off) !== off) patch.set(i, { line_mode: mode, alt_off: off });
+    }
+  }
+  items.forEach((it, i) => {
+    if (!inGroup.has(i) && (it.alt_off || it.line_mode)) patch.set(i, { line_mode: null, alt_off: false });
+  });
+  if (!patch.size) return items as T[];
+  return items.map((it, i) => (patch.has(i) ? { ...it, ...patch.get(i) } : it));
 }
 
 export type PlanEntry<T> =

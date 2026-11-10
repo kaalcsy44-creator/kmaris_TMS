@@ -168,7 +168,8 @@ def option_blocks(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not blocks:
             blocks.append({"no": None, "title": "", "items": [], "amount": 0.0})
         blocks[-1]["items"].append(raw)
-        blocks[-1]["amount"] += _num(raw.get("amount", 0))
+        if not raw.get("alt_off"):   # 합계에서 뺀 대안 줄은 소계에도 넣지 않는다
+            blocks[-1]["amount"] += _num(raw.get("amount", 0))
     return blocks
 
 
@@ -176,8 +177,9 @@ def counted_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """금액을 세는 품목 — 옵션 구분행(제목 줄)만 뺀 나머지 전부.
 
     옵션은 표에서 Subtotal 로 끊어 보이고, 총계(Total)는 그것들을 모두 더한 값이다
-    (_core._counted_rows 와 같은 규칙 — 화면 Final·목록 금액이 문서와 한 값이 되게)."""
-    return [it for it in normalize_items(items) if not is_option_row(it)]
+    (_core._counted_rows 와 같은 규칙 — 화면 Final·목록 금액이 문서와 한 값이 되게).
+    같은 라인의 대안 줄 중 합계에서 뺀 줄(alt_off)은 표에는 찍히지만 여기서 빠진다."""
+    return [it for it in normalize_items(items) if not is_option_row(it) and not it.get("alt_off")]
 
 
 def item_row_plan(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -211,10 +213,21 @@ def quote_no_header(items: List[Dict[str, Any]]) -> str:
     return "No.\nLine" if any(it.get("lid") for it in normalize_items(items)) else "No."
 
 
-def quote_no_text(no: Any, lid: Any) -> str:
+def quote_no_text(no: Any, lid: Any, alt: bool = False) -> str:
     """견적서 No. 칸 — 순번 밑에 라인 번호. 일부 줄만 견적하면 순번이 RFQ 번호와 어긋나,
-    고객이 자기 RFQ 의 어느 줄인지 맞춰 볼 수 있게 한다. 운임처럼 라인이 없는 줄은 순번만."""
-    return f"{no}\n{lid}" if lid else str(no)
+    고객이 자기 RFQ 의 어느 줄인지 맞춰 볼 수 있게 한다. 운임처럼 라인이 없는 줄은 순번만.
+    alt=True(합계에서 뺀 대안 줄)면 맨 아래에 "Alt." 를 붙인다."""
+    text = f"{no}\n{lid}" if lid else str(no)
+    return f"{text}\n{ALT_MARK}" if alt else text
+
+
+# 같은 라인의 대안 중 합계에 넣지 않는 줄 표시와, 품목표 아래 붙는 설명.
+ALT_MARK = "Alt."
+ALT_NOTE = "Lines marked “Alt.” are alternatives for the same line and are not included in the total."
+
+
+def has_alt_rows(items: List[Dict[str, Any]]) -> bool:
+    return any(it.get("alt_off") for it in normalize_items(items))
 
 
 def normalize_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -259,6 +272,8 @@ def normalize_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "measurement": raw.get("measurement", "") or cbm(*_dim_parts(raw.get("dimension")), raw.get("pkg_qty")),
                 "dimension": raw.get("dimension", ""),
                 "hs_code": raw.get("hs_code", ""),
+                # 같은 라인(lid)의 대안 중 합계에 넣지 않는 줄 — 표에는 "Alt." 로 찍힌다.
+                "alt_off": (not option) and bool(raw.get("alt_off")),
             }
         )
     return normalized
@@ -2293,6 +2308,7 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     # 옵션(대안)이 있으면 옵션 제목행 + 옵션별 Subtotal 로 끊어 적는다. 맨 아래 Total 은
     # 옵션이 있든 없든 늘 붙는다 — 그 Subtotal 들을 모두 더한 값이다(item_row_plan 참고).
     plan = item_row_plan(data.get("items", []))
+    alt_rows: List[int] = []   # 합계에서 뺀 대안 줄(표에는 "Alt." 로 찍는다)
     option_rows: List[int] = []
     total_rows: List[int] = []
     item_rows: List[int] = []
@@ -2312,8 +2328,10 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
             continue
         it = entry["item"]
         item_rows.append(r)
+        if it.get("alt_off"):
+            alt_rows.append(r)
         rows.append([
-            _p(quote_no_text(it["item_no"], it.get("lid")), s["tiny"]),
+            _p(quote_no_text(it["item_no"], it.get("lid"), it.get("alt_off")), s["tiny"]),
             _p(it["part_no"], s["tiny"]),
             _p(it["description"], s["tiny"]),
             _p(_qnum(it["qty"]), s["tiny"]),
@@ -2376,8 +2394,14 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     for n, r in enumerate(item_rows):
         if n % 2 == 1:
             tcmds.append(("BACKGROUND", (0, r), (-1, r), colors.HexColor("#FAFBFC")))
+    # 합계에서 뺀 대안 줄 — 금액을 흐리게(회색 이탤릭 대신 글자색만) 찍는다.
+    for r in alt_rows:
+        tcmds.append(("TEXTCOLOR", (5, r), (6, r), colors.HexColor("#8A94A6")))
     items_table.setStyle(TableStyle(tcmds))
-    story += [items_table, Spacer(1, 5 * mm)]
+    story += [items_table]
+    if alt_rows:
+        story += [Spacer(1, 1.5 * mm), _p(f"<i>{ALT_NOTE}</i>", s["tiny"])]
+    story += [Spacer(1, 5 * mm)]
 
     # ── Remark ────────────────────────────────────────────────────────
     # 4단계에서 입력한 견적 전체 비고. 품목표 바로 아래(=T&C 위)에 T&C 와 같은 형식으로

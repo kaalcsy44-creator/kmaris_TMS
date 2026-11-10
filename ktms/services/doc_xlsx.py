@@ -20,7 +20,7 @@ from services.kmaris_docs import (
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
     pi_decimals, doc_decimals, print_decimals, pi_charges, pi_doc_date, is_service_doc, service_info_rows,
     SERVICE_PI_DECIMALS, cn_view, cn_contact_line, CN_MIN_ITEM_ROWS,
-    is_option_row, item_row_plan, quote_no_header, quote_no_text,
+    is_option_row, item_row_plan, quote_no_header, quote_no_text, ALT_NOTE,
 )
 
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
@@ -1300,7 +1300,8 @@ def make_quotation_costing_xlsx(
         else:
             u_cell = u_formula if not unit_price else unit_price
         cells = {
-            1: quote_no_text(ri, it["lid"]) if it.get("lid") else ri,
+            1: (quote_no_text(ri, it.get("lid"), bool(it.get("alt_off")))
+                if it.get("lid") or it.get("alt_off") else ri),
             2: it.get("part_no", ""), 3: it.get("description", ""),
             4: qty, 5: it.get("unit", ""),
             6: cost,                                   # Cost U/P (입력, 원가통화)
@@ -1333,10 +1334,19 @@ def make_quotation_costing_xlsx(
         _desc = str(it.get("description", "") or ""); _rmk = str(it.get("remark", "") or "")
         _dl = sum(max(1, (len(x) + 39) // 40) for x in _desc.split("\n")) if _desc else 1
         _rl = sum(max(1, (len(x) + 25) // 26) for x in _rmk.split("\n")) if _rmk else 1
-        ws.row_dimensions[r].height = 14 * max(_dl, _rl, 2 if it.get("lid") else 1) + 5
+        ws.row_dimensions[r].height = 14 * max(_dl, _rl, (2 if it.get("lid") else 1) + (1 if it.get("alt_off") else 0)) + 5
 
     # "Total" 라벨 — A~E 병합, 가운데. 행 전체 글자 크기 12.
     bold16 = Font(name="Noto Sans KR", bold=True, size=12)
+
+    # 같은 라인의 대안 중 합계에서 뺀 줄(alt_off) — 범위 SUM 대신 그 줄을 뺀 칸만 더한다.
+    alt_rows: set[int] = set()
+
+    def sum_expr(col: str, f: int, l: int) -> str:
+        skip = [x for x in range(f, l + 1) if x in alt_rows]
+        if not skip:
+            return f"=SUM({col}{f}:{col}{l})"
+        return "=SUM(" + ",".join(f"{col}{x}" for x in range(f, l + 1) if x not in alt_rows) + ")"             if len(skip) < l - f + 1 else "=0"
 
     def write_total(r: int, label: str, f: int, l: int, *, add_rows=None) -> None:
         """합계행 — 원가합(G)·마진(H)·매출합(J) 수식. f..l 행 범위를 더하고, add_rows 를
@@ -1351,8 +1361,8 @@ def make_quotation_costing_xlsx(
             cost_sum = "=" + "+".join(f"G{x}" for x in add_rows)
             amt_sum = "=" + "+".join(f"K{x}" for x in add_rows)
         else:
-            cost_sum = f"=SUM(G{f}:G{l})" if has_rows else 0
-            amt_sum = f"=SUM(K{f}:K{l})" if has_rows else 0
+            cost_sum = sum_expr("G", f, l) if has_rows else 0
+            amt_sum = sum_expr("K", f, l) if has_rows else 0
         margin_tot = f"=IF(K{r}=0,0,(K{r}-G{r}*{fx_str})/K{r})" if has_rows else 0
         # 합계의 마진은 결과값이라 Actual Margin %(I) 칸에 둔다 — Margin %(H)는 줄마다 정한 값이라 비운다.
         for col, val, fill in [(6, "", cost_fill), (7, cost_sum, cost_fill), (8, "", cost_fill),
@@ -1410,6 +1420,10 @@ def make_quotation_costing_xlsx(
         if blk_first is None:
             blk_first = r
         write_item(r, ri, it)
+        if it.get("alt_off"):
+            alt_rows.add(r)
+            for col in (10, 11):   # 합계에서 뺀 대안 줄 — 단가·금액을 흐리게
+                ws.cell(r, col).font = Font(name="Calibri", color="8A94A6")
     if has_options:
         if blk_first is not None:
             r = close_block(r)
@@ -1478,7 +1492,13 @@ def make_quotation_costing_xlsx(
 
     # ── Remark ─────────────────────────────────────────────────────────
     # 4단계 Remarks 입력 — PDF 와 같은 자리(품목표와 T&C 사이)에 같은 형식으로 둔다.
-    r = trow + 2
+    r = trow + 1
+    if alt_rows:
+        merge(r, 1, r, NCOL)
+        nc = ws.cell(r, 1, ALT_NOTE)
+        nc.font = Font(name="Calibri", italic=True, size=9, color="5A6475"); nc.alignment = left
+        r += 1
+    r += 1
     remark_lines = quotation_remark_lines(terms)
     if remark_lines:
         section_bar(r, "Remark"); r += 1

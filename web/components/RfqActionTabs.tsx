@@ -146,7 +146,7 @@ import {
 } from "./common/itemTable";
 import FxRateControl, { FxMode } from "./common/FxRateControl";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, igSpan, type ItemCol } from "./common/itemGrid";
-import { OPTION_ROW_KIND, isOptionRow, countedItems, hasOptions, optionPlan } from "../lib/quoteOptions";
+import { OPTION_ROW_KIND, isOptionRow, countedItems, hasOptions, optionPlan, applyLineAlts, lineGroups } from "../lib/quoteOptions";
 import CategoryCell from "./common/CategoryCell";
 import { useMakerOptions } from "./common/MakerCell";
 import QuotationPreview from "./QuotationPreview";
@@ -5692,6 +5692,27 @@ function CustomerQuoteItemEditor({
       onChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, dec]);
+  // 같은 라인(lid) 줄이 여럿이면 대안(한 줄만 합계)·세트(모두 합계) 표식을 맞춘다 —
+  // 표식이 없던 옛 견적도 열면 "대안 · 맨 위 줄만 합계"로 잡힌다(lib/quoteOptions.ts).
+  useEffect(() => {
+    const next = applyLineAlts(items);
+    if (next !== items) onChange(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
+  const groups = lineGroups(items);
+  /** 대안 묶음에서 합계에 넣을 줄을 고른다. */
+  function pickAlt(i: number) {
+    const idx = groups.get(String(items[i]?.lid || "")) || [];
+    onChange(items.map((it, k) => (idx.includes(k) ? { ...it, line_mode: "alt", alt_off: k !== i } : it)));
+  }
+  /** 라인 묶음을 대안 ↔ 세트로 바꾼다. 대안으로 돌아가면 맨 위 줄이 합계에 들어간다. */
+  function toggleLineMode(i: number) {
+    const idx = groups.get(String(items[i]?.lid || "")) || [];
+    const toSet = (items[idx[0]]?.line_mode || "alt") !== "set";
+    onChange(items.map((it, k) => (idx.includes(k)
+      ? { ...it, line_mode: toSet ? "set" : "alt", alt_off: toSet ? false : k !== idx[0] }
+      : it)));
+  }
   /** 이 줄의 올림 단위 — 줄에 따로 준 값이 없으면 견적 Pricing 의 "Round up to". */
   const rdOf = (it: CustomerQuoteItem): number => it.round_digits ?? roundDigits;
   /** 줄마다 올림 단위를 바꾼다(null = 견적 기본값으로 되돌림). 원가가 있으면 원가·마진에서
@@ -6135,7 +6156,7 @@ function CustomerQuoteItemEditor({
               if (entry.kind === "total")
                 return entry.block.no === null ? null : (
                   <tr className="ig-subtotal-row" key={`t${entry.block.headerIndex}`}>
-                    {summaryCells(entry.label, sumsOf(entry.block.items), false, "ig-foot ig-subtotal")}
+                    {summaryCells(entry.label, sumsOf(countedItems(entry.block.items)), false, "ig-foot ig-subtotal")}
                   </tr>
                 );
               const i = entry.index;
@@ -6156,7 +6177,7 @@ function CustomerQuoteItemEditor({
                 );
               return (
                 <Fragment key={i}>
-              <tr className={itemRowClass(i)}>
+              <tr className={itemRowClass(i) + (it.alt_off ? " alt-off" : "")}>
                 <ItemSelectCell index={i} sel={sel} />
                 <td className="seq">
                   <button
@@ -6169,6 +6190,33 @@ function CustomerQuoteItemEditor({
                   </button>
                   {entry.seq}
                   {it.lid ? <span className="seq-lid" title="Line ID — also printed on the quotation sent to the customer">{it.lid}</span> : null}
+                  {/* 같은 라인이 여러 줄 — 대안이면 합계에 넣을 한 줄을 고르고, 세트면 모두 넣는다. */}
+                  {groups.has(String(it.lid || "")) ? (() => {
+                    const idx = groups.get(String(it.lid || ""))!;
+                    const set = it.line_mode === "set";
+                    return (
+                      <span className="line-alt">
+                        {idx[0] === i ? (
+                          <button
+                            type="button"
+                            className={`line-mode${set ? " set" : ""}`}
+                            title={set
+                              ? `Set — all ${idx.length} rows of ${it.lid} are added to the total. Click to treat them as alternatives.`
+                              : `Alternatives — only the checked row of ${it.lid} is added to the total. Click to add them all up as a set.`}
+                            onClick={() => toggleLineMode(i)}
+                          >
+                            {set ? "SET" : "ALT"}
+                          </button>
+                        ) : null}
+                        {set ? null : (
+                          <label className="line-pick" title={it.alt_off ? "Not in the total — printed as “Alt.”. Click to count this row instead." : "Counted in the total"}>
+                            <input type="radio" name={`alt-${it.lid}`} checked={!it.alt_off} onChange={() => pickAlt(i)} />
+                            {it.alt_off ? "Alt." : "Total"}
+                          </label>
+                        )}
+                      </span>
+                    );
+                  })() : null}
                 </td>
                 <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={it.description} onChange={(e) => patch(i, "description", e.target.value)} /></td>

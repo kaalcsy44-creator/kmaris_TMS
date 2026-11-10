@@ -2759,7 +2759,8 @@ function quoteItemsForOrder(
   q: { items: PoWorkItem[]; discount_pct?: number; currency?: string },
   decimals?: number | null
 ): PoWorkItem[] {
-  const rows = q.items.map(normalizeItem);
+  // 같은 라인의 대안 중 합계에서 뺀 줄(alt_off)은 고객이 고르지 않은 안이라 오더로 넘기지 않는다.
+  const rows = q.items.filter((it) => !(it as { alt_off?: boolean }).alt_off).map(normalizeItem);
   const d = Number(q.discount_pct || 0);
   // 자릿수를 정해 두었으면 그 자리, 아니면 0(정수) — 발행 문서 기본과 같다.
   const digits = decimals ?? 0;

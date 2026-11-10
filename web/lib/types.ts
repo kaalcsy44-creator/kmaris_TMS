@@ -762,6 +762,11 @@ export type CustomerQuoteItem = {
    *  다시 찾을 수 없어서다(web/lib/deal.ts makeItemMatcher). 편집기는 받은 값을
    *  그대로 돌려보내기만 하면 된다 — 새 줄이면 비워 두고 서버가 붙인다. */
   lid?: string;
+  /** 같은 라인(lid)이 여러 줄일 때 그 묶음의 성격 — "alt"(대안: 한 줄만 합계) / "set"(세트: 모두 합계).
+   *  묶음의 모든 줄에 같은 값이 실린다. 없으면 대안(lib/quoteOptions.ts applyLineAlts). */
+  line_mode?: "alt" | "set" | null;
+  /** 대안 묶음에서 합계에 넣지 않는 줄 — 문서엔 "Alt." 로 찍히고 Total·마진·딜 금액에서 빠진다. */
+  alt_off?: boolean;
   /** 원가 출처 — 이 줄의 원가를 준 공급사 견적. 한 장의 고객 견적에 여러 공급사 견적을
    *  합쳐 담을 수 있어서(web/lib/quoteMerge.ts), 출처는 문서가 아니라 줄이 안고 다닌다.
    *  내부용이다 — 고객이 받는 견적서·Excel 에는 한 글자도 찍히지 않는다. */
