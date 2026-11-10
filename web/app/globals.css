@@ -1082,49 +1082,6 @@ body {
 }
 
 /* ── Dashboard › Documents 탭: 문서 종류 버튼 + 화면 폭 한 장짜리 표 ─────── */
-.docs-board {
-  margin-top: 16px;
-}
-.docs-type-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.docs-type-bar button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: #fff;
-  color: var(--navy);
-  font-size: 13.5px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.docs-type-bar button:hover {
-  background: #f1f5f9;
-}
-.docs-type-bar button.on {
-  background: var(--navy);
-  border-color: var(--navy);
-  color: #fff;
-}
-.docs-type-count {
-  min-width: 22px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: #e8edf3;
-  color: #475569;
-  font-size: 11.5px;
-  text-align: center;
-}
-.docs-type-bar button.on .docs-type-count {
-  background: rgba(255, 255, 255, 0.22);
-  color: #fff;
-}
 /* 버튼 줄만큼 위쪽 붙박이가 늘었으므로 표 상자 높이 어림값을 그만큼 줄인다. */
 .docs-board .pl-table-wrap.pl-scroll {
   max-height: calc(100vh - 300px);

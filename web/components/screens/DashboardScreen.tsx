@@ -361,13 +361,21 @@ function HomeTab() {
 
   return (
     <div className="docs-board">
-      <div className="docs-type-bar" role="group" aria-label="Document type">
-        {filters.map((f) => (
-          <button key={f.key} className={filter === f.key ? "on" : ""} onClick={() => pick(f.key)}>
-            {f.label}
-            <span className="docs-type-count">{loading ? "…" : counts[f.key]}</span>
-          </button>
-        ))}
+      {/* Briefing 탭과 같은 칩 줄(brief-bar · mail-chip) — 대시보드 탭끼리 버튼 모양을 맞춘다. */}
+      <div className="brief-bar">
+        <span className="brief-chips">
+          {filters.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              className={`mail-chip${filter === f.key ? " on" : ""}`}
+              onClick={() => pick(f.key)}
+            >
+              {f.label}
+              {loading ? null : <b>{counts[f.key]}</b>}
+            </button>
+          ))}
+        </span>
       </div>
 
       {regError ? <div className="state error">PI·CI·PL list failed to load: {String(regError)}</div> : null}
