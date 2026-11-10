@@ -82,8 +82,23 @@ export default function TermsEditor({
   };
   const allOn = picked.size === QUOTATION_CLAUSES.length;
 
+  // 견적서(clauses)는 인쇄 순서(Remark → Terms & Conditions)대로 Remarks 를 맨 위에 둔다.
+  // 높이는 여러 줄 비고를 한눈에 볼 수 있게 넉넉히(예전 3줄의 두 배).
+  const remarksField = (
+    <div className="form-field" style={clauses ? { marginBottom: 12 } : { marginTop: 8 }}>
+      <label>Remarks{clauses ? " — printed as its own Remark section above Terms & Conditions" : ""}</label>
+      <textarea
+        rows={clauses ? 7 : 3}
+        style={{ minHeight: clauses ? 190 : 72 }}
+        value={terms.remarks ?? ""}
+        onChange={(e) => onChange({ ...terms, remarks: e.target.value })}
+      />
+    </div>
+  );
+
   return (
     <div className="stage-card" style={{ marginTop: 12 }}>
+      {clauses ? remarksField : null}
       <div className="sub-h">Terms &amp; Conditions</div>
       <div className="form-grid">
         {field("incoterms", "Incoterms *")}
@@ -124,6 +139,8 @@ export default function TermsEditor({
             <label>Additional clauses (one per line)</label>
             <textarea
               rows={2}
+              // 전역 .form-field textarea{min-height:240px} 를 덮는다 — 추가 문장은 보통 한두 줄(예전 높이의 1/3).
+              style={{ minHeight: 80, height: 80 }}
               value={(terms.extra_clauses || []).join("\n")}
               onChange={(e) =>
                 onChange({
@@ -137,15 +154,7 @@ export default function TermsEditor({
         </div>
       ) : null}
 
-      <div className="form-field" style={{ marginTop: 8 }}>
-        <label>Remarks{clauses ? " — printed as its own Remark section above Terms & Conditions" : ""}</label>
-        <textarea
-          rows={3}
-          style={{ minHeight: 72 }}
-          value={terms.remarks ?? ""}
-          onChange={(e) => onChange({ ...terms, remarks: e.target.value })}
-        />
-      </div>
+      {clauses ? null : remarksField}
     </div>
   );
 }
