@@ -1457,7 +1457,7 @@ def make_quotation_costing_xlsx(
         c = ws.cell(r, 1, title); c.fill = navy; c.font = white_hdr; c.alignment = left
         for col in range(1, NCOL + 1):
             ws.cell(r, col).fill = navy
-        ws.row_dimensions[r].height = 16
+        ws.row_dimensions[r].height = 18
 
     # 글머리 한 줄 — 점(•)은 A열에 따로 두고 오른쪽 정렬, 내용은 B~M 병합 왼쪽 정렬.
     # 점과 글을 한 칸에 넣으면 줄이 길어 접힐 때 둘째 줄이 점 아래로 파고든다.
@@ -1467,7 +1467,14 @@ def make_quotation_costing_xlsx(
         ws.cell(r, 1, "•").alignment = bullet_align
         merge(r, 2, r, NCOL)
         ws.cell(r, 2, text).alignment = left
-        ws.row_dimensions[r].height = 13
+        # 행 높이 18 — 병합 칸은 Excel 이 자동 높이를 못 잡으므로 B~M 폭(약 125자)을
+        # 넘는 긴 문장은 줄 수만큼 높인다(둘째 줄이 잘리지 않게).
+        lines = sum(max(1, -(-len(x) // 125)) for x in str(text or "").split("\n"))
+        ws.row_dimensions[r].height = 18 * lines
+
+    def gap(r):
+        """섹션 사이 빈 행 — 글머리 행과 같은 높이(18)."""
+        ws.row_dimensions[r].height = 18
 
     # ── Remark ─────────────────────────────────────────────────────────
     # 4단계 Remarks 입력 — PDF 와 같은 자리(품목표와 T&C 사이)에 같은 형식으로 둔다.
@@ -1478,7 +1485,7 @@ def make_quotation_costing_xlsx(
         for line in remark_lines:
             bullet(r, line)
             r += 1
-        r += 1
+        gap(r); r += 1
 
     # ── Terms & Conditions ─────────────────────────────────────────────
     section_bar(r, "Terms & Conditions"); r += 1
@@ -1488,7 +1495,7 @@ def make_quotation_costing_xlsx(
         r += 1
 
     # ── Payment ────────────────────────────────────────────────────────
-    r += 1
+    gap(r); r += 1
     section_bar(r, "Payment"); r += 1
     for line in (terms.get("payment_terms") or "T/T in advance",):
         bullet(r, line)
