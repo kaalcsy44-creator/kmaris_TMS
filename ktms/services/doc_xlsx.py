@@ -1273,7 +1273,7 @@ def make_quotation_costing_xlsx(
         cell = ws.cell(HROW, ci, h); cell.fill = navy; cell.font = white_hdr
         cell.alignment = center; cell.border = bdr
         ws.column_dimensions[get_column_letter(ci)].width = w
-    ws.row_dimensions[HROW].height = 24
+    ws.row_dimensions[HROW].height = 34.2   # "No. / Line" 두 줄이 잘리지 않게
 
     # 컬럼: A No · B Part · C Desc · D Qty · E Unit · F Cost U/P · G Cost Amount
     #       · H Margin% · I Actual Margin% · J U/Price · K Amount · L Lead · M Remark
