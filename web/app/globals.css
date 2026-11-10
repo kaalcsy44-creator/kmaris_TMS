@@ -18014,8 +18014,10 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
   padding-bottom: 6px;
 }
 .vm-compare-col {
-  flex: 0 0 clamp(360px, 46%, 560px);
-  min-width: 0;
+  /* 2건이면 둘이 폭을 나눠 끝까지 채운다(예전 상한 560px은 오른쪽에 빈 자리를 남겼다).
+     3건 이상으로 한 줄에 못 들면 열은 360px 을 지키고 상자가 가로로 스크롤한다. */
+  flex: 1 0 360px;
+  min-width: 360px;
   /* 단계 카드·품목표의 오른쪽 여백은 '창 스크롤바를 피하려고' 둔 것이다. 비교 열은
      제 폭 안에서 스크롤하지 않으니 그만큼이 그냥 빈 자리로 남는다 — 열 안에서만 끈다. */
   --item-list-gutter: 0px;
@@ -18037,6 +18039,21 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 }
 .vm-compare-col > .embedded-detail {
   padding: 10px 12px 12px;
+}
+/* 세로 고정(sticky top) 행은 열 안에서 모두 푼다. 이 행들의 고정 위치(--pane-top·
+   --pane-row-h 계산)는 '편집기 한 벌이 스크롤 창을 혼자 차지할 때' 기준이라, 열 머리
+   (.vm-compare-head)·Sent at 줄이 위에 얹힌 비교 열에선 엉뚱한 높이에 멈춘다 — 탭 행이
+   중간에 떠 있고 그 위·아래로 내용이 비쳐 지나갔다(Vsl./IMO 가 탭 밑으로 반쯤 잘림).
+   열이 여럿이면 탭도 여러 벌이라 고정해 둘 이유도 없다. */
+.vm-compare-col .pane-tabs,
+.vm-compare-col .pane-row,
+.vm-compare-col .ar-inv-bar,
+.vm-compare-col table.rfq thead th {
+  position: static;
+  z-index: auto;
+}
+.vm-compare-col .pane-tabs {
+  border-radius: 0;
 }
 /* 좁은 열에서는 2단 격자가 눌려 값이 잘린다 — 한 줄에 한 항목씩. */
 .vm-compare-col .form-grid {
