@@ -1082,10 +1082,6 @@ body {
 }
 
 /* ── Dashboard › Documents 탭: 문서 종류 버튼 + 화면 폭 한 장짜리 표 ─────── */
-/* 버튼 줄만큼 위쪽 붙박이가 늘었으므로 표 상자 높이 어림값을 그만큼 줄인다. */
-.docs-board .pl-table-wrap.pl-scroll {
-  max-height: calc(100vh - 300px);
-}
 .docs-board .pipeline tbody tr.danger td {
   background: #fff7f7;
 }
