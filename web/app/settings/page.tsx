@@ -699,6 +699,8 @@ function UsersTab() {
 // 라벨은 현재 상단 메뉴 기준. 권한 키(progress/rfq/po/documents/ar)는 API 가드가 그대로
 // 쓰므로 바꾸지 않는다 — 다만 RFQ·P/O·Documents·AR 은 전용 메뉴가 사라지고 프로젝트
 // 팝업의 단계별 작업 권한이 되었으므로 별도 그룹으로 묶어 보여준다.
+// 2026-11 메뉴 재편(Dashboard · Projects · Sales▾ · Finance · Data▾ · Settings)에 맞춘 이름.
+// 키 하나가 메뉴 여러 곳을 여는 경우(dashboard→Schedule, settings→Data)는 부연에 적는다.
 const MODULE_LABEL: Record<string, string> = {
   dashboard: "Dashboard",
   progress: "Projects",
@@ -707,16 +709,21 @@ const MODULE_LABEL: Record<string, string> = {
   documents: "Documents",
   ar: "AR",
   finance: "Finance",
-  marketing: "Marketing",
-  settings: "Settings",
+  marketing: "Sales › Marketing",
+  settings: "Data & Settings",
 };
 // 메뉴명만으로 범위가 분명하지 않은 항목의 부연.
 const MODULE_HINT: Record<string, string> = {
-  progress: "Projects + Activity",
-  settings: "Settings + Item master",
+  dashboard: "Dashboard + Sales › Schedule",
+  progress: "Pipeline · Activity · Documents · Mail tabs",
+  settings: "Data › Partners · Items + Settings",
+  rfq: "RFQ · vendor quotes · customer quotation",
+  po: "Customer & vendor P/O · P/O rows in Projects › Documents",
+  documents: "PI · CI · PL",
+  ar: "Billing · receivables / payables · claims",
 };
 // 표시 순서/그룹 — 상단 메뉴 순서대로 먼저, 단계별 작업 권한을 뒤에.
-const MENU_MODULES = ["dashboard", "progress", "finance", "marketing", "settings"];
+const MENU_MODULES = ["dashboard", "progress", "marketing", "finance", "settings"];
 const STAGE_MODULES = ["rfq", "po", "documents", "ar"];
 
 /** 백엔드가 준 모듈 목록을 [메뉴 그룹, 단계 그룹]으로 재배열(모르는 키는 메뉴 그룹 끝). */
