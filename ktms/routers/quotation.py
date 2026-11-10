@@ -4,6 +4,9 @@ from __future__ import annotations
 import re
 
 from _core import (
+    _doc_disposition,
+    _doc_filename,
+    _doc_vessel_name,
     Customer,
     CustomerQuoteCreate,
     CustomerQuoteUpdate,
@@ -465,7 +468,7 @@ def quotation_pdf(qtn_id: int, doc_type: str = "quotation"):
             content=pdf,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="{qtn.qtn_no}.pdf"',
+                "Content-Disposition": _doc_disposition(_doc_filename(qtn.qtn_no, "pdf", _doc_vessel_name(payload))),
                 "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
                 "Pragma": "no-cache",
             },
@@ -596,7 +599,7 @@ def quotation_xlsx(qtn_id: int, doc_type: str = "quotation"):
             content=xlsx,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": f'attachment; filename="{qtn.qtn_no}.xlsx"',
+                "Content-Disposition": _doc_disposition(_doc_filename(qtn.qtn_no, "xlsx", _doc_vessel_name(payload))),
                 # 문서는 편집 때마다 새로 생성되므로 브라우저가 옛 파일을 캐시해
                 # 다시 내려주지 않도록 캐시를 완전히 끈다.
                 "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",

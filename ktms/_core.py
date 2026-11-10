@@ -3100,21 +3100,43 @@ def _missing_items(order_items: list[dict], doc_items: list[dict]) -> list[dict]
     return missing
 
 
+def _doc_vessel_name(payload_or_vessel) -> str:
+    """문서 payload(또는 Vessel 레코드)에서 선박명 — 없거나 '—'면 빈 문자열."""
+    if payload_or_vessel is None:
+        return ""
+    if isinstance(payload_or_vessel, dict):
+        v = payload_or_vessel.get("vessel") or {}
+        name = v.get("name", "") if isinstance(v, dict) else str(v or "")
+    else:
+        name = getattr(payload_or_vessel, "name", "") or ""
+    name = str(name or "").strip()
+    return "" if name in ("—", "-") else name
+
+
+def _doc_filename(doc_no: str, ext: str, vessel: str = "") -> str:
+    """발행 문서 파일명 — '문서번호 선박명.ext'(KMS-QUO-2611-001 HELENE MAERSK.xlsx).
+    선박이 없으면 문서번호만."""
+    base = (doc_no or "document").strip()
+    vessel = (vessel or "").strip()
+    return f"{base} {vessel}.{ext}" if vessel else f"{base}.{ext}"
+
+
 def _doc_file_response(data: bytes, filename: str, media_type: str) -> Response:
     """발행 문서 응답 — 파일명은 문서번호(EHZM-26-0059-PI.pdf).
 
     파일명에 못 쓰는 글자(슬래시·역슬래시·: * ? " < > |)는 '-' 로 바꾼다. 헤더는 latin-1 만 실을 수
     있어 filename 에는 ASCII 로 바꾼 이름을, filename* 에는 UTF-8 원래 이름을 함께 싣는다(한글 번호 대비).
     프런트가 이 헤더를 읽으려면 CORS expose_headers 에 Content-Disposition 이 있어야 한다."""
+    return Response(content=data, media_type=media_type,
+                    headers={"Content-Disposition": _doc_disposition(filename)})
+
+
+def _doc_disposition(filename: str) -> str:
+    """Content-Disposition 값 — 못 쓰는 글자는 '-', filename(ASCII)+filename*(UTF-8) 함께."""
     from urllib.parse import quote
     safe = re.sub(r'[\\/:*?"<>|\r\n]+', "-", (filename or "document").strip()) or "document"
     ascii_name = safe.encode("ascii", "ignore").decode() or "document"
-    return Response(
-        content=data,
-        media_type=media_type,
-        headers={"Content-Disposition":
-                 f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(safe)}"},
-    )
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(safe)}"
 
 
 def _tracking_url(kind: str, token: str | None) -> str:
@@ -5085,6 +5107,9 @@ __all__ = [
     "_customer_for_order",
     "_date_iso",
     "_doc_file_response",
+    "_doc_filename",
+    "_doc_disposition",
+    "_doc_vessel_name",
     "_document_detail_payload",
     "_doc_defaults_from",
     "_doc_items_from_quotation",

@@ -2413,7 +2413,7 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     # 서명 이미지가 서명란(밑줄) 바로 위에 얹히도록: 이미지를 한 칸 표의 하단에
     # 정렬하고 그 칸의 아래 테두리를 서명선으로 쓴다(이름은 선 바로 아래).
     sign_img = image(asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg"), 40 * mm, 16 * mm)
-    story.append(_p("Your sincerely", s["base"]))
+    story.append(_p("Yours sincerely", s["base"]))
     story.append(Spacer(1, 1 * mm))
     sig_line = Table([[sign_img or _p("", s["base"])]], colWidths=[62 * mm], rowHeights=[16 * mm])
     sig_line.setStyle(TableStyle([

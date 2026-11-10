@@ -36,6 +36,8 @@ from _core import (
     _customer_for_order,
     _deal_done,
     _doc_file_response,
+    _doc_filename,
+    _doc_vessel_name,
     _document_detail_payload,
     _enum_val,
     _first_rfq_iso,
@@ -398,8 +400,10 @@ def proforma_invoice_pdf(order_id: int):
         pi = _latest_pi(s, order_id) if order else None
         if not order or not pi:
             raise HTTPException(status_code=404, detail="Proforma Invoice가 없습니다.")
-        pdf = generate_pdf("proforma_invoice", _pi_payload(s, order, pi))
-        return _doc_file_response(pdf, f"{pi.pi_no}.pdf", "application/pdf")
+        payload = _pi_payload(s, order, pi)
+        pdf = generate_pdf("proforma_invoice", payload)
+        return _doc_file_response(pdf, _doc_filename(pi.pi_no, "pdf", _doc_vessel_name(payload)),
+                                  "application/pdf")
     finally:
         s.close()
 
@@ -414,9 +418,10 @@ def proforma_invoice_xlsx(order_id: int):
         pi = _latest_pi(s, order_id) if order else None
         if not order or not pi:
             raise HTTPException(status_code=404, detail="Proforma Invoice가 없습니다.")
-        xlsx = generate_pi_xlsx(_pi_payload(s, order, pi))
+        payload = _pi_payload(s, order, pi)
+        xlsx = generate_pi_xlsx(payload)
         return _doc_file_response(
-            xlsx, f"{pi.pi_no}.xlsx",
+            xlsx, _doc_filename(pi.pi_no, "xlsx", _doc_vessel_name(payload)),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     finally:
@@ -516,7 +521,8 @@ def project_proforma_invoice_pdf(rfq_id: int):
     try:
         pi, payload = _project_pi_or_404(s, rfq_id)
         return _doc_file_response(generate_pdf("proforma_invoice", payload),
-                                  f"{pi.pi_no}.pdf", "application/pdf")
+                                  _doc_filename(pi.pi_no, "pdf", _doc_vessel_name(payload)),
+                                  "application/pdf")
     finally:
         s.close()
 
@@ -527,7 +533,7 @@ def project_proforma_invoice_xlsx(rfq_id: int):
     try:
         pi, payload = _project_pi_or_404(s, rfq_id)
         return _doc_file_response(
-            generate_pi_xlsx(payload), f"{pi.pi_no}.xlsx",
+            generate_pi_xlsx(payload), _doc_filename(pi.pi_no, "xlsx", _doc_vessel_name(payload)),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     finally:
@@ -583,7 +589,8 @@ def commercial_invoice_pdf(order_id: int):
             export_ref=_project_no_for_order(s, order),
         )
         pdf = generate_pdf("commercial_invoice", payload)
-        return _doc_file_response(pdf, f"{ci.ci_no}.pdf", "application/pdf")
+        return _doc_file_response(pdf, _doc_filename(ci.ci_no, "pdf", _doc_vessel_name(payload)),
+                                  "application/pdf")
     finally:
         s.close()
 
@@ -667,7 +674,7 @@ def commercial_invoice_xlsx(order_id: int):
         xlsx = generate_ci_xlsx(payload)
         return _doc_file_response(
             xlsx,
-            f"{ci.ci_no}.xlsx",
+            _doc_filename(ci.ci_no, "xlsx", _doc_vessel_name(payload)),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     finally:
@@ -813,7 +820,9 @@ def packing_list_pdf(order_id: int):
         payload = _packing_list_payload(s, order, ci, pl)
         pdf = generate_pdf("packing_list", payload)
         # 번호는 화면이 자동으로 정해 보내지만(P/O 번호-PL), 그 전에 저장된 건은 비어 있을 수 있다.
-        return _doc_file_response(pdf, f"{pl.pl_no or order.po_no or 'PACKING_LIST'}.pdf", "application/pdf")
+        return _doc_file_response(
+            pdf, _doc_filename(pl.pl_no or order.po_no or "PACKING_LIST", "pdf", _doc_vessel_name(payload)),
+            "application/pdf")
     finally:
         s.close()
 
@@ -833,7 +842,7 @@ def packing_list_xlsx(order_id: int):
         xlsx = generate_pl_xlsx(payload)
         return _doc_file_response(
             xlsx,
-            f"{pl.pl_no or order.po_no or 'PACKING_LIST'}.xlsx",
+            _doc_filename(pl.pl_no or order.po_no or "PACKING_LIST", "xlsx", _doc_vessel_name(payload)),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     finally:

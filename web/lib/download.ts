@@ -13,3 +13,11 @@ export function filenameFromDisposition(res: Response, fallback: string): string
   const plain = d.match(/filename\s*=\s*"([^"]+)"/i) || d.match(/filename\s*=\s*([^;]+)/i);
   return plain?.[1]?.trim() || fallback;
 }
+
+/** 발행 문서 파일명 — "문서번호 선박명.ext"(KMS-QUO-2611-001 HELENE MAERSK.pdf).
+ *  선박이 없거나 "—"면 문서번호만. suffix 는 선박명 뒤에 붙는다(Vendor RFQ 의 _벤더명). */
+export function docFileName(docNo: string, vessel: string | null | undefined, ext: string, suffix = ""): string {
+  const v = (vessel || "").trim();
+  const name = v && v !== "—" && v !== "-" ? `${docNo} ${v}` : docNo;
+  return `${name}${suffix}.${ext}`.replace(/[\/:*?"<>|\r\n]+/g, "-");
+}

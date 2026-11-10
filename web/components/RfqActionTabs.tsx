@@ -106,6 +106,7 @@ import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
 import CurrencyToggle from "./common/CurrencyToggle";
 import TermsEditor from "./common/TermsEditor";
 import DocSendPanel from "./common/DocSendPanel";
+import { docFileName, filenameFromDisposition } from "@/lib/download";
 import RecordStrip from "./common/RecordStrip";
 import DetailTabBar, { DetailTab } from "./common/DetailTabBar";
 import { ProjectProformaInvoice } from "./screens/DocumentsScreen";
@@ -1577,7 +1578,7 @@ function VendorRfqDetailModal({
       const objUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objUrl;
-      a.download = `${d?.kmaris_rfq_no || "VendorRFQ"}_${d?.vendor || "vendor"}.${format}`;
+      a.download = docFileName(d?.kmaris_rfq_no || "VendorRFQ", d?.vessel, format, `_${d?.vendor || "vendor"}`);
       a.click();
       URL.revokeObjectURL(objUrl);
     } catch (e) {
@@ -1794,7 +1795,7 @@ function VendorRfqDetailModal({
             title="Vendor RFQ · Email to Vendor"
             formats={["xlsx", "pdf"]}
             downloadUrl={(f) => (f === "pdf" ? vendorRfqPdfUrl(d.id) : vendorRfqSheetXlsxUrl(d.id))}
-            downloadName={(f) => `${d.kmaris_rfq_no || "VendorRFQ"}_${d.vendor || "vendor"}.${f}`}
+            downloadName={(f) => docFileName(d.kmaris_rfq_no || "VendorRFQ", d.vessel, f, `_${d.vendor || "vendor"}`)}
             onPreview={(lang) => previewVendorRfqEmail(d.id, lang)}
             onSend={(p) => sendVendorRfqEmail({ ...p, vrfqId: d.id })}
             templateType="vendor_rfq"
@@ -2821,7 +2822,7 @@ function CustomerQuoteDetailModal({
     const objUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = objUrl;
-    a.download = `${qtnNo || d?.qtn_no || "Quotation"}.${format}`;
+    a.download = docFileName(qtnNo || d?.qtn_no || "Quotation", d?.vessel, format);
     a.click();
     URL.revokeObjectURL(objUrl);
   }
@@ -3242,7 +3243,7 @@ function CustomerQuoteDetailModal({
             title="Quotation · Email to Customer"
             formats={["pdf", "xlsx"]}
             downloadUrl={(f) => (f === "xlsx" ? quotationXlsxUrl(id, "quotation") : quotationPdfUrl(id, "quotation"))}
-            downloadName={(f) => `${d.qtn_no || "Quotation"}.${f}`}
+            downloadName={(f) => docFileName(d.qtn_no || "Quotation", d.vessel, f)}
             archive={{ ref: `qtn:${id}`, doc: "quotation" }}
             onPreview={(lang) => previewQuotationEmail(id, lang)}
             onSend={(p) => sendQuotationEmail({ ...p, qtnId: id, docType: "quotation" })}
@@ -5328,7 +5329,10 @@ function CustomerQuoteAction({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${qtn.qtn_no}_${docType}.pdf`;
+    // 견적서는 서버가 붙인 "견적번호 선박명.pdf" 를 쓴다(PI 는 종전대로 _pi 꼬리).
+    a.download = docType === "quotation"
+      ? filenameFromDisposition(res, `${qtn.qtn_no}.pdf`)
+      : `${qtn.qtn_no}_${docType}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
     archiveIssuedDoc(blob, a.download, `qtn:${qtn.id}`, docType === "quotation" ? "quotation" : "pi");

@@ -218,36 +218,39 @@ class _FormSheet:
 
     # ── 블록 ──────────────────────────────────────────────────────────────
     def letterhead(self, company, title):
-        """1~6행 — 좌측 로고 · 가운데 회사명/주소/연락처 · 우측 슬로건 + 파란 구분선.
+        """1행 빈 행 + 2~7행 — 좌측 로고 · 가운데 회사명/주소/연락처 · 우측 슬로건 + 파란 구분선.
 
         PDF(_letterhead)와 같은 3단 구성이다. 예전에는 회사명을 전폭으로 합쳐 슬로건이
         설 자리가 없었다 — 미리보기(PDF)에는 있고 내려받은 Excel 에만 없던 이유."""
         logo_cols, org_cols, tag_cols = self.blocks["logo"], self.blocks["org"], self.blocks["tag"]
+        # 맨 위 1행은 빈 행(T) — 회사정보를 한 줄 내려 로고가 1~4행 높이에 넉넉히 들어가게 한다.
+        T = 1
         logo = _find_asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg")
         if logo:
-            # 로고 상자 = 1~3행 높이(65.4pt ≈ 87px)와 로고 열 폭에 맞춘다.
-            self.add_image(logo, "A1", int(sum(self.widths[logo_cols[0] - 1:logo_cols[1]]) * 7), 86)
-        for r, c1, c2 in ((1, *org_cols), (2, *org_cols), (3, *org_cols)):
+            # 로고 상자 = 빈 1행 + 회사정보 3행 높이(83.4pt ≈ 111px)와 로고 열 폭에 맞춘다.
+            self.add_image(logo, "A1", int(sum(self.widths[logo_cols[0] - 1:logo_cols[1]]) * 7), 106)
+        for r, c1, c2 in ((1 + T, *org_cols), (2 + T, *org_cols), (3 + T, *org_cols)):
             self.merge(r, c1, r, c2)
         contact = " | ".join(x for x in [
             f"Tel: {company.get('phone', '')}" if company.get("phone") else "",
             company.get("sales_email", ""), company.get("website", ""),
         ] if x)
-        self.put(1, org_cols[0], company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
+        self.put(1 + T, org_cols[0], company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
                  font=self.company_font, align=self.center)
-        self.put(2, org_cols[0], company.get("address_en") or company.get("address", ""),
+        self.put(2 + T, org_cols[0], company.get("address_en") or company.get("address", ""),
                  font=self.addr_font, align=self.center)
-        self.put(3, org_cols[0], contact, font=self.addr_font, align=self.center)
+        self.put(3 + T, org_cols[0], contact, font=self.addr_font, align=self.center)
         # 슬로건 — 우측 1~3행, 두 줄(문장 단위 줄바꿈), 이탤릭 블루. PDF 와 같은 자리.
-        self.merge(1, tag_cols[0], 3, tag_cols[1])
-        self.put(1, tag_cols[0], (company.get("tagline", "") or "").replace(". ", ".\n", 1),
+        self.merge(1 + T, tag_cols[0], 3 + T, tag_cols[1])
+        self.put(1 + T, tag_cols[0], (company.get("tagline", "") or "").replace(". ", ".\n", 1),
                  font=self.tag_font, align=self.right_wrap)
         for col in range(1, self.ncol + 1):
-            self.ws.cell(3, col).border = Border(bottom=Side(style="medium", color=self.BLUE))
-        self.cell(5, "full", title, font=self.title_font, align=self.center)
-        for row, height in ((1, 37.2), (2, 14.1), (3, 14.1), (4, 15.6), (5, 30), (6, 13.8)):
+            self.ws.cell(3 + T, col).border = Border(bottom=Side(style="medium", color=self.BLUE))
+        self.cell(5 + T, "full", title, font=self.title_font, align=self.center)
+        for row, height in ((1, 18), (1 + T, 37.2), (2 + T, 14.1), (3 + T, 14.1), (4 + T, 15.6),
+                            (5 + T, 30), (6 + T, 13.8)):
             self.ws.row_dimensions[row].height = height
-        return 7
+        return 7 + T
 
     def doc_info(self, r, rows):
         """문서 정보(송장번호·일자·PO No.) — 참조 양식처럼 오른쪽 반쪽에만 그린다."""
@@ -1181,24 +1184,28 @@ def make_quotation_costing_xlsx(
     if company.get("sales_email"): bits.append(company["sales_email"])
     if company.get("website"): bits.append(company["website"])
     contact = "   |   ".join(bits)
-    # 회사명/주소/연락처 — C~K 가운데 정렬, 진한 회색, 음영 없음.
-    merge(1, 3, 1, 12); cc = ws.cell(1, 3, company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd.")); cc.font = hd_name; cc.alignment = center_wrap
-    merge(2, 3, 2, 12); cc = ws.cell(2, 3, addr); cc.font = hd_addr; cc.alignment = center_wrap
-    merge(3, 3, 3, 12); cc = ws.cell(3, 3, contact); cc.font = hd_addr; cc.alignment = center_wrap
-    # 슬로건 — 우측 열 L1:L3, 좌측 정렬, 2줄(줄바꿈), 이탤릭 블루.
+    # 맨 위 1행은 빈 행(TOP) — 로고가 회사정보 3줄 높이에 눌리지 않고 넉넉히 들어가게
+    # 레터헤드 이하 모든 행을 한 줄씩 내린다(로고는 1행에서 시작해 빈 행까지 쓴다).
+    TOP = 1
+    ws.row_dimensions[1].height = 18
+    # 회사명/주소/연락처 — C~L 가운데 정렬, 진한 회색, 음영 없음.
+    merge(1 + TOP, 3, 1 + TOP, 12); cc = ws.cell(1 + TOP, 3, company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd.")); cc.font = hd_name; cc.alignment = center_wrap
+    merge(2 + TOP, 3, 2 + TOP, 12); cc = ws.cell(2 + TOP, 3, addr); cc.font = hd_addr; cc.alignment = center_wrap
+    merge(3 + TOP, 3, 3 + TOP, 12); cc = ws.cell(3 + TOP, 3, contact); cc.font = hd_addr; cc.alignment = center_wrap
+    # 슬로건 — 우측 열 M, 좌측 정렬, 2줄(줄바꿈), 이탤릭 블루.
     tagline = (company.get("tagline", "") or "").replace(". ", ".\n", 1)
-    merge(1, 13, 3, NCOL); cc = ws.cell(1, 13, tagline); cc.font = hd_tag; cc.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-    ws.row_dimensions[1].height = 34
-    ws.row_dimensions[2].height = 17
-    ws.row_dimensions[3].height = 17
+    merge(1 + TOP, 13, 3 + TOP, NCOL); cc = ws.cell(1 + TOP, 13, tagline); cc.font = hd_tag; cc.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    ws.row_dimensions[1 + TOP].height = 34
+    ws.row_dimensions[2 + TOP].height = 17
+    ws.row_dimensions[3 + TOP].height = 17
     for col in range(1, NCOL + 1):
-        ws.cell(3, col).border = Border(bottom=Side(style="medium", color="0055A8"))
-    ws.row_dimensions[4].height = 6
+        ws.cell(3 + TOP, col).border = Border(bottom=Side(style="medium", color="0055A8"))
+    ws.row_dimensions[4 + TOP].height = 6
     # ── 타이틀 (샘플처럼 크게) ─────────────────────────────────────────────
-    merge(5, 1, 5, NCOL)
-    c = ws.cell(5, 1, "QUOTATION / COSTING SHEET"); c.font = Font(name="Calibri", bold=True, size=22, color="0B1D3A"); c.alignment = center
-    ws.row_dimensions[5].height = 34
-    ws.row_dimensions[6].height = 4
+    merge(5 + TOP, 1, 5 + TOP, NCOL)
+    c = ws.cell(5 + TOP, 1, "QUOTATION / COSTING SHEET"); c.font = Font(name="Calibri", bold=True, size=22, color="0B1D3A"); c.alignment = center
+    ws.row_dimensions[5 + TOP].height = 34
+    ws.row_dimensions[6 + TOP].height = 4
 
     # 원가(cost) 통화 → 판매 통화 환산계수. Margin 수식에서 통화가 섞일 때 사용.
     cost_cur = (data.get("cost_currency") or currency).upper()
@@ -1239,7 +1246,7 @@ def make_quotation_costing_xlsx(
         ("Project", data.get("project_title", ""), "VAT", vat_label),
     ]
     # 원가열(F·G·H·I)은 기본 숨김이므로 메타는 그 열을 피해 좌(1-5)·우(10-13)에 배치.
-    for off, (k1, v1, k2, v2) in enumerate(meta, start=7):
+    for off, (k1, v1, k2, v2) in enumerate(meta, start=7 + TOP):
         merge(off, 1, off, 2); merge(off, 3, off, 5)
         merge(off, 10, off, 11); merge(off, 12, off, NCOL)
         for col, val, is_label in [(1, k1, True), (3, v1, False), (10, k2, True), (12, v2, False)]:
@@ -1251,7 +1258,7 @@ def make_quotation_costing_xlsx(
         ws.row_dimensions[off].height = 15
 
     # ── PURCHASE 그룹 라벨(원가 열 위) ─────────────────────────────────
-    GROUP_ROW = 12
+    GROUP_ROW = 12 + TOP
     merge(GROUP_ROW, 6, GROUP_ROW, 9)
     gc = ws.cell(GROUP_ROW, 6, f"PURCHASE (internal, {cost_cur})"); gc.fill = cost_fill; gc.font = boldsm; gc.alignment = center
     for col in range(1, NCOL + 1):
@@ -1260,8 +1267,8 @@ def make_quotation_costing_xlsx(
             ws.cell(GROUP_ROW, col).fill = gray
     ws.row_dimensions[GROUP_ROW].height = 14
 
-    # ── Item header (row 13) ───────────────────────────────────────────
-    HROW = 13
+    # ── Item header (row 14) ───────────────────────────────────────────
+    HROW = 13 + TOP
     for ci, (h, w) in enumerate(zip(HEADERS, WIDTHS), start=1):
         cell = ws.cell(HROW, ci, h); cell.fill = navy; cell.font = white_hdr
         cell.alignment = center; cell.border = bdr
@@ -1452,6 +1459,16 @@ def make_quotation_costing_xlsx(
             ws.cell(r, col).fill = navy
         ws.row_dimensions[r].height = 16
 
+    # 글머리 한 줄 — 점(•)은 A열에 따로 두고 오른쪽 정렬, 내용은 B~M 병합 왼쪽 정렬.
+    # 점과 글을 한 칸에 넣으면 줄이 길어 접힐 때 둘째 줄이 점 아래로 파고든다.
+    bullet_align = Alignment(horizontal="right", vertical="center")
+
+    def bullet(r, text):
+        ws.cell(r, 1, "•").alignment = bullet_align
+        merge(r, 2, r, NCOL)
+        ws.cell(r, 2, text).alignment = left
+        ws.row_dimensions[r].height = 13
+
     # ── Remark ─────────────────────────────────────────────────────────
     # 4단계 Remarks 입력 — PDF 와 같은 자리(품목표와 T&C 사이)에 같은 형식으로 둔다.
     r = trow + 2
@@ -1459,9 +1476,7 @@ def make_quotation_costing_xlsx(
     if remark_lines:
         section_bar(r, "Remark"); r += 1
         for line in remark_lines:
-            merge(r, 1, r, NCOL)
-            ws.cell(r, 1, f"• {line}").alignment = left
-            ws.row_dimensions[r].height = 13
+            bullet(r, line)
             r += 1
         r += 1
 
@@ -1469,18 +1484,14 @@ def make_quotation_costing_xlsx(
     section_bar(r, "Terms & Conditions"); r += 1
     for line in quotation_standard_terms(terms, valid_until=data.get("valid_until", "") or "",
                                          quote_date=data.get("date", "") or ""):
-        merge(r, 1, r, NCOL)
-        ws.cell(r, 1, f"• {line}").alignment = left
-        ws.row_dimensions[r].height = 13
+        bullet(r, line)
         r += 1
 
     # ── Payment ────────────────────────────────────────────────────────
     r += 1
     section_bar(r, "Payment"); r += 1
     for line in (terms.get("payment_terms") or "T/T in advance",):
-        merge(r, 1, r, NCOL)
-        ws.cell(r, 1, f"• {line}").alignment = left
-        ws.row_dimensions[r].height = 13
+        bullet(r, line)
         r += 1
     r += 1
     merge(r, 1, r, NCOL)
@@ -1489,7 +1500,7 @@ def make_quotation_costing_xlsx(
     r += 2
 
     # ── 서명 ───────────────────────────────────────────────────────────
-    merge(r, 1, r, NCOL); ws.cell(r, 1, "Your sincerely").alignment = left
+    merge(r, 1, r, NCOL); ws.cell(r, 1, "Yours sincerely").alignment = left
     sig = _find_asset("Authorized signature_Sungyeon Cho.jpg", "signature.png", "signature.jpg")
     if sig:
         try:
