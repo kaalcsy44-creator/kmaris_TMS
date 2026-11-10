@@ -216,7 +216,7 @@ function Settings({ onFill }: { onFill: (v: boolean) => void }) {
   // "왜 안 들어오나"를 보게). 밖에 나가 있는 ?tab=mail 링크는 그리로 보낸다.
   const legacyMail = params.get("tab") === "mail";
   useEffect(() => {
-    if (legacyMail) window.location.replace("/activity?view=mail&conn=1");
+    if (legacyMail) window.location.replace("/project?tab=mail&conn=1");
   }, [legacyMail]);
 
   // 상대처·선박 명부는 상단 메뉴 Partners 로 옮겼다 — 옛 링크(알림의 거래선 태그 제안 등)를

@@ -12,7 +12,7 @@ type SubItem = { href: string; label: string; key: string; perm?: PermModule };
 // sub 가 있으면 묶음 메뉴 — 누르면 볼 수 있는 첫 하위 화면으로, 호버하면 하위 목록이 펼쳐진다.
 type Item = { href: string; label: string; key: string; perm?: PermModule; sub?: SubItem[] };
 
-// 평면 상단 메뉴 — 페이지 자체가 주요 메뉴. 설정은 우측 톱니 아이콘으로 분리.
+// 상단 메뉴 — Dashboard · Projects · Sales▾ · Finance · Data▾ · Settings.
 // RFQ·견적 / P/O / Documents / AR 은 진행현황(Progress) 프로젝트 팝업의 단계별 작업으로
 // 통합되어 상단 메뉴에서 제거했다. 라우트(/rfq·/po·/documents·/ar)는 딥링크용으로 유지된다.
 const ITEMS: Item[] = [
@@ -20,26 +20,28 @@ const ITEMS: Item[] = [
   // 프로젝트 — 목록(/project)과 개요(/project/<id>)가 한 계층. 예전에는 같은 표를
   // 진행현황(/progress)과 색인(/project)으로 나눠 뒀는데, 같은 파이프라인 데이터를
   // 두 번 그리는 중복이라 하나로 합쳤다. 권한은 progress 모듈을 그대로 쓴다.
+  // Projects 는 딜을 다루는 화면을 탭으로 품는다: Pipeline | Activity | Documents | Mail.
+  // (2026-11 재편 — 예전 상단 Activity 와 Dashboard 의 Documents 탭을 흡수)
   { href: "/project", label: "Projects", key: "projects", perm: "progress" },
-  // 업무일지 — 파이프라인(progress) 열람 권한 사용자면 접근 가능.
-  // 상대처(Customer·Vendor·Maker)·선박 명부 — 자주 쓰여 Settings 에서 승격. 권한은 settings(마스터 데이터).
-  // 묶음 메뉴 — 바깥(고객)을 상대하는 영업(Sales)과 회사 안살림(Office)을 가른다.
+  // 메뉴 순서 = 왼쪽부터 매일 쓰는 것 → 가끔 → 관리. 묶음은 같은 성격끼리만 묶는다.
+  // Sales — 고객을 상대하는 바깥 일(홍보·미팅·출장).
   {
     href: "/marketing", label: "Sales", key: "sales",
     sub: [
       { href: "/marketing", label: "Marketing", key: "marketing" },
-      { href: "/partners", label: "Partners", key: "partners", perm: "settings" },
-    ],
-  },
-  {
-    href: "/schedule", label: "Office", key: "office",
-    sub: [
       // 일정은 팀 공용 — Dashboard 를 볼 수 있으면 열린다.
       { href: "/schedule", label: "Schedule", key: "schedule", perm: "dashboard" },
-      { href: "/finance", label: "Finance", key: "finance" },
     ],
   },
-  { href: "/activity", label: "Activity", key: "activity", perm: "progress" },
+  { href: "/finance", label: "Finance", key: "finance" },
+  // Data — 기준정보(상대처·선박 명부와 품목 마스터). 둘 다 settings 권한으로 연다.
+  {
+    href: "/partners", label: "Data", key: "data",
+    sub: [
+      { href: "/partners", label: "Partners", key: "partners", perm: "settings" },
+      { href: "/item", label: "Items", key: "item", perm: "settings" },
+    ],
+  },
 ];
 
 export default function TopNav({ active }: { active: string }) {
@@ -118,16 +120,6 @@ export default function TopNav({ active }: { active: string }) {
               </Link>
             )
           )}
-          {/* Item — 품목 마스터·분류/가격 관리(설정에서 분리). 접근 권한은 settings 와 동일. */}
-          {showSettings ? (
-            <Link
-              href="/item"
-              className={`topnav-link${active === "item" ? " on" : ""}`}
-              onClick={() => setOpen(false)}
-            >
-              Item
-            </Link>
-          ) : null}
           {/* 설정 — Marketing 우측 메뉴 항목으로 합류(구 우측 톱니 아이콘 대체). */}
           {showSettings ? (
             <Link

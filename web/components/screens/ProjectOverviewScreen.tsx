@@ -875,7 +875,7 @@ function StageTimeline({
             번호를 실어 By-deal 카드가 이 딜만 남게 한다. 입력·수정은 그 화면에서 한다. */}
         <Link
           className="proj-ov-actlink"
-          href={`/activity?q=${encodeURIComponent(row.project_no || row.kmaris_rfq_no || "")}`}
+          href={`/project?tab=activity&q=${encodeURIComponent(row.project_no || row.kmaris_rfq_no || "")}`}
           title="Open this project in the Activity Log"
         >
           Activity Log →

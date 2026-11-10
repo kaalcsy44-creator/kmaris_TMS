@@ -201,25 +201,23 @@ export default function ProjectsScreen({ onFill }: { onFill?: (fill: boolean) =>
     return refreshPipeline();
   }
 
+  // 내부확인용·고객확인용 전환 — 같은 딜 목록을 누구 눈으로 보느냐의 차이라 페이지 탭이
+  // 아니라 표 도구줄 맨 앞의 전환 버튼으로 둔다(페이지 탭은 Projects 의 Pipeline|Activity|…).
+  const audienceToggle = (
+    <span className="pl-view-toggle" role="tablist" aria-label="Audience">
+      <button type="button" className={tab === "internal" ? "on" : ""} aria-pressed={tab === "internal"}
+        onClick={() => setTab("internal")} title="Internal view — stage work, amounts, margin">
+        Internal
+      </button>
+      <button type="button" className={tab === "customer" ? "on" : ""} aria-pressed={tab === "customer"}
+        onClick={() => setTab("customer")} title="Customer view — 7 customer stages, no amounts">
+        Customer
+      </button>
+    </span>
+  );
+
   return (
     <>
-      <div className="page-tabs">
-        <button
-          className={tab === "internal" ? "on" : ""}
-          onClick={() => setTab("internal")}
-        >
-          Progress (Internal)
-        </button>
-        <button
-          className={tab === "customer" ? "on" : ""}
-          onClick={() => setTab("customer")}
-        >
-          Progress (Customer)
-        </button>
-        <Link href="/activity" className="page-navlink">
-          Activity Log <span className="pn-arrow">→</span>
-        </Link>
-      </div>
 
       {tab === "customer" && (
         <>
@@ -245,6 +243,7 @@ export default function ProjectsScreen({ onFill }: { onFill?: (fill: boolean) =>
               // 실주 사유는 내부 기록이다 — 고객에게 보이는 확인용 화면에는 적지 않는다.
               showCloseReason={false}
               onFill={onFill}
+              toolbarLead={audienceToggle}
             />
           )}
         </>
@@ -276,6 +275,7 @@ export default function ProjectsScreen({ onFill }: { onFill?: (fill: boolean) =>
               openView={deepLink?.view ?? "work"}
               openBack={deepLink?.back ?? null}
               onFill={onFill}
+              toolbarLead={audienceToggle}
             />
           )}
         </>
@@ -284,7 +284,7 @@ export default function ProjectsScreen({ onFill }: { onFill?: (fill: boolean) =>
       {/* 메일함에서 찾은 새 RFQ 후보 — 있을 때만 New RFQ 버튼 위에 뜬다. 누르면 메일 정리함의
           RFQ 후보 함으로 가서 승인 한 번에 프로젝트·드라이브 폴더를 세운다. */}
       {can("rfq", "create") && rfqInbox > 0 ? (
-        <Link className="progress-fab rfq-inbox-fab" href="/activity?view=mail&queue=rfq"
+        <Link className="progress-fab rfq-inbox-fab" href="/project?tab=mail&queue=rfq"
               title="New RFQs found in the mailbox — review and approve">
           📥 {rfqInbox} RFQ{rfqInbox === 1 ? "" : "s"} in mail
         </Link>
@@ -613,6 +613,7 @@ function PipelineTable({
   openBack = null,
   showCloseReason = true,
   onFill,
+  toolbarLead,
 }: {
   rows: PipelineRow[];
   steps: string[];
@@ -648,6 +649,8 @@ function PipelineTable({
    * 보드는 칸마다 길이가 달라 페이지째 굴러야 하므로 못 박으면 아래가 잘린다.
    */
   onFill?: (fill: boolean) => void;
+  /** 도구줄 맨 앞에 놓을 것(Internal/Customer 전환). */
+  toolbarLead?: React.ReactNode;
 }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [initialModalView, setInitialModalView] = useState<"work" | "overview">("work");
@@ -1151,6 +1154,7 @@ function PipelineTable({
   return (
     <>
       <div className="pl-toolbar">
+        {toolbarLead}
         {/* 필터 — Activity 화면과 동일한 멀티 선택 드롭다운 폼(FilterSelect). */}
         {salesScoped ? (
           <span className="pl-scope-badge" title="Sales accounts see only their own deals">

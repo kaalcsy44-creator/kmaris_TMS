@@ -41,7 +41,7 @@ function money(n: number) {
 }
 const today = () => new Date().toISOString().slice(0, 10);
 
-type Tab = "briefing" | "home" | "stats";
+type Tab = "briefing" | "stats";
 
 export default function DashboardScreen() {
   // 첫 화면은 Briefing — 로그인해서 가장 먼저 보는 것은 "지금 무슨 일이 벌어지고
@@ -56,15 +56,12 @@ export default function DashboardScreen() {
         <button className={tab === "briefing" ? "on" : ""} onClick={() => setTab("briefing")}>
           Briefing
         </button>
-        <button className={tab === "home" ? "on" : ""} onClick={() => setTab("home")}>
-          Documents
-        </button>
         <button className={tab === "stats" ? "on" : ""} onClick={() => setTab("stats")}>
           Statistics
         </button>
       </div>
 
-      {tab === "briefing" ? <BriefingTab /> : tab === "home" ? <HomeTab /> : <StatisticsTab />}
+      {tab === "briefing" ? <BriefingTab /> : <StatisticsTab />}
     </>
   );
 }
@@ -135,7 +132,8 @@ async function downloadPdf(url: string, fallback: string) {
   URL.revokeObjectURL(href);
 }
 
-function HomeTab() {
+// Documents 탭 — 2026-11 메뉴 재편으로 Projects 화면(/project?tab=documents)으로 옮겼다.
+export function HomeTab() {
   const router = useRouter();
   // 프로젝트 개요 페이지도 같은 목록으로 견적 id 를 찾으므로 캐시 키를 공유한다.
   const { data: qtn, refresh: refreshQtn } = useCachedData("quotations:overview", () => fetchQuotationOverview());

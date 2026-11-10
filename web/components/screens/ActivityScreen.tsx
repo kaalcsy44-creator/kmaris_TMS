@@ -140,7 +140,8 @@ function todayISO(): string {
 // 기존 활동 노트 수정 시 전달하는 값.
 
 
-export default function ActivityScreen() {
+// mode — Projects 화면의 탭: "activity"(딜별·일자별 활동) 또는 "mail"(메일 정리함).
+export default function ActivityScreen({ mode = "activity" }: { mode?: "activity" | "mail" }) {
   // 프로젝트 개요의 "Activity Log →" 바로가기가 ?q=<프로젝트번호> 로 넘어온다 —
   // 그 딜만 걸러 보이게 검색어 초기값으로 쓴다(이후엔 사용자가 자유롭게 바꾼다).
   const params = useSearchParams();
@@ -156,11 +157,10 @@ export default function ActivityScreen() {
   const [ageF, setAgeF] = useState<string[]>([]);
   const [custF, setCustF] = useState<string[]>([]);
   const [vendF, setVendF] = useState<string[]>([]);
-  // 탭: 딜별(카드) / 일자별(피드) / 메일 정리함. 대시보드의 "N unmatched" 와
-  // 브리핑의 "N unregistered" 링크가 ?view=mail(&queue=…)로 넘어오므로
-  // 초기값을 주소에서 받는다.
+  // 보기: 딜별(카드) / 일자별(피드) / 메일 정리함. 메일 정리함은 Projects 의 Mail 탭
+  // (mode="mail")이고, 브리핑의 "N unregistered" 링크는 ?tab=mail(&queue=…)로 넘어온다.
   const [view, setView] = useState<"deal" | "date" | "mail">(
-    () => (params.get("view") === "mail" ? "mail" : "deal"),
+    () => (mode === "mail" ? "mail" : "deal"),
   );
   const mailQueue: MailQueue =
     params.get("queue") === "rfq" ? "rfq"
@@ -466,35 +466,20 @@ export default function ActivityScreen() {
 
   return (
     <div className="act-screen">
-      {/* 페이지 탭 — Progress 페이지와 동일한 폼(상단 고정 밑줄 탭 + 우측 교차 링크). */}
-      <div className="page-tabs">
-        <button
-          className={view === "deal" ? "on" : ""}
-          onClick={() => setView("deal")}
-        >
-          Activity (By deal)
-        </button>
-        <button
-          className={view === "date" ? "on" : ""}
-          onClick={() => setView("date")}
-        >
-          Activity (By date)
-        </button>
-        {/* 메일 정리함 — 아직 딜에 자리 잡지 못한 메일을 여기서 배정하고, 등록되지
-            않은 상대를 등록·붙이기·무시로 처리한다(탭 안의 함 줄로 갈린다). */}
-        <button
-          className={view === "mail" ? "on" : ""}
-          onClick={() => setView("mail")}
-        >
-          Mail
-        </button>
-        <Link href="/project" className="page-navlink">
-          Projects <span className="pn-arrow">→</span>
-        </Link>
-      </div>
-
+      {/* 페이지 탭(Pipeline | Activity | Documents | Mail)은 Projects 화면이 단다.
+          딜별·일자별은 같은 활동을 다르게 줄 세운 보기라 도구줄 맨 앞의 전환 버튼으로 둔다. */}
       {view === "mail" ? null : (
       <div className="act-toolbar">
+        <span className="pl-view-toggle" role="tablist" aria-label="Activity view">
+          <button type="button" className={view === "deal" ? "on" : ""} aria-pressed={view === "deal"}
+            onClick={() => setView("deal")}>
+            By deal
+          </button>
+          <button type="button" className={view === "date" ? "on" : ""} aria-pressed={view === "date"}
+            onClick={() => setView("date")}>
+            By date
+          </button>
+        </span>
         <span className="act-count">
           {view === "deal" ? `stage activity by deal · ${totalDeals}` : `stage activity by date · ${totalActs}`}
         </span>
