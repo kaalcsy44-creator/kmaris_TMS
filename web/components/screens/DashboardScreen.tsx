@@ -6,27 +6,23 @@ import {
   fetchDashboard,
   fetchQuotationOverview,
   fetchPipeline,
-  fetchArOverview,
   fetchPoOverview,
-  fetchMarketingOverview,
-  fetchSchedule,
+  fetchDocumentsRegistry,
+  documentDownloadUrl,
+  quotationPdfUrl,
   fetchCustomers,
   fetchSettingsVessels,
   fetchStatistics,
   fetchStatisticsDebug,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import { can, getUser, isAdmin } from "@/lib/auth";
+import { can, getToken, isAdmin } from "@/lib/auth";
 import type {
-  QtnRow, PipelineRow, ArRow, PoRow, MarketingRow, MarketingOverview,
-  ScheduleRow, StatisticsData, CurrencyKey, StatCurKey,
+  PipelineRow, StatisticsData, CurrencyKey, StatCurKey,
   StatDebugData,
 } from "@/lib/types";
 import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen";
 import BriefingTab from "@/components/screens/BriefingTab";
-import { MarketingForm, emptyForm as emptyMarketingForm } from "@/components/screens/MarketingScreen";
-import { ReplyBadge, FollowUpCell } from "@/components/common/MarketingBadges";
-import { REPLY_STATUSES, replyText } from "@/lib/marketing";
 import {
   ResponsiveContainer, ComposedChart, Line, BarChart, Bar,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend, Cell, LabelList, ReferenceArea,
@@ -34,9 +30,8 @@ import {
 import { tr } from "@/lib/labels";
 import FilterTable, { ColumnDef } from "@/components/common/FilterTable";
 import CustomerName from "@/components/common/CustomerName";
-import Modal from "@/components/common/Modal";
 import { DualCurrencyAmount, dualCurrencyText } from "@/components/common/itemTable";
-import { ScheduleModal, ScheduleOpenLink, scheduleColumns, upcomingSchedule } from "@/components/screens/ScheduleScreen";
+import { filenameFromDisposition } from "@/lib/download";
 
 function num(n: number) {
   return n.toLocaleString();
@@ -45,14 +40,6 @@ function money(n: number) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 const today = () => new Date().toISOString().slice(0, 10);
-
-/** "YYYY-MM-DD…" 두 문자열의 일 수 차(a - b). 비교 불가 시 0. */
-function daysBetween(a: string, b: string): number {
-  const da = Date.parse((a || "").slice(0, 10));
-  const db = Date.parse((b || "").slice(0, 10));
-  if (Number.isNaN(da) || Number.isNaN(db)) return 0;
-  return Math.round((da - db) / 86_400_000);
-}
 
 type Tab = "briefing" | "home" | "stats";
 
@@ -70,7 +57,7 @@ export default function DashboardScreen() {
           Briefing
         </button>
         <button className={tab === "home" ? "on" : ""} onClick={() => setTab("home")}>
-          Home
+          Documents
         </button>
         <button className={tab === "stats" ? "on" : ""} onClick={() => setTab("stats")}>
           Statistics
@@ -83,116 +70,108 @@ export default function DashboardScreen() {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * Home 탭 — 업무 핵심 목록을 박스(카드) 그리드로. 각 박스는 날짜순 정렬 +
- * 다른 페이지와 동일한 FilterTable(헤더 정렬/필터) 형식.
+ * Documents 탭 — 발행·수신 문서(Quotation·고객 P/O·PI·CI·PL)를 한 장의 큰 표로.
+ * 위 버튼(All / Quotation / P/O / PI / CI / PL)으로 종류를 고른다. 기본 All.
+ * 견적서·P/O 는 기존 overview 캐시를 그대로 쓰고, PI·CI·PL 은 documents-registry.
  * ────────────────────────────────────────────────────────────────────────── */
 
-function HomeCard({
-  title,
-  sub,
-  dragging,
-  onDragStart,
-  onDragOver,
-  onDragEnd,
-  children,
-}: {
-  title: string;
-  sub?: string;
-  dragging?: boolean;
-  onDragStart?: () => void;
-  onDragOver?: (e: React.DragEvent) => void;
-  onDragEnd?: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      className={`home-card${dragging ? " dragging" : ""}`}
-      onDragOver={onDragOver}
-    >
-      <div
-        className="home-card-head"
-        draggable
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-        title="Drag to reorder"
-      >
-        <span className="home-card-grip" aria-hidden>⠿</span>
-        <h3>{title}</h3>
-        {sub ? <span className="home-card-sub">{sub}</span> : null}
-      </div>
-      <div className="home-card-body">{children}</div>
-    </section>
-  );
+type DocKind = "QTN" | "PO" | "PI" | "CI" | "PL";
+type DocFilter = "ALL" | DocKind;
+
+const DOC_FILTERS: { key: DocFilter; label: string }[] = [
+  { key: "ALL", label: "All" },
+  { key: "QTN", label: "Quotation" },
+  { key: "PO", label: "P/O" },
+  { key: "PI", label: "PI" },
+  { key: "CI", label: "CI" },
+  { key: "PL", label: "PL" },
+];
+const DOC_KIND_LABEL: Record<DocKind, string> = { QTN: "Quotation", PO: "P/O", PI: "PI", CI: "CI", PL: "PL" };
+const DOC_FILTER_KEY = "ktms:home-doc-filter";
+
+type DocListRow = {
+  key: string;
+  kind: DocKind;
+  date: string; // YYYY-MM-DD
+  doc_no: string;
+  customer: string;
+  project_title: string;
+  vessel: string;
+  amount: number | null;
+  currency: string;
+  item_count: number | null;
+  valid_until: string;
+  status: string;
+  expired: boolean;
+  pic: string;
+  rfq_id: number | null;
+  order_id: number | null;
+  /** PDF 받기 — 없으면 버튼 없음(P/O 는 고객이 보낸 문서라 우리 PDF 가 없다). */
+  pdfUrl: string | null;
+  fallback: string;
+};
+
+/** "26-08-03 12:00" / "2026-08-03T…" → "2026-08-03". */
+function normDate(s: string): string {
+  const v = (s || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+  const m = v.match(/^(\d{2})-(\d{2})-(\d{2})/);
+  return m ? `20${m[1]}-${m[2]}-${m[3]}` : v.slice(0, 10);
 }
 
-type ActivityRow = {
-  id: string;
-  datetime: string;
-  owner: string;
-  customer: string;
-  project_title: string;
-  party: string;
-  channel: string;
-  text: string;
-  rfq_id: number;
-};
-
-type DelayRow = {
-  id: string;
-  kind: string;
-  ref: string;
-  customer: string;
-  project_title: string;
-  pic: string;
-  due: string;
-  days: number;
-  amount: string;
-  href: string;
-  rfq_id?: number;
-  order_id?: number;
-};
+async function downloadPdf(url: string, fallback: string) {
+  const token = getToken();
+  const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) {
+    alert(`Download failed (${res.status})`);
+    return;
+  }
+  const blob = await res.blob();
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = filenameFromDisposition(res, fallback);
+  a.click();
+  URL.revokeObjectURL(href);
+}
 
 function HomeTab() {
   const router = useRouter();
   // 프로젝트 개요 페이지도 같은 목록으로 견적 id 를 찾으므로 캐시 키를 공유한다.
   const { data: qtn, refresh: refreshQtn } = useCachedData("quotations:overview", () => fetchQuotationOverview());
   const { data: pipeline, refresh: refreshPipeline } = useCachedData("pipeline", () => fetchPipeline());
-  const { data: ar, refresh: refreshAr } = useCachedData("ar:overview", fetchArOverview);
-  // 고객 P/O 수신 현황 — 열람 권한이 있을 때만 로드(없으면 카드 미표시).
+  // 고객 P/O 수신 현황 — 열람 권한이 있을 때만 로드(없으면 버튼 미표시).
   const canPo = can("po", "view");
   const { data: po } = useCachedData(
     "po:overview",
     () => (canPo ? fetchPoOverview() : Promise.resolve(null)),
   );
+  const { data: reg, error: regError, refresh: refreshReg } = useCachedData("documents:registry", fetchDocumentsRegistry);
   // 프로젝트 상세 팝업(Progress 화면과 동일한 모달)용 — 편집 셀렉터에 쓰는 고객사·선박 목록.
   const { data: vessels } = useCachedData("settings:vessels", fetchSettingsVessels);
-  // 마케팅 요약 — 열람 권한이 있을 때만 로드(없으면 카드 미표시).
-  const canMarketing = can("marketing", "view");
-  const { data: marketing, refresh: refreshMarketing } = useCachedData(
-    "home:marketing",
-    () => (canMarketing ? fetchMarketingOverview() : Promise.resolve(null)),
-  );
-  const { data: schedule, refresh: refreshSchedule } = useCachedData("home:schedule", fetchSchedule);
   const { data: customers } = useCachedData("settings:customers", fetchCustomers);
 
-  // 일정 등록/수정 모달 상태.
-  const [schedAdding, setSchedAdding] = useState(false);
-  const [schedEditing, setSchedEditing] = useState<ScheduleRow | null>(null);
+  // 고른 문서 종류 — 기본 All, 마지막 선택은 브라우저에 기억.
+  const [filter, setFilter] = useState<DocFilter>("ALL");
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(DOC_FILTER_KEY) as DocFilter | null;
+      if (v && DOC_FILTERS.some((f) => f.key === v)) setFilter(v);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  function pick(f: DocFilter) {
+    setFilter(f);
+    try {
+      localStorage.setItem(DOC_FILTER_KEY, f);
+    } catch {
+      /* ignore */
+    }
+  }
 
-  // 마케팅 활동 등록 모달 상태 — 카드의 + Add 버튼으로 연다.
-  const [mktAdding, setMktAdding] = useState(false);
-  const canMarketingCreate = canMarketing && can("marketing", "create");
-
-  const qtnRows = useMemo(() => qtn?.rows ?? [], [qtn]);
-  const arRows = useMemo(() => ar?.rows ?? [], [ar]);
-  // P/O 수신 = 주문(Order)이 생성된 건만(id>0). RFQ 단계뿐인 건은 제외.
-  const poRows = useMemo(() => (po?.rows ?? []).filter((r) => r.id > 0), [po]);
-  const schedRows = useMemo(() => schedule?.rows ?? [], [schedule]);
-  const schedUpcoming = useMemo(() => upcomingSchedule(schedRows), [schedRows]);
-
-  // 대시보드 목록에서 프로젝트 행 클릭 → Progress 화면과 동일한 상세 팝업을 연다.
-  // rfq_id 만 보관하고 최신 파이프라인에서 행을 다시 찾는다(모달 내 편집/삭제가
-  // 저장 후 즉시 반영되고, 삭제되면 자동으로 닫히도록).
+  // 목록 행 클릭 → Progress 화면과 동일한 상세 팝업. rfq_id 만 보관하고 최신
+  // 파이프라인에서 행을 다시 찾는다(모달 내 편집/삭제가 즉시 반영되도록).
   const [openRfqId, setOpenRfqId] = useState<number | null>(null);
   const pipeRows = useMemo(() => pipeline?.rows ?? [], [pipeline]);
   const steps = useMemo(() => pipeline?.steps ?? [], [pipeline]);
@@ -208,25 +187,15 @@ function HomeTab() {
   }, [pipeRows]);
   const openProject = openRfqId != null ? byRfqId.get(openRfqId) ?? null : null;
 
-  // rfq_id/order_id 로 프로젝트를 찾아 팝업을 연다. 파이프라인에 없으면(권한/필터 등)
-  // 기존처럼 해당 워크스페이스로 이동(fallback).
-  function openByRfqId(rfqId: number | null | undefined, fallback: string) {
-    if (rfqId && byRfqId.has(rfqId)) setOpenRfqId(rfqId);
-    else router.push(fallback);
-  }
-  function openByOrderId(orderId: number | null | undefined, fallback: string) {
-    const row = orderId ? byOrderId.get(orderId) : undefined;
-    if (row) setOpenRfqId(row.rfq_id);
-    else router.push(fallback);
+  function openRow(r: DocListRow) {
+    const viaOrder = r.order_id ? byOrderId.get(r.order_id) : undefined;
+    if (viaOrder) setOpenRfqId(viaOrder.rfq_id);
+    else if (r.rfq_id && byRfqId.has(r.rfq_id)) setOpenRfqId(r.rfq_id);
+    else router.push(r.fallback);
   }
 
-  // 팝업의 ← → — Home 의 카드는 견적·P/O·연체처럼 저마다 다른 목록이라 "인접"의 뜻이
-  // 카드마다 달라진다. 그래서 Projects 화면과 같은 프로젝트 번호순으로 넘긴다. 양 끝에서
-  // 순환한다.
-  const navOrder = useMemo(
-    () => [...pipeRows].sort(byProjectNo).map((r) => r.rfq_id),
-    [pipeRows]
-  );
+  // 팝업의 ← → — Projects 화면과 같은 프로젝트 번호순으로 넘긴다(양 끝에서 순환).
+  const navOrder = useMemo(() => [...pipeRows].sort(byProjectNo).map((r) => r.rfq_id), [pipeRows]);
   function navigateProject(dir: -1 | 1) {
     setOpenRfqId((cur) => {
       if (cur == null || !navOrder.length) return cur;
@@ -239,363 +208,186 @@ function HomeTab() {
 
   async function reloadAfterProjectEdit() {
     invalidateCache("dashboard");
-    await Promise.all([refreshPipeline(), refreshQtn(), refreshAr()]);
+    await Promise.all([refreshPipeline(), refreshQtn(), refreshReg()]);
   }
 
-  // 담당자 활동 기록 — 파이프라인 단계별 stage_notes 를 한 줄씩 펼친다.
-  const activityRows = useMemo<ActivityRow[]>(() => {
-    const out: ActivityRow[] = [];
-    for (const r of pipeline?.rows ?? []) {
-      const notes = r.stage_notes ?? {};
-      for (const [stage, list] of Object.entries(notes)) {
-        (list ?? []).forEach((n, i) => {
-          out.push({
-            id: `${r.rfq_id}-${stage}-${i}`,
-            datetime: n.datetime || n.at || "",
-            owner: r.assignee || "",
-            customer: r.customer || "",
-            project_title: r.project_title || "",
-            party: n.party || "",
-            channel: n.channel || "",
-            text: n.text || "",
-            rfq_id: r.rfq_id,
-          });
-        });
-      }
-    }
-    return out;
-  }, [pipeline]);
-
-  // 지연 리스트 — 유효기한 지난 견적 + 연체 AR 을 한 표로 모은다.
-  const delayRows = useMemo<DelayRow[]>(() => {
+  // ── 문서 종류별 행을 한 모양으로 ───────────────────────────────────────
+  const allRows = useMemo<DocListRow[]>(() => {
     const t = today();
-    const out: DelayRow[] = [];
-    const openQuote = new Set(["초안", "발송완료", "협상중"]); // 미확정 상태만 지연 대상
-    for (const q of qtnRows) {
-      if (q.valid_until && q.valid_until.slice(0, 10) < t && openQuote.has(q.status)) {
+    const openQuote = new Set(["초안", "발송완료", "협상중"]); // 미확정 상태만 만료 대상
+    const out: DocListRow[] = [];
+    for (const q of qtn?.rows ?? []) {
+      const expired = !!q.valid_until && q.valid_until.slice(0, 10) < t && openQuote.has(q.status);
+      out.push({
+        key: `qtn-${q.id}`,
+        kind: "QTN",
+        date: normDate(q.sent_date || q.date || ""),
+        doc_no: q.qtn_no || "",
+        customer: q.customer || "",
+        project_title: q.project_title || "",
+        vessel: q.vessel || "",
+        amount: q.amount,
+        currency: q.currency,
+        item_count: q.item_count ?? null,
+        valid_until: (q.valid_until || "").slice(0, 10),
+        status: expired ? "Expired" : tr(q.status),
+        expired,
+        pic: q.assignee || "",
+        rfq_id: q.rfq_id || null,
+        order_id: null,
+        pdfUrl: quotationPdfUrl(q.id, "quotation"),
+        fallback: q.rfq_id ? `/project?rfq=${q.rfq_id}&stage=4` : "/project",
+      });
+    }
+    if (canPo) {
+      // P/O 수신 = 주문(Order)이 생성된 건만(id>0). RFQ 단계뿐인 건은 제외.
+      for (const p of (po?.rows ?? []).filter((r) => r.id > 0)) {
+        const pr = byOrderId.get(p.id);
         out.push({
-          id: `q-${q.id}`,
-          kind: "Quote expired",
-          ref: q.qtn_no || "—",
-          customer: q.customer || "",
-          project_title: q.project_title || "",
-          pic: q.assignee || "",
-          due: q.valid_until,
-          days: daysBetween(t, q.valid_until),
-          amount: dualCurrencyText(q.amount, q.currency),
-          href: q.rfq_id ? `/project?rfq=${q.rfq_id}&stage=4` : "/project",
-          rfq_id: q.rfq_id || undefined,
+          key: `po-${p.id}`,
+          kind: "PO",
+          date: normDate(p.customer_po_at || ""),
+          doc_no: p.customer_po_no || "",
+          customer: p.customer || "",
+          project_title: p.project_title || "",
+          vessel: p.vessel || "",
+          amount: null,
+          currency: "",
+          item_count: p.item_count,
+          valid_until: "",
+          status: tr(p.status),
+          expired: false,
+          pic: pr?.assignee || "",
+          rfq_id: pr?.rfq_id ?? null,
+          order_id: p.id,
+          pdfUrl: null,
+          fallback: `/project?order=${p.id}&stage=5`,
         });
       }
     }
-    for (const a of arRows) {
-      if (a.overdue) {
-        out.push({
-          id: `ar-${a.id}`,
-          kind: "AR overdue",
-          ref: a.ci_no || a.project_no || "—",
-          customer: a.customer || "",
-          project_title: a.project_title || "",
-          pic: a.assignee || "",
-          due: a.due_date,
-          days: daysBetween(t, a.due_date),
-          amount: dualCurrencyText(a.outstanding, a.currency),
-          href: `/project?order=${a.order_id}&stage=10`,
-          order_id: a.order_id || undefined,
-        });
-      }
+    for (const d of reg?.rows ?? []) {
+      const kind = d.type;
+      const target = d.order_id ? { orderId: d.order_id } : d.rfq_id ? { rfqId: d.rfq_id } : null;
+      const pdfKind = kind === "PI" ? "pi/pdf" : kind === "CI" ? "ci/pdf" : "pl/pdf";
+      out.push({
+        key: d.key,
+        kind,
+        date: normDate(d.date),
+        doc_no: d.doc_no,
+        customer: d.customer,
+        project_title: d.project_title,
+        vessel: d.vessel,
+        amount: d.amount,
+        currency: d.currency,
+        item_count: d.item_count,
+        valid_until: "",
+        status: "",
+        expired: false,
+        pic: d.assignee,
+        rfq_id: d.rfq_id,
+        order_id: d.order_id,
+        // 프로젝트에만 붙은 PI 는 /projects/{rfq}/pi/pdf, 나머지는 오더 기준.
+        pdfUrl: target && (kind === "PI" || "orderId" in target) ? documentDownloadUrl(target, pdfKind) : null,
+        fallback: d.order_id ? `/project?order=${d.order_id}&stage=7` : d.rfq_id ? `/project?rfq=${d.rfq_id}` : "/project",
+      });
     }
     return out;
-  }, [qtnRows, arRows]);
+  }, [qtn, po, reg, canPo, byOrderId]);
 
-  // ── 컬럼 정의 ──────────────────────────────────────────────────────────
-  const quoteCols: ColumnDef<QtnRow>[] = [
-    { key: "date", label: "Date", text: (r) => (r.sent_date || r.date || "").slice(0, 10), filter: "date" },
-    { key: "qtn_no", label: "Quote No.", text: (r) => r.qtn_no || "" },
-    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
-    { key: "project", label: "Project", text: (r) => r.project_title || "" },
-    { key: "vessel", label: "Vessel", text: (r) => r.vessel || "" },
-    {
-      key: "amount",
-      label: "Amount",
-      numeric: true,
-      text: (r) => dualCurrencyText(r.amount, r.currency),
-      render: (r) => <DualCurrencyAmount value={r.amount} currency={r.currency} />,
-      sortValue: (r) => r.amount,
-    },
-    { key: "valid_until", label: "Valid until", text: (r) => r.valid_until || "", filter: "date" },
-    { key: "status", label: "Status", text: (r) => tr(r.status), filter: "facet" },
-    { key: "pic", label: "PIC", text: (r) => r.assignee || "", filter: "facet" },
-  ];
+  const counts = useMemo(() => {
+    const c: Record<DocFilter, number> = { ALL: allRows.length, QTN: 0, PO: 0, PI: 0, CI: 0, PL: 0 };
+    for (const r of allRows) c[r.kind] += 1;
+    return c;
+  }, [allRows]);
+  const rows = useMemo(() => (filter === "ALL" ? allRows : allRows.filter((r) => r.kind === filter)), [allRows, filter]);
+  // PI·CI·PL 조회가 실패해도 견적·P/O 는 보여 준다(그 경우 해당 버튼 건수 0).
+  const loading = !qtn || (!reg && !regError) || (canPo && !po);
 
-  const activityCols: ColumnDef<ActivityRow>[] = [
-    { key: "datetime", label: "Date / time", text: (r) => r.datetime || "", filter: "date", render: (r) => fmtDateTime(r.datetime) },
-    { key: "owner", label: "PIC", text: (r) => r.owner || "", filter: "facet" },
-    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
-    { key: "project", label: "Project", text: (r) => r.project_title || "" },
-    { key: "party", label: "Party", text: (r) => r.party || "", filter: "facet" },
-    { key: "channel", label: "Channel", text: (r) => r.channel || "", filter: "facet" },
-    { key: "text", label: "Activity", text: (r) => r.text || "" },
-  ];
+  // ── 컬럼 — 종류마다 의미 있는 칸만 ──────────────────────────────────────
+  const columns = useMemo<ColumnDef<DocListRow>[]>(() => {
+    const c: Record<string, ColumnDef<DocListRow>> = {
+      kind: {
+        key: "kind", label: "Type", filter: "facet",
+        text: (r) => DOC_KIND_LABEL[r.kind],
+        facetOrder: ["Quotation", "P/O", "PI", "CI", "PL"],
+        render: (r) => <span className={`doc-kind doc-kind-${r.kind.toLowerCase()}`}>{DOC_KIND_LABEL[r.kind]}</span>,
+      },
+      date: { key: "date", label: filter === "PO" ? "Received" : "Date", text: (r) => r.date, filter: "date" },
+      doc_no: { key: "doc_no", label: filter === "PO" ? "PO No." : "Doc No.", text: (r) => r.doc_no || "—" },
+      customer: { key: "customer", label: "Customer", filter: "facet", text: (r) => r.customer, render: (r) => <CustomerName name={r.customer} /> },
+      project: { key: "project", label: "Project", text: (r) => r.project_title },
+      vessel: { key: "vessel", label: "Vessel", text: (r) => r.vessel },
+      amount: {
+        key: "amount", label: "Amount", numeric: true,
+        text: (r) => (r.amount == null ? "" : dualCurrencyText(r.amount, r.currency)),
+        render: (r) => (r.amount == null ? <span className="muted">—</span> : <DualCurrencyAmount value={r.amount} currency={r.currency} />),
+        sortValue: (r) => r.amount ?? -1,
+      },
+      items: { key: "items", label: "Items", numeric: true, text: (r) => (r.item_count == null ? "" : String(r.item_count)), sortValue: (r) => r.item_count ?? -1 },
+      valid_until: { key: "valid_until", label: "Valid until", text: (r) => r.valid_until, filter: "date" },
+      status: {
+        key: "status", label: "Status", filter: "facet", text: (r) => r.status,
+        render: (r) => (r.status ? <span className={`ar-badge${r.expired ? " overdue" : ""}`}>{r.status}</span> : null),
+      },
+      pic: { key: "pic", label: "PIC", filter: "facet", text: (r) => r.pic },
+      file: {
+        key: "file", label: "File", text: () => "",
+        render: (r) =>
+          r.pdfUrl ? (
+            <button
+              className="btn sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                void downloadPdf(r.pdfUrl!, `${r.doc_no || r.kind}.pdf`);
+              }}
+            >
+              PDF
+            </button>
+          ) : null,
+      },
+    };
+    const keys: Record<DocFilter, string[]> = {
+      ALL: ["kind", "date", "doc_no", "customer", "project", "vessel", "amount", "status", "pic", "file"],
+      QTN: ["date", "doc_no", "customer", "project", "vessel", "amount", "items", "valid_until", "status", "pic", "file"],
+      PO: ["date", "doc_no", "customer", "project", "vessel", "items", "status", "pic"],
+      PI: ["date", "doc_no", "customer", "project", "vessel", "amount", "items", "pic", "file"],
+      CI: ["date", "doc_no", "customer", "project", "vessel", "amount", "items", "pic", "file"],
+      PL: ["date", "doc_no", "customer", "project", "vessel", "items", "pic", "file"],
+    };
+    return keys[filter].map((k) => c[k]);
+  }, [filter]);
 
-  const salesCols: ColumnDef<ArRow>[] = [
-    { key: "date", label: "Date", text: (r) => (r.tax_issued_date || r.due_date || "").slice(0, 10), filter: "date" },
-    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
-    { key: "project", label: "Project", text: (r) => r.project_title || "" },
-    {
-      key: "amount",
-      label: "Invoice",
-      numeric: true,
-      text: (r) => dualCurrencyText(r.invoice_amount, r.currency),
-      render: (r) => <DualCurrencyAmount value={r.invoice_amount} currency={r.currency} />,
-      sortValue: (r) => r.invoice_amount,
-    },
-    {
-      key: "paid",
-      label: "Paid",
-      numeric: true,
-      text: (r) => dualCurrencyText(r.paid_amount, r.currency),
-      render: (r) => <DualCurrencyAmount value={r.paid_amount} currency={r.currency} />,
-      sortValue: (r) => r.paid_amount,
-    },
-    { key: "status", label: "Status", text: (r) => tr(r.status), filter: "facet", render: (r) => <span className={`ar-badge${r.overdue ? " overdue" : ""}`}>{tr(r.status)}</span> },
-    { key: "pic", label: "PIC", text: (r) => r.assignee || "", filter: "facet" },
-  ];
-
-  // 고객 P/O 수신 — 대시보드 카드 컬럼(수신일·PO번호·고객·선박·품목수·단계).
-  const poCols: ColumnDef<PoRow>[] = [
-    { key: "customer_po_at", label: "Received", text: (r) => (r.customer_po_at || "").slice(0, 10), filter: "date" },
-    { key: "customer_po_no", label: "PO No.", text: (r) => r.customer_po_no || "" },
-    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
-    { key: "project", label: "Project", text: (r) => r.project_title || "" },
-    { key: "vessel", label: "Vessel", text: (r) => r.vessel || "" },
-    { key: "items", label: "Items", numeric: true, text: (r) => String(r.item_count), sortValue: (r) => r.item_count },
-    { key: "status", label: "Status", text: (r) => tr(r.status), filter: "facet", render: (r) => <span className="ar-badge">{tr(r.status)}</span> },
-  ];
-
-  const delayCols: ColumnDef<DelayRow>[] = [
-    { key: "due", label: "Due date", text: (r) => r.due || "", filter: "date" },
-    { key: "days", label: "Days late", numeric: true, text: (r) => `${r.days}d`, sortValue: (r) => r.days, render: (r) => <b className="home-late">{r.days}d</b> },
-    { key: "kind", label: "Type", text: (r) => r.kind, filter: "facet" },
-    { key: "project", label: "Project", text: (r) => r.project_title || "" },
-    { key: "ref", label: "Ref.", text: (r) => r.ref },
-    { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => <CustomerName name={r.customer || ""} /> },
-    { key: "amount", label: "Amount", numeric: true, text: (r) => r.amount },
-    { key: "pic", label: "PIC", text: (r) => r.pic || "", filter: "facet" },
-  ];
-
-  // 마케팅(잠정 고객사) — 최근 활동 목록 컬럼.
-  const marketingCols: ColumnDef<MarketingRow>[] = [
-    { key: "activity_date", label: "Date", text: (r) => r.activity_date || "", filter: "date" },
-    { key: "customer", label: "Target", text: (r) => r.customer || "", filter: "facet", render: (r) => (r.is_prospect ? <span>{r.customer || "—"}</span> : <CustomerName name={r.customer || ""} />) },
-    { key: "activity_type", label: "Activity", text: (r) => r.activity_type || "", filter: "facet" },
-    { key: "channel", label: "Channel", text: (r) => r.channel || "", filter: "facet" },
-    { key: "reply_status", label: "Reply", text: (r) => replyText(r.reply_status, !!r.reply_email_id), filter: "facet", emptyLabel: "No reply logged", render: (r) => <ReplyBadge status={r.reply_status || ""} detected={!!r.reply_email_id} auto={!!r.reply_auto} /> },
-    { key: "next_action_date", label: "Follow-up", text: (r) => r.next_action_date || "", filter: "date", render: (r) => <FollowUpCell date={r.next_action_date || ""} /> },
-    { key: "pic", label: "PIC", text: (r) => r.owner || "", filter: "facet" },
-  ];
-
-  // 일정 — 카드는 다가오는 일정만 요약한다(전체 목록·관리는 Office › Schedule 화면).
-  const scheduleCols = scheduleColumns(true);
-
-  // ── 박스(카드) 정의 — id 별 제목/내용. 순서는 order 상태가 정한다. ───────
-  const cards: Record<string, { title: string; sub: string; body: React.ReactNode }> = {
-    quotes: {
-      title: "Quote Submissions",
-      sub: "Submitted quotes",
-      body: !qtn ? (
-        <div className="state">Loading…</div>
-      ) : (
-        <FilterTable
-          tableId="dash-quotes"
-          rows={qtnRows}
-          columns={quoteCols}
-          getRowKey={(r) => r.id}
-          defaultSortKey="date"
-          defaultSortDir="desc"
-          onRowClick={(r) => openByRfqId(r.rfq_id, r.rfq_id ? `/project?rfq=${r.rfq_id}&stage=4` : "/project")}
-          empty="No quotations submitted yet."
-        />
-      ),
-    },
-    ...(canPo
-      ? {
-          po: {
-            title: "P/O Received",
-            sub: "Customer purchase orders",
-            body: !po ? (
-              <div className="state">Loading…</div>
-            ) : (
-              <FilterTable
-                tableId="dash-po"
-                rows={poRows}
-                columns={poCols}
-                getRowKey={(r) => r.id}
-                defaultSortKey="customer_po_at"
-                defaultSortDir="desc"
-                onRowClick={(r) => openByOrderId(r.id, `/project?order=${r.id}&stage=5`)}
-                empty="No purchase orders received yet."
-              />
-            ),
-          },
-        }
-      : {}),
-    activity: {
-      title: "Activity Log",
-      sub: "PIC activity log",
-      body: !pipeline ? (
-        <div className="state">Loading…</div>
-      ) : (
-        <FilterTable
-          tableId="dash-activity"
-          rows={activityRows}
-          columns={activityCols}
-          getRowKey={(r) => r.id}
-          defaultSortKey="datetime"
-          defaultSortDir="desc"
-          onRowClick={(r) => openByRfqId(r.rfq_id, `/project?rfq=${r.rfq_id}`)}
-          empty="No activity recorded yet."
-        />
-      ),
-    },
-    sales: {
-      title: "Sales",
-      sub: "Sales list",
-      body: !ar ? (
-        <div className="state">Loading…</div>
-      ) : (
-        <FilterTable
-          tableId="dash-sales"
-          rows={arRows}
-          columns={salesCols}
-          getRowKey={(r) => r.id}
-          defaultSortKey="date"
-          defaultSortDir="desc"
-          onRowClick={(r) => openByOrderId(r.order_id, `/project?order=${r.order_id}&stage=10`)}
-          empty="No sales records yet."
-        />
-      ),
-    },
-    delays: {
-      title: "Delays",
-      sub: "Overdue items (quotes, delivery)",
-      body: !qtn || !ar ? (
-        <div className="state">Loading…</div>
-      ) : (
-        <FilterTable
-          tableId="dash-delays"
-          rows={delayRows}
-          columns={delayCols}
-          getRowKey={(r) => r.id}
-          defaultSortKey="due"
-          defaultSortDir="asc"
-          rowClassName={() => "danger"}
-          onRowClick={(r) => (r.rfq_id ? openByRfqId(r.rfq_id, r.href) : openByOrderId(r.order_id, r.href))}
-          empty="No delayed items. 🎉"
-        />
-      ),
-    },
-    schedule: {
-      title: "Schedule",
-      sub: "Next 7 days · results to record",
-      body: !schedule ? (
-        <div className="state">Loading…</div>
-      ) : (
-        <FilterTable
-          tableId="dash-schedule"
-          rows={schedUpcoming}
-          columns={scheduleCols}
-          getRowKey={(r) => r.id}
-          defaultSortKey="date"
-          defaultSortDir="asc"
-          onRowClick={(r) => setSchedEditing(r)}
-          empty="Nothing in the next 7 days."
-          actions={
-            <>
-              <button className="btn" onClick={() => setSchedAdding(true)}>
-                + Add
-              </button>
-              <ScheduleOpenLink />
-            </>
-          }
-        />
-      ),
-    },
-    ...(canMarketing
-      ? {
-          marketing: {
-            title: "Marketing",
-            sub: "Prospect outreach",
-            body: !marketing ? (
-              <div className="state">Loading…</div>
-            ) : (
-              <MarketingCardBody
-                data={marketing}
-                columns={marketingCols}
-                onRowClick={(r) => router.push(`/marketing?id=${r.id}`)}
-                onAdd={canMarketingCreate ? () => setMktAdding(true) : undefined}
-              />
-            ),
-          },
-        }
-      : {}),
-  };
-
-  const order = useHomeOrder(Object.keys(cards));
-  const { ids, dragId, onDragStart, onDragOver, onDragEnd } = order;
-
-
-  function reloadMarketing() {
-    setMktAdding(false);
-    // 마케팅 화면 목록 캐시도 무효화해 다음 방문 시 최신 활동이 보이도록.
-    invalidateCache("marketing");
-    invalidateCache("marketing-overview");
-    return refreshMarketing();
-  }
+  const filters = DOC_FILTERS.filter((f) => f.key !== "PO" || canPo);
 
   return (
-    <div className="home-grid">
-      {ids.map((id) => {
-        const c = cards[id];
-        if (!c) return null;
-        return (
-          <HomeCard
-            key={id}
-            title={c.title}
-            sub={c.sub}
-            dragging={dragId === id}
-            onDragStart={() => onDragStart(id)}
-            onDragOver={(e) => onDragOver(e, id)}
-            onDragEnd={onDragEnd}
-          >
-            {c.body}
-          </HomeCard>
-        );
-      })}
+    <div className="docs-board">
+      <div className="docs-type-bar" role="group" aria-label="Document type">
+        {filters.map((f) => (
+          <button key={f.key} className={filter === f.key ? "on" : ""} onClick={() => pick(f.key)}>
+            {f.label}
+            <span className="docs-type-count">{loading ? "…" : counts[f.key]}</span>
+          </button>
+        ))}
+      </div>
 
-      {schedAdding || schedEditing ? (
-        <ScheduleModal
-          row={schedEditing ?? undefined}
-          rows={schedRows}
-          customers={customers ?? []}
-          onClose={() => {
-            setSchedAdding(false);
-            setSchedEditing(null);
-          }}
-          onSaved={refreshSchedule}
+      {regError ? <div className="state error">PI·CI·PL list failed to load: {String(regError)}</div> : null}
+      {loading ? (
+        <div className="state">Loading…</div>
+      ) : (
+        <FilterTable
+          key={filter}
+          tableId={`home-docs-${filter.toLowerCase()}`}
+          rows={rows}
+          columns={columns}
+          getRowKey={(r) => r.key}
+          defaultSortKey="date"
+          defaultSortDir="desc"
+          rowClassName={(r) => (r.expired ? "danger" : "")}
+          onRowClick={openRow}
+          scrollBody
+          empty="No documents yet."
         />
-      ) : null}
-
-      {mktAdding ? (
-        <Modal title="Add marketing activity" onClose={() => setMktAdding(false)} form>
-          <MarketingForm
-            initial={{ ...emptyMarketingForm, owner_id: getUser()?.id ?? "" }}
-            customers={customers ?? []}
-            canEdit
-            onChanged={reloadMarketing}
-          />
-        </Modal>
-      ) : null}
+      )}
 
       {openProject ? (
         <PipelineModal
@@ -610,142 +402,6 @@ function HomeTab() {
       ) : null}
     </div>
   );
-}
-
-/* 박스 순서를 드래그앤드롭으로 바꾸고 localStorage 에 보존하는 훅. */
-const HOME_ORDER_KEY = "ktms:home-order";
-
-function useHomeOrder(defaults: string[]) {
-  const [ids, setIds] = useState<string[]>(defaults);
-  const [dragId, setDragId] = useState<string | null>(null);
-
-  // 최초 마운트 시 저장된 순서를 불러와 현재 카드 목록과 정합성을 맞춘다.
-  useEffect(() => {
-    let saved: string[] = [];
-    try {
-      saved = JSON.parse(localStorage.getItem(HOME_ORDER_KEY) || "[]");
-    } catch {
-      saved = [];
-    }
-    const known = new Set(defaults);
-    // 저장된 순서를 유지하되, 저장 이후 새로 추가된 카드는 끝이 아니라
-    // 기본 순서상의 자리(직전 카드 뒤)에 끼워 넣는다. 그래야 신규 카드가
-    // 의도한 위치(예: P/O Received = Quote 다음)에 나타난다.
-    const merged = saved.filter((id) => known.has(id));
-    defaults.forEach((id, idx) => {
-      if (merged.includes(id)) return;
-      let insertAt = merged.length;
-      for (let j = idx - 1; j >= 0; j--) {
-        const pos = merged.indexOf(defaults[j]);
-        if (pos !== -1) {
-          insertAt = pos + 1;
-          break;
-        }
-      }
-      merged.splice(insertAt, 0, id);
-    });
-    setIds(merged);
-    // defaults 는 매 렌더 새 배열이라 의존성에서 제외(키 집합은 고정).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function onDragStart(id: string) {
-    setDragId(id);
-  }
-  function onDragOver(e: React.DragEvent, overId: string) {
-    e.preventDefault();
-    if (!dragId || dragId === overId) return;
-    setIds((prev) => {
-      const from = prev.indexOf(dragId);
-      const to = prev.indexOf(overId);
-      if (from < 0 || to < 0) return prev;
-      const next = [...prev];
-      next.splice(from, 1);
-      next.splice(to, 0, dragId);
-      return next;
-    });
-  }
-  function onDragEnd() {
-    setDragId(null);
-    setIds((prev) => {
-      try {
-        localStorage.setItem(HOME_ORDER_KEY, JSON.stringify(prev));
-      } catch {
-        /* ignore */
-      }
-      return prev;
-    });
-  }
-
-  return { ids, dragId, onDragStart, onDragOver, onDragEnd };
-}
-
-/* 마케팅 카드 본문 — 이번 달 집계 + 후속 예정 요약을 상단에, 최근 활동표를 아래에. */
-function MarketingCardBody({
-  data,
-  columns,
-  onRowClick,
-  onAdd,
-}: {
-  data: MarketingOverview;
-  columns: ColumnDef<MarketingRow>[];
-  onRowClick: (r: MarketingRow) => void;
-  onAdd?: () => void;
-}) {
-  const t = today();
-  const dueFollowUps = data.follow_ups.filter((r) => r.next_action_date && r.next_action_date <= t).length;
-  // 답장 집계 — 온 답장 수와, 그중 바로 문의로 이어진 건수를 함께 보여 준다.
-  const byReply = data.replies?.by_status ?? {};
-  const replied = REPLY_STATUSES.filter((r) => r.value !== "no_reply")
-    .reduce((sum, r) => sum + (byReply[r.value] || 0), 0);
-  const inquiries = byReply["inquiry"] || 0;
-  // 답장은 왔는데 종류를 못 가른 줄 — 사람이 열어 봐야 한다.
-  const toClassify = data.replies?.needs_review ?? 0;
-  const topChannels = Object.entries(data.month.by_channel)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([k, v]) => `${k} ${v}`)
-    .join(" · ");
-
-  return (
-    <>
-      <div className="home-marketing-summary" style={{ display: "flex", gap: 16, flexWrap: "wrap", padding: "0 4px 8px", fontSize: 13 }}>
-        <span>This month: <b>{data.month.total}</b></span>
-        <span>Follow-ups: <b>{data.follow_ups.length}</b>{dueFollowUps > 0 ? <b className="home-late"> ({dueFollowUps} due)</b> : null}</span>
-        <span>Replies: <b>{replied}</b>{inquiries > 0 ? <b style={{ color: "#137a44" }}> ({inquiries} inquiry)</b> : null}</span>
-        {toClassify > 0 ? (
-          <span>To classify: <b className="home-late">{toClassify}</b></span>
-        ) : null}
-        {topChannels ? <span style={{ color: "#64748b" }}>{topChannels}</span> : null}
-      </div>
-      <FilterTable
-        tableId="dash-marketing"
-        rows={data.recent}
-        columns={columns}
-        getRowKey={(r) => r.id}
-        defaultSortKey="activity_date"
-        defaultSortDir="desc"
-        onRowClick={onRowClick}
-        empty="No marketing activities yet."
-        actions={
-          onAdd ? (
-            <button className="btn" onClick={onAdd}>
-              + Add
-            </button>
-          ) : undefined
-        }
-      />
-    </>
-  );
-}
-
-/** "YYYY-MM-DDTHH:MM" → "yy-mm-dd HH:MM". 시각 없으면 날짜만. */
-function fmtDateTime(iso: string): string {
-  if (!iso) return "—";
-  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
-  if (!m) return iso;
-  const [, y, mo, d, h, mi] = m;
-  return `${y.slice(2)}-${mo}-${d}${h ? ` ${h}:${mi}` : ""}`;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

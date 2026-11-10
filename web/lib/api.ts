@@ -880,6 +880,30 @@ export function fetchDocumentsOverview(): Promise<{ rows: DocRow[] }> {
   return get<{ rows: DocRow[] }>("/api/admin/documents-overview");
 }
 
+/** 발행 문서 대장(PI·CI·PL) — 문서 1건 = 1행. Dashboard › Documents 탭. */
+export type RegistryDocRow = {
+  key: string;
+  type: "PI" | "CI" | "PL";
+  id: number;
+  doc_no: string;
+  date: string;
+  currency: string;
+  amount: number | null;
+  item_count: number;
+  order_id: number | null;
+  rfq_id: number | null;
+  customer: string;
+  vessel: string;
+  project_title: string;
+  project_no: string;
+  assignee: string;
+  po_no: string;
+};
+
+export function fetchDocumentsRegistry(): Promise<{ rows: RegistryDocRow[] }> {
+  return get<{ rows: RegistryDocRow[] }>("/api/admin/documents-registry");
+}
+
 export function fetchDocumentDetail(orderId: number): Promise<DocumentDetail> {
   return get<DocumentDetail>(`/api/admin/documents/${orderId}`);
 }

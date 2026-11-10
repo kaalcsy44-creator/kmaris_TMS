@@ -1081,97 +1081,76 @@ body {
   margin-top: 4px;
 }
 
-/* ── Home 탭: 업무 핵심 목록 박스 그리드 ──────────────────────────────── */
-.home-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  margin-top: 18px;
-  align-items: stretch;
+/* ── Dashboard › Documents 탭: 문서 종류 버튼 + 화면 폭 한 장짜리 표 ─────── */
+.docs-board {
+  margin-top: 16px;
 }
-/* 정사각형(가로폭 기준) 박스 — 한 행 3개가 동일 폭이라 높이도 동일해진다. */
-.home-card {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-  overflow: hidden;
-  aspect-ratio: 1 / 1;
+.docs-type-bar {
   display: flex;
-  flex-direction: column;
-}
-.home-card.dragging {
-  opacity: 0.45;
-  outline: 2px dashed var(--navy);
-  outline-offset: -2px;
-}
-.home-card-head {
-  display: flex;
-  align-items: baseline;
+  flex-wrap: wrap;
   gap: 8px;
-  padding: 13px 16px;
-  border-bottom: 1px solid var(--line);
-  background: #f8fafc;
-  cursor: grab;
+  margin-bottom: 12px;
 }
-.home-card-head:active {
-  cursor: grabbing;
-}
-.home-card-grip {
-  align-self: center;
-  color: #c2cbd6;
-  font-size: 13px;
-  line-height: 1;
-  letter-spacing: -2px;
-}
-.home-card-head h3 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
+.docs-type-bar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: #fff;
   color: var(--navy);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
 }
-.home-card-sub {
-  font-size: 11px;
-  font-weight: 500;
-  color: #aab4c2;
+.docs-type-bar button:hover {
+  background: #f1f5f9;
 }
-.home-card-body {
-  padding: 8px 14px 14px;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+.docs-type-bar button.on {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
 }
-/* 카드 본문 표는 상단여백을 줄이고 남는 높이를 채우며 세로 스크롤 */
-.home-card-body .pl-toolbar {
-  margin: 0 0 6px;
+.docs-type-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #e8edf3;
+  color: #475569;
+  font-size: 11.5px;
+  text-align: center;
 }
-.home-card-body .pl-table-wrap {
-  flex: 1;
-  min-height: 0;
-  max-height: none;
-  overflow-y: auto;
+.docs-type-bar button.on .docs-type-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
 }
-.home-card-body .pipeline thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+/* 버튼 줄만큼 위쪽 붙박이가 늘었으므로 표 상자 높이 어림값을 그만큼 줄인다. */
+.docs-board .pl-table-wrap.pl-scroll {
+  max-height: calc(100vh - 300px);
 }
-.home-late {
-  color: #b42318;
-}
-.home-card-body .pipeline tbody tr.danger td {
+.docs-board .pipeline tbody tr.danger td {
   background: #fff7f7;
 }
-.home-card-body .pipeline tbody tr.danger:hover td {
+.docs-board .pipeline tbody tr.danger:hover td {
   background: #ffeded;
 }
-/* 중간 폭에서는 3열이 좁아져 2열로 */
-@media (max-width: 1280px) {
-  .home-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+/* 문서 종류 표식(All 보기의 Type 칸) */
+.doc-kind {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: #eef2f7;
+  color: #334155;
 }
+.doc-kind-qtn { background: #e6f0fb; color: #0b4f9c; }
+.doc-kind-po { background: #eaf6ee; color: #137a44; }
+.doc-kind-pi { background: #fdf3e3; color: #9a5b00; }
+.doc-kind-ci { background: #f1ecfb; color: #5b3aa8; }
+.doc-kind-pl { background: #eef2f7; color: #475569; }
 .alert-card {
   border: 1px solid var(--line);
   border-radius: 8px;

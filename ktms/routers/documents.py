@@ -54,6 +54,8 @@ from _core import (
     _project_no_for_order,
     _project_no_map,
     _project_pi,
+    _counted_rows,
+    cached_aggregate,
     _rfq_for_order,
     _total_amount,
     _tracking_url,
@@ -158,6 +160,78 @@ def documents_overview():
                 # 서비스 단계 수동 완료 상태(7). 8(Complete·Report)은 has_pod, 9(Billing)은 svc_billed.
                 "svc_ready_done": bool(sd.get("7")),
                 "svc_billed": bool(svc.get("9")),
+            })
+        return {"rows": rows}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/documents-registry", dependencies=[Depends(require_token)])
+@cached_aggregate()
+def documents_registry():
+    """발행 문서 대장 — PI·CI·PL 을 문서 1건 = 1행으로 (Dashboard › Documents 탭).
+    견적서·고객 P/O 는 각자의 overview API 를 화면에서 그대로 합친다."""
+    s = get_session()
+    try:
+        cust_names = {c.id: c.name for c in s.query(Customer).all()}
+        vessel_names = {v.id: v.name for v in s.query(Vessel).all()}
+        user_names = {u.id: u.username for u in s.query(User).all()}
+        rfqs = {r.id: r for r in s.query(RFQ).all()}
+        orders = {o.id: o for o in s.query(Order).all()}
+        pno = _project_no_map(s)
+        qtn_rfq = {q.id: q.rfq_id for q in s.query(Quotation.id, Quotation.rfq_id).all()}
+
+        def rfq_of(o):
+            # _rfq_for_order 와 같은 규칙(직접 연결 우선, 없으면 견적 경유) — 메모리 맵으로.
+            if o.rfq_id and o.rfq_id in rfqs:
+                return rfqs[o.rfq_id]
+            return rfqs.get(qtn_rfq.get(o.quotation_id)) if o.quotation_id else None
+
+        def ctx(order_id, rfq_id=None):
+            o = orders.get(order_id) if order_id else None
+            r = None
+            if o is not None:
+                r = rfq_of(o)
+            if r is None and rfq_id:
+                r = rfqs.get(rfq_id)
+            cust_id = (o.customer_id if o is not None else None) or (r.customer_id if r else None)
+            vessel_id = (o.vessel_id if o is not None else None) or (r.vessel_id if r else None)
+            return {
+                "order_id": o.id if o is not None else None,
+                "rfq_id": r.id if r else None,
+                "customer": cust_names.get(cust_id, "") if cust_id else "",
+                "vessel": vessel_names.get(vessel_id, "") if vessel_id else "",
+                "project_title": (getattr(r, "project_title", None) or "") if r else "",
+                "project_no": pno.get(r.id, "") if r else "",
+                "assignee": (user_names.get(r.created_by, "") or "") if r else "",
+                "po_no": (o.po_no or "") if o is not None else "",
+            }
+
+        def counted(items):
+            return len(_counted_rows(items))
+
+        rows = []
+        for pi in s.query(ProformaInvoice).all():
+            rows.append({
+                "key": f"pi-{pi.id}", "type": "PI", "id": pi.id, "doc_no": pi.pi_no or "",
+                "date": pi.date or "", "currency": pi.currency or "USD",
+                "amount": round(_total_amount(pi.items or []), 2),
+                "item_count": counted(pi.items), **ctx(pi.order_id, pi.rfq_id),
+            })
+        ci_order: dict[int, int] = {}
+        for ci in s.query(CommercialInvoice).all():
+            ci_order[ci.id] = ci.order_id
+            rows.append({
+                "key": f"ci-{ci.id}", "type": "CI", "id": ci.id, "doc_no": ci.ci_no or "",
+                "date": ci.date or "", "currency": ci.currency or "USD",
+                "amount": round(_total_amount(ci.items or []), 2),
+                "item_count": counted(ci.items), **ctx(ci.order_id),
+            })
+        for pl in s.query(PackingList).all():
+            rows.append({
+                "key": f"pl-{pl.id}", "type": "PL", "id": pl.id, "doc_no": pl.pl_no or "",
+                "date": pl.date or "", "currency": "", "amount": None,
+                "item_count": counted(pl.items), **ctx(ci_order.get(pl.ci_id)),
             })
         return {"rows": rows}
     finally:
