@@ -3,6 +3,7 @@
 import AmountInput from "@/components/common/AmountInput";
 import DecimalsSelect from "@/components/common/DecimalsSelect";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   fetchVendors,
   fetchRfqDetail,
@@ -4678,6 +4679,8 @@ function LinePick({
   /** lids = 덮는 라인 전부(대표 포함). 하나뿐이면 undefined — 예전 저장 모양 그대로. */
   onChange: (lid: string, lids: string[] | undefined) => void;
 }) {
+  // 여러 라인을 한 번에 고르는 창(체크박스) — 하나씩 "+ line" 으로 붙이면 라인이 많을 때 끝이 없다.
+  const [multiOpen, setMultiOpen] = useState(false);
   const others = (lid: string) => (lidRows?.get(lid) ?? []).filter((n) => n !== seq);
   const emit = (lid: string, more: string[]) => {
     const rest = lid ? [...new Set(more.filter((x) => x && x !== lid))] : [];
@@ -4727,11 +4730,42 @@ function LinePick({
       )}
     </select>
   );
-  if (!value) return primary;
+  const multiBtn = (
+    <button type="button" className="line-multi-btn" onClick={() => setMultiOpen(true)}
+            title="Pick several project lines at once — for one complete item that covers them">
+      ☰ Pick lines
+    </button>
+  );
+  // 표 칸 안이 아니라 body 에 띄운다 — 표의 가로 스크롤 상자·행 클릭/키 처리에 걸리지 않게.
+  const multiModal = multiOpen && typeof document !== "undefined" ? createPortal(
+    <LineMultiPicker
+      lines={lines}
+      asked={askedSet}
+      selected={value ? [value, ...extra] : []}
+      label={label}
+      onClose={() => setMultiOpen(false)}
+      onApply={(picked) => {
+        setMultiOpen(false);
+        // 대표는 지금 대표가 남아 있으면 그대로, 빠졌으면 딜 순서상 첫 라인.
+        const head = picked.includes(value) ? value : (picked[0] ?? "");
+        emit(head, picked.filter((x) => x !== head));
+      }}
+    />,
+    document.body
+  ) : null;
+  if (!value)
+    return (
+      <div className="line-multi">
+        {primary}
+        <div className="line-extra">{multiBtn}</div>
+        {multiModal}
+      </div>
+    );
   // 완제품 — 한 줄이 딜의 여러 라인을 덮는다. 대표 라인 아래에 더 덮는 라인을 칩으로 쌓는다.
   const addable = lines.filter((l) => l.lid !== value && !extra.includes(l.lid));
   return (
     <div className="line-multi">
+      {multiModal}
       {primary}
       {extra.length || addable.length ? (
         <div className="line-extra">
@@ -4759,9 +4793,106 @@ Also linked on row ${used.join(", ")} — that row's own price wins for ${x}.` :
               ))}
             </select>
           ) : null}
+          {multiBtn}
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** 라인 여러 개를 한 번에 — 체크박스 목록. 묶음(이 벤더에게 물어본 줄 / 나머지)마다 전체 선택,
+ *  Shift+클릭으로 범위 선택, 검색. 돌려주는 순서는 딜의 라인 순서다. */
+function LineMultiPicker({
+  lines,
+  asked,
+  selected,
+  label,
+  onApply,
+  onClose,
+}: {
+  lines: LineOption[];
+  asked: Set<string>;
+  selected: string[];
+  label: (l: LineOption) => string;
+  onApply: (lids: string[]) => void;
+  onClose: () => void;
+}) {
+  const [sel, setSel] = useState<Set<string>>(() => new Set(selected));
+  const [q, setQ] = useState("");
+  const anchor = useRef<string | null>(null);
+  const needle = q.trim().toLowerCase();
+  const shown = needle
+    ? lines.filter((l) => `${l.lid} ${l.part_no} ${l.description}`.toLowerCase().includes(needle))
+    : lines;
+  const groups = asked.size && lines.some((l) => !asked.has(l.lid))
+    ? [
+        { title: "Asked this vendor", rows: shown.filter((l) => asked.has(l.lid)) },
+        { title: "Other project items", rows: shown.filter((l) => !asked.has(l.lid)) },
+      ]
+    : [{ title: "Project items", rows: shown }];
+  const order = shown.map((l) => l.lid);
+
+  function click(lid: string, shift: boolean) {
+    setSel((prev) => {
+      const next = new Set(prev);
+      const on = !prev.has(lid);
+      // Shift+클릭 — 마지막으로 누른 줄부터 이 줄까지(보이는 순서) 같은 상태로.
+      if (shift && anchor.current && order.includes(anchor.current)) {
+        const [a, b] = [order.indexOf(anchor.current), order.indexOf(lid)].sort((x, y) => x - y);
+        for (const x of order.slice(a, b + 1)) if (on) next.add(x); else next.delete(x);
+      } else if (on) next.add(lid);
+      else next.delete(lid);
+      return next;
+    });
+    anchor.current = lid;
+  }
+  function setGroup(rows: LineOption[], on: boolean) {
+    setSel((prev) => {
+      const next = new Set(prev);
+      for (const l of rows) if (on) next.add(l.lid); else next.delete(l.lid);
+      return next;
+    });
+  }
+  const picked = lines.map((l) => l.lid).filter((x) => sel.has(x));
+
+  return (
+    <Modal title="Pick project lines" onClose={onClose} form maxWidth={620}>
+      <div className="lmp">
+        <p className="hint-inline">
+          Tick every project line this row covers — e.g. one complete air horn priced for the horn,
+          heater and valve lines. Shift+click ticks a range. The first ticked line carries the price;
+          the rest show as &ldquo;Included in&rdquo; it.
+        </p>
+        <input className="lmp-search" placeholder="Filter by line, part no. or description"
+               value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+        <div className="lmp-list">
+          {groups.map((g) => (g.rows.length ? (
+            <div key={g.title} className="lmp-group">
+              <div className="lmp-ghead">
+                <b>{g.title}</b>
+                <button type="button" className="btn sm" onClick={() => setGroup(g.rows, true)}>Select all</button>
+                <button type="button" className="btn sm" onClick={() => setGroup(g.rows, false)}>Clear</button>
+              </div>
+              {g.rows.map((l) => (
+                <label key={l.lid} className={`lmp-row${sel.has(l.lid) ? " on" : ""}`}
+                       onClick={(e) => { e.preventDefault(); click(l.lid, e.shiftKey); }}>
+                  <input type="checkbox" checked={sel.has(l.lid)} readOnly />
+                  <span>{label(l)}</span>
+                </label>
+              ))}
+            </div>
+          ) : null))}
+          {!shown.length ? <div className="hint-inline">No line matches.</div> : null}
+        </div>
+        <div className="form-actions">
+          <span className="lmp-count">
+            {picked.length} line(s){picked.length ? ` · price on ${picked.includes(selected[0]) ? selected[0] : picked[0]}` : ""}
+          </span>
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn primary" onClick={() => onApply(picked)}>Apply</button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
