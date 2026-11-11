@@ -749,6 +749,9 @@ export type VendorQuoteItem = {
    *  물건(complete 제품)으로 견적한 경우다 — 비교표는 대표 라인에 값, 나머지는
    *  "Included in 대표"로 보이고 채택도 묶음째 한다. */
   lids?: string[];
+  /** (불러오기 전용, 저장 안 함) 완제품 줄이 덮는 딜 라인의 품목 정보 — 서버가 고객 견적
+   *  불러오기용으로 실어 준다. 고객 견적은 이 라인들을 "Included in 대표" 줄로 세운다. */
+  covered_lines?: { lid: string; part_no: string; description: string; qty: number; unit: string }[];
 };
 
 export type CustomerQuoteItem = {

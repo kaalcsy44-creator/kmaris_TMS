@@ -1007,6 +1007,27 @@ def rfq_vendor_quotes(rfq_id: int):
         vqs = (s.query(VendorQuote)
                .filter(VendorQuote.vendor_rfq_id.in_(list(vrfq_map.keys())))
                .order_by(VendorQuote.id.desc()).all() if vrfq_map else [])
+        # 완제품 줄(lids)이 덮는 딜 라인의 품목 정보 — 고객 견적이 그 라인들을 "Included in"
+        # 줄로 세울 수 있게 함께 싣는다(견적 줄 자체는 대표 라인 하나뿐이다).
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        deal_line = {line_id_of(it): it for it in ((rfq.items if rfq else None) or [])
+                     if isinstance(it, dict) and line_id_of(it) and not is_option_row(it)}
+
+        def _with_covered(items):
+            out_items = []
+            for it in items or []:
+                lids = line_ids_of(it) if isinstance(it, dict) else []
+                if len(lids) > 1:
+                    it = {**it, "covered_lines": [{
+                        "lid": x,
+                        "part_no": (deal_line.get(x) or {}).get("part_no") or "",
+                        "description": (deal_line.get(x) or {}).get("description") or "",
+                        "qty": (deal_line.get(x) or {}).get("qty") or 1,
+                        "unit": (deal_line.get(x) or {}).get("unit") or "",
+                    } for x in lids[1:] if x in deal_line]}
+                out_items.append(it)
+            return out_items
+
         out = []
         for q in vqs:
             vrfq = vrfq_map.get(q.vendor_rfq_id)
@@ -1024,7 +1045,7 @@ def rfq_vendor_quotes(rfq_id: int):
                 "received_at": getattr(q, "received_at", None) or "",
                 "valid_until": getattr(q, "valid_until", None) or "",
                 "currency": getattr(q, "currency", None) or "USD",
-                "items": q.items or [],
+                "items": _with_covered(q.items),
                 "terms": getattr(q, "terms", None) or {},
             })
         return {"vendor_quotes": out}

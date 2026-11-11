@@ -5157,17 +5157,17 @@ function customerQuoteItemsFromVendorQuote(
   costCurrency?: string
 ): CustomerQuoteItem[] {
   const costCur = (costCurrency || vq.currency || DEFAULT_COST_CURRENCY).toUpperCase();
-  return vq.items.map((it) => {
+  return vq.items.flatMap((it): CustomerQuoteItem[] => {
     // 옵션 구분행은 제목만 있는 줄이라 원가·단가를 계산하지 않고 그대로 옮긴다.
     if (isOptionRow(it))
-      return { part_no: "", description: it.description || "", qty: 0, unit: "",
+      return [{ part_no: "", description: it.description || "", qty: 0, unit: "",
                cost_price: null, margin_pct: null, unit_price: null, amount: null,
-               row_kind: OPTION_ROW_KIND };
+               row_kind: OPTION_ROW_KIND }];
     const srcCost = Number(it.cost_price ?? 0);
     const cost = convertCurrency(srcCost, vq.currency, costCur, rate);
     const unit = calcUnitPrice(cost, defaultMargin, costCur, saleCurrency, roundDigits, rate);
     const qty = Number(it.qty || 1);
-    return {
+    const row: CustomerQuoteItem = {
       part_no: it.part_no || "",
       description: it.description || "",
       type: it.type ?? "",
@@ -5187,6 +5187,30 @@ function customerQuoteItemsFromVendorQuote(
       src_currency: (vq.currency || costCur).toUpperCase(),
       src_cost: srcCost,
     };
+    // 완제품 줄(한 줄이 딜의 여러 라인을 덮음) — 고객이 물어본 라인은 고객 견적에도 모두 선다.
+    // 값은 대표 줄에만 있고, 나머지 라인은 원가·단가 0 + "Included in 대표".
+    const head = (it.lid || "").trim();
+    const covered = (it.covered_lines ?? []).map((c): CustomerQuoteItem => ({
+      part_no: c.part_no || "",
+      description: c.description || "",
+      type: "",
+      serial_no: "",
+      qty: Number(c.qty || 1),
+      unit: c.unit || it.unit || "PCS",
+      cost_price: 0,
+      margin_pct: defaultMargin,
+      unit_price: 0,
+      amount: 0,
+      lead_time: it.lead_time ?? "",
+      remark: head ? `Included in ${head}` : "Included",
+      lid: c.lid,
+      src_vq_id: vq.id,
+      src_vendor: vq.vendor || "",
+      src_vq_no: vq.vendor_quote_no || "",
+      src_currency: (vq.currency || costCur).toUpperCase(),
+      src_cost: 0,
+    }));
+    return [row, ...covered];
   });
 }
 
