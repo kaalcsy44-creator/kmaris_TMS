@@ -2753,7 +2753,7 @@ function CustomerQuoteDetailModal({
 
   // 되돌리기 이력 — 품목과 가격 설정을 한 덩어리로(통화만 되돌리고 품목을 두면 숫자가 틀어진다).
   const hist = useEditHistory(
-    { items, costCurrency, currency, roundDigits, fxRate, defaultMargin, discountPct, crossFx: usedCross(crossFx, costCurrency, items) },
+    { items, costCurrency, currency, roundDigits, fxRate, defaultMargin, discountPct, crossFx: usedCross(crossFx, costCurrency, items, currency) },
     (v) => {
       setItems(v.items);
       setCrossFx((p) => ({ ...p, ...v.crossFx }));
@@ -2769,7 +2769,7 @@ function CustomerQuoteDetailModal({
   // 저장본과 달라졌나 — 폼 전체. Cancel·닫기·미리보기가 이것을 보고 묻는다.
   const { dirty, markClean } = useDirty(
     { qtnNo, currency, costCurrency, roundDigits, defaultMargin, discountPct, fxRate, sentAt,
-      validUntil, status, terms, messrs, attn, refNo, items, crossFx: usedCross(crossFx, costCurrency, items) },
+      validUntil, status, terms, messrs, attn, refNo, items, crossFx: usedCross(crossFx, costCurrency, items, currency) },
     readyKey
   );
   // Cancel = 편집을 버리고 저장본으로. 단계 화면(inline)에서는 창이 그대로라 다시 읽는다.
@@ -2788,7 +2788,7 @@ function CustomerQuoteDetailModal({
   const finalTotal = Math.round(total * (1 - Number(discountPct || 0) / 100) * 100) / 100;
 
   // 헤더 문서 필드(Attn/Messrs/Ref No.)는 terms JSON 에 함께 저장한다.
-  const termsForSave = (): QuotationTerms => withCostFx({ ...terms, messrs, attn, ref_no: refNo }, costCurrency, crossFx, items);
+  const termsForSave = (): QuotationTerms => withCostFx({ ...terms, messrs, attn, ref_no: refNo }, costCurrency, crossFx, items, currency);
 
   // 현재 편집값을 서버에 저장(모달은 닫지 않음). save()·미리보기가 공유.
   async function persist() {
@@ -3076,17 +3076,21 @@ function CustomerQuoteDetailModal({
                 onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c, roundDigits, fxAll)); }}
               />
             </div>
-            <FxRateControl
-              label="FX 1 USD ="
-              rate={fxRate}
-              onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, fxWithCross(v ?? USD_KRW_RATE, crossFx))); }}
-              mode={fxMode}
-              onMode={setFxMode}
-              date={sentAt}
-            />
+            {/* USD↔KRW 환율은 KRW 가 낀 환산에서만 값에 들어간다(SGD→USD 같은 환산에서는 지워진다) —
+                원가·판매 통화나 실린 줄에 KRW 가 없으면 감춘다(헷갈린다). 값은 그대로 들고 저장한다. */}
+            {usesKrw(costCurrency, currency, items) ? (
+              <FxRateControl
+                label="FX 1 USD ="
+                rate={fxRate}
+                onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, fxWithCross(v ?? USD_KRW_RATE, crossFx))); }}
+                mode={fxMode}
+                onMode={setFxMode}
+                date={sentAt}
+              />
+            ) : null}
             {/* USD·KRW 밖 통화마다 교차환율 — 원가 통화, 견적서 줄의 출처 통화, 이 딜의 공급사 견적 통화. */}
             <CrossFxControls
-              curs={crossCurrencies(costCurrency, items)}
+              curs={crossCurrencies(costCurrency, items, currency)}
               cross={crossFx}
               date={sentAt}
               onRate={(c, v) => {
@@ -4990,23 +4994,36 @@ function fxWithCross(usdKrw: number, cross: CrossFx): Fx {
 /** 실제로 값에 쓰이는 통화의 환율만 — 원가 통화와 줄의 출처 통화. 공급사 견적에만 있는
  *  통화(아직 싣지 않은 SGD 견적)의 시세는 열자마자 들어와도 이 견적의 숫자를 바꾸지 않으므로
  *  '저장 안 된 변경'으로 치지 않는다. */
-function usedCross(cross: CrossFx, costCur: string, items: CustomerQuoteItem[]): CrossFx {
-  const used = new Set([(costCur || "").toUpperCase(), ...items.map((it) => (it.src_currency || "").toUpperCase())]);
+function usedCross(cross: CrossFx, costCur: string, items: CustomerQuoteItem[], saleCur = ""): CrossFx {
+  const used = new Set([(costCur || "").toUpperCase(), (saleCur || "").toUpperCase(),
+    ...items.map((it) => (it.src_currency || "").toUpperCase())]);
   return Object.fromEntries(Object.entries(cross).filter(([c]) => used.has(c)));
+}
+
+/** 이 견적서의 숫자에 KRW 가 끼는가 — 원가·판매 통화, 또는 실린 줄의 출처 통화. */
+function usesKrw(costCur: string, saleCur: string, items: CustomerQuoteItem[]): boolean {
+  const k = (c?: string | null) => (c || "").toUpperCase() === "KRW";
+  return k(costCur) || k(saleCur) || items.some((it) => !isOptionRow(it) && k(it.src_currency));
 }
 
 /** 환율 칸을 세울 통화 — 이 견적서에 실제로 쓰인 USD·KRW 밖 통화만: 원가 통화와 실린 줄의
  *  출처 통화. 같은 딜의 다른 견적(아직 안 실은 SGD 견적)의 통화는 보이지 않는다 — 헷갈린다.
  *  그런 견적을 실을 때 그 통화의 시세를 받아 오고(ensureCross), 그때부터 칸이 선다. */
-function crossCurrencies(costCur: string, items: CustomerQuoteItem[]): string[] {
-  const out: string[] = [];
+function crossCurrencies(costCur: string, items: CustomerQuoteItem[], saleCur = ""): string[] {
+  const all: string[] = [];
   const add = (c?: string | null) => {
     const u = (c || "").toUpperCase();
-    if (needsCross(u) && !out.includes(u)) out.push(u);
+    if (u && !all.includes(u)) all.push(u);
   };
   add(costCur);
   items.forEach((it) => { if (!isOptionRow(it)) add(it.src_currency); });
-  return out;
+  // 원가·판매·줄이 모두 한 통화면 환산이 없다 — 환율 칸도 필요 없다.
+  const withSale = [...all];
+  const s = (saleCur || "").toUpperCase();
+  if (s && !withSale.includes(s)) withSale.push(s);
+  if (withSale.length <= 1) return [];
+  // 판매 통화가 외화(원가 KRW → 판매 SGD)여도 그 통화의 환율이 있어야 단가를 낸다.
+  return withSale.filter(needsCross);
 }
 
 /** 아직 환율이 없는 외화의 매매기준율(1 cur = ? USD) — 그 통화의 견적을 실을 때 받아 온다.
@@ -5053,9 +5070,9 @@ function readCrossFx(terms: unknown): CrossFx {
 
 /** 저장할 거래조건에 교차환율을 싣는다 — cross_fx(통화별 전부) + 원가 통화가 USD·KRW 밖이면
  *  예전 칸 cost_fx 도(서버의 견적 Excel 이 그 칸으로 원가→판매 통화를 환산한다). */
-function withCostFx(terms: QuotationTerms, costCur: string, crossAll: CrossFx, items: CustomerQuoteItem[]): QuotationTerms {
+function withCostFx(terms: QuotationTerms, costCur: string, crossAll: CrossFx, items: CustomerQuoteItem[], saleCur = ""): QuotationTerms {
   // 이 견적서에 쓰인 통화의 환율만 남긴다 — 딜의 다른 견적 때문에 받아 둔 환율은 싣지 않는다.
-  const cross = usedCross(crossAll, costCur, items);
+  const cross = usedCross(crossAll, costCur, items, saleCur);
   const { cost_fx: _a, cross_fx: _b, ...rest } = terms as QuotationTerms & { cost_fx?: unknown; cross_fx?: unknown };
   void _a; void _b;
   const saved: Record<string, { usd: number; mode: FxMode }> = {};
@@ -5632,7 +5649,7 @@ function CustomerQuoteAction({
     setMsg(null);
     setErr(null);
     try {
-      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, withCostFx(terms, costCurrency, crossFx, items), qtnNo.trim() === autoNo ? "" : qtnNo.trim(), sentAt, costCurrency, roundDigits, discountPct, fxRate, docSourceId(items, importVqId === "" ? null : importVqId), defaultMargin);
+      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, withCostFx(terms, costCurrency, crossFx, items, currency), qtnNo.trim() === autoNo ? "" : qtnNo.trim(), sentAt, costCurrency, roundDigits, discountPct, fxRate, docSourceId(items, importVqId === "" ? null : importVqId), defaultMargin);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
       setMsg(`Sent — ${r.qtn_no}`);
       onDone();
@@ -5743,17 +5760,21 @@ function CustomerQuoteAction({
             onChange={(c) => { setCurrency(c); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, c, roundDigits, fxAll)); }}
           />
         </div>
-        <FxRateControl
-          label="FX 1 USD ="
-          rate={fxRate}
-          onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, fxWithCross(v ?? USD_KRW_RATE, crossFx))); }}
-          mode={fxMode}
-          onMode={setFxMode}
-          date={sentAt}
-        />
+        {/* USD↔KRW 환율은 KRW 가 낀 환산에서만 값에 들어간다(SGD→USD 같은 환산에서는 지워진다) —
+            원가·판매 통화나 실린 줄에 KRW 가 없으면 감춘다(헷갈린다). 값은 그대로 들고 저장한다. */}
+        {usesKrw(costCurrency, currency, items) ? (
+          <FxRateControl
+            label="FX 1 USD ="
+            rate={fxRate}
+            onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, fxWithCross(v ?? USD_KRW_RATE, crossFx))); }}
+            mode={fxMode}
+            onMode={setFxMode}
+            date={sentAt}
+          />
+        ) : null}
         {/* USD·KRW 밖 통화마다 교차환율 — 원가 통화, 견적서 줄의 출처 통화, 이 딜의 공급사 견적 통화. */}
         <CrossFxControls
-          curs={crossCurrencies(costCurrency, items)}
+          curs={crossCurrencies(costCurrency, items, currency)}
           cross={crossFx}
           date={sentAt}
           onRate={(c, v) => {
