@@ -51,6 +51,7 @@ from _core import (
     index_doc_by_line,
     is_option_row,
     line_id_of,
+    line_ids_of,
     stamp_doc_line_ids,
     _base_meta,
     cached_aggregate,
@@ -1170,6 +1171,17 @@ def _cheapest_alt(alts: list[dict]) -> int | None:
     return min(priced)[1] if priced else None
 
 
+def _bundle_lids(q, lid: str) -> list[str]:
+    """견적 q 에서 라인 lid 를 덮는 완제품 줄(lids 2개 이상)의 라인 전부 — 대표가 맨 앞.
+    그런 줄이 없으면 [lid]. 완제품은 통째로 사는 것이라 채택·취소를 라인 묶음째 한다."""
+    for d in (q.items or []) if q else []:
+        if isinstance(d, dict) and not is_option_row(d):
+            lids = line_ids_of(d)
+            if len(lids) > 1 and lid in lids:
+                return lids
+    return [lid]
+
+
 def _quote_line(lines_src, q, lid: str, alt: int | None) -> tuple[dict, int | None]:
     """견적 q 에서 라인 lid 로 살 줄과 그 대안 자리. 대안이 있는 줄인데 자리를 안 줬거나
     (견적을 고쳐) 없는 자리면 가장 싼 대안으로 — 세트로 합산한 값이 원가가 되면 안 된다."""
@@ -1281,9 +1293,17 @@ def _line_board(s, rfq) -> dict:
                     low = _cheapest_alt(alts)
                     cost = _cell_cost(alts[low]) if low is not None else None
                     it = {"lead_time": alts[low]["lead_time"] if low is not None else ""}
+                covered = (it.get("covered_by") or "") if isinstance(it, dict) else ""
                 cells.setdefault(ln["lid"], {})[str(vr.id)] = {
                     # 0원은 값이 아니다 — 견적을 못 냈다는 뜻이라 최저가·채택 후보에서 뺀다.
-                    "state": "quoted" if cost is not None and cost > 0 else "no_price",
+                    # 완제품 줄에 포함된 라인은 "included"(값은 대표 라인 칸에 있다).
+                    "state": "included" if covered else (
+                        "quoted" if cost is not None and cost > 0 else "no_price"),
+                    "covered_by": covered,
+                    # 대표 라인 칸 — 이 값이 덮는 라인 전부(완제품). 다른 벤더의 이 라인 값과
+                    # 그대로 견주면 안 된다(그쪽은 이 라인 하나 값이다) — 화면이 표시한다.
+                    "covers": (lambda l: l if len(l) > 1 else [])(
+                        line_ids_of(it) if isinstance(it, dict) and not covered else []),
                     "unit_cost": cost,
                     "currency": q.currency or "USD",
                     "lead_time": (it.get("lead_time") or "") if isinstance(it, dict) else "",
@@ -1326,10 +1346,13 @@ def _line_board(s, rfq) -> dict:
         for key, c in row.items():
             if c.get("state") != "quoted" or c.get("unit_cost") is None:
                 continue
+            if len(c.get("covers") or []) > 1:
+                continue      # 완제품 값은 이 라인 하나의 값과 견줄 수 없다
             if best is None or c["unit_cost"] < best["unit_cost"]:
                 best = {**c, "vrfq_id": int(key)}
         ln["sent_count"] = len(states)
-        ln["quoted_count"] = sum(1 for x in states if x == "quoted")
+        # 완제품 줄에 포함된 칸도 '값을 받은 것'으로 센다(그 값은 대표 라인 칸에 있다).
+        ln["quoted_count"] = sum(1 for x in states if x in ("quoted", "included"))
         # 최저가 — 통화가 섞이면 비교가 뜻을 잃으므로 한 통화일 때만 매긴다.
         curs = {c.get("currency") for c in row.values() if c.get("state") == "quoted"}
         ln["best"] = best if len(curs) <= 1 else None
@@ -1431,28 +1454,43 @@ def save_line_awards(rfq_id: int, body: LineAwardsSave, user: dict = Depends(get
             row = s.query(DealLineAward).filter_by(rfq_id=rfq.id, lid=lid).first()
             if not a.vendor_quote_id:
                 if row is not None:
-                    s.delete(row)
-                    cleared += 1
+                    # 완제품으로 채택한 라인이면 묶음째 취소한다 — 한 라인만 빼면 남은 라인이
+                    # 0원으로 채택된 채 남는다.
+                    group = _bundle_lids(vq_map.get(row.vendor_quote_id), lid)
+                    for g in group:
+                        r2 = s.query(DealLineAward).filter_by(
+                            rfq_id=rfq.id, lid=g, vendor_quote_id=row.vendor_quote_id).first()
+                        if r2 is not None:
+                            s.delete(r2)
+                            cleared += 1
                 continue
             q = vq_map.get(a.vendor_quote_id)
             if q is None:
                 raise HTTPException(status_code=400, detail="이 딜의 벤더 견적이 아닙니다.")
-            # 채택 시점의 값을 사본으로 남긴다 — 벤더가 견적을 고쳐 보내도 무엇을 보고
-            # 골랐는지가 남는다(현재가는 vendor_quote_id 를 따라가면 언제든 다시 읽는다).
-            hit, alt = _quote_line(lines_src, q, lid, a.alt)
-            if row is None:
-                row = DealLineAward(rfq_id=rfq.id, lid=lid)
-                s.add(row)
-            row.vendor_quote_id = q.id
-            row.alt = alt
-            row.vendor_id = vendor_of_vrfq.get(q.vendor_rfq_id) or None
-            row.unit_cost = _cell_cost(hit)
-            row.currency = q.currency or "USD"
-            row.lead_time = (hit.get("lead_time") or "")[:60]
-            row.reason = ((a.reason or "").strip() or None)
-            row.chosen_at = now
-            row.chosen_by = (user.get("id") or None) if user else None
-            saved += 1
+            # 완제품 줄이면 그 줄이 덮는 라인 전부를 같은 견적으로 채택한다(대표 라인에
+            # 값, 나머지는 0 + "Included in 대표"). 어느 라인 칸에서 눌러도 같다.
+            group = [g for g in _bundle_lids(q, lid) if g in known]
+            for g in group:
+                # 채택 시점의 값을 사본으로 남긴다 — 벤더가 견적을 고쳐 보내도 무엇을 보고
+                # 골랐는지가 남는다(현재가는 vendor_quote_id 를 따라가면 언제든 다시 읽는다).
+                hit, alt = _quote_line(lines_src, q, g, a.alt if g == lid else None)
+                r2 = s.query(DealLineAward).filter_by(rfq_id=rfq.id, lid=g).first()
+                if r2 is None:
+                    r2 = DealLineAward(rfq_id=rfq.id, lid=g)
+                    s.add(r2)
+                r2.vendor_quote_id = q.id
+                r2.alt = alt
+                r2.vendor_id = vendor_of_vrfq.get(q.vendor_rfq_id) or None
+                r2.unit_cost = 0.0 if hit.get("covered_by") else _cell_cost(hit)
+                r2.currency = q.currency or "USD"
+                r2.lead_time = (hit.get("lead_time") or "")[:60]
+                note = (a.reason or "").strip()
+                if hit.get("covered_by") and not note:
+                    note = f"Included in {hit['covered_by']} (complete set)"
+                r2.reason = note or None
+                r2.chosen_at = now
+                r2.chosen_by = (user.get("id") or None) if user else None
+                saved += 1
         s.commit()
         rfq = s.query(RFQ).filter_by(id=rfq_id).first()
         return {"ok": True, "saved": saved, "cleared": cleared, **_line_board(s, rfq)}
@@ -1517,6 +1555,8 @@ def awarded_items(rfq_id: int):
             q = vq_map.get(a.vendor_quote_id)
             # 단가·납기는 벤더가 쓴 것을 쓴다. 대안이 있는 줄은 고른 그 대안의 줄이다.
             hit = _quote_line(lines_src, q, lid, a.alt)[0] if q else {}
+            # 완제품 줄에 포함된 라인 — 값은 대표 라인에 있다. 원가 0, 비고에 "Included in".
+            covered = hit.get("covered_by") or ""
             cur = (q.currency if q else a.currency) or "USD"
             if cur not in currencies:
                 currencies.append(cur)
@@ -1529,16 +1569,18 @@ def awarded_items(rfq_id: int):
                 "description": it.get("description") or hit.get("description") or "",
                 # 벤더 쪽 품번은 따로 실어 보낸다 — 발주서(6단계)는 이쪽을 써야
                 # 벤더가 자기 번호로 알아본다.
-                "vendor_part_no": hit.get("part_no") or "",
+                "vendor_part_no": "" if covered else (hit.get("part_no") or ""),
                 "type": it.get("type") or hit.get("type") or "",
                 "serial_no": it.get("serial_no") or hit.get("serial_no") or "",
                 "maker": it.get("maker") or hit.get("maker") or hit.get("manufacturer") or "",
                 "qty": it.get("qty", 1) or 1,
                 "unit": hit.get("unit") or it.get("unit") or "PCS",
-                "cost_price": a.unit_cost if a.unit_cost is not None else _cell_cost(hit),
+                "cost_price": 0 if covered else (a.unit_cost if a.unit_cost is not None else _cell_cost(hit)),
                 "currency": cur,
                 "lead_time": hit.get("lead_time") or a.lead_time or "",
-                "remark": it.get("remark") or "",
+                "remark": (f"Included in {covered}" + (f" · {it.get('remark')}" if it.get("remark") else ""))
+                          if covered else (it.get("remark") or ""),
+                "included_in": covered,
                 "category_id": it.get("category_id"),
                 "applied_to": it.get("applied_to"),
                 "vendor_id": a.vendor_id or 0,

@@ -21542,3 +21542,20 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
   padding: 10px 12px;
 }
 .site-fill-box > .form-field { margin: 0; }
+
+/* 비교표 — 완제품(한 줄이 여러 라인을 덮음): 대표 칸의 "covers L01·L02", 나머지 칸의 "incl. in L01" */
+.lb-covers { color: #8a5a00; font-weight: 600; }
+.lb-c.c-included { background: #f6f8fb; color: var(--muted); }
+.lb-incl { font-size: 11px; white-space: nowrap; }
+
+/* 벤더 견적 Line 칸 — 완제품(여러 라인) 고르기: 대표 드롭다운 + 덮는 라인 칩 + "+ line" */
+.line-multi { display: flex; flex-direction: column; gap: 3px; }
+.line-extra { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+.line-chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  font-size: 11px; font-weight: 600; padding: 1px 4px 1px 6px;
+  border: 1px solid var(--line-strong); border-radius: 10px; background: #f4f7fb;
+}
+.line-chip.line-dup { border-color: #d97706; background: #fff7ed; }
+.line-chip button { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 0 2px; line-height: 1; }
+.line-add { font-size: 11px; padding: 1px 4px; max-width: 90px; color: var(--muted); }

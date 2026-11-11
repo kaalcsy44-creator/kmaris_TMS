@@ -745,6 +745,10 @@ export type VendorQuoteItem = {
    *  다시 찾을 수 없어서다(web/lib/deal.ts makeItemMatcher). 편집기는 받은 값을
    *  그대로 돌려보내기만 하면 된다 — 새 줄이면 비워 두고 서버가 붙인다. */
   lid?: string;
+  /** 이 줄이 덮는 라인 전부(대표 lid 포함, 2개 이상일 때만). 벤더가 딜의 여러 줄을 한
+   *  물건(complete 제품)으로 견적한 경우다 — 비교표는 대표 라인에 값, 나머지는
+   *  "Included in 대표"로 보이고 채택도 묶음째 한다. */
+  lids?: string[];
 };
 
 export type CustomerQuoteItem = {
@@ -803,7 +807,11 @@ export type CustomerQuoteItem = {
 export type LineCell = {
   /** sent=물어봤고 아직 답 없음 · quoted=값이 왔다 · no_price=답은 왔는데 값이 비었다
    *  · omitted=견적은 왔는데 이 줄만 빠졌다 · declined=견적 불가 통보 */
-  state: "sent" | "quoted" | "no_price" | "omitted" | "declined";
+  state: "sent" | "quoted" | "no_price" | "omitted" | "declined" | "included";
+  /** state=included — 이 라인의 값이 들어 있는 대표 라인(완제품 줄). */
+  covered_by?: string;
+  /** 대표 라인 칸 — 이 값이 덮는 라인 전부(완제품). 비어 있으면 이 라인 하나의 값. */
+  covers?: string[];
   unit_cost?: number | null;
   currency?: string;
   lead_time?: string;

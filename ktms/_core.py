@@ -1765,6 +1765,26 @@ def line_id_of(it) -> str:
     return str(it.get(LINE_ID_KEY) or "").strip()
 
 
+LINE_IDS_KEY = "lids"
+
+
+def line_ids_of(it) -> list[str]:
+    """이 줄이 덮는 라인 전부 — 대표(lid)가 맨 앞.
+
+    벤더가 딜의 여러 줄을 한 물건으로 견적하는 일이 있다(complete 제품: 에어혼 본체·히터·
+    밸브를 따로 물었는데 '완제품 1대'로 답한 경우). 그 줄은 lid 에 대표 라인을, lids 에
+    덮는 라인 전체를 든다. lid 하나로만 읽는 예전 코드는 대표 라인만 보므로 그대로 돈다."""
+    lid = line_id_of(it)
+    if not lid:
+        return []
+    out = [lid]
+    for v in (it.get(LINE_IDS_KEY) or []) if isinstance(it, dict) else []:
+        v = str(v or "").strip()
+        if v and v not in out:
+            out.append(v)
+    return out
+
+
 def assign_line_ids(items, reserved=None) -> list:
     """품목 줄에 딜 안에서 변하지 않는 라인 ID(lid)를 매긴다(제자리 수정).
 
@@ -1845,8 +1865,8 @@ def deal_line_docs(s, rfq_id: int) -> list:
 
 def deal_used_line_ids(s, rfq_id: int) -> set[str]:
     """1단계 RFQ 밖에서 아직 쓰이는 줄 이름 — 다른 문서의 품목 줄과 채택 기록."""
-    used = {line_id_of(it) for d in deal_line_docs(s, rfq_id)
-            for it in (d.items or []) if line_id_of(it)}
+    used = {lid for d in deal_line_docs(s, rfq_id)
+            for it in (d.items or []) for lid in line_ids_of(it)}
     used |= {a.lid for a in s.query(DealLineAward).filter_by(rfq_id=rfq_id).all() if a.lid}
     return used
 
@@ -1892,6 +1912,23 @@ def index_doc_by_line(base_items, doc_items, kits: bool = False) -> dict[str, di
         for lid, group in sets.items():
             if len(group) > 1:
                 out[lid] = _kit_line(base_of.get(lid) or {}, group)
+        # 한 줄이 여러 라인을 덮는 완제품(lids) — 대표 라인 밖의 라인은 "그 줄에 포함"으로
+        # 잇는다. 값은 0 이고 covered_by 로 대표를 가리킨다. 같은 라인에 따로 이은 줄이
+        # 있으면 그쪽이 먼저다(사람이 일부러 따로 받은 값이다).
+        for d in doc:
+            lids = line_ids_of(d)
+            for extra in lids[1:]:
+                if extra in named and extra not in out:
+                    b = base_of.get(extra) or {}
+                    out[extra] = {
+                        **d,
+                        "description": b.get("description") or d.get("description") or "",
+                        "qty": b.get("qty") or d.get("qty"),
+                        "unit": b.get("unit") or d.get("unit") or "",
+                        "cost_price": 0, "unit_price": 0, "amount": 0,
+                        "covered_by": lids[0],
+                    }
+                    taken.add(id(d))
     rest = [d for d in doc if id(d) not in taken]
     if not rest:
         return out
@@ -2091,7 +2128,8 @@ def stamp_doc_line_ids(base_items, doc_items, scope_lids=None) -> dict:
         return {"matches": [], "unmatched": targets if base else []}
     scope = {str(x).strip() for x in (scope_lids or []) if str(x or "").strip()}
     cands = [b for b in base if not scope or line_id_of(b) in scope]
-    claimed = {line_id_of(d) for d in doc if isinstance(d, dict) and line_id_of(d)}
+    # 완제품 줄(lids)이 덮은 라인도 이미 잡힌 라인이다 — 남은 줄을 거기에 붙이지 않는다.
+    claimed = {lid for d in doc if isinstance(d, dict) for lid in line_ids_of(d)}
     free = {line_id_of(b): b for b in cands if line_id_of(b) not in claimed}
 
     matches: list[dict] = []

@@ -40,6 +40,7 @@ const CELL_TITLE: Record<LineCell["state"], string> = {
   no_price: "Replied, but this line has no price",
   omitted: "Quote received, but this line was left out",
   declined: "Declined to quote",
+  included: "Included in a complete-set line — the price is on that line",
 };
 
 /** 비교 통화 선택지 — 견적에 실제로 나온 통화가 여기에 없으면 목록 끝에 붙는다. */
@@ -322,6 +323,8 @@ export default function LineBoard({
       for (const v of vendors) {
         const c = cells[l.lid]?.[String(v.vrfq_id)];
         if (c?.state !== "quoted" || c.unit_cost == null || Number(c.unit_cost) <= 0) continue;
+        // 완제품 칸(여러 라인 값)은 이 라인 하나의 값과 견줄 수 없다 — 최저가에서 뺀다.
+        if ((c.covers?.length ?? 0) > 1) continue;
         // 칸의 unit_cost 는 대안이 있으면 이미 그중 최저가다.
         const x = conv(c.unit_cost, c.currency);
         if (x == null) { ok = false; break; }
@@ -445,6 +448,7 @@ export default function LineBoard({
       if (c.state === "omitted") return "– not quoted";
       if (c.state === "no_price") return "no price";
       if (c.state === "sent") return "• waiting";
+      if (c.state === "included") return `incl. in ${c.covered_by ?? ""}`;
       // ✓(U+2713) — PDF 글꼴(Noto Sans KR)에 ✔(U+2714) 글리프가 없어 빈 네모로 찍힌다.
       const marks = [
         isAwardCell(l, c, alt?.idx ?? null) ? "✓" : "",
@@ -689,7 +693,8 @@ export default function LineBoard({
                       isBest={!!c && isBestCell(l, v.vrfq_id)}
                       cmp={c?.state === "quoted" ? cmpText(c.unit_cost, c.currency) : ""}
                       isAward={isAwardCell(l, c)}
-                      canAward={mode === "award" && l.named && !busy && c?.state === "quoted"}
+                      canAward={mode === "award" && l.named && !busy
+                        && (c?.state === "quoted" || c?.state === "included")}
                       onModeSwitch={canMode && (c?.kit_lines ?? 0) > 1
                         ? () => setLineMode(l.lid, c!.vendor_quote_id!, "alt") : undefined}
                       onAward={() => {
@@ -855,12 +860,20 @@ function Cell({
         {cmp ? <span className="lb-cmpv">{cmp}</span> : null}
         {cell.lead_time ? <span className="lb-lt">{cell.lead_time}</span> : null}
         {altQty ? <span className="lb-lt">{altQty}</span> : null}
+        {cell.covers && cell.covers.length > 1 ? (
+          <span className="lb-lt lb-covers"
+                title={`Complete set — this price covers ${cell.covers.join(", ")}. Compare it with the sum of those lines, not with this line alone.`}>
+            covers {cell.covers.join("·")}
+          </span>
+        ) : null}
         {cell.kit_lines && cell.kit_lines > 1 ? (
           <span className="lb-lt" title="The vendor priced this line as several parts — the price is the set total per unit">
             {cell.kit_lines}-line set
           </span>
         ) : null}
       </>
+    ) : cell.state === "included" ? (
+      <span className="lb-incl">incl. in <b>{cell.covered_by}</b></span>
     ) : cell.state === "declined" ? (
       <span className="lb-mark">✕</span>
     ) : cell.state === "omitted" ? (

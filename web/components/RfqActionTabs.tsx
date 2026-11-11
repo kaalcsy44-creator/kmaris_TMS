@@ -4480,8 +4480,9 @@ function VendorQuoteItemEditor({
   const lidRows = new Map<string, number[]>();
   for (const e of plan) {
     if (e.kind !== "item") continue;
-    const lid = (e.item.lid || "").trim();
-    if (lid) lidRows.set(lid, [...(lidRows.get(lid) ?? []), e.seq]);
+    // 완제품 줄(lids)은 덮는 라인 전부에 이름을 올린다 — 다른 행이 같은 라인을 잡으면 경고가 선다.
+    const all = new Set([(e.item.lid || "").trim(), ...(e.item.lids ?? []).map((x) => x.trim())]);
+    for (const lid of all) if (lid) lidRows.set(lid, [...(lidRows.get(lid) ?? []), e.seq]);
   }
   // 옵션 제목행 <td colSpan> 이 덮을 칸 수 — 숨긴 컬럼을 빼고 센다.
   const visibleColSpan = grid.cols.filter((c) => c.fixed || !grid.layout.hidden.has(c.key)).length;
@@ -4603,11 +4604,12 @@ function VendorQuoteItemEditor({
                 <td>
                   <LinePick
                     value={it.lid || ""}
+                    extra={(it.lids ?? []).filter((x) => x && x !== it.lid)}
                     lines={lines}
                     asked={asked}
                     seq={entry.seq}
                     lidRows={lidRows}
-                    onChange={(lid) => onChange(items.map((x, idx) => (idx === i ? { ...x, lid } : x)))}
+                    onChange={(lid, lids) => onChange(items.map((x, idx) => (idx === i ? { ...x, lid, lids } : x)))}
                   />
                 </td>
                 <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={it.part_no} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
@@ -4659,6 +4661,7 @@ function VendorQuoteItemEditor({
  *  비어 있으면 눈에 띄게 둔다 — 이 줄은 개요·소싱 보드에서 어느 품목에도 안 붙는다. */
 function LinePick({
   value,
+  extra = [],
   lines,
   asked,
   seq,
@@ -4666,15 +4669,22 @@ function LinePick({
   onChange,
 }: {
   value: string;
+  /** 대표(value) 말고 이 줄이 더 덮는 라인 — 완제품 하나가 딜의 여러 줄을 덮을 때. */
+  extra?: string[];
   lines?: LineOption[];
   asked?: string[];
   /** 이 행의 번호(No.) — lidRows 에서 자기 자신을 빼는 데 쓴다. */
   seq?: number;
   /** 줄 이름 → 그 이름을 단 행 번호들(편집기 전체). */
   lidRows?: Map<string, number[]>;
-  onChange: (lid: string) => void;
+  /** lids = 덮는 라인 전부(대표 포함). 하나뿐이면 undefined — 예전 저장 모양 그대로. */
+  onChange: (lid: string, lids: string[] | undefined) => void;
 }) {
   const others = (lid: string) => (lidRows?.get(lid) ?? []).filter((n) => n !== seq);
+  const emit = (lid: string, more: string[]) => {
+    const rest = lid ? [...new Set(more.filter((x) => x && x !== lid))] : [];
+    onChange(lid, rest.length ? [lid, ...rest] : undefined);
+  };
   const dupOf = value ? others(value) : [];
   const dupNote = dupOf.length
     ? `Also linked on row ${dupOf.join(", ")} — these rows are compared as one set (sum of qty × price ÷ project qty).`
@@ -4690,12 +4700,12 @@ function LinePick({
   const first = lines.filter((l) => askedSet.has(l.lid));
   const rest = lines.filter((l) => !askedSet.has(l.lid));
   const cur = lines.find((l) => l.lid === value);
-  return (
+  const primary = (
     <select
       className={`line-pick${value ? "" : " unlinked"}`}
       value={value}
       title={dupNote || (cur ? label(cur) : value || "Not linked to a project item")}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => emit(e.target.value, extra)}
     >
       <option value="">— link —</option>
       {value && !cur ? <option value={value}>{value}</option> : null}
@@ -4718,6 +4728,42 @@ function LinePick({
         ))
       )}
     </select>
+  );
+  if (!value) return primary;
+  // 완제품 — 한 줄이 딜의 여러 라인을 덮는다. 대표 라인 아래에 더 덮는 라인을 칩으로 쌓는다.
+  const addable = lines.filter((l) => l.lid !== value && !extra.includes(l.lid));
+  return (
+    <div className="line-multi">
+      {primary}
+      {extra.length || addable.length ? (
+        <div className="line-extra">
+          {extra.map((x) => {
+            const used = others(x);
+            const ln = lines.find((l) => l.lid === x);
+            return (
+              <span key={x} className={`line-chip${used.length ? " line-dup" : ""}`}
+                    title={(ln ? label(ln) : x) + (used.length
+                      ? `
+Also linked on row ${used.join(", ")} — that row's own price wins for ${x}.` : "")}>
+                + {x}
+                <button type="button" aria-label={`Remove ${x}`}
+                        onClick={() => emit(value, extra.filter((y) => y !== x))}>×</button>
+              </span>
+            );
+          })}
+          {addable.length ? (
+            <select className="line-add" value=""
+                    title="This row is one complete item covering several project lines — add the other lines it covers"
+                    onChange={(e) => e.target.value && emit(value, [...extra, e.target.value])}>
+              <option value="">+ line</option>
+              {addable.map((l) => (
+                <option key={l.lid} value={l.lid}>{label(l)}</option>
+              ))}
+            </select>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -4771,6 +4817,8 @@ function normalizeVendorQuoteItem(raw: Partial<VendorQuoteItem> & { manufacturer
     // 라인 ID 는 정규화가 지우면 안 되는 값이다 — 파일에서 읽어 온 줄에는 없고,
     // 벤더 RFQ 에서 불러온 줄에는 있다.
     lid: raw.lid ?? "",
+    // 완제품이 덮는 라인 전부 — 대표(lid) 하나뿐이면 싣지 않는다(예전 저장 모양 그대로).
+    ...(raw.lids && raw.lids.length > 1 ? { lids: raw.lids } : {}),
   };
 }
 

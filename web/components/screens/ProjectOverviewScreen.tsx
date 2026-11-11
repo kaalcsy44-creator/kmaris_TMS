@@ -1862,6 +1862,7 @@ const CELL_STATE_LABEL: Record<LineCell["state"], string> = {
   omitted: "left this item out of the quote",
   sent: "awaiting reply",
   declined: "declined",
+  included: "included in a complete-set line",
 };
 
 /**
@@ -1899,7 +1900,7 @@ function VendorLineRows({
   const vendorOf = new Map(board.vendors.map((v) => [String(v.vrfq_id), v]));
   const awardQ = line.award?.vendor_quote_id ?? null;
   const bestQ = line.best?.vendor_quote_id ?? null;
-  const order: Record<LineCell["state"], number> = { quoted: 2, no_price: 3, omitted: 4, sent: 5, declined: 6 };
+  const order: Record<LineCell["state"], number> = { quoted: 2, included: 2, no_price: 3, omitted: 4, sent: 5, declined: 6 };
   const rows = Object.entries(cells)
     .map(([k, c]) => ({ vrfqId: Number(k), v: vendorOf.get(k), c }))
     .map((e) => ({
