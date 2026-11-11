@@ -34,6 +34,7 @@ import {
   lookupVessel,
   fetchSanctionsStatus,
   parseBusinessCard,
+  fetchSiteProfile,
   updateCompanyProfile,
   updateCustomerCompanyInfo,
   fetchCustomerRoleSuggestions,
@@ -87,6 +88,7 @@ import type { PermGrid } from "@/lib/auth";
 import { toggleBold, onBoldKey } from "@/lib/mdEdit";
 import type {
   BusinessCardOcr,
+  SiteProfile,
   CompanyProfile,
   CustomerOption,
   SettingsCustomer,
@@ -1216,6 +1218,10 @@ export function MakersTab() {
         />
       )}
       renderField={({ key, label, form, setForm, rows }) => {
+        // 홈페이지 주소 → 빈 칸 자동 채우기(명함 스캔의 짝).
+        if (key === "website") {
+          return <WebsiteAutofillField label={label} form={form} setForm={setForm} kind="maker" />;
+        }
         if (key === "name") {
           return (
             <PickOrTypeField
@@ -1514,6 +1520,10 @@ export function CustomersTab() {
         />
       )}
       renderField={({ key, label, form, setForm, rows }) => {
+        // 홈페이지 주소 → 빈 칸 자동 채우기(명함 스캔의 짝).
+        if (key === "website") {
+          return <WebsiteAutofillField label={label} form={form} setForm={setForm} kind="customer" />;
+        }
         // 회사명 = 기존 등록 목록에서 고르거나(같은 회사의 다른 담당자 추가) 새로 입력.
         if (key === "name") {
           return (
@@ -2910,6 +2920,116 @@ function applyBusinessCard<
   return { next: rec as unknown as T, filled };
 }
 
+// 홈페이지 읽기 결과를 폼에 반영 — 명함과 같은 규칙: 빈 칸만 채우고, 다중값은 없는 값만 더한다.
+function applySiteProfile<
+  T extends {
+    name: string; contact: string; address: string; website: string; logo: string; note: string;
+    specialization: string;
+    addresses: string[]; emails: string[]; phones: string[]; regions: string[];
+  }
+>(form: T, p: SiteProfile, logo: string): { next: T; filled: string[] } {
+  const card = applyBusinessCard(form, {
+    company: p.company, tax_id: p.tax_id, emails: p.emails, phones: p.phones, regions: p.regions,
+  });
+  const rec = { ...card.next } as Record<string, unknown>;
+  const filled = [...card.filled];
+  // 주소는 본사·지사 여럿 — 명함(한 줄)과 달리 목록째 들어온다.
+  const cur = ((rec.addresses as string[]) ?? []).filter((v) => v.trim());
+  const add = uniqStrings(p.addresses ?? []).filter(
+    (v) => !cur.some((c) => c.trim().toLowerCase() === v.toLowerCase())
+  );
+  if (add.length) {
+    rec.addresses = [...cur, ...add];
+    rec.address = (rec.addresses as string[])[0] ?? "";
+    filled.push("Address");
+  }
+  function text(key: string, label: string, value?: string) {
+    const v = (value ?? "").trim();
+    if (!v || !(key in rec) || String(rec[key] ?? "").trim()) return;
+    rec[key] = v;
+    filled.push(label);
+  }
+  text("specialization", "Specialization", p.specialization);
+  text("note", "About", p.about);
+  text("logo", "Logo", logo);
+  // 앞머리 없이 적은 주소는 열리는 꼴(https://…)로 바로잡는다.
+  if (p.website && !/^https?:\/\//i.test(String(rec.website ?? "").trim())) rec.website = p.website;
+  return { next: rec as unknown as T, filled };
+}
+
+// Website 칸 + "Fill from site" — 홈페이지를 읽어(서버가 Claude 로) 회사명·주소·연락처·
+// 소개·취급품목·로고를 빈 칸에 채운다. 저장은 하지 않는다(Add 는 사람이 누른다).
+function WebsiteAutofillField<
+  T extends {
+    name: string; contact: string; address: string; website: string; logo: string; note: string;
+    specialization: string;
+    addresses: string[]; emails: string[]; phones: string[]; regions: string[];
+  }
+>({ label, form, setForm, kind }: {
+  label: string; form: T; setForm: (next: T) => void; kind: "customer" | "vendor" | "maker";
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [filled, setFilled] = useState<string[]>([]);
+  // 읽는 데 20~30초 걸린다 — 그사이 사람이 적은 값을 덮지 않도록 끝난 시점의 폼에 얹는다.
+  const latest = useRef(form);
+  latest.current = form;
+
+  async function run() {
+    const url = form.website.trim();
+    if (!url || busy) return;
+    setBusy(true);
+    setErr("");
+    setFilled([]);
+    try {
+      const p = await fetchSiteProfile(url, kind);
+      let logo = "";
+      if (p.logo) {
+        try {
+          const blob = await (await fetch(p.logo)).blob();
+          logo = await fileToLogoDataUrl(new File([blob], "logo", { type: blob.type }));
+        } catch {
+          logo = "";   // 그림이 깨졌으면 로고만 건너뛴다 — 나머지 칸은 살린다
+        }
+      }
+      const { next, filled: got } = applySiteProfile(latest.current, p, logo);
+      setForm(next);
+      setFilled(got);
+      if (!got.length) setErr("홈페이지에서 새로 채울 내용을 찾지 못했습니다(이미 입력된 칸은 덮어쓰지 않습니다).");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "홈페이지 읽기 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="form-field site-fill-field">
+      <span>{label}</span>
+      <div className="site-fill-row">
+        <input
+          value={form.website}
+          placeholder="https://www.example.com"
+          onChange={(e) => setForm({ ...form, website: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              run();
+            }
+          }}
+        />
+        <button type="button" className="btn sm" disabled={busy || !form.website.trim()} onClick={run}
+                title="Read the website and fill empty fields — company, address, contacts, about, logo">
+          {busy ? "Reading…" : "✨ Fill from site"}
+        </button>
+      </div>
+      {busy ? <span className="hint-inline">홈페이지를 읽는 중입니다 — 20~30초 걸립니다.</span> : null}
+      {filled.length ? <span className="action-ok">Filled: {filled.join(", ")}</span> : null}
+      {err ? <span className="action-err">{err}</span> : null}
+    </div>
+  );
+}
+
 // 명함 스캔 패널 — 사진을 붙여넣거나(Ctrl+V) 파일을 고르면 Claude 비전이 읽어
 // 회사·담당자·주소·사업자번호·이메일·연락처를 아래 입력칸에 채워 준다.
 function BusinessCardScan({ onApply }: { onApply: (card: BusinessCardOcr) => string[] }) {
@@ -3328,6 +3448,10 @@ export function VendorsTab() {
         />
       )}
       renderField={({ key, label, form, setForm, rows }) => {
+        // 홈페이지 주소 → 빈 칸 자동 채우기(명함 스캔의 짝).
+        if (key === "website") {
+          return <WebsiteAutofillField label={label} form={form} setForm={setForm} kind="vendor" />;
+        }
         if (key === "name") {
           return (
             <PickOrTypeField

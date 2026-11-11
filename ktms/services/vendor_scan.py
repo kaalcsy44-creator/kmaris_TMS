@@ -304,7 +304,10 @@ def fetch_site(website: str) -> dict:
     body_only = re.sub(r"### \S+", "", text).strip()
     return {"pages": pages, "text": text, "error": "",
             "thin": len(body_only) < THIN_CHARS,
-            "images": _image_urls(raws)}
+            "images": _image_urls(raws),
+            # 첫 화면 원문 — 홈페이지로 회사 정보 채우기(site_profile)가 로고·꼬리말
+            # (주소·전화는 대개 맨 아래에 있어 위 text 의 앞머리 자르기에 잘린다)을 본다.
+            "home_html": body, "home_url": base}
 
 
 # 직접 읽어서 안 되는 사이트가 생각보다 많다. 하나는 자바스크립트로만 그리는 사이트

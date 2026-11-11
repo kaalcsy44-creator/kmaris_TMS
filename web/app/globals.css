@@ -21529,3 +21529,9 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
 .hs-line { line-height: 1.45; overflow-wrap: anywhere; }
 .hs-src { margin-left: 6px; font-size: 11.5px; color: #64748b; }
 .hs-warn { margin-top: 6px; font-size: 12.5px; color: #8a5a00; }
+
+/* 등록 폼 Website 칸 + "Fill from site" 버튼(홈페이지로 빈 칸 채우기) */
+.site-fill-field { display: flex; flex-direction: column; gap: 4px; }
+.site-fill-row { display: flex; gap: 6px; align-items: stretch; }
+.site-fill-row input { flex: 1; min-width: 0; }
+.site-fill-row .btn { white-space: nowrap; }

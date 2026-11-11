@@ -1120,6 +1120,22 @@ def _scan_partner_row(Model, row_id: int, website: str, kind: str):
         s.close()
 
 
+@app.post("/api/admin/partners/site-profile", dependencies=[Depends(require_token)])
+def partner_site_profile(website: str = Body("", embed=True), kind: str = Body("vendor", embed=True)):
+    """홈페이지 주소 → 등록 폼 자동 입력값(회사명·주소·연락처·소개·취급품목·로고).
+
+    명함 스캔과 같은 자리의 짝이다 — **읽기만 한다**. 화면이 빈 칸에만 채우고 저장은
+    사람이 한다. kind 는 customer|vendor|maker(소개·취급품목 문장의 관점만 달라진다).
+    """
+    from services.site_profile import SiteProfileError, profile_from_site
+    try:
+        return profile_from_site(website, kind if kind in ("customer", "vendor", "maker") else "vendor")
+    except SiteProfileError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"홈페이지 읽기 실패: {exc}") from exc
+
+
 @app.post("/api/admin/settings/vendors/{row_id}/scan-website",
           dependencies=[Depends(require_token)])
 def scan_vendor_website(row_id: int, website: str = Body("", embed=True)):

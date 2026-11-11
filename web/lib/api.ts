@@ -21,6 +21,7 @@ import type {
   PoWorkItem,
   PoWorkOptions,
   BusinessCardOcr,
+  SiteProfile,
   PayableBillOcr,
   RfqOcrResult,
   RfqSourceFile,
@@ -615,6 +616,11 @@ export function parseBusinessCard(file: File): Promise<BusinessCardOcr> {
   const fd = new FormData();
   fd.append("file", file);
   return postForm<BusinessCardOcr>("/api/admin/ocr/business-card", fd);
+}
+
+// 홈페이지 주소 → 등록 폼 값(회사명·주소·연락처·소개·취급품목·로고). 저장은 하지 않는다.
+export function fetchSiteProfile(website: string, kind: "customer" | "vendor" | "maker"): Promise<SiteProfile> {
+  return post<SiteProfile>("/api/admin/partners/site-profile", { website, kind });
 }
 
 // 고지서·거래명세서(사진·캡쳐·PDF) 인식 — Add payable 폼 자동 입력용(저장은 하지 않는다).

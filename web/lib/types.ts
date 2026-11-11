@@ -587,6 +587,22 @@ export type BusinessCardOcr = {
   regions?: string[];
 };
 
+// 홈페이지 읽기 결과 — Customer/Vendor/Maker 등록 폼 자동 채우기용(명함 스캔의 짝).
+export type SiteProfile = {
+  website: string;
+  company: string;
+  addresses: string[];
+  phones: string[];
+  emails: string[];
+  regions: string[];
+  tax_id: string;
+  about: string;
+  specialization: string;
+  /** data URL(원본 그림) — 화면이 로고 크기로 줄여 담는다. 못 찾으면 "". */
+  logo: string;
+  pages: string[];
+};
+
 export type OrderOcrResult = {
   customer_hint?: string | null;
   po_no?: string | null;
