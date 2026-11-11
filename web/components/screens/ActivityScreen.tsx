@@ -37,7 +37,7 @@ import ActivityNoteForm, {
 } from "@/components/common/ActivityNoteForm";
 import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen";
 import Modal from "@/components/common/Modal";
-import { useCachedData } from "@/lib/useCachedData";
+import { invalidateCache, useCachedData } from "@/lib/useCachedData";
 
 // 내부 10단계 → 5개 버킷(RFQ 1–2 / Quote 3–4 / PO 5–6 / Documents 7–8 / AR 9–10).
 const PHASES: { label: string; from: number; to: number }[] = [
@@ -145,7 +145,12 @@ export default function ActivityScreen({ mode = "activity" }: { mode?: "activity
   // 프로젝트 개요의 "Activity Log →" 바로가기가 ?q=<프로젝트번호> 로 넘어온다 —
   // 그 딜만 걸러 보이게 검색어 초기값으로 쓴다(이후엔 사용자가 자유롭게 바꾼다).
   const params = useSearchParams();
-  const [data, setData] = useState<PipelineData | null>(null);
+  // 딜 목록은 Pipeline·Briefing·Documents 와 같은 "pipeline" 캐시를 쓴다 — 탭을 오갈 때
+  // 받아 둔 목록을 바로 그리고 뒤에서 새로 받는다(예전엔 열 때마다 전체를 새로 받느라
+  // Activity·Mail 탭이 매번 Loading… 에 멈췄다).
+  const { data: pipe, error: pipeErr, refresh: refreshPipe } =
+    useCachedData<PipelineData>("pipeline", () => fetchPipeline());
+  const data = pipe ?? null;
   const [err, setErr] = useState<string | null>(null);
   const [q, setQ] = useState(() => params.get("q") ?? "");
   const [dateFilter, setDateFilter] = useState<"all" | "today" | "date">("all");
@@ -185,12 +190,11 @@ export default function ActivityScreen({ mode = "activity" }: { mode?: "activity
   const { data: mailByDate } = useCachedData("mail:by-date", () =>
     fetchMailByDate().catch(() => null));
 
+  // 데이터를 바꾼 뒤 — 공용 캐시를 새로 받고, 대시보드 집계 캐시도 비운다(ProjectsScreen 과 같은 규칙).
   function load() {
-    fetchPipeline()
-      .then(setData)
-      .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
+    invalidateCache("dashboard");
+    refreshPipe().catch((e) => setErr(e instanceof Error ? e.message : "Error"));
   }
-  useEffect(load, []);
 
   const steps = data?.steps ?? [];
   const today = todayISO();
@@ -462,6 +466,7 @@ export default function ActivityScreen({ mode = "activity" }: { mode?: "activity
   );
 
   if (err) return <div className="state error">{err}</div>;
+  if (pipeErr && !data) return <div className="state error">{pipeErr.message}</div>;
   if (!data) return <div className="state">Loading…</div>;
 
   return (
