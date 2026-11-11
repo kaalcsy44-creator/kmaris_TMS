@@ -2651,11 +2651,13 @@ function CustomerQuoteDetailModal({
   const [mergeOpen, setMergeOpen] = useState(false);
   const [defaultMargin, setDefaultMargin] = useState(DEFAULT_MARGIN_PCT);
   const effRate = fxRate ?? USD_KRW_RATE;
-  // 원가 통화가 EUR 처럼 USD·KRW 밖이면 교차환율(1 EUR = ? USD)이 따로 있어야 한다 —
-  // 예전엔 EUR→USD 를 1:1 로 환산했다(712 EUR = 712 USD). terms.cost_fx 에 저장한다.
-  const [costFx, setCostFx] = useState<{ cur: string; usd: number | null } | null>(null);
-  const [costFxMode, setCostFxMode] = useState<FxMode>("auto");
-  const fxAll = withCross(effRate, costFx?.cur, costFx?.usd);
+  // USD·KRW 밖 통화의 교차환율(1 SGD = ? USD) — 원가 통화만이 아니라 이 견적에 실리는
+  // 모든 통화(SGD 로 받은 공급사 견적 등)를 통화별로 든다. terms.cross_fx(+ 원가 통화는
+  // 예전 칸 cost_fx)에 저장한다. 예전엔 EUR→USD 를 1:1 로 환산했다(712 EUR = 712 USD).
+  const [crossFx, setCrossFx] = useState<CrossFx>({});
+  const crossRef = useRef(crossFx);
+  crossRef.current = crossFx;
+  const fxAll = fxWithCross(effRate, crossFx);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -2700,9 +2702,7 @@ function CustomerQuoteDetailModal({
         setTerms(withDefaultTerms(seedPaymentTerms(data.terms, data.default_payment_terms)));
         // 저장해 둔 원가 교차환율(1 EUR = ? USD). 저장본이 있으면 그 값 그대로(직접입력으로 연다) —
         // 열 때마다 오늘 시세로 바뀌면 보낸 견적의 단가가 달라진다.
-        const cfx = (data.terms as { cost_fx?: { cur?: string; usd?: number } } | undefined)?.cost_fx;
-        setCostFx(cfx?.cur && cfx.usd ? { cur: cfx.cur.toUpperCase(), usd: Number(cfx.usd) } : null);
-        setCostFxMode(cfx?.cur && cfx.usd ? "manual" : "auto");
+        setCrossFx(readCrossFx(data.terms));
         // 헤더 문서 필드 — terms JSON 에 저장한 값(Attn 은 미입력 시 담당자 이름 시드).
         setMessrs((data.terms as { messrs?: string })?.messrs || "");
         setAttn((data.terms as { attn?: string })?.attn || "");
@@ -2737,10 +2737,10 @@ function CustomerQuoteDetailModal({
 
   // 되돌리기 이력 — 품목과 가격 설정을 한 덩어리로(통화만 되돌리고 품목을 두면 숫자가 틀어진다).
   const hist = useEditHistory(
-    { items, costCurrency, currency, roundDigits, fxRate, defaultMargin, discountPct, costFx },
+    { items, costCurrency, currency, roundDigits, fxRate, defaultMargin, discountPct, crossFx: usedCross(crossFx, costCurrency, items) },
     (v) => {
       setItems(v.items);
-      setCostFx(v.costFx);
+      setCrossFx((p) => ({ ...p, ...v.crossFx }));
       setCostCurrency(v.costCurrency);
       setCurrency(v.currency);
       setRoundDigits(v.roundDigits);
@@ -2753,7 +2753,7 @@ function CustomerQuoteDetailModal({
   // 저장본과 달라졌나 — 폼 전체. Cancel·닫기·미리보기가 이것을 보고 묻는다.
   const { dirty, markClean } = useDirty(
     { qtnNo, currency, costCurrency, roundDigits, defaultMargin, discountPct, fxRate, sentAt,
-      validUntil, status, terms, messrs, attn, refNo, items, costFx },
+      validUntil, status, terms, messrs, attn, refNo, items, crossFx: usedCross(crossFx, costCurrency, items) },
     readyKey
   );
   // Cancel = 편집을 버리고 저장본으로. 단계 화면(inline)에서는 창이 그대로라 다시 읽는다.
@@ -2772,7 +2772,7 @@ function CustomerQuoteDetailModal({
   const finalTotal = Math.round(total * (1 - Number(discountPct || 0) / 100) * 100) / 100;
 
   // 헤더 문서 필드(Attn/Messrs/Ref No.)는 terms JSON 에 함께 저장한다.
-  const termsForSave = (): QuotationTerms => withCostFx({ ...terms, messrs, attn, ref_no: refNo }, costCurrency, costFx, costFxMode);
+  const termsForSave = (): QuotationTerms => withCostFx({ ...terms, messrs, attn, ref_no: refNo }, costCurrency, crossFx);
 
   // 현재 편집값을 서버에 저장(모달은 닫지 않음). save()·미리보기가 공유.
   async function persist() {
@@ -3061,31 +3061,28 @@ function CustomerQuoteDetailModal({
             <FxRateControl
               label="FX 1 USD ="
               rate={fxRate}
-              onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, withCross(v ?? USD_KRW_RATE, costFx?.cur, costFx?.usd))); }}
+              onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, fxWithCross(v ?? USD_KRW_RATE, crossFx))); }}
               mode={fxMode}
               onMode={setFxMode}
               date={sentAt}
             />
-            {needsCross(costCurrency) ? (
-              <FxRateControl
-                label={`FX 1 ${costCurrency} = USD`}
-                cur={costCurrency}
-                per="USD"
-                rate={costFx?.cur === costCurrency.toUpperCase() ? costFx.usd : null}
-                onRate={(v) => {
-                  setCostFx({ cur: costCurrency.toUpperCase(), usd: v });
-                  setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, withCross(effRate, costCurrency, v)));
-                }}
-                mode={costFxMode}
-                onMode={setCostFxMode}
-                date={sentAt}
-              />
-            ) : null}
-            {needsCross(costCurrency) && !(costFx?.cur === costCurrency.toUpperCase() && costFx.usd) ? (
-              <span className="pb-warn">
-                Enter the {costCurrency} → USD rate — {costCurrency} costs are not converted until then.
-              </span>
-            ) : null}
+            {/* USD·KRW 밖 통화마다 교차환율 — 원가 통화, 견적서 줄의 출처 통화, 이 딜의 공급사 견적 통화. */}
+            <CrossFxControls
+              curs={crossCurrencies(costCurrency, items, vendorQuotes, crossFx)}
+              cross={crossFx}
+              date={sentAt}
+              onRate={(c, v) => {
+                const next = { ...crossRef.current, [c]: { usd: v, mode: crossRef.current[c]?.mode ?? "auto" } };
+                crossRef.current = next;
+                setCrossFx(next);
+                setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, fxWithCross(effRate, next)));
+              }}
+              onMode={(c, m) => {
+                const next = { ...crossRef.current, [c]: { usd: crossRef.current[c]?.usd ?? null, mode: m } };
+                crossRef.current = next;
+                setCrossFx(next);
+              }}
+            />
             <div className="form-field">
               <label>Round up to</label>
               <RoundUnitSelect
@@ -3174,6 +3171,7 @@ function CustomerQuoteDetailModal({
               quotes={vendorQuotes}
               items={items}
               costCurrency={costCurrency}
+              fx={fxAll}
               onLoad={loadVendorQuotes}
               onClose={() => setMergeOpen(false)}
             />
@@ -4832,18 +4830,106 @@ function needsCross(cur: string): boolean {
   return !!c && c !== "USD" && c !== "KRW";
 }
 
-/** 저장할 거래조건에 원가 교차환율을 싣는다(필요 없으면 뺀다). */
-function withCostFx(
-  terms: QuotationTerms,
+/** 통화별 교차환율(1 cur = ? USD)과 입력 방식(시세/직접). USD·KRW 는 넣지 않는다. */
+type CrossFx = Record<string, { usd: number | null; mode: FxMode }>;
+
+/** USD↔KRW 환율에 통화별 교차환율을 얹은 환산 기준. 값이 하나도 없으면 숫자 그대로. */
+function fxWithCross(usdKrw: number, cross: CrossFx): Fx {
+  const m: Record<string, number> = {};
+  for (const [c, v] of Object.entries(cross)) if (v.usd && v.usd > 0) m[c] = v.usd;
+  return Object.keys(m).length ? { usdKrw, cross: m } : usdKrw;
+}
+
+/** 실제로 값에 쓰이는 통화의 환율만 — 원가 통화와 줄의 출처 통화. 공급사 견적에만 있는
+ *  통화(아직 싣지 않은 SGD 견적)의 시세는 열자마자 들어와도 이 견적의 숫자를 바꾸지 않으므로
+ *  '저장 안 된 변경'으로 치지 않는다. */
+function usedCross(cross: CrossFx, costCur: string, items: CustomerQuoteItem[]): CrossFx {
+  const used = new Set([(costCur || "").toUpperCase(), ...items.map((it) => (it.src_currency || "").toUpperCase())]);
+  return Object.fromEntries(Object.entries(cross).filter(([c]) => used.has(c)));
+}
+
+/** 환율 칸을 세울 통화 — 원가 통화, 견적서 줄의 출처 통화, 이 딜의 공급사 견적 통화,
+ *  그리고 저장해 둔 환율(USD·KRW 밖만). 원가 통화를 KRW 로 둔 채 SGD 견적 줄을 섞어도
+ *  SGD 환율을 넣을 자리가 있어야 한다 — 예전엔 원가 통화가 SGD 일 때만 칸이 섰다. */
+function crossCurrencies(
   costCur: string,
-  costFx: { cur: string; usd: number | null } | null,
-  mode: FxMode
-): QuotationTerms {
-  const { cost_fx: _drop, ...rest } = terms as QuotationTerms & { cost_fx?: unknown };
-  void _drop;
+  items: CustomerQuoteItem[],
+  quotes: VendorQuoteForImport[],
+  cross: CrossFx
+): string[] {
+  const out: string[] = [];
+  const add = (c?: string | null) => {
+    const u = (c || "").toUpperCase();
+    if (needsCross(u) && !out.includes(u)) out.push(u);
+  };
+  add(costCur);
+  items.forEach((it) => add(it.src_currency));
+  quotes.forEach((q) => add(q.currency));
+  Object.keys(cross).forEach(add);
+  return out;
+}
+
+/** 저장본의 교차환율 — cross_fx(통화별) + 예전 칸 cost_fx(원가 통화 하나). 저장본은 직접입력으로
+ *  연다: 열 때마다 오늘 시세로 바뀌면 보낸 견적의 단가가 달라진다. */
+function readCrossFx(terms: unknown): CrossFx {
+  const t = (terms || {}) as {
+    cost_fx?: { cur?: string; usd?: number };
+    cross_fx?: Record<string, { usd?: number }>;
+  };
+  const out: CrossFx = {};
+  for (const [c, v] of Object.entries(t.cross_fx || {})) {
+    if (v?.usd && Number(v.usd) > 0) out[c.toUpperCase()] = { usd: Number(v.usd), mode: "manual" };
+  }
+  const cf = t.cost_fx;
+  if (cf?.cur && cf.usd && !out[cf.cur.toUpperCase()]) out[cf.cur.toUpperCase()] = { usd: Number(cf.usd), mode: "manual" };
+  return out;
+}
+
+/** 저장할 거래조건에 교차환율을 싣는다 — cross_fx(통화별 전부) + 원가 통화가 USD·KRW 밖이면
+ *  예전 칸 cost_fx 도(서버의 견적 Excel 이 그 칸으로 원가→판매 통화를 환산한다). */
+function withCostFx(terms: QuotationTerms, costCur: string, cross: CrossFx): QuotationTerms {
+  const { cost_fx: _a, cross_fx: _b, ...rest } = terms as QuotationTerms & { cost_fx?: unknown; cross_fx?: unknown };
+  void _a; void _b;
+  const saved: Record<string, { usd: number; mode: FxMode }> = {};
+  for (const [c, v] of Object.entries(cross)) if (v.usd && v.usd > 0) saved[c] = { usd: v.usd, mode: v.mode };
+  const out: QuotationTerms = { ...rest };
+  if (Object.keys(saved).length) out.cross_fx = saved;
   const c = (costCur || "").toUpperCase();
-  if (!needsCross(c) || !costFx || costFx.cur !== c || !costFx.usd) return rest;
-  return { ...rest, cost_fx: { cur: c, usd: costFx.usd, mode } };
+  if (needsCross(c) && saved[c]) out.cost_fx = { cur: c, usd: saved[c].usd, mode: saved[c].mode };
+  return out;
+}
+
+/** 통화마다 교차환율 칸(시세/직접) + 아직 환율이 없는 통화 경고. */
+function CrossFxControls({ curs, cross, date, onRate, onMode }: {
+  curs: string[];
+  cross: CrossFx;
+  date: string;
+  onRate: (cur: string, usd: number | null) => void;
+  onMode: (cur: string, mode: FxMode) => void;
+}) {
+  const missing = curs.filter((c) => !(cross[c]?.usd && Number(cross[c]?.usd) > 0));
+  return (
+    <>
+      {curs.map((c) => (
+        <FxRateControl
+          key={c}
+          label={`FX 1 ${c} = USD`}
+          cur={c}
+          per="USD"
+          rate={cross[c]?.usd ?? null}
+          onRate={(v) => onRate(c, v)}
+          mode={cross[c]?.mode ?? "auto"}
+          onMode={(m) => onMode(c, m)}
+          date={date}
+        />
+      ))}
+      {missing.length ? (
+        <span className="pb-warn">
+          Enter the {missing.join(" · ")} → USD rate — {missing.join(" · ")} costs are not converted until then.
+        </span>
+      ) : null}
+    </>
+  );
 }
 
 /** 고른 견적들이 모두 같게 적은 거래조건만 — 값이 하나라도 다르거나 빈 곳이 있으면 뺀다. */
@@ -5013,8 +5099,8 @@ function mergeVendorQuotes(opts: {
   if (bad.length > 0) {
     const who = bad.map((q) => `${q.vendor} (${(q.currency || "").toUpperCase()})`).join(", ");
     return {
-      err: `${who} cannot be converted to ${costCur} — only USD↔KRW has a rate here. `
-        + `Load it into a quotation priced in its own currency, or enter those lines by hand.`,
+      err: `${who} cannot be converted to ${costCur} yet — enter the rate to USD on the Pricing band `
+        + `(FX 1 … = USD), then load again.`,
     };
   }
   let items = base;
@@ -5170,11 +5256,13 @@ function CustomerQuoteAction({
   const [validUntil, setValidUntil] = useState(() => defaultValidUntil(nowLocalDt()));
   const [defaultMargin, setDefaultMargin] = useState(DEFAULT_MARGIN_PCT);
   const effRate = fxRate ?? USD_KRW_RATE;
-  // 원가 통화가 EUR 처럼 USD·KRW 밖이면 교차환율(1 EUR = ? USD)이 따로 있어야 한다 —
-  // 예전엔 EUR→USD 를 1:1 로 환산했다(712 EUR = 712 USD). terms.cost_fx 에 저장한다.
-  const [costFx, setCostFx] = useState<{ cur: string; usd: number | null } | null>(null);
-  const [costFxMode, setCostFxMode] = useState<FxMode>("auto");
-  const fxAll = withCross(effRate, costFx?.cur, costFx?.usd);
+  // USD·KRW 밖 통화의 교차환율(1 SGD = ? USD) — 원가 통화만이 아니라 이 견적에 실리는
+  // 모든 통화(SGD 로 받은 공급사 견적 등)를 통화별로 든다. terms.cross_fx(+ 원가 통화는
+  // 예전 칸 cost_fx)에 저장한다. 예전엔 EUR→USD 를 1:1 로 환산했다(712 EUR = 712 USD).
+  const [crossFx, setCrossFx] = useState<CrossFx>({});
+  const crossRef = useRef(crossFx);
+  crossRef.current = crossFx;
+  const fxAll = fxWithCross(effRate, crossFx);
   const [terms, setTerms] = useState<QuotationTerms>(
     withDefaultTerms({ remarks: "Bank charges outside Korea shall be borne by Buyer." })
   );
@@ -5336,7 +5424,7 @@ function CustomerQuoteAction({
     setMsg(null);
     setErr(null);
     try {
-      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, withCostFx(terms, costCurrency, costFx, costFxMode), qtnNo.trim() === autoNo ? "" : qtnNo.trim(), sentAt, costCurrency, roundDigits, discountPct, fxRate, docSourceId(items, importVqId === "" ? null : importVqId), defaultMargin);
+      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, withCostFx(terms, costCurrency, crossFx), qtnNo.trim() === autoNo ? "" : qtnNo.trim(), sentAt, costCurrency, roundDigits, discountPct, fxRate, docSourceId(items, importVqId === "" ? null : importVqId), defaultMargin);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
       setMsg(`Sent — ${r.qtn_no}`);
       onDone();
@@ -5450,31 +5538,28 @@ function CustomerQuoteAction({
         <FxRateControl
           label="FX 1 USD ="
           rate={fxRate}
-          onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, withCross(v ?? USD_KRW_RATE, costFx?.cur, costFx?.usd))); }}
+          onRate={(v) => { setFxRate(v); setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, fxWithCross(v ?? USD_KRW_RATE, crossFx))); }}
           mode={fxMode}
           onMode={setFxMode}
           date={sentAt}
         />
-        {needsCross(costCurrency) ? (
-          <FxRateControl
-            label={`FX 1 ${costCurrency} = USD`}
-            cur={costCurrency}
-            per="USD"
-            rate={costFx?.cur === costCurrency.toUpperCase() ? costFx.usd : null}
-            onRate={(v) => {
-              setCostFx({ cur: costCurrency.toUpperCase(), usd: v });
-              setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, withCross(effRate, costCurrency, v)));
-            }}
-            mode={costFxMode}
-            onMode={setCostFxMode}
-            date={sentAt}
-          />
-        ) : null}
-        {needsCross(costCurrency) && !(costFx?.cur === costCurrency.toUpperCase() && costFx.usd) ? (
-          <span className="pb-warn">
-            Enter the {costCurrency} → USD rate — {costCurrency} costs are not converted until then.
-          </span>
-        ) : null}
+        {/* USD·KRW 밖 통화마다 교차환율 — 원가 통화, 견적서 줄의 출처 통화, 이 딜의 공급사 견적 통화. */}
+        <CrossFxControls
+          curs={crossCurrencies(costCurrency, items, vendorQuotes, crossFx)}
+          cross={crossFx}
+          date={sentAt}
+          onRate={(c, v) => {
+            const next = { ...crossRef.current, [c]: { usd: v, mode: crossRef.current[c]?.mode ?? "auto" } };
+            crossRef.current = next;
+            setCrossFx(next);
+            setItems((prev) => recomputeCustomerQuoteItems(prev, costCurrency, currency, roundDigits, fxWithCross(effRate, next)));
+          }}
+          onMode={(c, m) => {
+            const next = { ...crossRef.current, [c]: { usd: crossRef.current[c]?.usd ?? null, mode: m } };
+            crossRef.current = next;
+            setCrossFx(next);
+          }}
+        />
         <div className="form-field">
           <label>Round up to</label>
           <RoundUnitSelect
@@ -5558,6 +5643,7 @@ function CustomerQuoteAction({
           quotes={vendorQuotes}
           items={items}
           costCurrency={costCurrency}
+          fx={fxAll}
           onLoad={loadVendorQuotes}
           onClose={() => setMergeOpen(false)}
         />

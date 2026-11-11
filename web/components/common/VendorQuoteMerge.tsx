@@ -19,7 +19,8 @@
 import { useState } from "react";
 import Modal from "@/components/common/Modal";
 import VendorName from "@/components/common/VendorName";
-import { costConvertible, hasSource } from "@/lib/quoteMerge";
+import { hasSource } from "@/lib/quoteMerge";
+import { canConvert, type Fx } from "@/components/common/itemTable";
 import type { CostSource } from "@/lib/quoteMerge";
 import type { CustomerQuoteItem, VendorQuoteForImport } from "@/lib/types";
 
@@ -29,6 +30,7 @@ export default function VendorQuoteMergeModal({
   quotes,
   items,
   costCurrency,
+  fx,
   onLoad,
   onClose,
 }: {
@@ -37,6 +39,8 @@ export default function VendorQuoteMergeModal({
   items: CustomerQuoteItem[];
   /** 이 견적서의 원가 통화. 다른 통화의 견적은 이 통화로 환산해 싣는다. */
   costCurrency: string;
+  /** 견적의 환산 기준(USD↔KRW + 통화별 교차환율) — 이 기준으로 바꿀 수 있는 통화만 싣는다. */
+  fx: Fx;
   onLoad: (ids: number[], mode: MergeMode) => void;
   onClose: () => void;
 }) {
@@ -61,8 +65,8 @@ export default function VendorQuoteMergeModal({
   const chosen = quotes.filter((q) => picked.has(q.id));
   const lines = chosen.reduce((n, q) => n + q.items.length, 0);
   // 환산할 수 없는 통화(USD·KRW 밖)는 숫자가 그대로 통과해 조용히 틀린 원가가 된다.
-  const blocked = chosen.filter((q) => !costConvertible(q.currency, cur));
-  const converted = chosen.filter((q) => costConvertible(q.currency, cur) && (q.currency || "").toUpperCase() !== cur);
+  const blocked = chosen.filter((q) => !canConvert(q.currency, cur, fx));
+  const converted = chosen.filter((q) => canConvert(q.currency, cur, fx) && (q.currency || "").toUpperCase() !== cur);
 
   return (
     <Modal title="Load vendor quotes" onClose={onClose} maxWidth={860}>
@@ -92,7 +96,7 @@ export default function VendorQuoteMergeModal({
                 <tr><td colSpan={7} className="vqm-empty">No vendor quote has been received for this deal yet.</td></tr>
               ) : quotes.map((q) => {
                 const loaded = hasSource(items, q.id);
-                const bad = picked.has(q.id) && !costConvertible(q.currency, cur);
+                const bad = picked.has(q.id) && !canConvert(q.currency, cur, fx);
                 return (
                   <tr key={q.id} className={bad ? "vqm-bad" : undefined} onClick={() => toggle(q.id)}>
                     <td className="vqm-chk">
@@ -147,8 +151,8 @@ export default function VendorQuoteMergeModal({
         {blocked.length > 0 ? (
           <p className="vqm-err">
             {blocked.map((q) => `${q.vendor} (${(q.currency || "").toUpperCase()})`).join(" · ")} cannot be
-            converted to {cur} — only USD↔KRW has a rate here. Unpick it, or set the cost currency to
-            match, and enter those lines by hand.
+            converted to {cur} yet — close this, enter the rate to USD on the Pricing band
+            (FX 1 … = USD), and load again.
           </p>
         ) : null}
 

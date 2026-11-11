@@ -974,6 +974,8 @@ export type QuotationTerms = {
   engine_type?: string;
   /** 고객 견적의 원가 교차환율 — 원가 통화가 USD·KRW 밖일 때 1 cur = usd USD. */
   cost_fx?: { cur: string; usd: number; mode?: string };
+  /** 통화별 교차환율(1 cur = usd USD) — 원가 통화 밖의 공급사 견적 통화(SGD 등)까지. */
+  cross_fx?: Record<string, { usd: number; mode?: string }>;
   /** 오더·발주 품목표 금액의 소수 자릿수(엑셀 0 / 0.0 / 0.00). 없으면 자동(그대로). */
   decimals?: number | null;
 };
