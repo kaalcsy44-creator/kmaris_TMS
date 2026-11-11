@@ -65,7 +65,8 @@ export default function VendorQuoteMergeModal({
   const chosen = quotes.filter((q) => picked.has(q.id));
   const lines = chosen.reduce((n, q) => n + q.items.length, 0);
   // 환산할 수 없는 통화(USD·KRW 밖)는 숫자가 그대로 통과해 조용히 틀린 원가가 된다.
-  const blocked = chosen.filter((q) => !canConvert(q.currency, cur, fx));
+  // 환율이 아직 없는 외화 — 막지 않는다. 실을 때 그날 매매기준율을 받아 오고, Pricing 에서 고칠 수 있다.
+  const fresh = chosen.filter((q) => !canConvert(q.currency, cur, fx));
   const converted = chosen.filter((q) => canConvert(q.currency, cur, fx) && (q.currency || "").toUpperCase() !== cur);
 
   return (
@@ -96,9 +97,8 @@ export default function VendorQuoteMergeModal({
                 <tr><td colSpan={7} className="vqm-empty">No vendor quote has been received for this deal yet.</td></tr>
               ) : quotes.map((q) => {
                 const loaded = hasSource(items, q.id);
-                const bad = picked.has(q.id) && !canConvert(q.currency, cur, fx);
                 return (
-                  <tr key={q.id} className={bad ? "vqm-bad" : undefined} onClick={() => toggle(q.id)}>
+                  <tr key={q.id} onClick={() => toggle(q.id)}>
                     <td className="vqm-chk">
                       <input
                         type="checkbox"
@@ -148,11 +148,11 @@ export default function VendorQuoteMergeModal({
             same thing — where they differ, the customer must still see one, so set those below.
           </p>
         ) : null}
-        {blocked.length > 0 ? (
-          <p className="vqm-err">
-            {blocked.map((q) => `${q.vendor} (${(q.currency || "").toUpperCase()})`).join(" · ")} cannot be
-            converted to {cur} yet — close this, enter the rate to USD on the Pricing band
-            (FX 1 … = USD), and load again.
+        {fresh.length > 0 ? (
+          <p className="vqm-note">
+            No rate yet for {[...new Set(fresh.map((q) => (q.currency || "").toUpperCase()))].join(" · ")} —
+            today&apos;s market rate (to USD) is fetched when you load, and shows on the Pricing band
+            where you can change it.
           </p>
         ) : null}
 
@@ -164,7 +164,7 @@ export default function VendorQuoteMergeModal({
           <button
             type="button"
             className="btn primary"
-            disabled={chosen.length === 0 || blocked.length > 0}
+            disabled={chosen.length === 0}
             onClick={() => onLoad(chosen.map((q) => q.id), mode)}
           >
             {mode === "replace" ? "Replace item list" : "Add to item list"}

@@ -49,6 +49,7 @@ import {
   fetchAwardedItems,
   fetchLineBoard,
   saveLineAwards,
+  fetchFxRate,
 } from "@/lib/api";
 import type { LineOption } from "@/lib/api";
 import { confirmDiscard, useDirty, useEditHistory } from "./common/editHistory";
@@ -2659,6 +2660,20 @@ function CustomerQuoteDetailModal({
   const crossRef = useRef(crossFx);
   crossRef.current = crossFx;
   const fxAll = fxWithCross(effRate, crossFx);
+  // 실을 견적의 통화 중 환율이 없는 외화는 그 자리에서 매매기준율을 받아 채운다(Pricing 에서 고칠 수 있다).
+  async function ensureCross(curs: string[]): Promise<Fx> {
+    const missing = curs.map((c) => (c || "").toUpperCase())
+      .filter((c) => needsCross(c) && !(crossRef.current[c]?.usd && Number(crossRef.current[c]?.usd) > 0));
+    if (missing.length) {
+      const got = await marketCross(missing, sentAt);
+      if (Object.keys(got).length) {
+        const next = { ...crossRef.current, ...got };
+        crossRef.current = next;
+        setCrossFx(next);
+      }
+    }
+    return fxWithCross(effRate, crossRef.current);
+  }
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -2773,7 +2788,7 @@ function CustomerQuoteDetailModal({
   const finalTotal = Math.round(total * (1 - Number(discountPct || 0) / 100) * 100) / 100;
 
   // 헤더 문서 필드(Attn/Messrs/Ref No.)는 terms JSON 에 함께 저장한다.
-  const termsForSave = (): QuotationTerms => withCostFx({ ...terms, messrs, attn, ref_no: refNo }, costCurrency, crossFx);
+  const termsForSave = (): QuotationTerms => withCostFx({ ...terms, messrs, attn, ref_no: refNo }, costCurrency, crossFx, items);
 
   // 현재 편집값을 서버에 저장(모달은 닫지 않음). save()·미리보기가 공유.
   async function persist() {
@@ -2887,10 +2902,11 @@ function CustomerQuoteDetailModal({
   }
 
   // 고른 공급사 견적들을 품목표에 싣는다 — 한 장이면 예전과 같고, 여러 장이면 합쳐 담는다.
-  function loadVendorQuotes(ids: number[], mode: MergeMode) {
+  async function loadVendorQuotes(ids: number[], mode: MergeMode) {
+    const fx = await ensureCross(vendorQuotes.filter((q) => ids.includes(q.id)).map((q) => q.currency || ""));
     const r = mergeVendorQuotes({
       quotes: vendorQuotes, ids, mode, existing: items,
-      defaultMargin, saleCurrency: currency, costCurrency, roundDigits, rate: fxAll,
+      defaultMargin, saleCurrency: currency, costCurrency, roundDigits, rate: fx,
     });
     setMergeOpen(false);
     if ("err" in r) {
@@ -2939,7 +2955,8 @@ function CustomerQuoteDetailModal({
       // 한 통화면 원가 통화를 그 통화로 맞춘다. 여러 통화에 걸치면 지금 원가 통화로
       // 줄마다 환산해 싣는다 — 환율이 없는 통화가 끼면 마진이 틀어지므로 먼저 말하고 멈춘다.
       const cur = aw.currencies.length === 1 ? aw.currencies[0] || costCurrency : costCurrency;
-      const noRate = aw.currencies.filter((c) => !canConvert(c, cur, fxAll));
+      const fx = await ensureCross([...aw.currencies, cur]);
+      const noRate = aw.currencies.filter((c) => !canConvert(c, cur, fx));
       if (noRate.length) {
         setErr(
           `No exchange rate from ${noRate.join(", ")} to ${cur} — set the cost currency to one of the awarded currencies, or enter the rate.`
@@ -2947,7 +2964,7 @@ function CustomerQuoteDetailModal({
         return;
       }
       setCostCurrency(cur);
-      setItems(customerQuoteItemsFromAwards(aw.items, defaultMargin, cur, currency, roundDigits, fxAll));
+      setItems(customerQuoteItemsFromAwards(aw.items, defaultMargin, cur, currency, roundDigits, fx));
       const vendors = aw.by_vendor.map((g) => g.vendor).filter(Boolean);
       setMsg(
         `Loaded ${aw.items.length} awarded line(s) from ${vendors.length} vendor(s): ${vendors.join(" · ")}`
@@ -3069,7 +3086,7 @@ function CustomerQuoteDetailModal({
             />
             {/* USD·KRW 밖 통화마다 교차환율 — 원가 통화, 견적서 줄의 출처 통화, 이 딜의 공급사 견적 통화. */}
             <CrossFxControls
-              curs={crossCurrencies(costCurrency, items, vendorQuotes, crossFx)}
+              curs={crossCurrencies(costCurrency, items)}
               cross={crossFx}
               date={sentAt}
               onRate={(c, v) => {
@@ -4979,24 +4996,43 @@ function usedCross(cross: CrossFx, costCur: string, items: CustomerQuoteItem[]):
   return Object.fromEntries(Object.entries(cross).filter(([c]) => used.has(c)));
 }
 
-/** 환율 칸을 세울 통화 — 원가 통화, 견적서 줄의 출처 통화, 이 딜의 공급사 견적 통화,
- *  그리고 저장해 둔 환율(USD·KRW 밖만). 원가 통화를 KRW 로 둔 채 SGD 견적 줄을 섞어도
- *  SGD 환율을 넣을 자리가 있어야 한다 — 예전엔 원가 통화가 SGD 일 때만 칸이 섰다. */
-function crossCurrencies(
-  costCur: string,
-  items: CustomerQuoteItem[],
-  quotes: VendorQuoteForImport[],
-  cross: CrossFx
-): string[] {
+/** 환율 칸을 세울 통화 — 이 견적서에 실제로 쓰인 USD·KRW 밖 통화만: 원가 통화와 실린 줄의
+ *  출처 통화. 같은 딜의 다른 견적(아직 안 실은 SGD 견적)의 통화는 보이지 않는다 — 헷갈린다.
+ *  그런 견적을 실을 때 그 통화의 시세를 받아 오고(ensureCross), 그때부터 칸이 선다. */
+function crossCurrencies(costCur: string, items: CustomerQuoteItem[]): string[] {
   const out: string[] = [];
   const add = (c?: string | null) => {
     const u = (c || "").toUpperCase();
     if (needsCross(u) && !out.includes(u)) out.push(u);
   };
   add(costCur);
-  items.forEach((it) => add(it.src_currency));
-  quotes.forEach((q) => add(q.currency));
-  Object.keys(cross).forEach(add);
+  items.forEach((it) => { if (!isOptionRow(it)) add(it.src_currency); });
+  return out;
+}
+
+/** 아직 환율이 없는 외화의 매매기준율(1 cur = ? USD) — 그 통화의 견적을 실을 때 받아 온다.
+ *  FxRateControl 과 같은 계산(같은 날 고시의 cur/KRW ÷ USD/KRW). 고시를 못 받으면 비워 둔다
+ *  (폴백 환율끼리 나눈 값은 거짓이라 쓰지 않는다). */
+async function marketCross(curs: string[], date: string): Promise<CrossFx> {
+  const need = [...new Set(curs.map((c) => (c || "").toUpperCase()))].filter(needsCross);
+  const out: CrossFx = {};
+  if (!need.length) return out;
+  const d = (date || "").slice(0, 10);
+  const per = (r: { rate: number; unit?: number }) => r.rate / (r.unit && r.unit > 0 ? r.unit : 1);
+  try {
+    const usd = await fetchFxRate(d, "USD");
+    for (const c of need) {
+      try {
+        const r = await fetchFxRate(d, c);
+        if (r.source === "exim" && usd.source === "exim" && per(usd) > 0)
+          out[c] = { usd: Number((per(r) / per(usd)).toFixed(4)), mode: "auto" };
+      } catch {
+        // 이 통화만 건너뛴다 — 부르는 쪽이 "환율 없음"으로 알린다.
+      }
+    }
+  } catch {
+    // USD 고시조차 못 받으면 아무것도 채우지 않는다.
+  }
   return out;
 }
 
@@ -5018,7 +5054,9 @@ function readCrossFx(terms: unknown): CrossFx {
 
 /** 저장할 거래조건에 교차환율을 싣는다 — cross_fx(통화별 전부) + 원가 통화가 USD·KRW 밖이면
  *  예전 칸 cost_fx 도(서버의 견적 Excel 이 그 칸으로 원가→판매 통화를 환산한다). */
-function withCostFx(terms: QuotationTerms, costCur: string, cross: CrossFx): QuotationTerms {
+function withCostFx(terms: QuotationTerms, costCur: string, crossAll: CrossFx, items: CustomerQuoteItem[]): QuotationTerms {
+  // 이 견적서에 쓰인 통화의 환율만 남긴다 — 딜의 다른 견적 때문에 받아 둔 환율은 싣지 않는다.
+  const cross = usedCross(crossAll, costCur, items);
   const { cost_fx: _a, cross_fx: _b, ...rest } = terms as QuotationTerms & { cost_fx?: unknown; cross_fx?: unknown };
   void _a; void _b;
   const saved: Record<string, { usd: number; mode: FxMode }> = {};
@@ -5394,6 +5432,20 @@ function CustomerQuoteAction({
   const crossRef = useRef(crossFx);
   crossRef.current = crossFx;
   const fxAll = fxWithCross(effRate, crossFx);
+  // 실을 견적의 통화 중 환율이 없는 외화는 그 자리에서 매매기준율을 받아 채운다(Pricing 에서 고칠 수 있다).
+  async function ensureCross(curs: string[]): Promise<Fx> {
+    const missing = curs.map((c) => (c || "").toUpperCase())
+      .filter((c) => needsCross(c) && !(crossRef.current[c]?.usd && Number(crossRef.current[c]?.usd) > 0));
+    if (missing.length) {
+      const got = await marketCross(missing, sentAt);
+      if (Object.keys(got).length) {
+        const next = { ...crossRef.current, ...got };
+        crossRef.current = next;
+        setCrossFx(next);
+      }
+    }
+    return fxWithCross(effRate, crossRef.current);
+  }
   const [terms, setTerms] = useState<QuotationTerms>(
     withDefaultTerms({ remarks: "Bank charges outside Korea shall be borne by Buyer." })
   );
@@ -5460,10 +5512,11 @@ function CustomerQuoteAction({
 
   // 고른 공급사 견적들의 품목·cost_price 를 불러와 기본 마진을 적용한다. 여러 장을 고르면
   // 한 품목표로 합쳐 담고, 딜 품목으로 미리 깔아 둔 빈 줄은 제자리에서 값이 채워진다.
-  function loadVendorQuotes(ids: number[], mode: MergeMode) {
+  async function loadVendorQuotes(ids: number[], mode: MergeMode) {
+    const fx = await ensureCross(vendorQuotes.filter((q) => ids.includes(q.id)).map((q) => q.currency || ""));
     const r = mergeVendorQuotes({
       quotes: vendorQuotes, ids, mode, existing: items,
-      defaultMargin, saleCurrency: currency, costCurrency, roundDigits, rate: fxAll,
+      defaultMargin, saleCurrency: currency, costCurrency, roundDigits, rate: fx,
     });
     setMergeOpen(false);
     if ("err" in r) {
@@ -5507,7 +5560,8 @@ function CustomerQuoteAction({
       // 한 통화면 원가 통화를 그 통화로 맞춘다. 여러 통화에 걸치면 지금 원가 통화로
       // 줄마다 환산해 싣는다 — 환율이 없는 통화가 끼면 마진이 틀어지므로 먼저 말하고 멈춘다.
       const cur = aw.currencies.length === 1 ? aw.currencies[0] || costCurrency : costCurrency;
-      const noRate = aw.currencies.filter((c) => !canConvert(c, cur, fxAll));
+      const fx = await ensureCross([...aw.currencies, cur]);
+      const noRate = aw.currencies.filter((c) => !canConvert(c, cur, fx));
       if (noRate.length) {
         setErr(
           `No exchange rate from ${noRate.join(", ")} to ${cur} — set the cost currency to one of the awarded currencies, or enter the rate.`
@@ -5515,7 +5569,7 @@ function CustomerQuoteAction({
         return;
       }
       setCostCurrency(cur);
-      setItems(customerQuoteItemsFromAwards(aw.items, defaultMargin, cur, currency, roundDigits, fxAll));
+      setItems(customerQuoteItemsFromAwards(aw.items, defaultMargin, cur, currency, roundDigits, fx));
       const vendors = aw.by_vendor.map((g) => g.vendor).filter(Boolean);
       setMsg(
         `Loaded ${aw.items.length} awarded line(s) from ${vendors.length} vendor(s): ${vendors.join(" · ")}`
@@ -5555,7 +5609,7 @@ function CustomerQuoteAction({
     setMsg(null);
     setErr(null);
     try {
-      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, withCostFx(terms, costCurrency, crossFx), qtnNo.trim() === autoNo ? "" : qtnNo.trim(), sentAt, costCurrency, roundDigits, discountPct, fxRate, docSourceId(items, importVqId === "" ? null : importVqId), defaultMargin);
+      const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, withCostFx(terms, costCurrency, crossFx, items), qtnNo.trim() === autoNo ? "" : qtnNo.trim(), sentAt, costCurrency, roundDigits, discountPct, fxRate, docSourceId(items, importVqId === "" ? null : importVqId), defaultMargin);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
       setMsg(`Sent — ${r.qtn_no}`);
       onDone();
@@ -5676,7 +5730,7 @@ function CustomerQuoteAction({
         />
         {/* USD·KRW 밖 통화마다 교차환율 — 원가 통화, 견적서 줄의 출처 통화, 이 딜의 공급사 견적 통화. */}
         <CrossFxControls
-          curs={crossCurrencies(costCurrency, items, vendorQuotes, crossFx)}
+          curs={crossCurrencies(costCurrency, items)}
           cross={crossFx}
           date={sentAt}
           onRate={(c, v) => {
