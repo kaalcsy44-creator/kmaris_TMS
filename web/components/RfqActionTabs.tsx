@@ -6550,7 +6550,7 @@ function CustomerQuoteItemEditor({
                           </button>
                         ) : null}
                         {set ? null : (
-                          <label className="line-pick" title={it.alt_off ? "Not in the total — printed as “Alt.”. Click to count this row instead." : "Counted in the total"}>
+                          <label className="alt-pick" title={it.alt_off ? "Not in the total — printed as “Alt.”. Click to count this row instead." : "Counted in the total"}>
                             <input type="radio" name={`alt-${it.lid}`} checked={!it.alt_off} onChange={() => pickAlt(i)} />
                             {it.alt_off ? "Alt." : "Total"}
                           </label>

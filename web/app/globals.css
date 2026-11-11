@@ -19801,10 +19801,20 @@ select.compose-tpl-version {
 .line-alt { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 3px; }
 .line-mode { font: 600 9.5px var(--mono); padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; background: #fff; color: var(--muted); cursor: pointer; line-height: 15px; }
 .line-mode.set { background: #eaf3ff; color: #0055a8; border-color: #b9d4f2; }
-.line-pick { display: inline-flex; align-items: center; gap: 2px; font-size: 10px; color: var(--muted); cursor: pointer; white-space: nowrap; }
-.line-pick input { margin: 0; width: 11px; height: 11px; }
+/* 대안 중 합계에 넣을 줄 고르기(◉ Total / ○ Alt.) — 벤더 견적의 Line 드롭다운(.line-pick)과
+   이름을 갈랐다: 같은 이름이라 드롭다운 폭 규칙(100%·min 72px)이 No. 칸을 넓혔고, 표 입력칸
+   일반 규칙이 라디오를 칸 크기로 키웠다. 표 규칙보다 구체적으로 작게 고정한다. */
+table.mini td.seq .alt-pick {
+  display: inline-flex; align-items: center; gap: 3px;
+  width: auto; min-width: 0; max-width: none; padding: 0; border: 0; background: none;
+  font-size: 10px; line-height: 1; color: var(--muted); cursor: pointer; white-space: nowrap;
+}
+table.mini td.seq .alt-pick input[type="radio"] {
+  width: 11px; height: 11px; min-width: 0; min-height: 0; max-width: none;
+  margin: 0; padding: 0; flex: none; box-shadow: none;
+}
 tr.alt-off td.num, tr.alt-off td .num { color: #9aa3b2; }
-tr.alt-off .line-pick { color: #b25f00; }
+tr.alt-off td.seq .alt-pick { color: #b25f00; }
 .lb-lid {
   display: inline-block;
   margin-left: 6px;
