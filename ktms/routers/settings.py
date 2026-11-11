@@ -3532,6 +3532,9 @@ def _tag_decision(body: VendorTagDecision, accept: bool) -> dict:
         else:
             _vts.dismiss(s, body.company, body.kind, body.ref_id)
         s.commit()
+        # 알림 종이 들고 있는 태그 제안(뒤에서 계산해 둔 결과)에서도 바로 뺀다.
+        from routers.notifications import forget_vendor_tag
+        forget_vendor_tag(body.company, body.kind, body.ref_id)
         return {"ok": True, "updated": n}
     finally:
         s.close()

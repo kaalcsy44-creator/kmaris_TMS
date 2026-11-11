@@ -32,6 +32,8 @@ from routers.dashboard import pipeline_overview
 from routers.settings import vendor_tag_suggestion_rows
 
 import hashlib
+import threading
+import time
 from urllib.parse import quote
 
 # 수금·지급 예정일을 며칠 전부터 알릴 것인가(D-3).
@@ -190,6 +192,70 @@ def _pipeline_alerts(rows: list[dict], today: date) -> list[dict]:
     return out
 
 
+# ── 거래선 태그 제안은 뒤에서 계산한다 ─────────────────────────────────────────
+# 받은 메일 본문 전체를 분류명 정규식 145개로 훑고 실적 집계까지 다시 해서 한 번에 15초쯤
+# 걸린다(2026-11 측정, 메일이 쌓일수록 늘어난다). 알림 응답 캐시(cached_aggregate)는 60초·
+# 쓰기마다 비워지므로, 그 안에서 계산하면 화면을 열 때마다 종이 15초를 붙들고 CPU 하나뿐인
+# 서버에서 다른 요청까지 같이 느려졌다. 제안은 급한 알림이 아니라서 직전 결과를 바로 주고,
+# 10분이 지났으면 뒤에서 다시 계산한다(저장마다 다시 돌리면 뒤에서라도 CPU 를 계속 쓴다).
+# 서버가 켜질 때 한 번 미리 계산하고, 수락·무시한 제안은 저장해 둔 결과에서 바로 뺀다.
+VTAG_TTL = 600.0
+_VTAG: dict = {"at": 0.0, "val": None, "busy": False}
+_VTAG_LOCK = threading.Lock()
+
+
+def _refresh_vendor_tags() -> None:
+    try:
+        val = _vendor_tag_alerts()
+    except Exception:
+        val = None          # 실패하면 직전 값을 그대로 둔다
+    with _VTAG_LOCK:
+        if val is not None:
+            _VTAG.update(at=time.time(), val=val)
+        _VTAG["busy"] = False
+
+
+def _kick_vendor_tags() -> None:
+    with _VTAG_LOCK:
+        if _VTAG["busy"]:
+            return
+        _VTAG["busy"] = True
+    threading.Thread(target=_refresh_vendor_tags, name="vendor-tag-alerts", daemon=True).start()
+
+
+def _vendor_tag_alerts_cached() -> list[dict]:
+    """직전에 계산해 둔 태그 제안(아직 없으면 빈 목록) — 낡았으면 뒤에서 다시 계산을 건다."""
+    with _VTAG_LOCK:
+        val, at = _VTAG["val"], _VTAG["at"]
+    if val is None or time.time() - at > VTAG_TTL:
+        _kick_vendor_tags()
+    return list(val or [])
+
+
+def forget_vendor_tag(company: str, kind: str, ref_id: int) -> None:
+    """수락·무시한 제안을 저장해 둔 결과에서 뺀다 — 다시 계산(15초)을 기다리지 않고 종에서 사라지게."""
+    key = (company or "").strip().lower()
+    with _VTAG_LOCK:
+        val = _VTAG["val"]
+        if not val:
+            return
+        out = []
+        for a in val:
+            if (a.get("company") or "").strip().lower() == key:
+                rest = [i for i in a.get("suggestions") or []
+                        if not (i.get("kind") == kind and int(i.get("ref_id") or 0) == int(ref_id))]
+                if not rest:
+                    continue
+                a = {**a, "suggestions": rest}
+            out.append(a)
+        _VTAG["val"] = out
+
+
+@app.on_event("startup")
+def _warm_vendor_tags() -> None:
+    _kick_vendor_tags()
+
+
 def _vendor_tag_alerts() -> list[dict]:
     """거래선 태그 제안 — 회사마다 한 건. 안에 제안 목록을 실어 종 안에서 바로 Add/Dismiss.
     id 에 제안 구성을 넣는다 — 새 근거로 새 제안이 생기면 다시 안 읽음이 된다."""
@@ -245,6 +311,6 @@ def notifications(mine: int = 1, user: dict = Depends(get_current_user)):
         finally:
             s.close()
     if _can(role, "settings", "view"):
-        items += _vendor_tag_alerts()
+        items += _vendor_tag_alerts_cached()
     items.sort(key=lambda a: (_LEVEL_ORDER.get(a["level"], 9), -(a.get("days") or 0)))
     return {"items": items, "today": today.isoformat()}
