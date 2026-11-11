@@ -3123,8 +3123,7 @@ function CustomerQuoteDetailModal({
               {/* 마진%가 원가의 몇 배인지 — "마진 100% = 2배"로 오해하기 쉬워 배수를 같이 보여준다. */}
               <MarginFactorHint pct={defaultMargin} />
             </div>
-            {/* Apply 는 설정이 아니라 실행 — 설정 줄과 섞이지 않게 줄을 끊고 오른쪽 끝에 세운다. */}
-            <span className="pb-break" aria-hidden />
+            {/* Apply 는 마지막 설정 줄의 오른쪽 끝(margin-left:auto) — 따로 줄을 끊으면 빈 줄이 하나 생긴다. */}
             {/* 잘못된 마진은 Apply 를 누르기 전에, 버튼 바로 옆에서 알린다. */}
             {isUnreachableMargin(defaultMargin) ? (
               <span className="pb-warn">
@@ -5791,8 +5790,7 @@ function CustomerQuoteAction({
           {/* 마진%가 원가의 몇 배인지 — "마진 100% = 2배"로 오해하기 쉬워 배수를 같이 보여준다. */}
           <MarginFactorHint pct={defaultMargin} />
         </div>
-        {/* Apply 는 설정이 아니라 실행 — 설정 줄과 섞이지 않게 줄을 끊고 오른쪽 끝에 세운다. */}
-        <span className="pb-break" aria-hidden />
+        {/* Apply 는 마지막 설정 줄의 오른쪽 끝(margin-left:auto) — 따로 줄을 끊으면 빈 줄이 하나 생긴다. */}
         {/* 잘못된 마진은 Apply 를 누르기 전에, 버튼 바로 옆에서 알린다. */}
         {isUnreachableMargin(defaultMargin) ? (
           <span className="pb-warn">
