@@ -1857,9 +1857,14 @@ export type PartnerScan = {
  *  취급품목 쪽 주소를 직접 넣어 볼 수 있다. */
 export function scanPartnerWebsite(
   kind: "vendor" | "maker",
-  rowId: number,
-  website = ""
+  rowId: number | null,
+  website = "",
+  name = ""
 ): Promise<PartnerScan> {
+  // 아직 등록 전(+ New 폼)이면 행이 없다 — 주소·이름만으로 읽는 길로 간다.
+  if (rowId == null) {
+    return post<PartnerScan>("/api/admin/partners/scan-website", { website, name, kind });
+  }
   return post<PartnerScan>(
     `/api/admin/settings/${kind === "maker" ? "makers" : "vendors"}/${rowId}/scan-website`,
     { website }

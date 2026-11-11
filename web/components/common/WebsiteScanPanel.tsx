@@ -13,6 +13,9 @@ import { scanPartnerWebsite, type PartnerScan } from "@/lib/api";
  * 'Fill from history') 아직 거래해 본 적 없는 곳은 비어 있다 — 그 빈자리를 메우는 것이
  * 여기다.
  *
+ * 홈페이지로 받는 두 가지 중 ② 태그다 — ① 기본 정보(회사명·연락처·주소·로고·소개)는
+ * 설정 화면의 "Fill basic info" 가 따로 맡는다. 회사 소개 문장도 그쪽에서 채운다.
+ *
  * **고르는 것은 사람이 한다.** 홈페이지에 로고가 걸렸다고 그 메이커를 대 준다는 뜻은
  * 아니라서(한 번 납품한 실적일 수도, 호환품일 수도 있다), 받은 후보는 체크한 것만
  * 태그 칸으로 들어가고 저장은 평소의 Save 가 한다. 이 칸이 직접 쓰는 것은 없다.
@@ -25,12 +28,14 @@ export function WebsiteScanPanel({
   onCats,
   makerIds,
   onMakers,
-  note,
-  onNote,
+  name = "",
 }: {
   kind: "vendor" | "maker";
-  /** 이 회사의 아무 담당자 줄 — 서버는 그 줄에서 회사 이름과 홈페이지만 읽는다. */
-  rowId: number;
+  /** 이 회사의 아무 담당자 줄 — 서버는 그 줄에서 회사 이름과 홈페이지만 읽는다.
+   *  null = 아직 등록 전(+ New 폼) — 주소와 name 만으로 읽는다. */
+  rowId: number | null;
+  /** 등록 전일 때 모델에 알려 줄 회사명(폼에 적힌 값). */
+  name?: string;
   /** 지금 폼에 적힌 홈페이지. 아직 저장 전이어도 이 값으로 읽는다. */
   website: string;
   catIds: number[];
@@ -38,8 +43,6 @@ export function WebsiteScanPanel({
   /** 제조사 창에는 이 칸이 없다(그 회사가 곧 그 브랜드다) — 안 주면 그 줄이 안 선다. */
   makerIds?: number[];
   onMakers?: (ids: number[]) => void;
-  note: string;
-  onNote: (v: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<PartnerScan | null>(null);
@@ -55,7 +58,7 @@ export function WebsiteScanPanel({
     setErr("");
     setRes(null);
     try {
-      const d = await scanPartnerWebsite(kind, rowId, site);
+      const d = await scanPartnerWebsite(kind, rowId, site, name);
       setRes(d);
       // 이미 달려 있는 것은 뺀다 — 새로 고를 것만 남아야 무엇이 늘어나는지 보인다.
       setPickCat(new Set(d.categories.map((c) => c.id).filter((id) => !catIds.includes(id))));
@@ -87,13 +90,13 @@ export function WebsiteScanPanel({
 
   return (
     <div className="form-field scan-panel">
-      <span>Read the website</span>
+      <span>② Tags from website — item categories{onMakers ? " & makers supplied" : ""}</span>
       <div className="scan-bar">
         <button type="button" className="btn sm" disabled={busy || !site} onClick={run}
                 title={site ? `Read ${site} and suggest tags` : "Enter a website address first"}>
-          {busy ? "Reading…" : res ? "Scan again" : "Scan website"}
+          {busy ? "Reading…" : res ? "Suggest again" : "🏷 Suggest tags"}
         </button>
-        {!site ? <span className="hint-inline">No website on file yet.</span> : null}
+        {!site ? <span className="hint-inline">Enter the website first.</span> : null}
         {res && !res.error ? (
           <span className="hint-inline">
             Read {res.pages.length} page{res.pages.length === 1 ? "" : "s"}
@@ -155,12 +158,6 @@ export function WebsiteScanPanel({
                     disabled={!pickCat.size && !pickMk.size} onClick={apply}>
               Add checked ({pickCat.size + pickMk.size})
             </button>
-            {res.summary && res.summary !== note ? (
-              <button type="button" className="btn sm" onClick={() => onNote(res.summary)}
-                      title={res.summary}>
-                {note.trim() ? "Replace About with this" : "Use as About"}
-              </button>
-            ) : null}
           </div>
 
           {res.unlisted_brands.length ? (
@@ -177,7 +174,8 @@ export function WebsiteScanPanel({
 
       <span className="hint-inline">
         Reads the front page and a few product pages — and, where a site prints its text
-        into images, those pictures too — then proposes tags. It never saves on its own.
+        into images, those pictures too — then proposes tags. It never saves on its own
+        (takes 20–40 s).
         A logo on a website is not proof they supply that brand, so check before adding.
       </span>
     </div>

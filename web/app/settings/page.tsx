@@ -2718,19 +2718,49 @@ function CompanyInfoModal<
           />
         ) : null}
         <LogoPasteField value={vals.logo ?? ""} onChange={(v) => setVals({ ...vals, logo: v })} />
-        {scan ? (
-          <WebsiteScanPanel
-            kind={scan.kind}
-            rowId={rows[0].id}
+        {/* 홈페이지로 받는 두 가지 — ① 기본 정보(회사 단위 칸), ② 태그 제안(거래선·메이커). */}
+        <div className="site-fill-box">
+          <SiteBasicFill
             website={vals.website ?? ""}
-            catIds={catIds}
-            onCats={setCatIds}
-            makerIds={makerTags ? makerIds : undefined}
-            onMakers={makerTags ? setMakerIds : undefined}
-            note={vals.note ?? ""}
-            onNote={(v) => setVals({ ...vals, note: v })}
+            kind={scan?.kind ?? "customer"}
+            note="Address · logo · about · specialization (contacts are per person — add them below)"
+            onResult={(p, logo) => {
+              // 이 창의 칸은 회사 단위다. 이메일·전화는 담당자마다 따로 적는 칸이라 여기서 채우지 않는다.
+              const filled: string[] = [];
+              if (!name.trim() && p.company) { setName(p.company); filled.push("Company"); }
+              const addAddr = uniqStrings(p.addresses ?? []).filter(
+                (v) => !addresses.some((c) => c.trim().toLowerCase() === v.toLowerCase()));
+              if (addAddr.length) {
+                setAddresses([...addresses.filter((v) => v.trim()), ...addAddr]);
+                filled.push("Address");
+              }
+              const nv = { ...vals };
+              const put = (key: string, label: string, v?: string) => {
+                if (!v?.trim() || !(key in nv) || (nv[key] ?? "").trim()) return;
+                nv[key] = v.trim();
+                filled.push(label);
+              };
+              put("logo", "Logo", logo);
+              put("note", "About", p.about);
+              put("specialization", "Specialization", p.specialization);
+              put("tax_id", "Tax ID", p.tax_id);
+              if (p.website && !/^https?:\/\//i.test((nv.website ?? "").trim())) nv.website = p.website;
+              setVals(nv);
+              return filled;
+            }}
           />
-        ) : null}
+          {scan ? (
+            <WebsiteScanPanel
+              kind={scan.kind}
+              rowId={rows[0].id}
+              website={vals.website ?? ""}
+              catIds={catIds}
+              onCats={setCatIds}
+              makerIds={makerTags ? makerIds : undefined}
+              onMakers={makerTags ? setMakerIds : undefined}
+            />
+          ) : null}
+        </div>
         {tags ? (
           <CategoryTagPicker value={catIds} onChange={setCatIds} suggestions={tags.suggestions} />
         ) : null}
@@ -2957,32 +2987,29 @@ function applySiteProfile<
   return { next: rec as unknown as T, filled };
 }
 
-// Website 칸 + "Fill from site" — 홈페이지를 읽어(서버가 Claude 로) 회사명·주소·연락처·
-// 소개·취급품목·로고를 빈 칸에 채운다. 저장은 하지 않는다(Add 는 사람이 누른다).
-function WebsiteAutofillField<
-  T extends {
-    name: string; contact: string; address: string; website: string; logo: string; note: string;
-    specialization: string;
-    addresses: string[]; emails: string[]; phones: string[]; regions: string[];
-  }
->({ label, form, setForm, kind }: {
-  label: string; form: T; setForm: (next: T) => void; kind: "customer" | "vendor" | "maker";
+// ① 기본 정보 — 홈페이지를 읽어(서버가 Claude 로) 회사명·주소·연락처·소개·취급품목·로고를
+// 돌려준다. 어디에 어떻게 채울지는 부르는 쪽(onResult)이 정한다 — + New 폼과 회사 정보
+// 창은 칸의 생김새가 달라서다. onResult 는 실제로 채운 칸 이름을 돌려준다.
+// 홈페이지로 받는 두 가지 중 ② 태그(취급 분류·메이커)는 WebsiteScanPanel 이 따로 맡는다.
+function SiteBasicFill({ website, kind, onResult, note }: {
+  website: string;
+  kind: "customer" | "vendor" | "maker";
+  onResult: (p: SiteProfile, logo: string) => string[];
+  /** 버튼 옆 설명 — 무엇이 채워지는지. */
+  note?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [filled, setFilled] = useState<string[]>([]);
-  // 읽는 데 20~30초 걸린다 — 그사이 사람이 적은 값을 덮지 않도록 끝난 시점의 폼에 얹는다.
-  const latest = useRef(form);
-  latest.current = form;
+  const site = website.trim();
 
   async function run() {
-    const url = form.website.trim();
-    if (!url || busy) return;
+    if (!site || busy) return;
     setBusy(true);
     setErr("");
     setFilled([]);
     try {
-      const p = await fetchSiteProfile(url, kind);
+      const p = await fetchSiteProfile(site, kind);
       let logo = "";
       if (p.logo) {
         try {
@@ -2992,8 +3019,7 @@ function WebsiteAutofillField<
           logo = "";   // 그림이 깨졌으면 로고만 건너뛴다 — 나머지 칸은 살린다
         }
       }
-      const { next, filled: got } = applySiteProfile(latest.current, p, logo);
-      setForm(next);
+      const got = onResult(p, logo);
       setFilled(got);
       if (!got.length) setErr("홈페이지에서 새로 채울 내용을 찾지 못했습니다(이미 입력된 칸은 덮어쓰지 않습니다).");
     } catch (e) {
@@ -3005,28 +3031,68 @@ function WebsiteAutofillField<
 
   return (
     <div className="form-field site-fill-field">
-      <span>{label}</span>
-      <div className="site-fill-row">
-        <input
-          value={form.website}
-          placeholder="https://www.example.com"
-          onChange={(e) => setForm({ ...form, website: e.target.value })}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              run();
-            }
-          }}
-        />
-        <button type="button" className="btn sm" disabled={busy || !form.website.trim()} onClick={run}
-                title="Read the website and fill empty fields — company, address, contacts, about, logo">
-          {busy ? "Reading…" : "✨ Fill from site"}
+      <span>① Basic info from website</span>
+      <div className="scan-bar">
+        <button type="button" className="btn sm" disabled={busy || !site} onClick={run}
+                title={site ? `Read ${site} and fill empty fields` : "Enter the website first"}>
+          {busy ? "Reading…" : "✨ Fill basic info"}
         </button>
+        {!site ? <span className="hint-inline">Enter the website first.</span>
+          : busy ? <span className="hint-inline">홈페이지를 읽는 중입니다 — 20~30초 걸립니다.</span>
+          : !filled.length && !err ? <span className="hint-inline">{note}</span> : null}
       </div>
-      {busy ? <span className="hint-inline">홈페이지를 읽는 중입니다 — 20~30초 걸립니다.</span> : null}
       {filled.length ? <span className="action-ok">Filled: {filled.join(", ")}</span> : null}
       {err ? <span className="action-err">{err}</span> : null}
     </div>
+  );
+}
+
+// + New 폼의 Website 칸 — 주소 입력 아래에 ① 기본 정보, ② 태그 제안(거래선·메이커)을 둔다.
+// 읽는 데 20~40초 걸린다 — 그사이 사람이 적은 값을 덮지 않도록 끝난 시점의 폼에 얹는다.
+function WebsiteAutofillField<
+  T extends {
+    name: string; contact: string; address: string; website: string; logo: string; note: string;
+    specialization: string;
+    addresses: string[]; emails: string[]; phones: string[]; regions: string[];
+  }
+>({ label, form, setForm, kind }: {
+  label: string; form: T; setForm: (next: T) => void; kind: "customer" | "vendor" | "maker";
+}) {
+  const latest = useRef(form);
+  latest.current = form;
+  const rec = form as unknown as { category_ids?: number[]; maker_ids?: number[] };
+  const patch = (p: Partial<{ category_ids: number[]; maker_ids: number[] }>) =>
+    setForm({ ...latest.current, ...p });
+
+  return (
+    <>
+      <TextField label={label} value={form.website}
+                 onChange={(website) => setForm({ ...form, website })} />
+      <div className="site-fill-box">
+        <SiteBasicFill
+          website={form.website}
+          kind={kind}
+          note="Company name · address · email · phone · logo · about · specialization"
+          onResult={(p, logo) => {
+            const { next, filled } = applySiteProfile(latest.current, p, logo);
+            setForm(next);
+            return filled;
+          }}
+        />
+        {kind !== "customer" && rec.category_ids ? (
+          <WebsiteScanPanel
+            kind={kind}
+            rowId={null}
+            name={form.name}
+            website={form.website}
+            catIds={rec.category_ids}
+            onCats={(category_ids) => patch({ category_ids })}
+            makerIds={rec.maker_ids}
+            onMakers={rec.maker_ids ? (maker_ids) => patch({ maker_ids }) : undefined}
+          />
+        ) : null}
+      </div>
+    </>
   );
 }
 

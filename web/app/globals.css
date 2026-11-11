@@ -21535,3 +21535,10 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
 .site-fill-row { display: flex; gap: 6px; align-items: stretch; }
 .site-fill-row input { flex: 1; min-width: 0; }
 .site-fill-row .btn { white-space: nowrap; }
+/* 홈페이지로 받는 두 칸(① 기본 정보 · ② 태그 제안)을 한 상자로 묶는다 */
+.site-fill-box {
+  display: flex; flex-direction: column; gap: 10px;
+  border: 1px dashed var(--line-strong); border-radius: 8px;
+  padding: 10px 12px;
+}
+.site-fill-box > .form-field { margin: 0; }

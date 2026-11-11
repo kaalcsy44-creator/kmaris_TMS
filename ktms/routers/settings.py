@@ -1136,6 +1136,25 @@ def partner_site_profile(website: str = Body("", embed=True), kind: str = Body("
         raise HTTPException(status_code=400, detail=f"홈페이지 읽기 실패: {exc}") from exc
 
 
+@app.post("/api/admin/partners/scan-website", dependencies=[Depends(require_token)])
+def scan_new_partner_website(website: str = Body("", embed=True), name: str = Body("", embed=True),
+                             kind: str = Body("vendor", embed=True)):
+    """아직 등록 전(+ New 폼) — 행 없이 주소·이름만으로 태그 후보를 낸다. 읽기만 한다."""
+    site = (website or "").strip()
+    if not site:
+        raise HTTPException(status_code=400, detail="홈페이지 주소를 입력하세요.")
+    from services.site_profile import _public_host
+    from services.vendor_scan import site_url
+    if not _public_host(site_url(site)):
+        raise HTTPException(status_code=400, detail="열 수 없는 주소입니다(공개 웹 주소만 읽습니다).")
+    s = get_session()
+    try:
+        return {"name": name, "website": site,
+                **scan_partner(s, (name or "").strip(), site, "maker" if kind == "maker" else "vendor")}
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/settings/vendors/{row_id}/scan-website",
           dependencies=[Depends(require_token)])
 def scan_vendor_website(row_id: int, website: str = Body("", embed=True)):
