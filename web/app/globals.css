@@ -21584,3 +21584,5 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
 .lmp-row:hover { background: #f4f7fb; }
 .lmp-row.on { background: #eaf3ff; }
 .lmp-count { margin-right: auto; color: var(--muted); font-size: 12px; align-self: center; }
+/* 완제품 줄(한 줄이 여러 딜 라인을 덮음) — No. 칸 "L01–L14". 범위가 여럿이면 칸 안에서 줄바꿈. */
+td.seq .seq-lid.seq-lids { white-space: normal; color: #0055a8; font-weight: 600; line-height: 1.25; }

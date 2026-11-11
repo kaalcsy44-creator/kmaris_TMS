@@ -208,6 +208,36 @@ def item_row_plan(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return plan
 
 
+def line_range_text(lids: Any) -> str:
+    """라인 목록을 짧게 — 이어진 번호는 범위로("L01–L14", "L01–L03, L07")."""
+    import re as _re
+    out: List[str] = []
+    run: List[tuple] = []
+
+    def flush():
+        if not run:
+            return
+        out.append(run[0][1] if len(run) == 1 else
+                   (f"{run[0][1]}, {run[1][1]}" if len(run) == 2 else f"{run[0][1]}–{run[-1][1]}"))
+        run.clear()
+
+    for x in [str(v or "").strip() for v in (lids or []) if str(v or "").strip()]:
+        m = _re.match(r"^([A-Za-z]*)(\d+)$", x)
+        if m and run and run[-1][0] == (m.group(1), int(m.group(2)) - 1):
+            run.append(((m.group(1), int(m.group(2))), x))
+            continue
+        flush()
+        run.append(((m.group(1), int(m.group(2))) if m else (x, -99), x))
+    flush()
+    return ", ".join(out)
+
+
+def line_label(it: Dict[str, Any]) -> str:
+    """견적서 No. 칸의 라인 표시 — 완제품(lids)이면 덮는 라인 범위, 아니면 lid."""
+    lids = it.get("lids") or []
+    return line_range_text(lids) if len(lids) > 1 else str(it.get("lid") or "").strip()
+
+
 def quote_no_header(items: List[Dict[str, Any]]) -> str:
     """견적서 No. 칸의 머리 — 딜 라인(lid)이 달린 줄이 있으면 라인 번호도 함께 선다는 표시."""
     return "No.\nLine" if any(it.get("lid") for it in normalize_items(items)) else "No."
@@ -253,6 +283,7 @@ def normalize_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "row_kind": OPTION_ROW_KIND if option else "",
                 "item_no": "" if option else (seq if renumber else (raw.get("item_no") or seq)),
                 "lid": "" if option else str(raw.get("lid") or "").strip(),
+                "lids": [] if option else [str(x).strip() for x in (raw.get("lids") or []) if str(x).strip()],
                 "part_no": raw.get("part_no", ""),
                 "description": raw.get("description", ""),
                 "maker": raw.get("maker", ""),
@@ -2331,7 +2362,7 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
         if it.get("alt_off"):
             alt_rows.append(r)
         rows.append([
-            _p(quote_no_text(it["item_no"], it.get("lid"), it.get("alt_off")), s["tiny"]),
+            _p(quote_no_text(it["item_no"], line_label(it), it.get("alt_off")), s["tiny"]),
             _p(it["part_no"], s["tiny"]),
             _p(it["description"], s["tiny"]),
             _p(_qnum(it["qty"]), s["tiny"]),

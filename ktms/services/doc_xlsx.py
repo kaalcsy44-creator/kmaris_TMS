@@ -20,7 +20,7 @@ from services.kmaris_docs import (
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
     pi_decimals, doc_decimals, print_decimals, pi_charges, pi_doc_date, is_service_doc, service_info_rows,
     SERVICE_PI_DECIMALS, cn_view, cn_contact_line, CN_MIN_ITEM_ROWS,
-    is_option_row, item_row_plan, quote_no_header, quote_no_text, ALT_NOTE,
+    is_option_row, item_row_plan, quote_no_header, quote_no_text, line_label, ALT_NOTE,
 )
 
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
@@ -1301,7 +1301,7 @@ def make_quotation_costing_xlsx(
         else:
             u_cell = u_formula if not unit_price else unit_price
         cells = {
-            1: (quote_no_text(ri, it.get("lid"), bool(it.get("alt_off")))
+            1: (quote_no_text(ri, line_label(it), bool(it.get("alt_off")))
                 if it.get("lid") or it.get("alt_off") else ri),
             2: it.get("part_no", ""), 3: it.get("description", ""),
             4: qty, 5: it.get("unit", ""),

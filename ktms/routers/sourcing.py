@@ -1007,27 +1007,6 @@ def rfq_vendor_quotes(rfq_id: int):
         vqs = (s.query(VendorQuote)
                .filter(VendorQuote.vendor_rfq_id.in_(list(vrfq_map.keys())))
                .order_by(VendorQuote.id.desc()).all() if vrfq_map else [])
-        # 완제품 줄(lids)이 덮는 딜 라인의 품목 정보 — 고객 견적이 그 라인들을 "Included in"
-        # 줄로 세울 수 있게 함께 싣는다(견적 줄 자체는 대표 라인 하나뿐이다).
-        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
-        deal_line = {line_id_of(it): it for it in ((rfq.items if rfq else None) or [])
-                     if isinstance(it, dict) and line_id_of(it) and not is_option_row(it)}
-
-        def _with_covered(items):
-            out_items = []
-            for it in items or []:
-                lids = line_ids_of(it) if isinstance(it, dict) else []
-                if len(lids) > 1:
-                    it = {**it, "covered_lines": [{
-                        "lid": x,
-                        "part_no": (deal_line.get(x) or {}).get("part_no") or "",
-                        "description": (deal_line.get(x) or {}).get("description") or "",
-                        "qty": (deal_line.get(x) or {}).get("qty") or 1,
-                        "unit": (deal_line.get(x) or {}).get("unit") or "",
-                    } for x in lids[1:] if x in deal_line]}
-                out_items.append(it)
-            return out_items
-
         out = []
         for q in vqs:
             vrfq = vrfq_map.get(q.vendor_rfq_id)
@@ -1045,7 +1024,7 @@ def rfq_vendor_quotes(rfq_id: int):
                 "received_at": getattr(q, "received_at", None) or "",
                 "valid_until": getattr(q, "valid_until", None) or "",
                 "currency": getattr(q, "currency", None) or "USD",
-                "items": _with_covered(q.items),
+                "items": q.items or [],
                 "terms": getattr(q, "terms", None) or {},
             })
         return {"vendor_quotes": out}
@@ -1576,8 +1555,11 @@ def awarded_items(rfq_id: int):
             q = vq_map.get(a.vendor_quote_id)
             # 단가·납기는 벤더가 쓴 것을 쓴다. 대안이 있는 줄은 고른 그 대안의 줄이다.
             hit = _quote_line(lines_src, q, lid, a.alt)[0] if q else {}
-            # 완제품 줄에 포함된 라인 — 값은 대표 라인에 있다. 원가 0, 비고에 "Included in".
+            # 완제품 줄에 포함된 라인 — 따로 줄을 세우지 않고 대표 줄의 lids 에 묶는다
+            # (고객 견적·발주서에서 한 줄 = 한 물건, No. 칸에 "L01–L14").
             covered = hit.get("covered_by") or ""
+            if covered:
+                continue
             cur = (q.currency if q else a.currency) or "USD"
             if cur not in currencies:
                 currencies.append(cur)
@@ -1590,18 +1572,19 @@ def awarded_items(rfq_id: int):
                 "description": it.get("description") or hit.get("description") or "",
                 # 벤더 쪽 품번은 따로 실어 보낸다 — 발주서(6단계)는 이쪽을 써야
                 # 벤더가 자기 번호로 알아본다.
-                "vendor_part_no": "" if covered else (hit.get("part_no") or ""),
+                "vendor_part_no": hit.get("part_no") or "",
                 "type": it.get("type") or hit.get("type") or "",
                 "serial_no": it.get("serial_no") or hit.get("serial_no") or "",
                 "maker": it.get("maker") or hit.get("maker") or hit.get("manufacturer") or "",
                 "qty": it.get("qty", 1) or 1,
                 "unit": hit.get("unit") or it.get("unit") or "PCS",
-                "cost_price": 0 if covered else (a.unit_cost if a.unit_cost is not None else _cell_cost(hit)),
+                "cost_price": a.unit_cost if a.unit_cost is not None else _cell_cost(hit),
                 "currency": cur,
                 "lead_time": hit.get("lead_time") or a.lead_time or "",
-                "remark": (f"Included in {covered}" + (f" · {it.get('remark')}" if it.get("remark") else ""))
-                          if covered else (it.get("remark") or ""),
-                "included_in": covered,
+                "remark": it.get("remark") or "",
+                # 이 줄이 덮는 라인 전부(완제품) — 채택된 라인만, 딜 순서로.
+                "lids": (lambda ls: ls if len(ls) > 1 else None)(
+                    [x for x in line_ids_of(hit) if x in awards]) if q else None,
                 "category_id": it.get("category_id"),
                 "applied_to": it.get("applied_to"),
                 "vendor_id": a.vendor_id or 0,

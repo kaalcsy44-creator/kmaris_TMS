@@ -749,9 +749,6 @@ export type VendorQuoteItem = {
    *  물건(complete 제품)으로 견적한 경우다 — 비교표는 대표 라인에 값, 나머지는
    *  "Included in 대표"로 보이고 채택도 묶음째 한다. */
   lids?: string[];
-  /** (불러오기 전용, 저장 안 함) 완제품 줄이 덮는 딜 라인의 품목 정보 — 서버가 고객 견적
-   *  불러오기용으로 실어 준다. 고객 견적은 이 라인들을 "Included in 대표" 줄로 세운다. */
-  covered_lines?: { lid: string; part_no: string; description: string; qty: number; unit: string }[];
 };
 
 export type CustomerQuoteItem = {
@@ -785,6 +782,9 @@ export type CustomerQuoteItem = {
    *  다시 찾을 수 없어서다(web/lib/deal.ts makeItemMatcher). 편집기는 받은 값을
    *  그대로 돌려보내기만 하면 된다 — 새 줄이면 비워 두고 서버가 붙인다. */
   lid?: string;
+  /** 이 줄이 덮는 딜 라인 전부(완제품 — 대표 lid 포함, 2개 이상일 때만). No. 칸·견적서에
+   *  "L01–L14" 로 선다. 값은 이 한 줄에 있다. */
+  lids?: string[];
   /** 같은 라인(lid)이 여러 줄일 때 그 묶음의 성격 — "alt"(대안: 한 줄만 합계) / "set"(세트: 모두 합계).
    *  묶음의 모든 줄에 같은 값이 실린다. 없으면 대안(lib/quoteOptions.ts applyLineAlts). */
   line_mode?: "alt" | "set" | null;
@@ -911,6 +911,8 @@ export type LineBoard = {
 /** 채택된 줄을 문서용 품목으로 — 4단계 고객 견적·6단계 벤더 발주서가 쓴다. */
 export type AwardedItem = {
   lid: string;
+  /** 완제품 줄이면 덮는 라인 전부(대표 포함). */
+  lids?: string[] | null;
   part_no: string;
   /** 벤더가 자기 번호로 바꿔 적어 보낸 품번. 발주서는 이쪽을 쓰고, 고객 견적서는
    *  쓰지 않는다 — 우리 매입처의 코드를 고객에게 넘기는 셈이 되기 때문이다. */

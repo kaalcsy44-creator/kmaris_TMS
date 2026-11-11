@@ -5000,6 +5000,31 @@ function usedCross(cross: CrossFx, costCur: string, items: CustomerQuoteItem[], 
   return Object.fromEntries(Object.entries(cross).filter(([c]) => used.has(c)));
 }
 
+/** 라인 목록을 짧게 — 이어진 번호는 범위로("L01–L14", "L01–L03, L07"). 서버 kmaris_docs.line_range_text 와 같은 규칙. */
+function lineRangeText(lids: string[]): string {
+  const out: string[] = [];
+  let run: { p: string; n: number; x: string }[] = [];
+  const flush = () => {
+    if (!run.length) return;
+    out.push(run.length === 1 ? run[0].x : run.length === 2 ? `${run[0].x}, ${run[1].x}` : `${run[0].x}–${run[run.length - 1].x}`);
+    run = [];
+  };
+  for (const raw of lids) {
+    const x = (raw || "").trim();
+    if (!x) continue;
+    const m = /^([A-Za-z]*)(\d+)$/.exec(x);
+    const last = run[run.length - 1];
+    if (m && last && last.p === m[1] && last.n === Number(m[2]) - 1) {
+      run.push({ p: m[1], n: Number(m[2]), x });
+      continue;
+    }
+    flush();
+    run.push({ p: m ? m[1] : x, n: m ? Number(m[2]) : -99, x });
+  }
+  flush();
+  return out.join(", ");
+}
+
 /** 이 견적서의 숫자에 KRW 가 끼는가 — 원가·판매 통화, 또는 실린 줄의 출처 통화. */
 function usesKrw(costCur: string, saleCur: string, items: CustomerQuoteItem[]): boolean {
   const k = (c?: string | null) => (c || "").toUpperCase() === "KRW";
@@ -5173,12 +5198,12 @@ function customerQuoteItemsFromVendorQuote(
   costCurrency?: string
 ): CustomerQuoteItem[] {
   const costCur = (costCurrency || vq.currency || DEFAULT_COST_CURRENCY).toUpperCase();
-  return vq.items.flatMap((it): CustomerQuoteItem[] => {
+  return vq.items.map((it): CustomerQuoteItem => {
     // 옵션 구분행은 제목만 있는 줄이라 원가·단가를 계산하지 않고 그대로 옮긴다.
     if (isOptionRow(it))
-      return [{ part_no: "", description: it.description || "", qty: 0, unit: "",
+      return { part_no: "", description: it.description || "", qty: 0, unit: "",
                cost_price: null, margin_pct: null, unit_price: null, amount: null,
-               row_kind: OPTION_ROW_KIND }];
+               row_kind: OPTION_ROW_KIND };
     const srcCost = Number(it.cost_price ?? 0);
     const cost = convertCurrency(srcCost, vq.currency, costCur, rate);
     const unit = calcUnitPrice(cost, defaultMargin, costCur, saleCurrency, roundDigits, rate);
@@ -5197,36 +5222,15 @@ function customerQuoteItemsFromVendorQuote(
       lead_time: it.lead_time ?? "",
       remark: it.remark ?? "",
       lid: it.lid ?? "",
+      // 완제품 — 이 한 줄이 덮는 딜 라인 전부(No. 칸 "L01–L14").
+      ...(it.lids && it.lids.length > 1 ? { lids: it.lids } : {}),
       src_vq_id: vq.id,
       src_vendor: vq.vendor || "",
       src_vq_no: vq.vendor_quote_no || "",
       src_currency: (vq.currency || costCur).toUpperCase(),
       src_cost: srcCost,
     };
-    // 완제품 줄(한 줄이 딜의 여러 라인을 덮음) — 고객이 물어본 라인은 고객 견적에도 모두 선다.
-    // 값은 대표 줄에만 있고, 나머지 라인은 원가·단가 0 + "Included in 대표".
-    const head = (it.lid || "").trim();
-    const covered = (it.covered_lines ?? []).map((c): CustomerQuoteItem => ({
-      part_no: c.part_no || "",
-      description: c.description || "",
-      type: "",
-      serial_no: "",
-      qty: Number(c.qty || 1),
-      unit: c.unit || it.unit || "PCS",
-      cost_price: 0,
-      margin_pct: defaultMargin,
-      unit_price: 0,
-      amount: 0,
-      lead_time: it.lead_time ?? "",
-      remark: head ? `Included in ${head}` : "Included",
-      lid: c.lid,
-      src_vq_id: vq.id,
-      src_vendor: vq.vendor || "",
-      src_vq_no: vq.vendor_quote_no || "",
-      src_currency: (vq.currency || costCur).toUpperCase(),
-      src_cost: 0,
-    }));
-    return [row, ...covered];
+    return row;
   });
 }
 
@@ -5268,6 +5272,7 @@ function customerQuoteItemsFromAwards(
       category_id: it.category_id ?? null,
       applied_to: it.applied_to ?? null,
       lid: it.lid || "",
+      ...(it.lids && it.lids.length > 1 ? { lids: it.lids } : {}),
       // 채택된 줄도 출처를 안고 간다 — 벤더 견적을 합쳐 담는 길과 같은 표식이라
       // 출처 띠·저장 시 문서 링크가 두 길을 가리지 않는다.
       src_vq_id: it.vendor_quote_id || null,
@@ -5328,6 +5333,14 @@ function mergeVendorQuotes(opts: {
     filled += r.filled;
     skipped.push(...r.skipped);
   });
+  // 완제품 줄이 덮은 라인의 빈 줄(딜 품목으로 미리 깔아 둔, 값·출처 없는 줄)은 걷어낸다 —
+  // 그 라인은 이제 완제품 한 줄 안에 있다(No. 칸 "L01–L14").
+  const coveredBy = new Set<string>();
+  items.forEach((it) => (it.lids ?? []).slice(1).forEach((x) => coveredBy.add(x)));
+  if (coveredBy.size) {
+    items = items.filter((it) => isOptionRow(it) || !coveredBy.has(String(it.lid || ""))
+      || Number(it.src_vq_id || 0) > 0 || Number(it.cost_price || 0) > 0);
+  }
   return {
     items,
     costCurrency: costCur,
@@ -6551,7 +6564,14 @@ function CustomerQuoteItemEditor({
                     ▸
                   </button>
                   {entry.seq}
-                  {it.lid ? <span className="seq-lid" title="Line ID — also printed on the quotation sent to the customer">{it.lid}</span> : null}
+                  {it.lid ? (
+                    <span className={`seq-lid${(it.lids?.length ?? 0) > 1 ? " seq-lids" : ""}`}
+                          title={(it.lids?.length ?? 0) > 1
+                            ? `One complete item covering ${it.lids!.length} project lines: ${it.lids!.join(", ")} — printed the same way on the quotation`
+                            : "Line ID — also printed on the quotation sent to the customer"}>
+                      {(it.lids?.length ?? 0) > 1 ? lineRangeText(it.lids!) : it.lid}
+                    </span>
+                  ) : null}
                   {/* 같은 라인이 여러 줄 — 대안이면 합계에 넣을 한 줄을 고르고, 세트면 모두 넣는다. */}
                   {groups.has(String(it.lid || "")) ? (() => {
                     const idx = groups.get(String(it.lid || ""))!;
