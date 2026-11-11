@@ -1203,8 +1203,9 @@ def make_quotation_costing_xlsx(
     ws.row_dimensions[4 + TOP].height = 6
     # ── 타이틀 (샘플처럼 크게) ─────────────────────────────────────────────
     merge(5 + TOP, 1, 5 + TOP, NCOL)
-    c = ws.cell(5 + TOP, 1, "QUOTATION / COSTING SHEET"); c.font = Font(name="Calibri", bold=True, size=22, color="0B1D3A"); c.alignment = center
-    ws.row_dimensions[5 + TOP].height = 34
+    # 2026-11-11 사용자 수정본 기준 — 제목은 "QUOTATION"만, 28pt, 행 높이 48.6.
+    c = ws.cell(5 + TOP, 1, "QUOTATION"); c.font = Font(name="Calibri", bold=True, size=28, color="0B1D3A"); c.alignment = center
+    ws.row_dimensions[5 + TOP].height = 48.6
     ws.row_dimensions[6 + TOP].height = 4
 
     # 원가(cost) 통화 → 판매 통화 환산계수. Margin 수식에서 통화가 섞일 때 사용.
