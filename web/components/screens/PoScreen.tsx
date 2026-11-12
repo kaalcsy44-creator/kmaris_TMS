@@ -86,7 +86,7 @@ import type {
   VendorOption,
 } from "@/lib/types";
 import SourceFilesList from "@/components/common/SourceFilesList";
-import { withDefaultTerms } from "@/lib/terms";
+import { withDefaultTerms, NO_WARRANTY } from "@/lib/terms";
 import { useEditGate } from "@/lib/viewMode";
 
 type OrderOpt = PoWorkOptions["orders"][number];
@@ -1293,7 +1293,7 @@ function VendorPoDetailModal({
         setCurrency(data.currency || "USD");
         setStatus(data.status || "");
         setItems(data.items.length ? data.items.map(normalizeItem) : [blankItem()]);
-        setTerms(withDefaultTerms(data.terms));
+        setTerms(withDefaultTerms(data.terms, NO_WARRANTY));
         // 이 발주서가 속한 오더의 프로젝트(RFQ)에서 수신한 공급사 견적들.
         const ord = options.orders.find((o) => o.id === data.order_id);
         if (ord) {
@@ -1315,7 +1315,8 @@ function VendorPoDetailModal({
     const v = options.vendors.find((x) => x.name === vq.vendor);
     if (v) setVendorId(v.id);
     // 발주서 머리의 Quotation No. — 이 발주의 근거가 된 견적번호를 그대로 물려받는다.
-    setTerms((t) => ({ ...t, vendor_quote_no: vq.vendor_quote_no || t.vendor_quote_no }));
+    // 보증도 그 견적에 적힌 그대로 — 견적에 없으면 빈칸.
+    setTerms((t) => ({ ...t, vendor_quote_no: vq.vendor_quote_no || t.vendor_quote_no, warranty: (vq.terms?.warranty || "").trim() }));
     // 단가를 불러오면 그 단가의 통화도 함께 — 안 그러면 KRW 단가가 USD 로 찍힌다.
     if (vq.currency) setCurrency(vq.currency);
     setErr(null);
@@ -1874,7 +1875,7 @@ function VendorPoCreate({
   const [date, setDate] = useState(today);
   const [currency, setCurrency] = useState("USD");
   const [items, setItems] = useState<PoWorkItem[]>([blankItem()]);
-  const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
+  const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms(null, NO_WARRANTY));
   const [vendorQuotes, setVendorQuotes] = useState<VendorQuoteForImport[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -1908,11 +1909,14 @@ function VendorPoCreate({
   // — USD 로 수출하는 딜이라도 국내 공급사에서는 KRW 로 산다. 사람이 통화를 직접 고쳤으면
   // 덮지 않는다.
   useEffect(() => {
-    if (curTouched.current || vendorId === "") return;
+    if (vendorId === "") return;
     const v = options.vendors.find((x) => x.id === vendorId);
     const mine = vendorQuotes
       .filter((q) => (q.vendor_id && q.vendor_id === vendorId) || (v && q.vendor === v.name))
       .sort((a, b) => (b.received_at || b.received_date || "").localeCompare(a.received_at || a.received_date || ""));
+    // 보증 = 그 공급사가 견적에 적은 보증(없으면 빈칸). 기본값으로 채우지 않는다.
+    if (mine.length) setTerms((t) => ({ ...t, warranty: (mine[0].terms?.warranty || "").trim() }));
+    if (curTouched.current) return;
     if (mine[0]?.currency) setCurrency(mine[0].currency);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vendorId, vendorQuotes]);
@@ -1935,7 +1939,8 @@ function VendorPoCreate({
     const v = options.vendors.find((x) => x.name === vq.vendor);
     if (v) setVendorId(v.id);
     // 발주서 머리의 Quotation No. — 이 발주의 근거가 된 견적번호를 그대로 물려받는다.
-    setTerms((t) => ({ ...t, vendor_quote_no: vq.vendor_quote_no || t.vendor_quote_no }));
+    // 보증도 그 견적에 적힌 그대로 — 견적에 없으면 빈칸.
+    setTerms((t) => ({ ...t, vendor_quote_no: vq.vendor_quote_no || t.vendor_quote_no, warranty: (vq.terms?.warranty || "").trim() }));
     // 단가를 불러오면 그 단가의 통화도 함께 — 안 그러면 KRW 단가가 USD 로 찍힌다.
     if (vq.currency) {
       setCurrency(vq.currency);

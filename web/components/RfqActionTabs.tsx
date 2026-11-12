@@ -114,7 +114,7 @@ import DetailTabBar, { DetailTab } from "./common/DetailTabBar";
 import { ProjectProformaInvoice } from "./screens/DocumentsScreen";
 import { useEditGate, useViewMode } from "@/lib/viewMode";
 import SourceFilesList from "./common/SourceFilesList";
-import { withDefaultTerms, TERM_TEXT_KEYS } from "@/lib/terms";
+import { withDefaultTerms, TERM_TEXT_KEYS, NO_WARRANTY } from "@/lib/terms";
 import { sortByDocNo } from "@/lib/sort";
 import {
   amountInputValue,
@@ -2152,7 +2152,7 @@ function VendorQuoteDetailModal({
   const [currency, setCurrency] = useState(DEFAULT_COST_CURRENCY);
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
-  const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
+  const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms(null, NO_WARRANTY));
   const [fxRate, setFxRate] = useState<number | null>(null);
   const [fxMode, setFxMode] = useState<FxMode>("auto");
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
@@ -2186,7 +2186,7 @@ function VendorQuoteDetailModal({
         setFxMode(typeof data.fx_rate === "number" ? "manual" : "auto");
         setOcrFiles(Array.isArray(data.source_files) ? data.source_files : []);
         // Payment Terms 미입력이면 벤더 정보에 등록된 기본 결제조건으로 채운다(수정 가능).
-        setTerms(withDefaultTerms(seedPaymentTerms(data.terms, data.default_payment_terms)));
+        setTerms(withDefaultTerms(seedPaymentTerms(data.terms, data.default_payment_terms), NO_WARRANTY));
         setParseMsg(null);
         setErr(null);
         setReadyKey(ready);
@@ -4035,7 +4035,7 @@ function VendorQuoteAction({
   const [currency, setCurrency] = useState(DEFAULT_COST_CURRENCY);
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<VendorQuoteItem[]>([]);
-  const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
+  const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms(null, NO_WARRANTY));
   const [fxRate, setFxRate] = useState<number | null>(null);
   const [fxMode, setFxMode] = useState<FxMode>("auto");
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
@@ -4189,7 +4189,7 @@ function VendorQuoteAction({
       setCurrency(DEFAULT_COST_CURRENCY);
       setNotes("");
       setItems([]);
-      setTerms(withDefaultTerms());
+      setTerms(withDefaultTerms(null, NO_WARRANTY));
       setOcrFiles([]);
       setFxRate(null);
       setFxMode("auto");

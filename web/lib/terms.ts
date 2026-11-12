@@ -35,13 +35,23 @@ export const DEFAULT_TERMS = {
 
 // 저장된 terms 에 기본값을 채워 반환한다. 이미 값이 있는 필드는 그대로 두고,
 // 비어 있는(미입력) 필드만 DEFAULT_TERMS 로 보완한다. t 를 안 주면 순수 기본값.
-export function withDefaultTerms(t?: QuotationTerms | null): QuotationTerms {
-  const out: QuotationTerms = { ...DEFAULT_TERMS, ...(t || {}) };
+// opts.warranty=false — 보증은 기본값으로 채우지 않는다(받은 견적·발주서: 공급사가 적은
+// 보증만 싣는다. 견적서에 없으면 빈칸 그대로).
+export function withDefaultTerms(
+  t?: QuotationTerms | null,
+  opts?: { warranty?: boolean },
+): QuotationTerms {
+  const noWarranty = opts?.warranty === false;
+  const out: QuotationTerms = { ...DEFAULT_TERMS, ...(noWarranty ? { warranty: "" } : {}), ...(t || {}) };
   (Object.keys(DEFAULT_TERMS) as (keyof typeof DEFAULT_TERMS)[]).forEach((k) => {
+    if (noWarranty && k === "warranty") return;
     if (!out[k] || String(out[k]).trim() === "") out[k] = DEFAULT_TERMS[k];
   });
   return out;
 }
+
+/** 받은 견적·발주서용 기본 거래조건 — 보증은 기본값 없이(견적서에 적힌 것만). */
+export const NO_WARRANTY = { warranty: false } as const;
 
 // 문자열 값을 가지는 거래조건 키 — 문서 간 복사(벤더 견적 → 고객 견적)에 쓴다.
 // clauses·extra_clauses 는 견적서 전용 목록이라 여기 넣지 않는다(복사 대상 아님).
