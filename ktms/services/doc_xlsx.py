@@ -1863,10 +1863,15 @@ def make_purchase_order_xlsx(
             ws.cell(row, col).fill = navy
         ws.row_dimensions[row].height = 16
 
+    # 글머리 — 견적서 T&C 와 같은 모양: 점(•)은 A열에 따로(오른쪽 정렬), 글은 B~끝 병합.
+    # 점과 글을 한 칸에 넣으면 줄이 접힐 때 둘째 줄이 점 아래로 파고든다.
     def bullet(row, text):
-        merge(row, 1, row, NCOL)
-        put(row, 1, f"• {text}", font=normal, align=left)
-        ws.row_dimensions[row].height = 13
+        put(row, 1, "•", font=normal, align=Alignment(horizontal="right", vertical="center"))
+        merge(row, 2, row, NCOL)
+        put(row, 2, text, font=normal, align=left)
+        # 병합 칸은 Excel 이 높이를 못 잡는다 — 긴 글·여러 줄(Remarks)은 줄 수만큼 높인다.
+        lines = sum(max(1, -(-len(x) // 110)) for x in str(text or "").split(chr(10)))
+        ws.row_dimensions[row].height = 15 * lines
 
     # ── Terms & Conditions ─────────────────────────────────────────────
     r += 2
