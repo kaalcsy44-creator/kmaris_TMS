@@ -166,6 +166,8 @@ _MIGRATIONS = {
         "vendor_docs_sent_date":    "VARCHAR(10)",
         # 8) Delivery Complete · POD 화면의 자유 메모(파일과 독립 보관).
         "pod_notes":         "TEXT",
+        # 8) 인도 기록(인계일·장소·인수자·증빙 종류) — Incoterms 인도 지점 기준.
+        "pod_info":          "JSON",
         "trade_type":        "VARCHAR(10) DEFAULT '수출'",
         "service_info":      "JSON",
         # 수동 완료 표시(7·8·10·11)를 고객 P/O 단위로 보관. NULL = 아직 오더별 기록 없음

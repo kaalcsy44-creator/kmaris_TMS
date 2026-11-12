@@ -1234,8 +1234,13 @@ def save_pod_notes(order_id: int, body: PodNotesSave):
         if not order:
             raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
         order.pod_notes = (body.notes or "").strip() or None
+        if body.info is not None:
+            # 문자열 값만, 앞뒤 공백 정리 — 빈 칸은 버려 "기록 없음"과 구분되게 한다.
+            info = {str(k): str(v).strip() for k, v in body.info.items()
+                    if v is not None and str(v).strip()}
+            order.pod_info = info or None  # 재할당해야 JSON 변경이 감지된다
         s.commit()
-        return {"ok": True, "notes": order.pod_notes or ""}
+        return {"ok": True, "notes": order.pod_notes or "", "info": order.pod_info or {}}
     finally:
         s.close()
 

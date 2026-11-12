@@ -602,6 +602,9 @@ class Order(Base):
     consignee_confirmed_date = Column(String(10))  # 8) Delivery arrangement - Customer 확인 (수동)
     vendor_docs_sent_date    = Column(String(10))  # 8) Delivery arrangement - Vendor 서류 확인 (수동)
     pod_notes                = Column(Text)        # 8) Delivery Complete · POD 자유 메모
+    # 8) 인도(우리 책임 종료) 기록 — Incoterms 인도 지점에서의 인계일·장소·인수자·증빙 종류.
+    # {"handover_date","handover_place","handed_to","received_by","transport_ref","evidence_type"}
+    pod_info                 = Column(JSON)
     items          = Column(JSON, default=list)
     terms          = Column(JSON, default=dict)   # 거래조건(Incoterms·Place·결제·포장·보증 등)
     # Auto-fill 소스 파일 메타(영구 보관). [{"name","media_type","item_count","at"}]

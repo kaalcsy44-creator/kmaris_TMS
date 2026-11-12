@@ -1167,6 +1167,8 @@ export type DocumentDetail = {
     consignee_confirmed_date: string;
     vendor_docs_sent_date: string;
     pod_notes?: string;          // 8) Delivery Complete · POD 메모
+    // 8) 인도 기록 — Incoterms 인도 지점(우리 책임 종료점)에서의 인계일·장소·인수자·증빙 종류.
+    pod_info?: Record<string, string>;
     items: DocumentWorkItem[];
     // 상위 단계에서 이미 입력한 값 — 문서(PI/CI)의 빈 칸을 채우는 기본값.
     // 우선순위는 고객 P/O(5단계) > 견적(3·4단계)이며, sources 는 각 값이 어느 단계에서 왔는지.

@@ -29,7 +29,7 @@ if str(ROOT) not in sys.path:
 
 import bcrypt
 import jwt
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -3349,6 +3349,7 @@ def _document_detail_payload(session, order: Order) -> dict:
             "consignee_confirmed_date": order.consignee_confirmed_date or "",
             "vendor_docs_sent_date": order.vendor_docs_sent_date or "",
             "pod_notes": getattr(order, "pod_notes", None) or "",
+            "pod_info": getattr(order, "pod_info", None) or {},
             "items": order.items or [],
             # 상위 단계(고객 P/O·견적)에서 이미 입력한 거래조건·통화 — 문서 기본값으로 쓴다.
             "doc_defaults": _doc_defaults(session, order),
@@ -3592,6 +3593,7 @@ def _project_doc_context(session, rfq: RFQ) -> dict:
             "consignee_confirmed_date": "",
             "vendor_docs_sent_date": "",
             "pod_notes": "",
+            "pod_info": {},
             "items": items,
             "doc_defaults": _doc_defaults_from(None, "", quo),
         },
@@ -3623,8 +3625,10 @@ class DocumentMilestoneUpdate(BaseModel):
 
 
 class PodNotesSave(BaseModel):
-    """8) Delivery Complete · POD 화면 메모 저장(파일 유무와 무관)."""
+    """8) Delivery Complete · POD 화면 메모 + 인도 기록 저장(파일 유무와 무관).
+    info 가 None 이면 인도 기록은 건드리지 않는다(메모만 보내던 옛 호출 호환)."""
     notes: str = ""
+    info: Optional[Dict[str, Any]] = None
 
 
 class ProformaInvoiceSave(BaseModel):
