@@ -3243,6 +3243,13 @@ def _doc_defaults(session, order: Order) -> dict:
     q = None
     if getattr(order, "quotation_id", None):
         q = session.query(Quotation).filter_by(id=order.quotation_id).first()
+    if q is None:
+        # 고객 P/O 를 견적과 잇지 않고 등록한 오더(quotation_id 없음)도 많다 — 그러면 견적 할인·
+        # 거래조건이 PI/CI 로 안 넘어와 총액이 견적서(할인가)와 어긋난다. 4단계 PI 와 같은 규칙
+        # (딜의 대표 견적: 발송본 중 최신)으로 견적을 찾아 쓴다.
+        rfq = _rfq_for_order(session, order)
+        if rfq is not None:
+            q = _project_quotation(session, rfq.id)
     return _doc_defaults_from(getattr(order, "terms", None),
                               getattr(order, "currency", ""), q)
 
