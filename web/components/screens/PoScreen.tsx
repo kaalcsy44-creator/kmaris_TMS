@@ -818,7 +818,10 @@ function VendorPoTab({
           )}
           <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Issue another</button>
         </div>
+        {/* key — 발주서를 바꾸면 폼을 새로 띄운다. 안 그러면 앞 발주서의 늦게 온 응답이
+            지금 발주서 칸(PO No. 등)을 덮어 Save 가 "이미 존재하는 PO No." 로 막힌다. */}
         <VendorPoDetailModal
+          key={selected.id}
           id={selected.id}
           options={options}
           onClose={onChanged}
@@ -1278,8 +1281,10 @@ function VendorPoDetailModal({
   const vendorChoices = options.vendors;
 
   useEffect(() => {
+    let stale = false;   // id 가 바뀐 뒤 도착한 옛 응답은 버린다
     fetchVendorPoDetail(id)
       .then((data) => {
+        if (stale) return;
         setD(data);
         setVendorId(data.vendor_id || "");
         // 이미 채번되어 저장된 K-Maris PO No.(KMS-ORD-…)를 그대로 보여준다.
@@ -1299,7 +1304,8 @@ function VendorPoDetailModal({
           setVendorQuotes([]);
         }
       })
-      .catch((e) => setErr(e instanceof Error ? e.message : "Error"));
+      .catch((e) => { if (!stale) setErr(e instanceof Error ? e.message : "Error"); });
+    return () => { stale = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -1319,9 +1325,11 @@ function VendorPoDetailModal({
     setBusy(true);
     setErr(null);
     try {
+      // PO No. 는 사람이 고쳤을 때만 보낸다 — 번호를 안 바꾼 저장이 번호 중복 검사에 걸릴 일이 없게.
+      const newNo = poNo.trim();
       await updatePurchaseOrder(id, {
         vendor_id: vendorId === "" ? undefined : vendorId,
-        po_no: poNo.trim() || undefined,
+        po_no: newNo && newNo !== (d?.po_no || "") ? newNo : undefined,
         date: poDate,
         currency,
         status,
