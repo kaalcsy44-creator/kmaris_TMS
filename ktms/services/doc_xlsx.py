@@ -14,7 +14,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 from services.kmaris_docs import (
-    bank_name_address, origin_mark,
+    bank_name_address, origin_mark, incoterms_text,
     normalize_items, calc_totals, _num, DOC_TITLES, doc_parties,
     packing_totals, consignee_mark_lines, _dim_parts, cbm, _invoice_shipping_rows,
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
@@ -1013,7 +1013,7 @@ def make_document_xlsx(
         (party, customer.get("name", ""), "Document No.", data.get("doc_no", "")),
         ("Address", customer.get("address", ""), "Date", data.get("date", "")),
         ("Vessel", vessel.get("name", ""), "Currency", currency),
-        ("Contact", customer.get("contact", ""), "Incoterms", terms.get("incoterms", "")),
+        ("Contact", customer.get("contact", ""), "Incoterms", incoterms_text(terms)),
     ]
     for off, (k1, v1, k2, v2) in enumerate(meta, start=4):
         for col, val, is_label in [(1, k1, True), (2, v1, False), (7, k2, True), (8, v2, False)]:

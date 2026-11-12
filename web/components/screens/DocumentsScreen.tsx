@@ -2028,7 +2028,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
   // 사용자가 수정한 항목만 PL 로 저장되며 나머지는 CI 를 따라간다.
   function initialShipping(): Record<string, string> {
     return {
-      port_loading: "Busan, Korea",
+      port_loading: "Busan, Republic of Korea",
       port_discharge: "",
       carrier: "TBD",
       bl_awb_no: "TBD",
@@ -2624,9 +2624,18 @@ function ShippingFields({
       {ro("eta")
         ? <ReadonlyField label="ETA" value={shipping.eta || ""} />
         : <Field label="ETA" value={shipping.eta || ""} onChange={set("eta")} type="date" />}
+      {/* Incoterms 는 규칙 + 지정 장소 두 칸 — 인쇄 시 "EXW (Ex Works) Busan, Republic of Korea" 로 이어 찍는다. */}
       {setTerms
         ? <ComboField label="Incoterms" value={t.incoterms || ""} onChange={setTerm("incoterms")} options={INCOTERMS_OPTIONS} />
         : <ReadonlyField label="Incoterms" value={t.incoterms || ""} />}
+      {setTerms
+        ? <ComboField
+            label={placeIsDestination(t.incoterms || "") ? "Incoterms place (destination)" : "Incoterms place"}
+            value={t.delivery_place || ""}
+            onChange={setTerm("delivery_place")}
+            options={PORT_OPTIONS}
+          />
+        : <ReadonlyField label="Incoterms place" value={t.delivery_place || ""} />}
       {setTerms
         ? <ComboField label="Payment Terms" value={t.payment_terms || ""} onChange={setTerm("payment_terms")} options={PAYMENT_OPTIONS} />
         : <ReadonlyField label="Payment Terms" value={t.payment_terms || ""} />}
@@ -2785,13 +2794,15 @@ function ReadonlyField({ label, value, wide }: { label: string; value: string; w
 
 // 자주 쓰는 값 제안 목록(datalist) — 목록 선택도, 직접 입력도 모두 가능한 콤보박스.
 const PORT_OPTIONS = [
-  "Busan, Korea", "Busan New Port, Korea", "Incheon, Korea", "Incheon Airport, Korea",
-  "Gwangyang, Korea", "Ulsan, Korea", "Pyeongtaek, Korea",
-  "Shanghai, China", "Ningbo, China", "Qingdao, China", "Hong Kong",
+  "Busan, Republic of Korea", "Busan New Port, Republic of Korea", "Incheon, Republic of Korea",
+  "Incheon Airport, Republic of Korea", "Gwangyang, Republic of Korea", "Ulsan, Republic of Korea",
+  "Pyeongtaek, Republic of Korea",
+  "Shanghai, China", "Ningbo, China", "Qingdao, China", "Zhoushan, China", "Dalian, China", "Hong Kong",
   "Singapore", "Port Klang, Malaysia", "Tokyo, Japan", "Yokohama, Japan", "Kobe, Japan",
   "Kaohsiung, Taiwan", "Ho Chi Minh, Vietnam", "Rotterdam, Netherlands", "Hamburg, Germany",
   "Antwerp, Belgium", "Piraeus, Greece", "Istanbul, Turkey",
-  "Los Angeles, USA", "Long Beach, USA", "Houston, USA", "Jebel Ali, UAE", "Fujairah, UAE",
+  "Los Angeles, United States", "Long Beach, United States", "Houston, United States",
+  "Jebel Ali, United Arab Emirates", "Fujairah, United Arab Emirates",
 ];
 const CARRIER_OPTIONS = [
   "TBD", "Maersk", "MSC", "CMA CGM", "HMM", "ONE", "Hapag-Lloyd", "Evergreen", "COSCO", "Yang Ming",
@@ -2862,13 +2873,15 @@ function docDefaultTerms(
   };
   fill("incoterms", d?.incoterms);
   fill("payment_terms", d?.payment_terms);
+  // 지정 장소는 규칙과 한 쌍 — 서버가 같은 단계(오더 또는 견적)에서 짝으로 골라 준 값이다.
+  fill("delivery_place", d?.delivery_place);
   // 견적·오더의 Packing(포장 방법)은 문서에서 packing_type 칸에 들어간다
   // (문서의 packing 키는 하단 합계의 포장비 금액이라 이름만 같고 뜻이 다르다).
   fill("packing_type", d?.packing);
   return out;
 }
 
-/** 선적정보 초깃값 — 저장값 > 상위 단계 값 > 기존 기본값(Busan, Korea · TBD).
+/** 선적정보 초깃값 — 저장값 > 상위 단계 값 > 기존 기본값(Busan, Republic of Korea · TBD).
  *  상위 단계의 Place 는 Incoterms 규칙에 따라 출발지/도착지 중 맞는 칸으로 들어간다. */
 function docDefaultShipping(
   order: DocumentDetail["order"],
@@ -2887,7 +2900,7 @@ function docDefaultShipping(
   const place = order.doc_defaults?.delivery_place || "";
   const key = placeIsDestination(incoterms) ? "port_discharge" : "port_loading";
   if (place && !String(out[key] || "").trim()) out[key] = place;
-  if (!String(out.port_loading || "").trim()) out.port_loading = "Busan, Korea";
+  if (!String(out.port_loading || "").trim()) out.port_loading = "Busan, Republic of Korea";
   return out;
 }
 

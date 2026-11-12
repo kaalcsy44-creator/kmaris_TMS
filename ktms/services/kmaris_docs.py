@@ -889,7 +889,7 @@ def _commercial_shipping_block(data: Dict[str, Any]):
         [_p("Vessel / IMO No.", s["small"]), _p(_vessel_imo(shipping, data.get("vessel")), s["small"]), _p("Carrier", s["small"]), _p(shipping.get("carrier", ""), s["small"])],
         [_p("Place of Departure", s["small"]), _p(shipping.get("port_loading", ""), s["small"]), _p("Place of Destination", s["small"]), _p(shipping.get("port_discharge", ""), s["small"])],
         [_p("B/L or AWB No.", s["small"]), _p(shipping.get("bl_awb_no", ""), s["small"]), _p("ETD / ETA", s["small"]), _p(f"{shipping.get('etd', '')} / {shipping.get('eta', '')}", s["small"])],
-        [_p("Incoterms", s["small"]), _p(terms.get("incoterms", ""), s["small"]), _p("Payment Terms", s["small"]), _p(terms.get("payment_terms", ""), s["small"])],
+        [_p("Incoterms", s["small"]), _p(incoterms_text(terms), s["small"]), _p("Payment Terms", s["small"]), _p(terms.get("payment_terms", ""), s["small"])],
         [_p("Packing", s["small"]), _p(terms.get("packing_type", ""), s["small"]), _p("Country of Origin", s["small"]), _p(shipping.get("sm_origin", ""), s["small"])],
         [_p("<b>SHIPPING MARKS</b>", s["section"]), "", "", ""],
         [_p(marks, s["small"]), "", "", ""],
@@ -1219,6 +1219,18 @@ def _form_doc(title: str) -> tuple:
     return buffer, doc, 190 * mm
 
 
+def incoterms_text(terms: Dict[str, Any]) -> str:
+    """Incoterms 칸 인쇄값 — 규칙(EXW (Ex Works))과 지정 장소(Busan, Republic of Korea)를
+    한 칸에 "EXW (Ex Works) Busan, Republic of Korea" 로 잇는다. 장소가 이미 규칙 문자열
+    안에 들어 있는 옛 값은 그대로 둔다."""
+    t = terms or {}
+    rule = str(t.get("incoterms") or "").strip()
+    place = str(t.get("delivery_place") or "").strip()
+    if place and place.lower() not in rule.lower():
+        return f"{rule} {place}".strip()
+    return rule
+
+
 def _invoice_shipping_rows(data: Dict[str, Any], incoterms_label: str = "Incoterms") -> List[tuple]:
     """SHIPPING INFORMATION 블록의 공통 앞 네 줄 — 이름·순서는 입력 화면(7단계 각 탭)과 같다.
     마지막 줄(Packing·Currency·Country of Origin)은 문서마다 달라 각 문서가 덧붙인다."""
@@ -1229,7 +1241,7 @@ def _invoice_shipping_rows(data: Dict[str, Any], incoterms_label: str = "Incoter
         ("Place of Departure", shipping.get("port_loading", ""),
          "Place of Destination", shipping.get("port_discharge", "")),
         ("ETD", pi_doc_date(shipping.get("etd", "")), "ETA", pi_doc_date(shipping.get("eta", ""))),
-        (incoterms_label, terms.get("incoterms", ""), "Payment Terms", terms.get("payment_terms", "")),
+        (incoterms_label, incoterms_text(terms), "Payment Terms", terms.get("payment_terms", "")),
     ]
 
 
