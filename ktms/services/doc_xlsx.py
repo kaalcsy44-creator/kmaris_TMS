@@ -162,6 +162,7 @@ class _FormSheet:
         self.right = Alignment(horizontal="right", vertical="center")
         self.left_top = Alignment(horizontal="left", vertical="top", wrap_text=True)
         self.right_wrap = Alignment(horizontal="right", vertical="center", wrap_text=True)
+        self.left_wrap = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
     # ── 저수준 도우미 ─────────────────────────────────────────────────────
     def merge(self, r1, c1, r2, c2):
@@ -227,8 +228,9 @@ class _FormSheet:
         T = 1
         logo = _find_asset("logo_icon.jpg", "logo_icon.png", "logo_K-maris.png", "logo.png", "logo.jpg")
         if logo:
-            # 로고 상자 = 빈 1행 + 회사정보 3행 높이(83.4pt ≈ 111px)와 로고 열 폭에 맞춘다.
-            self.add_image(logo, "A1", int(sum(self.widths[logo_cols[0] - 1:logo_cols[1]]) * 7), 106)
+            # 로고 상자 = 약 2.54cm × 2.26cm(96×85px) — 회사정보 3행보다 살짝 작게 둬야
+            # 머리글이 무겁지 않다(예전 106px 높이는 회사명보다 로고가 먼저 눈에 띄었다).
+            self.add_image(logo, "A1", min(96, int(sum(self.widths[logo_cols[0] - 1:logo_cols[1]]) * 7)), 85)
         for r, c1, c2 in ((1 + T, *org_cols), (2 + T, *org_cols), (3 + T, *org_cols)):
             self.merge(r, c1, r, c2)
         contact = " | ".join(x for x in [
@@ -240,10 +242,10 @@ class _FormSheet:
         self.put(2 + T, org_cols[0], company.get("address_en") or company.get("address", ""),
                  font=self.addr_font, align=self.center)
         self.put(3 + T, org_cols[0], contact, font=self.addr_font, align=self.center)
-        # 슬로건 — 우측 1~3행, 두 줄(문장 단위 줄바꿈), 이탤릭 블루. PDF 와 같은 자리.
+        # 슬로건 — 우측 1~3행, 두 줄(문장 단위 줄바꿈), 이탤릭 블루. 칸 안에서는 왼쪽 정렬(두 줄 첫 글자를 맞춘다).
         self.merge(1 + T, tag_cols[0], 3 + T, tag_cols[1])
         self.put(1 + T, tag_cols[0], (company.get("tagline", "") or "").replace(". ", ".\n", 1),
-                 font=self.tag_font, align=self.right_wrap)
+                 font=self.tag_font, align=self.left_wrap)
         for col in range(1, self.ncol + 1):
             self.ws.cell(3 + T, col).border = Border(bottom=Side(style="medium", color=self.BLUE))
         self.cell(5 + T, "full", title, font=self.title_font, align=self.center)
