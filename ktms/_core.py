@@ -3280,6 +3280,16 @@ def _doc_defaults_from(order_terms, order_currency, q) -> dict:
         cur = q.currency.strip()
         sources["currency"] = "quotation"
     out["currency"] = cur.upper()
+    # 견적 할인(4단계 Summary 의 Discount %) → PI/CI 의 Discount 금액 기본값.
+    # 견적서에 찍힌 할인액과 같은 값(정수 반올림, quotation_discount)이어야 고객에게 낸 숫자와 맞는다.
+    out["discount"] = ""
+    pct = float(getattr(q, "discount_pct", 0) or 0) if q else 0.0
+    if pct:
+        from services.kmaris_docs import quotation_discount
+        disc, _ = quotation_discount(_quotation_total(q.items or [], 0), pct)
+        if disc:
+            out["discount"] = f"{disc:g}"
+            sources["discount"] = "quotation"
     out["sources"] = sources
     return out
 
@@ -3474,6 +3484,14 @@ def _pi_charges(pi) -> dict:
     return out
 
 
+def _pi_discount(pi) -> float:
+    """PI 의 총액 할인(terms.discount, 양수 금액). 없으면 0."""
+    try:
+        return abs(float((pi.terms or {}).get("discount") or 0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def ar_from_pi(session, order, pi):
     """오더에 본 청구(AR)가 없으면 PI 로 세우고, PI 로 세운 청구는 PI 와 맞춘다. 세운/맞춘 AR 을 돌려준다."""
     if order is None or pi is None or not getattr(order, "id", None):
@@ -3486,6 +3504,13 @@ def ar_from_pi(session, order, pi):
     if not subtotal and not items:
         return None
     charges = _pi_charges(pi)
+    # PI 총액 할인은 청구 품목의 마이너스 한 줄로 싣는다 — AR 의 공급가액(품목 합계+부대비용)·
+    # 대금청구서·매출 집계가 모두 할인된 금액으로 맞춰진다(별도 할인 칸이 없으므로).
+    discount = _pi_discount(pi)
+    if discount:
+        items = items + [{"part_no": "", "description": "DISCOUNT", "qty": 1, "unit": "",
+                          "unit_price": -discount, "amount": -discount, "remark": ""}]
+        subtotal -= discount
     rate = float(pi.vat_rate or 0)
     if rate > 1:          # PI 는 퍼센트(10)로 저장되기도 한다 — AR 은 분수(0.1).
         rate /= 100.0

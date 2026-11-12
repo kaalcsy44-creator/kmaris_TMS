@@ -1378,6 +1378,9 @@ function ProformaInvoiceTab({
   }
   const [shipping, setShipping] = useState<Record<string, string>>(initialShipping());
   const [terms, setTerms] = useState<Record<string, string>>(initialTerms());
+  // 총액 할인(양수 금액) — 저장값이 없으면 견적의 할인액(doc_defaults.discount)을 이어받는다.
+  const initialDiscount = () => data.pi?.terms?.discount ?? data.order.doc_defaults?.discount ?? "";
+  const [discount, setDiscount] = useState<string>(initialDiscount());
   const [freight, setFreight] = useState(data.pi?.terms?.freight || "");
   const [packing, setPacking] = useState(data.pi?.terms?.packing || "");
   const [insurance, setInsurance] = useState(data.pi?.terms?.insurance || "");
@@ -1385,7 +1388,7 @@ function ProformaInvoiceTab({
   // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT (선적 전 견적성 송장).
   // 소계는 문서에서 제외한 행을 뺀 금액(발행 PDF·Excel 과 같은 기준).
   const subtotal = useMemo(() => includedRows(items).reduce((sum, i) => sum + num(i.amount), 0), [items]);
-  const extras = num(freight) + num(packing) + num(insurance);
+  const extras = num(freight) + num(packing) + num(insurance) - Math.abs(num(discount));
   const vatAmount = (subtotal + extras) * (num(vatRate) / 100);
   const totalInvoiceValue = subtotal + extras + vatAmount;
   // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
@@ -1398,7 +1401,7 @@ function ProformaInvoiceTab({
     try {
       const outItems = items.map((it) => ({ ...it, hs_code: shipping.hs_code || it.hs_code || "" }));
       const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
-      const outTerms = { ...terms, freight, packing, insurance };
+      const outTerms = { ...terms, discount, freight, packing, insurance };
       await saveProformaInvoice(target, { pi_no: piNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms: outTerms });
       onChanged();
     } finally {
@@ -1415,6 +1418,7 @@ function ProformaInvoiceTab({
     setItems(normalizeItems(data.pi?.items || data.order.items));
     setShipping(initialShipping());
     setTerms(initialTerms());
+    setDiscount(initialDiscount());
     setFreight(data.pi?.terms?.freight || "");
     setPacking(data.pi?.terms?.packing || "");
     setInsurance(data.pi?.terms?.insurance || "");
@@ -1500,6 +1504,7 @@ function ProformaInvoiceTab({
         // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT.
         footerRows={[
           { label: "Subtotal", strong: true, value: <DualCurrencyAmount value={subtotal} currency={currency} /> },
+          { label: "Discount (−)", value: <AmountInput className="foot-charge-input" value={discount} onChange={(e) => setDiscount(String(Math.abs(parseAmountInput(e.target.value) ?? 0) || ""))} /> },
           { label: "Freight", value: <AmountInput className="foot-charge-input" value={freight} onChange={(e) => setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
           { label: "Packing", value: <AmountInput className="foot-charge-input" value={packing} onChange={(e) => setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
           { label: "Insurance", value: <AmountInput className="foot-charge-input" value={insurance} onChange={(e) => setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
@@ -1776,6 +1781,9 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   }
   const [shipping, setShipping] = useState<Record<string, string>>(initialShipping());
   const [terms, setTerms] = useState<Record<string, string>>(initialTerms());
+  // 총액 할인(양수 금액) — 저장값이 없으면 견적의 할인액(doc_defaults.discount)을 이어받는다.
+  const initialDiscount = () => data.ci?.terms?.discount ?? data.order.doc_defaults?.discount ?? "";
+  const [discount, setDiscount] = useState<string>(initialDiscount());
   const [freight, setFreight] = useState(data.ci?.terms?.freight || "");
   const [packing, setPacking] = useState(data.ci?.terms?.packing || "");
   const [insurance, setInsurance] = useState(data.ci?.terms?.insurance || "");
@@ -1783,7 +1791,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT.
   // 소계는 문서에서 제외한 행을 뺀 금액(발행 PDF·Excel 과 같은 기준).
   const subtotal = useMemo(() => includedRows(items).reduce((sum, i) => sum + num(i.amount), 0), [items]);
-  const extras = num(freight) + num(packing) + num(insurance);
+  const extras = num(freight) + num(packing) + num(insurance) - Math.abs(num(discount));
   const vatAmount = (subtotal + extras) * (num(vatRate) / 100);
   const totalInvoiceValue = subtotal + extras + vatAmount;
   // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
@@ -1796,7 +1804,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       const outItems = items.map((it) => ({ ...it, hs_code: shipping.hs_code || it.hs_code || "" }));
       // 구조화 Shipping Mark → PDF 출력용 문자열로 합성해 함께 저장.
       const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
-      const outTerms = { ...terms, freight, packing, insurance };
+      const outTerms = { ...terms, discount, freight, packing, insurance };
       await saveCommercialInvoice(data.order.id, { ci_no: ciNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms: outTerms });
       onChanged();
     } finally {
@@ -1814,6 +1822,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     setItems(normalizeItems(data.ci?.items || data.order.items));
     setShipping(initialShipping());
     setTerms(initialTerms());
+    setDiscount(initialDiscount());
     setFreight(data.ci?.terms?.freight || "");
     setPacking(data.ci?.terms?.packing || "");
     setInsurance(data.ci?.terms?.insurance || "");
@@ -1895,6 +1904,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT.
         footerRows={[
           { label: "Subtotal", strong: true, value: <DualCurrencyAmount value={subtotal} currency={currency} /> },
+          { label: "Discount (−)", value: <AmountInput className="foot-charge-input" value={discount} onChange={(e) => setDiscount(String(Math.abs(parseAmountInput(e.target.value) ?? 0) || ""))} /> },
           { label: "Freight", value: <AmountInput className="foot-charge-input" value={freight} onChange={(e) => setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
           { label: "Packing", value: <AmountInput className="foot-charge-input" value={packing} onChange={(e) => setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
           { label: "Insurance", value: <AmountInput className="foot-charge-input" value={insurance} onChange={(e) => setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },

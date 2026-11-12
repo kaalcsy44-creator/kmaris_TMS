@@ -438,14 +438,16 @@ def _invoice_items_and_totals(form: "_FormSheet", data: Dict[str, Any], r: int, 
         return ref
 
     sref = total_line("Subtotal", f"=SUM(H{first}:H{last})")
+    # 총액 할인 — 있을 때만 Subtotal 아래 마이너스 줄(없으면 참조 양식 그대로).
+    base = f"{sref}+{total_line('Discount', -money['discount'])}" if money.get("discount") else sref
     fref = total_line("Freight", money["freight"])
     pref = total_line("Packing", money["packing"])
     iref = total_line("Insurance", money["insurance"])
     # VAT 는 부대비용까지 더한 금액에 매긴다(입력 화면·PDF 와 같은 계산).
-    vref = total_line("VAT", f"=({sref}+{fref}+{pref}+{iref})*{money['vat_rate']}")
+    vref = total_line("VAT", f"=({base}+{fref}+{pref}+{iref})*{money['vat_rate']}")
     form.merge(r, 1, r, 7)
     form.put(r, 1, "TOTAL INVOICE VALUE", fill=form.lightblue, font=form.bold, align=form.center)
-    form.put(r, 8, f"={sref}+{fref}+{pref}+{iref}+{vref}", fill=form.lightblue, font=form.bold,
+    form.put(r, 8, f"={base}+{fref}+{pref}+{iref}+{vref}", fill=form.lightblue, font=form.bold,
              align=form.right, fmt=num_fmt)
     form.bd(r, 1, r, form.ncol)
     form.ws.row_dimensions[r].height = 18

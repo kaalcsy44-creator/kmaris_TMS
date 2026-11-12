@@ -1086,13 +1086,15 @@ def pi_charges(data: Dict[str, Any]) -> Dict[str, float]:
 
     subtotal = sum(_num(it.get("amount", 0)) for it in normalize_items(data.get("items", [])))
     freight, packing, insurance = charge("freight"), charge("packing"), charge("insurance")
+    # 총액 할인(양수 금액으로 저장) — 견적에서 깎아 준 금액. 소계 바로 다음에 뺀다.
+    discount = abs(charge("discount"))
     rate = _num(data.get("vat_rate", 0))
     if rate > 1:  # 프론트는 퍼센트(10), 이 모듈은 분수(0.1) 규약.
         rate /= 100.0
-    taxable = subtotal + freight + packing + insurance
+    taxable = subtotal - discount + freight + packing + insurance
     vat = taxable * rate
     return {
-        "subtotal": subtotal, "freight": freight, "packing": packing,
+        "subtotal": subtotal, "discount": discount, "freight": freight, "packing": packing,
         "insurance": insurance, "vat_rate": rate, "vat": vat, "total": taxable + vat,
     }
 
@@ -1248,8 +1250,11 @@ def _invoice_shipping_rows(data: Dict[str, Any], incoterms_label: str = "Incoter
 def _invoice_totals_tables(form: _DocForm, item_w: List[float], money: Dict[str, float],
                            amount) -> List[Any]:
     """합계 블록 — 라벨은 Unit Price 칸, 값은 Amount 칸. PI·CI 가 같이 쓴다."""
-    rows = [("Subtotal", money["subtotal"]), ("Freight", money["freight"]),
-            ("Packing", money["packing"]), ("Insurance", money["insurance"]), ("VAT", money["vat"])]
+    rows = [("Subtotal", money["subtotal"])]
+    if money.get("discount"):   # 할인은 있을 때만 — 없으면 참조 양식 그대로
+        rows.append(("Discount", -money["discount"]))
+    rows += [("Freight", money["freight"]), ("Packing", money["packing"]),
+             ("Insurance", money["insurance"]), ("VAT", money["vat"])]
     totals = Table([["", form.p(k, form.label), form.p(amount(v), form.right)] for k, v in rows],
                    colWidths=[sum(item_w[:5]), item_w[5], item_w[6]])
     totals.setStyle(TableStyle([("GRID", (1, 0), (-1, -1), .35, MID_GRAY),

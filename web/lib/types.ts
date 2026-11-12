@@ -1178,6 +1178,7 @@ export type DocumentDetail = {
       packing: string;        // 포장 방법 — 문서에서는 terms.packing_type 칸에 들어간다
       delivery_place: string; // Incoterms 의 지정 장소(규칙에 따라 출발지/도착지)
       currency: string;
+      discount?: string;      // 견적 총액 할인액 — PI/CI Discount 칸 기본값
       sources: Record<string, "order" | "quotation">;
     };
   };
