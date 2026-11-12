@@ -14,7 +14,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 from services.kmaris_docs import (
-    bank_name_address,
+    bank_name_address, origin_mark,
     normalize_items, calc_totals, _num, DOC_TITLES, doc_parties,
     packing_totals, consignee_mark_lines, _dim_parts, cbm, _invoice_shipping_rows,
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
@@ -105,7 +105,7 @@ def _compose_marks(sh: Dict[str, Any]) -> str:
     if any(d and str(d).strip() for d in dim):
         push("DIM.: " + " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " CM")
     if sh.get("sm_final_dest"): push(f"FINAL DESTINATION: {sh['sm_final_dest']}")
-    push(sh.get("sm_origin"))
+    push(origin_mark(sh.get("sm_origin")))
     push(sh.get("sm_handling"))
     return "\n".join(lines)
 
@@ -892,7 +892,7 @@ def make_shipping_mark_xlsx(
     if shipping.get("sm_case_no"):
         lines.append(f"CASE NO. : {shipping['sm_case_no']}")
     if shipping.get("sm_origin"):
-        lines.append(str(shipping["sm_origin"]).upper())
+        lines.append(origin_mark(shipping["sm_origin"]).upper())
     if not lines:
         lines.append("(NO SHIPPING MARK DATA)")
 

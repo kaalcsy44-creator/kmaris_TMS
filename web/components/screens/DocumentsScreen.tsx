@@ -2827,7 +2827,13 @@ const FINAL_DEST_OPTIONS = [
   "Hong Kong", "Singapore", "Shanghai, China", "Ningbo, China", "Tokyo, Japan",
   "Kaohsiung, Taiwan", "Rotterdam, Netherlands", "Hamburg, Germany", "Los Angeles, USA", "Jebel Ali, UAE",
 ];
-const ORIGIN_OPTIONS = ["Made in Korea", "Made in China", "Made in Japan", "Made in Germany", "Made in USA"];
+// 원산지는 국가명으로 받는다 — Shipping Mark 에는 "MADE IN ..." 으로 찍힌다(originMark).
+const ORIGIN_OPTIONS = [
+  "Republic of Korea", "China", "Japan", "Taiwan", "Singapore", "Vietnam", "India",
+  "Germany", "Netherlands", "Denmark", "Norway", "Sweden", "Finland", "United Kingdom",
+  "France", "Italy", "Spain", "Switzerland", "Austria", "Poland", "Turkey",
+  "United States", "Canada", "Brazil",
+];
 const CASE_NO_OPTIONS = ["1-UP", "1 OF 1", "1-2", "1-3", "1-5", "1-10"];
 const HANDLING_OPTIONS = ["THIS SIDE UP", "KEEP DRY", "FRAGILE", "HANDLE WITH CARE", "DO NOT STACK", "USE NO HOOKS", "KEEP AWAY FROM HEAT"];
 
@@ -2911,7 +2917,7 @@ function defaultMarkFields(order: { vessel?: string; po_no?: string; customer?: 
     sm_ref_no: order.kms_order_no || "KMS-ORD-yymm-nnn",
     sm_desc: "MARINE SPARE PARTS",
     sm_case_no: "1-UP",
-    sm_origin: "Made in Korea",
+    sm_origin: "Republic of Korea",
   };
 }
 
@@ -2938,7 +2944,9 @@ function composeShippingMarks(s: Record<string, string>): string {
   // 치수 단위는 cm — Packing List 의 전체 포장 규격과 같은 칸(sm_dim_*)을 쓰므로 단위도 같아야 한다.
   if (dim.some((v) => v && v.trim())) push(`DIM.: ${dim.map((v) => (v && v.trim()) || "-").join(" × ")} CM`);
   if (s.sm_final_dest) push(`FINAL DESTINATION: ${s.sm_final_dest}`);
-  push(s.sm_origin);
+  // 백엔드 kmaris_docs.origin_mark 와 같은 규칙 — 국가명이면 "MADE IN" 을 붙인다.
+  const origin = (s.sm_origin || "").trim();
+  push(origin && !/^made in/i.test(origin) ? `MADE IN ${origin}` : origin);
   push(s.sm_handling);
   return lines.join("\n");
 }

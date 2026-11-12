@@ -1803,6 +1803,15 @@ def consignee_mark_lines(sh: Dict[str, Any]) -> List[str]:
     return lines
 
 
+def origin_mark(v: Any) -> str:
+    """원산지 칸 → 마크 한 줄. 값은 국가명(Republic of Korea)으로 받고, 마크에는
+    관례대로 "MADE IN ..." 으로 찍는다. 예전 값("Made in Korea")은 그대로 둔다."""
+    t = str(v or "").strip()
+    if not t or t.lower().startswith("made in"):
+        return t
+    return f"MADE IN {t}"
+
+
 def compose_shipping_marks(sh: Dict[str, Any]) -> str:
     """구조화 Shipping Mark(sm_*)를 여러 줄 문자열로 재구성 — 프론트 composeShippingMarks·
     doc_xlsx._compose_marks 와 동일 규약. PL 은 CI 상속값+PL 수정값이 병합된 sh 를 받아
@@ -1828,7 +1837,7 @@ def compose_shipping_marks(sh: Dict[str, Any]) -> str:
     if any(d and str(d).strip() for d in dim):
         push("DIM.: " + " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " CM")
     if sh.get("sm_final_dest"): push(f"FINAL DESTINATION: {sh['sm_final_dest']}")
-    push(sh.get("sm_origin"))
+    push(origin_mark(sh.get("sm_origin")))
     push(sh.get("sm_handling"))
     return "\n".join(lines)
 
@@ -1918,7 +1927,7 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
     if shipping.get("sm_case_no"):
         flow.append(mline(f"CASE NO. : {shipping['sm_case_no']}"))
     if shipping.get("sm_origin"):
-        flow.append(mline(str(shipping["sm_origin"]).upper()))
+        flow.append(mline(origin_mark(shipping["sm_origin"]).upper()))
     if not flow:
         flow.append(mline("(NO SHIPPING MARK DATA)"))
 
