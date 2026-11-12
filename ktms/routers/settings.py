@@ -123,6 +123,45 @@ def customers():
         s.close()
 
 
+@app.get("/api/admin/customers/party-options", dependencies=[Depends(require_token)])
+def customer_party_options(name: str = ""):
+    """문서 당사자 칸(Consignee·Buyer)의 선택지 — 회사명이 같은 고객 레코드 전부에서
+    담당자·이메일·주소를 모은다(레코드1=담당자1 이라 한 회사의 담당자는 여러 레코드에 흩어져 있다).
+    contacts 는 이름과 그 사람의 대표 이메일을 함께 줘, 담당자를 고르면 메일도 따라 바뀌게 한다."""
+    nm = (name or "").strip()
+    if not nm:
+        return {"contacts": [], "emails": [], "addresses": []}
+    s = get_session()
+    try:
+        rows = (s.query(Customer)
+                .filter(func.lower(func.trim(Customer.name)) == nm.lower())
+                .order_by(Customer.id).all())
+        contacts: list[dict] = []
+        emails: list[str] = []
+        addresses: list[str] = []
+
+        def _add(lst: list, v):
+            v = str(v or "").strip()
+            if v and v not in lst:
+                lst.append(v)
+
+        seen_c = set()
+        for c in rows:
+            em = [str(e).strip() for e in (c.emails or []) if str(e or "").strip()] or ([c.email.strip()] if c.email else [])
+            cn = (c.contact or "").strip()
+            if cn and cn not in seen_c:
+                seen_c.add(cn)
+                contacts.append({"name": cn, "email": em[0] if em else ""})
+            for e in em:
+                _add(emails, e)
+            for a in (c.addresses or []):
+                _add(addresses, a.get("address") if isinstance(a, dict) else a)
+            _add(addresses, c.address)
+        return {"contacts": contacts, "emails": emails, "addresses": addresses}
+    finally:
+        s.close()
+
+
 @app.get("/api/admin/vendors", dependencies=[Depends(require_token)])
 @cached_aggregate()
 def vendors():

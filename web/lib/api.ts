@@ -251,6 +251,16 @@ export function fetchCustomers(): Promise<CustomerOption[]> {
   return get<CustomerOption[]>("/api/admin/customers");
 }
 
+/** 문서 당사자 칸 선택지 — 그 회사명으로 등록된 담당자(+대표 메일)·이메일·주소 전부. */
+export type PartyOptions = {
+  contacts: { name: string; email: string }[];
+  emails: string[];
+  addresses: string[];
+};
+export function fetchCustomerPartyOptions(name: string): Promise<PartyOptions> {
+  return get<PartyOptions>(`/api/admin/customers/party-options?name=${encodeURIComponent(name)}`);
+}
+
 /** 거래선 태그 제안 — company 를 주면 그 회사만. */
 export function fetchVendorTagSuggestions(company = ""): Promise<{ rows: VendorTagSuggestionRow[] }> {
   return get<{ rows: VendorTagSuggestionRow[] }>(

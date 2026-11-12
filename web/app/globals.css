@@ -786,6 +786,74 @@ body {
   margin-top: 0;
 }
 
+/* 입력칸 + ▾ 등록값 고르기(문서 당사자 칸) */
+.pick-field-box {
+  position: relative;
+}
+.pick-field-box input {
+  width: 100%;
+  padding-right: 34px;
+}
+.pick-field-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.pick-field-toggle:hover:not(:disabled) {
+  background: #eef3fa;
+  color: #1d3a6b;
+}
+.pick-field-toggle:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.pick-field-list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #d7e0ec;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 35, 70, 0.14);
+}
+.pick-field-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  cursor: pointer;
+  white-space: normal;
+}
+.pick-field-list button:hover {
+  background: #f3f8ff;
+}
+.pick-field-list button.on {
+  font-weight: 700;
+  color: #1d3a6b;
+}
+
 /* POD(인도 증빙) 파일 표시 행 */
 .pod-current {
   display: flex;

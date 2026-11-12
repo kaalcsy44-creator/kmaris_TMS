@@ -27,6 +27,9 @@ import {
   saveServiceStage,
   deleteServiceStage,
   fetchCompanyProfile,
+  fetchCustomers,
+  fetchCustomerPartyOptions,
+  type PartyOptions,
 } from "@/lib/api";
 import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useResizable } from "@/lib/useResizable";
@@ -2343,10 +2346,6 @@ function PartiesSection({
   // 수하인 칸은 고객 마스터 값을 회색 안내가 아니라 실제 글자로 채워 보여준다. 한 번 손댄 칸만
   // 적은 값 그대로(지우면 빈칸 + 회색 안내 — 비운 칸은 여전히 마스터 값으로 인쇄된다).
   const [touched, setTouched] = useState<Set<string>>(() => new Set());
-  const set = (key: string) => (v: string) => {
-    if (!touched.has(key)) setTouched(new Set(touched).add(key));
-    setShipping({ ...shipping, [key]: v });
-  };
   // 인쇄될 값 — 적은 값, 없으면 기본값(수하인: 고객 마스터 / 매수인: 수하인). 백엔드 doc_parties 와 같은 규칙.
   const consigneeVal = CONSIGNEE_FIELDS.map(({ key, master }) => shipping[key] || master(order));
   const fallback = (i: number) => (buyerOnly ? BUYER_FIELDS[i].master(order) : consigneeVal[i]);
@@ -2367,27 +2366,48 @@ function PartiesSection({
     setDiffPick(true);
     if (!hasBuyer) fillBuyer((i) => BUYER_FIELDS[i].master(order));
   };
-  const editSameBuyer = (i: number) => (v: string) => {
-    setDiffPick(true);
-    fillBuyer((j) => (j === i ? v : consigneeVal[j]));
-  };
   const buyerToggle = (
     <div className="seg-toggle" role="group" aria-label="Buyer">
       <button type="button" className={differs ? "" : "on"} onClick={pickSame}>Same as consignee</button>
       <button type="button" className={differs ? "on" : ""} onClick={pickDifferent}>Different</button>
     </div>
   );
+  // 여러 칸을 한 번에 — 회사를 고르면 담당자·메일·주소가, 담당자를 고르면 메일이 따라 바뀐다.
+  const setMany = (fields: PartyField[], mirror?: boolean) => (patch: Record<number, string>) => {
+    if (mirror) {
+      setDiffPick(true);
+      fillBuyer((j) => (j in patch ? patch[j] : consigneeVal[j]));
+      return;
+    }
+    const next = new Set(touched);
+    const upd: Record<string, string> = {};
+    for (const [i, v] of Object.entries(patch)) {
+      const key = fields[Number(i)].key;
+      upd[key] = v;
+      next.add(key);
+    }
+    setTouched(next);
+    setShipping({ ...shipping, ...upd });
+  };
   const block = (title: string, fields: PartyField[], base: (i: number) => string, row?: boolean, mirror?: boolean, head?: ReactNode, prefill?: boolean) => (
     <section className="doc-party">
       <div className="sub-h doc-party-head">{title}{head}</div>
       <div className={`form-grid doc-party-grid${row ? " doc-party-grid--row" : ""}`}>
-        {fields.map(({ key, label, wide, options }, i) => (
-          readonly
-            ? <ReadonlyField key={key} label={label} value={shipping[key] || base(i)} wide={wide && !row} />
-            : mirror
-              ? <Field key={key} label={label} value={base(i)} onChange={editSameBuyer(i)} wide={wide && !row} options={options?.(order)} />
-              : <Field key={key} label={label} value={shipping[key] || (prefill && !touched.has(key) ? base(i) : "")} onChange={set(key)} placeholder={base(i)} wide={wide && !row} options={options?.(order)} />
-        ))}
+        {readonly
+          ? fields.map(({ key, label, wide }, i) => (
+              <ReadonlyField key={key} label={label} value={shipping[key] || base(i)} wide={wide && !row} />
+            ))
+          : (
+            <PartyPickFields
+              order={order}
+              fields={fields}
+              row={row}
+              values={fields.map(({ key }, i) =>
+                mirror ? base(i) : shipping[key] || (prefill && !touched.has(key) ? base(i) : ""))}
+              placeholders={fields.map((_, i) => (mirror ? "" : base(i)))}
+              onSet={setMany(fields, mirror)}
+            />
+          )}
       </div>
     </section>
   );
@@ -2400,6 +2420,162 @@ function PartiesSection({
       {readonly
         ? block("Buyer (if different)", BUYER_FIELDS, fallback)
         : block("Buyer", BUYER_FIELDS, fallback, false, !differs, buyerToggle)}
+    </div>
+  );
+}
+
+/** 당사자 블록의 네 칸(회사·담당자·메일·주소) — 각 칸은 직접 입력 + ▾ 로 등록값 고르기.
+ *  선택지는 "지금 칸에 적힌 회사"로 등록된 고객 레코드 전부에서 모은다(레코드1=담당자1).
+ *  회사를 목록에서 고르면 그 회사의 첫 담당자·메일·주소로 나머지 칸을 채우고,
+ *  담당자를 고르면 그 사람의 대표 메일로 e-mail 칸을 맞춘다. */
+function PartyPickFields({
+  order,
+  fields,
+  row,
+  values,
+  placeholders,
+  onSet,
+}: {
+  order: DocumentDetail["order"];
+  fields: PartyField[];
+  row?: boolean;
+  values: string[];
+  placeholders: string[];
+  onSet: (patch: Record<number, string>) => void;
+}) {
+  const { data: customers } = useCachedData("settings:customers", fetchCustomers);
+  const companies = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const c of customers ?? []) {
+      const n = (c.name || "").trim();
+      if (n && !seen.has(n.toLowerCase())) seen.set(n.toLowerCase(), n);
+    }
+    return [...seen.values()].sort((a, b) => a.localeCompare(b));
+  }, [customers]);
+
+  const company = (values[0] || placeholders[0] || "").trim();
+  const [opts, setOpts] = useState<PartyOptions | null>(null);
+  useEffect(() => {
+    if (!company) { setOpts(null); return; }
+    let alive = true;
+    const t = setTimeout(() => {
+      fetchCustomerPartyOptions(company)
+        .then((o) => { if (alive) setOpts(o); })
+        .catch(() => { if (alive) setOpts(null); });
+    }, 250);
+    return () => { alive = false; clearTimeout(t); };
+  }, [company]);
+
+  // 서버 조회가 아직이거나 실패해도, 이 딜의 고객사라면 상세에 실려 온 값으로 고를 수 있게.
+  const isOrderCustomer = company.toLowerCase() === (order.customer || "").trim().toLowerCase();
+  const uniq = (xs: string[]) => [...new Set(xs.map((x) => (x || "").trim()).filter(Boolean))];
+  const contactList = opts?.contacts ?? (isOrderCustomer
+    ? uniq([order.customer_contact || "", ...(order.customer_contacts ?? []).map((c) => c.name)]).map((n) => ({ name: n, email: "" }))
+    : []);
+  const lists: string[][] = [
+    companies,
+    contactList.map((c) => c.name),
+    uniq([...(opts?.emails ?? []), ...(isOrderCustomer ? [order.customer_email || "", ...(order.customer_emails ?? [])] : [])]),
+    uniq([...(opts?.addresses ?? []), ...(isOrderCustomer ? [order.customer_address || "", ...(order.customer_addresses ?? [])] : [])]),
+  ];
+
+  async function pickCompany(name: string) {
+    let o: PartyOptions | null = null;
+    try { o = await fetchCustomerPartyOptions(name); } catch { o = null; }
+    if (o) setOpts(o);
+    const c0 = o?.contacts[0];
+    onSet({
+      0: name,
+      1: c0?.name || "",
+      2: c0?.email || o?.emails[0] || "",
+      3: o?.addresses[0] || "",
+    });
+  }
+
+  function pick(i: number, v: string) {
+    if (i === 0) { void pickCompany(v); return; }
+    if (i === 1) {
+      const em = contactList.find((c) => c.name === v)?.email;
+      onSet(em ? { 1: v, 2: em } : { 1: v });
+      return;
+    }
+    onSet({ [i]: v });
+  }
+
+  return (
+    <>
+      {fields.map(({ key, label, wide }, i) => (
+        <PickField
+          key={key}
+          label={label}
+          value={values[i]}
+          placeholder={placeholders[i]}
+          options={lists[i]}
+          wide={wide && !row}
+          onChange={(v) => onSet({ [i]: v })}
+          onPick={(v) => pick(i, v)}
+        />
+      ))}
+    </>
+  );
+}
+
+/** 입력칸 + ▾ — 값이 차 있어도 등록된 선택지를 전부 펼쳐 보여 준다
+ *  (datalist 는 적힌 글자로 걸러 버려 값이 있으면 목록이 사실상 안 보였다). */
+function PickField({
+  label,
+  value,
+  placeholder,
+  options,
+  wide,
+  onChange,
+  onPick,
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  options: string[];
+  wide?: boolean;
+  onChange: (v: string) => void;
+  onPick: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = value || placeholder || "";
+  return (
+    <div className={`form-field pick-field${wide ? " form-field--wide" : ""}`}>
+      <span>{label}</span>
+      <div
+        className="pick-field-box"
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
+        }}
+      >
+        <input value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+        <button
+          type="button"
+          className="pick-field-toggle"
+          title={options.length ? "Choose a registered value" : "No registered values"}
+          disabled={!options.length}
+          onClick={() => setOpen((v) => !v)}
+        >
+          ▾
+        </button>
+        {open && options.length ? (
+          <ul className="pick-field-list" role="listbox">
+            {options.map((o) => (
+              <li key={o}>
+                <button
+                  type="button"
+                  className={o === current ? "on" : ""}
+                  onClick={() => { onPick(o); setOpen(false); }}
+                >
+                  {o}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
     </div>
   );
 }
