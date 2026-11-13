@@ -1364,8 +1364,8 @@ function ProformaInvoiceTab({
   // 통화·거래조건·선적 장소는 상위 단계(고객 P/O·견적)에서 정한 값을 이어받는다(빈 칸만).
   const [currency, setCurrency] = useState(data.pi?.currency || data.order.doc_defaults?.currency || "USD");
   const [vatRate, setVatRate] = useState(data.pi?.vat_rate ?? 0);
-  const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(data.pi?.items || data.order.items));
   const firstHs = (data.pi?.items || data.order.items || []).find((i) => i.hs_code)?.hs_code || "";
+  const [items, setItems] = useState<DocumentWorkItem[]>(lineHsItems(data.pi?.items || data.order.items, firstHs));
   function initialTerms(): Record<string, string> {
     return docDefaultTerms(data.order, data.pi?.terms);
   }
@@ -1399,7 +1399,8 @@ function ProformaInvoiceTab({
   async function save() {
     setBusy(true);
     try {
-      const outItems = items.map((it) => ({ ...it, hs_code: shipping.hs_code || it.hs_code || "" }));
+      // 줄에 적은 HS Code 가 우선, 빈 줄은 문서 기본값.
+      const outItems = items.map((it) => ({ ...it, hs_code: it.hs_code || shipping.hs_code || "" }));
       const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
       const outTerms = { ...terms, discount, freight, packing, insurance };
       await saveProformaInvoice(target, { pi_no: piNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms: outTerms });
@@ -1415,7 +1416,7 @@ function ProformaInvoiceTab({
     setDate(data.pi?.date || today());
     setCurrency(data.pi?.currency || data.order.doc_defaults?.currency || "USD");
     setVatRate(data.pi?.vat_rate ?? 0);
-    setItems(normalizeItems(data.pi?.items || data.order.items));
+    setItems(lineHsItems(data.pi?.items || data.order.items, firstHs));
     setShipping(initialShipping());
     setTerms(initialTerms());
     setDiscount(initialDiscount());
@@ -1481,7 +1482,7 @@ function ProformaInvoiceTab({
           <CurrencyToggle value={currency} onChange={setCurrency} />
         </label>
         <VatRateSelect value={String(vatRate)} onChange={(v) => setVatRate(num(v))} />
-        <HsCodeField value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} items={includedRows(items)} docNo={data.pi?.pi_no || ""} />
+        <HsCodeField value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} items={includedRows(items)} docNo={data.pi?.pi_no || ""} onApplyLines={(byNo) => setItems(applyLineHs(items, byNo))} />
       </div>
       <DocDefaultsHint order={data.order} />
       <BankInfoSection currency={currency} />
@@ -1493,6 +1494,7 @@ function ProformaInvoiceTab({
         packing={false}
         currency={currency}
         tableId="pi-items"
+        hsDefault={shipping.hs_code || ""}
         decimals={decimalsOf(terms.decimals)}
         onDecimals={(d) => setTerms((t) => ({ ...t, decimals: d == null ? "" : String(d) }))}
         headerActions={
@@ -1756,9 +1758,9 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   // 통화·거래조건·선적 장소는 상위 단계(고객 P/O·견적)에서 정한 값을 이어받는다(빈 칸만).
   const [currency, setCurrency] = useState(data.ci?.currency || data.order.doc_defaults?.currency || "USD");
   const [vatRate, setVatRate] = useState(data.ci?.vat_rate ?? 0);
-  const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(data.ci?.items || data.order.items));
-  // HS Code 는 문서 단위 단일 값(선적 단위) — shipping.hs_code 에 저장하고 저장 시 전 품목에 반영.
+  // HS Code — 문서 기본값(shipping.hs_code) + 줄별 코드(item.hs_code, 비우면 기본값). lineHsItems 참고.
   const firstHs = (data.ci?.items || data.order.items || []).find((i) => i.hs_code)?.hs_code || "";
+  const [items, setItems] = useState<DocumentWorkItem[]>(lineHsItems(data.ci?.items || data.order.items, firstHs));
   // Incoterms · Payment Terms — CI/PDF/Excel 의 Shipping Information 에 출력.
   function initialTerms(): Record<string, string> {
     return docDefaultTerms(data.order, data.ci?.terms);
@@ -1792,8 +1794,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
   async function save() {
     setBusy(true);
     try {
-      // 단일 HS Code 를 모든 품목에 반영해 PDF(품목별 HS 열)와 일관되게 유지.
-      const outItems = items.map((it) => ({ ...it, hs_code: shipping.hs_code || it.hs_code || "" }));
+      // 줄에 적은 HS Code 가 우선, 빈 줄은 문서 기본값.
+      const outItems = items.map((it) => ({ ...it, hs_code: it.hs_code || shipping.hs_code || "" }));
       // 구조화 Shipping Mark → PDF 출력용 문자열로 합성해 함께 저장.
       const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
       const outTerms = { ...terms, discount, freight, packing, insurance };
@@ -1811,7 +1813,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     setDate(data.ci?.date || today());
     setCurrency(data.ci?.currency || data.order.doc_defaults?.currency || "USD");
     setVatRate(data.ci?.vat_rate ?? 0);
-    setItems(normalizeItems(data.ci?.items || data.order.items));
+    setItems(lineHsItems(data.ci?.items || data.order.items, firstHs));
     setShipping(initialShipping());
     setTerms(initialTerms());
     setDiscount(initialDiscount());
@@ -1874,7 +1876,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
           <CurrencyToggle value={currency} onChange={setCurrency} />
         </label>
         <VatRateSelect value={String(vatRate)} onChange={(v) => setVatRate(num(v))} />
-        <HsCodeField value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} items={includedRows(items)} docNo={data.ci?.ci_no || ""} />
+        <HsCodeField value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} items={includedRows(items)} docNo={data.ci?.ci_no || ""} onApplyLines={(byNo) => setItems(applyLineHs(items, byNo))} />
       </div>
       <DocDefaultsHint order={data.order} />
       </div>
@@ -1885,6 +1887,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         packing={false}
         currency={currency}
         tableId="ci-items"
+        hsDefault={shipping.hs_code || ""}
         decimals={decimalsOf(terms.decimals)}
         onDecimals={(d) => setTerms((t) => ({ ...t, decimals: d == null ? "" : String(d) }))}
         headerActions={
@@ -3126,6 +3129,22 @@ function withAutoCbm(it: DocumentWorkItem): DocumentWorkItem {
   return m3 ? { ...it, measurement: m3 } : it;
 }
 
+/** PI·CI 품목 — 줄별 HS Code 칸에 싣는다. 예전 저장본은 문서 기본 코드를 전 줄에 찍어 두었으므로,
+ *  기본값과 같은 줄은 비워(=기본값 따름) 보여준다. 그래야 기본값을 바꾸면 그 줄들이 함께 따라간다. */
+function lineHsItems(src: DocumentWorkItem[] | undefined, docHs: string): DocumentWorkItem[] {
+  return normalizeItems(src || []).map((it) => (docHs && it.hs_code === docHs ? { ...it, hs_code: "" } : it));
+}
+
+/** HS 추천 결과를 줄마다 넣는다. byNo 의 번호는 추천에 넘긴 "문서에 실리는 줄"(제외 안 한 줄)의 1부터 순번. */
+function applyLineHs(items: DocumentWorkItem[], byNo: Record<number, string>): DocumentWorkItem[] {
+  let n = 0;
+  return items.map((it) => {
+    if (isRowExcluded(it)) return it;
+    n += 1;
+    return byNo[n] ? { ...it, hs_code: byNo[n] } : it;
+  });
+}
+
 /** PI·CI 품목표 아래 합계 줄 — Items total(할인 전) → Discount → Subtotal(할인 후 물품가)
  *  → Freight·Packing·Insurance → VAT → Total invoice value. 발행 PDF·Excel 과 같은 순서.
  *  편집 화면에선 할인이 없어도 줄을 고정해 둔다(입력 중 줄이 끼어들면 칸 포커스를 잃는다).
@@ -3157,6 +3176,7 @@ function ItemEditor({
   tableId,
   headerActions,
   footerRows,
+  hsDefault,
   packingTotals,
   decimals: decimalsProp = null,
   onDecimals,
@@ -3183,7 +3203,12 @@ function ItemEditor({
   // Proforma Invoice 의 Subtotal/Freight/Packing/Insurance/VAT/Total invoice value 처럼
   // 품목 컬럼(Unit Price=라벨, Amount=값)에 정렬해 표 안에 넣는다.
   footerRows?: { label: React.ReactNode; value: React.ReactNode; grand?: boolean; strong?: boolean }[];
+  /** 주면(PI·CI) 줄별 HS Code 칸을 Maker 뒤에 둔다. 값은 문서 기본 HS Code — 빈 줄의 회색 안내값이자
+   *  저장 시 빈 줄에 들어가는 값. 줄에 적은 코드가 우선한다. */
+  hsDefault?: string;
 }) {
+  const hs = hsDefault !== undefined && !packing;
+  const o = hs ? 1 : 0;   // HS 칸이 끼면 Qty 이후 열 번호가 하나씩 밀린다
   // 단가·금액을 발행 자릿수로 반올림(금액 = 반올림 단가 × 수량을 다시 반올림). 안 고르면 0 자리.
   const decimals: number = decimalsProp ?? 0;
   const rnd = (n: number) => (decimals == null ? n : roundTo(n, decimals));
@@ -3244,6 +3269,7 @@ function ItemEditor({
     { key: "part_no", label: "Part No." },
     { key: "description", label: "Description", phone: true },
     { key: "maker", label: "Maker" },
+    ...(hs ? [{ key: "hs_code", label: "HS Code" }] : []),
     { key: "qty", label: "Qty", className: "num", phone: true },
     { key: "unit", label: "Unit" },
     ...(packing
@@ -3275,7 +3301,7 @@ function ItemEditor({
     items,
     onChange: setItems,
     fields: [
-      "part_no", "description", "maker", "qty", "unit",
+      "part_no", "description", "maker", ...(hs ? ["hs_code" as const] : []), "qty", "unit",
       ...(packing
         ? ["pkg_qty", "pkg_kind", "net_weight", "gross_weight", "dimension", "measurement"]
         : ["unit_price", "amount"]),
@@ -3284,7 +3310,7 @@ function ItemEditor({
     numeric: ["qty", "unit_price", "amount"],
     blank: () => blankItem(packing),
     headers: [
-      "Part No.", "Description", "Maker", "Qty", "Unit",
+      "Part No.", "Description", "Maker", ...(hs ? ["HS Code"] : []), "Qty", "Unit",
       ...(packing
         ? ["No. of Packages", "Kind of Packages", "N.W. (kg)", "G.W. (kg)", "Dim. (cm)", "Meas. (m³)"]
         : [`Unit Price (${cur})`, `Amount (${cur})`]),
@@ -3343,6 +3369,7 @@ function ItemEditor({
               <ItemTh grid={grid} k="part_no">Part No.</ItemTh>
               <ItemTh grid={grid} k="description">Description</ItemTh>
               <ItemTh grid={grid} k="maker">Maker</ItemTh>
+              {hs ? <ItemTh grid={grid} k="hs_code">HS Code</ItemTh> : null}
               <ItemTh grid={grid} k="qty" className="num">Qty</ItemTh>
               <ItemTh grid={grid} k="unit">Unit</ItemTh>
               {packing ? (
@@ -3374,8 +3401,19 @@ function ItemEditor({
                 <td><textarea {...keys.cell(i, 0)} className="wrapcell" rows={1} value={item.part_no || ""} onChange={(e) => patch(i, "part_no", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 1)} className="desc" rows={1} value={item.description || ""} onChange={(e) => patch(i, "description", e.target.value)} /></td>
                 <td><textarea {...keys.cell(i, 2)} className="wrapcell" rows={1} value={item.maker || ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
-                <td><AmountInput {...keys.cell(i, 3)} className="num" value={item.qty} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
-                <td><input {...keys.cell(i, 4)} list={unitListId} value={item.unit || "PCS"} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
+                {hs ? (
+                  <td>
+                    <input
+                      {...keys.cell(i, 3)}
+                      value={item.hs_code || ""}
+                      placeholder={hsDefault || ""}
+                      title={hsDefault ? `Blank = document default ${hsDefault}` : "HS Code for this line"}
+                      onChange={(e) => patch(i, "hs_code", e.target.value)}
+                    />
+                  </td>
+                ) : null}
+                <td><AmountInput {...keys.cell(i, 3 + o)} className="num" value={item.qty} onChange={(e) => patch(i, "qty", e.target.value)} /></td>
+                <td><input {...keys.cell(i, 4 + o)} list={unitListId} value={item.unit || "PCS"} onChange={(e) => patch(i, "unit", e.target.value)} /></td>
                 {packing ? (
                   <>
                     <td><input {...keys.cell(i, 5)} className="num" value={String(item.pkg_qty ?? "")} onChange={(e) => patch(i, "pkg_qty", e.target.value)} /></td>
@@ -3406,11 +3444,11 @@ function ItemEditor({
                   </>
                 ) : (
                   <>
-                    <td><AmountInput {...keys.cell(i, 5)} className="num" value={item.unit_price} decimals={decimals} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
-                    <td><AmountInput {...keys.cell(i, 6)} className="num" value={item.amount} decimals={decimals} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
+                    <td><AmountInput {...keys.cell(i, 5 + o)} className="num" value={item.unit_price} decimals={decimals} onChange={(e) => patch(i, "unit_price", e.target.value)} /></td>
+                    <td><AmountInput {...keys.cell(i, 6 + o)} className="num" value={item.amount} decimals={decimals} onChange={(e) => patch(i, "amount", e.target.value)} /></td>
                   </>
                 )}
-                <td><textarea {...keys.cell(i, packing ? 11 : 7)} className="wrapcell" rows={1} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
+                <td><textarea {...keys.cell(i, packing ? 11 : 7 + o)} className="wrapcell" rows={1} value={item.remark || ""} onChange={(e) => patch(i, "remark", e.target.value)} /></td>
               </tr>
             ))}
           </tbody>
@@ -3443,6 +3481,7 @@ function ItemEditor({
                       <td></td>{/* 3 part_no */}
                       <td></td>{/* 4 description */}
                       <td></td>{/* 5 maker */}
+                      {hs ? <td></td> : null}{/* hs_code */}
                       <td></td>{/* 6 qty */}
                       <td></td>{/* 7 unit */}
                       <td className="total-label">{r.label}</td>{/* 8 unit_price */}
@@ -3458,6 +3497,7 @@ function ItemEditor({
                   <td></td>{/* 3 part_no */}
                   <td></td>{/* 4 description */}
                   <td></td>{/* 5 maker */}
+                  {hs ? <td></td> : null}{/* hs_code */}
                   <td></td>{/* 6 qty */}
                   <td></td>{/* 7 unit */}
                   <td className="total-label">Total</td>{/* 8 unit_price */}

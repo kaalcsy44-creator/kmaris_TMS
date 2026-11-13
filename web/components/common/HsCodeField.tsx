@@ -5,7 +5,8 @@ import { suggestHsCodes, type HsSuggestLine, type HsSuggestResult } from "@/lib/
 
 /* 문서(PI·CI)의 HS Code 칸 + 추천. 근거는 지난 문서 → 품목 마스터 → Claude 순이다
    (ktms/services/hs_suggest.py). 칸을 채우기만 하고 저장은 문서 저장으로 한다.
-   문서에는 코드가 하나뿐이라(저장 시 전 품목에 반영), 줄마다 코드가 다르면 그 사실을 알린다. */
+   이 칸은 문서 기본 코드(줄별 HS Code 칸을 비운 줄에 쓰인다). onApplyLines 를 주면 추천 코드를
+   줄마다 넣을 수 있다 — 줄마다 코드가 다를 때. */
 
 const SOURCE: Record<string, string> = { history: "Used before", master: "Item master", ai: "AI" };
 
@@ -23,12 +24,15 @@ export default function HsCodeField({
   onChange,
   items,
   docNo,
+  onApplyLines,
 }: {
   value: string;
   onChange: (v: string) => void;
   items: { part_no?: string; description?: string; maker?: string }[];
   /** 지금 편집 중인 문서 번호 — 이 문서의 값은 근거에서 뺀다. */
   docNo: string;
+  /** 주면 "Apply to each line" — 추천 코드를 줄마다 넣는다(키 = items 의 1부터 순번). */
+  onApplyLines?: (byNo: Record<number, string>) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -56,7 +60,9 @@ export default function HsCodeField({
   return (
     <>
       <label className="form-field">
-        <span>HS Code (optional)</span>
+        <span title={onApplyLines ? "Used for item lines whose HS Code is left blank" : undefined}>
+          {onApplyLines ? "HS Code (default)" : "HS Code (optional)"}
+        </span>
         <div className="hs-input">
           <input value={value} onChange={(e) => onChange(e.target.value)} />
           <button
@@ -75,6 +81,16 @@ export default function HsCodeField({
         <div className="hs-panel">
           <div className="hs-head">
             <b>Suggested HS codes</b>
+            {onApplyLines && result.lines.some((l) => l.code) ? (
+              <button
+                type="button"
+                className="btn sm primary"
+                title="Put each line's suggested code into its HS Code cell (lines without a suggestion are left as they are)"
+                onClick={() => onApplyLines(Object.fromEntries(result.lines.filter((l) => l.code).map((l) => [l.no, l.code])))}
+              >
+                Apply to each line
+              </button>
+            ) : null}
             <button type="button" className="btn sm" onClick={() => setResult(null)}>Close</button>
           </div>
           <div className="muted">Reference only — confirm with your customs broker before declaring.</div>
@@ -114,7 +130,9 @@ export default function HsCodeField({
           ))}
           {result.distinct > 1 ? (
             <div className="hs-warn">
-              These lines fall under {result.distinct} different codes. This document holds one HS code, applied to every line when saved.
+              {onApplyLines
+                ? `These lines fall under ${result.distinct} different codes — use "Apply to each line" to set them per line.`
+                : `These lines fall under ${result.distinct} different codes. This document holds one HS code, applied to every line when saved.`}
             </div>
           ) : null}
           {result.note ? <div className="hs-warn">{result.note}</div> : null}
