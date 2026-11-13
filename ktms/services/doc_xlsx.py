@@ -427,20 +427,18 @@ def _invoice_items_and_totals(form: "_FormSheet", data: Dict[str, Any], r: int, 
         r += 1
     last = r - 1
 
-    def total_line(label, value, wide=False, strong=False):
+    def total_line(label, value, wide=False):
         """wide: TOTAL INVOICE VALUE 처럼 A~G 를 합친 넓은 줄(Items Total·Subtotal).
         나머지(Discount·Freight·…)는 F~G 의 작은 라벨 줄."""
         nonlocal r
-        if wide:
+        if wide:   # 라벨 칸만 회색, 라벨·값 모두 굵게
             form.merge(r, 1, r, 7)
-            form.put(r, 1, label, fill=form.gray if strong else None,
-                     font=form.bold if strong else form.item_font, align=form.center)
-            form.put(r, 8, value, fill=form.gray if strong else None,
-                     font=form.bold if strong else form.item_font, align=form.right, fmt=num_fmt)
+            form.put(r, 1, label, fill=form.gray, font=form.bold, align=form.center)
+            form.put(r, 8, value, font=form.bold, align=form.right, fmt=num_fmt)
             form.bd(r, 1, r, form.ncol)
-        else:
+        else:      # 라벨은 회색 칸·보통 굵기(품목 글자 크기), 오른쪽 정렬
             form.merge(r, 6, r, 7)
-            form.put(r, 6, label, fill=form.gray, font=form.boldsm, align=form.right)
+            form.put(r, 6, label, fill=form.gray, font=form.item_font, align=form.right)
             form.put(r, 8, value, font=form.item_font, align=form.right, fmt=num_fmt)
             form.bd(r, 6, r, form.ncol)
         form.ws.row_dimensions[r].height = 18
@@ -453,9 +451,9 @@ def _invoice_items_and_totals(form: "_FormSheet", data: Dict[str, Any], r: int, 
     if money.get("discount"):
         gref = total_line("Items Total", f"=SUM(H{first}:H{last})", wide=True)
         dref = total_line("Discount", -money["discount"])
-        base = total_line("Subtotal", f"={gref}+{dref}", wide=True, strong=True)
+        base = total_line("Subtotal", f"={gref}+{dref}", wide=True)
     else:
-        base = total_line("Subtotal", f"=SUM(H{first}:H{last})", wide=True, strong=True)
+        base = total_line("Subtotal", f"=SUM(H{first}:H{last})", wide=True)
     fref = total_line("Freight", money["freight"])
     pref = total_line("Packing", money["packing"])
     iref = total_line("Insurance", money["insurance"])
