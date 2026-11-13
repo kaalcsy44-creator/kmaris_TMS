@@ -20,11 +20,22 @@ import { useState } from "react";
 import Modal from "@/components/common/Modal";
 import VendorName from "@/components/common/VendorName";
 import { hasSource } from "@/lib/quoteMerge";
+import { countedItems } from "@/lib/quoteOptions";
 import { canConvert, type Fx } from "@/components/common/itemTable";
 import type { CostSource } from "@/lib/quoteMerge";
 import type { CustomerQuoteItem, VendorQuoteForImport } from "@/lib/types";
 
 export type MergeMode = "append" | "replace";
+
+/** 견적 합계 — 3단계 받은 견적 화면의 Total 과 같은 기준(원가×수량, 합계에서 빠지는 옵션·대안 줄 제외). */
+function quoteTotal(items: VendorQuoteForImport["items"]): number {
+  return countedItems(items || []).reduce((s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1), 0);
+}
+
+function fmtTotal(v: number, cur: string): string {
+  const dec = (cur || "").toUpperCase() === "KRW" ? 0 : 2;
+  return v.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
 
 export default function VendorQuoteMergeModal({
   quotes,
@@ -70,7 +81,7 @@ export default function VendorQuoteMergeModal({
   const converted = chosen.filter((q) => canConvert(q.currency, cur, fx) && (q.currency || "").toUpperCase() !== cur);
 
   return (
-    <Modal title="Load vendor quotes" onClose={onClose} maxWidth={860}>
+    <Modal title="Load vendor quotes" onClose={onClose} maxWidth={980}>
       <div className="vqm">
         <p className="vqm-lead">
           Pick every vendor quote whose prices belong in this quotation. A line still waiting for a
@@ -89,12 +100,13 @@ export default function VendorQuoteMergeModal({
                 <th>Quote No.</th>
                 <th>Cur.</th>
                 <th className="num">Items</th>
+                <th className="num">Total</th>
                 <th>In this quotation</th>
               </tr>
             </thead>
             <tbody>
               {quotes.length === 0 ? (
-                <tr><td colSpan={7} className="vqm-empty">No vendor quote has been received for this deal yet.</td></tr>
+                <tr><td colSpan={8} className="vqm-empty">No vendor quote has been received for this deal yet.</td></tr>
               ) : quotes.map((q) => {
                 const loaded = hasSource(items, q.id);
                 return (
@@ -112,6 +124,7 @@ export default function VendorQuoteMergeModal({
                     <td>{q.vendor_quote_no || "—"}</td>
                     <td>{(q.currency || "—").toUpperCase()}</td>
                     <td className="num">{q.items.length}</td>
+                    <td className="num">{(() => { const t = quoteTotal(q.items); return t ? fmtTotal(t, q.currency) : "—"; })()}</td>
                     <td>
                       {loaded
                         ? <span className="vqm-tag on">Already loaded</span>
