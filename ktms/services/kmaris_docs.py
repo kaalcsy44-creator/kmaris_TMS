@@ -21,6 +21,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
+    KeepTogether,
     SimpleDocTemplate,
     Paragraph,
     Spacer,
@@ -1252,24 +1253,36 @@ def _invoice_totals_tables(form: _DocForm, item_w: List[float], money: Dict[str,
     """합계 블록 — 라벨은 Unit Price 칸, 값은 Amount 칸. PI·CI 가 같이 쓴다."""
     # 할인이 있으면 Items Total(할인 전) → Discount → Subtotal(할인 후 물품가) 순으로 적는다.
     # 없으면 참조 양식 그대로 Subtotal 한 줄.
-    rows = []
+    # 위계: Items Total·Subtotal 은 TOTAL INVOICE VALUE 처럼 A~G 를 합친 넓은 줄(Subtotal 은 굵게),
+    # Discount·Freight·Packing·Insurance·VAT 는 Unit Price 칸의 작은 라벨 줄.
+    rows = []   # (label, value, kind) — kind: "wide" | "wide_strong" | "charge"
     if money.get("discount"):
-        rows += [("Items Total", money["subtotal"]), ("Discount", -money["discount"])]
-    rows.append(("Subtotal", money["subtotal"] - money.get("discount", 0)))
-    rows += [("Freight", money["freight"]), ("Packing", money["packing"]),
-             ("Insurance", money["insurance"]), ("VAT", money["vat"])]
-    totals = Table([["", form.p(k, form.label), form.p(amount(v), form.right)] for k, v in rows],
-                   colWidths=[sum(item_w[:5]), item_w[5], item_w[6]])
-    totals.setStyle(TableStyle([("GRID", (1, 0), (-1, -1), .35, MID_GRAY),
-                                ("LINEBEFORE", (0, 0), (0, -1), .35, MID_GRAY),
-                                ("LINEAFTER", (0, 0), (0, -1), .35, MID_GRAY),
-                                ("BACKGROUND", (1, 0), (1, -1), LIGHT_GRAY)] + form.CELL))
+        rows += [("Items Total", money["subtotal"], "wide"), ("Discount", -money["discount"], "charge")]
+    rows.append(("Subtotal", money["subtotal"] - money.get("discount", 0), "wide_strong"))
+    rows += [("Freight", money["freight"], "charge"), ("Packing", money["packing"], "charge"),
+             ("Insurance", money["insurance"], "charge"), ("VAT", money["vat"], "charge")]
+    data_rows, style = [], [("LINEBEFORE", (0, 0), (0, -1), .35, MID_GRAY),
+                            ("LINEAFTER", (0, 0), (0, -1), .35, MID_GRAY)]
+    for i, (k, v, kind) in enumerate(rows):
+        if kind == "charge":
+            data_rows.append(["", form.p(k, form.label), form.p(amount(v), form.right)])
+            style += [("GRID", (1, i), (-1, i), .35, MID_GRAY), ("BACKGROUND", (1, i), (1, i), LIGHT_GRAY)]
+        else:
+            strong = kind == "wide_strong"
+            data_rows.append([form.p(k, form.grand if strong else form.center), "",
+                              form.p(amount(v), form.grand_right if strong else form.right)])
+            style += [("SPAN", (0, i), (1, i)), ("GRID", (0, i), (-1, i), .35, MID_GRAY)]
+            if strong:
+                style.append(("BACKGROUND", (0, i), (-1, i), LIGHT_GRAY))
+    totals = Table(data_rows, colWidths=[sum(item_w[:5]), item_w[5], item_w[6]])
+    totals.setStyle(TableStyle(style + form.CELL))
     grand = Table([[form.p("TOTAL INVOICE VALUE", form.grand),
                     form.p(amount(money["total"]), form.grand_right)]],
                   colWidths=[sum(item_w[:6]), item_w[6]])
     grand.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
                                ("BACKGROUND", (0, 0), (-1, -1), LIGHT_BLUE)] + form.CELL))
-    return [totals, grand]
+    # 합계 블록이 페이지 경계에서 갈라지지 않게(VAT·TOTAL 만 다음 장으로 넘어가던 문제).
+    return [KeepTogether([totals, grand])]
 
 
 def _invoice_item_table(form: _DocForm, data: Dict[str, Any], items: List[Dict[str, Any]],

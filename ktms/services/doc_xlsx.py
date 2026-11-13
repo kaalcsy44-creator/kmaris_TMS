@@ -374,7 +374,8 @@ def _invoice_money_format(currency: str, decimals: int | None = None) -> str:
     decimals 를 주면 통화 규칙 대신 그 자리수로 찍는다(서비스 송장=정수, 화면에서 고른 자릿수)."""
     d = pi_decimals(currency) if decimals is None else decimals
     n = "#,##0" + ("." + "0" * d if d else "")
-    return f'_-* {n}_-;\\-* {n}_-;_-* "-"_-;_-@_-'
+    # 음수는 마이너스를 숫자에 붙여 찍는다(Discount "-840") — 회계 서식 기본은 칸 왼쪽 끝에 떨어진다.
+    return f'_-* {n}_-;_-* \\-{n}_-;_-* "-"_-;_-@_-'
 
 
 def _invoice_doc_date(value: Any):
@@ -426,12 +427,22 @@ def _invoice_items_and_totals(form: "_FormSheet", data: Dict[str, Any], r: int, 
         r += 1
     last = r - 1
 
-    def total_line(label, value):
+    def total_line(label, value, wide=False, strong=False):
+        """wide: TOTAL INVOICE VALUE 처럼 A~G 를 합친 넓은 줄(Items Total·Subtotal).
+        나머지(Discount·Freight·…)는 F~G 의 작은 라벨 줄."""
         nonlocal r
-        form.merge(r, 6, r, 7)
-        form.put(r, 6, label, fill=form.gray, font=form.boldsm, align=form.right)
-        form.put(r, 8, value, font=form.item_font, align=form.right, fmt=num_fmt)
-        form.bd(r, 6, r, form.ncol)
+        if wide:
+            form.merge(r, 1, r, 7)
+            form.put(r, 1, label, fill=form.gray if strong else None,
+                     font=form.bold if strong else form.item_font, align=form.center)
+            form.put(r, 8, value, fill=form.gray if strong else None,
+                     font=form.bold if strong else form.item_font, align=form.right, fmt=num_fmt)
+            form.bd(r, 1, r, form.ncol)
+        else:
+            form.merge(r, 6, r, 7)
+            form.put(r, 6, label, fill=form.gray, font=form.boldsm, align=form.right)
+            form.put(r, 8, value, font=form.item_font, align=form.right, fmt=num_fmt)
+            form.bd(r, 6, r, form.ncol)
         form.ws.row_dimensions[r].height = 18
         ref = f"H{r}"
         r += 1
@@ -440,11 +451,11 @@ def _invoice_items_and_totals(form: "_FormSheet", data: Dict[str, Any], r: int, 
     # 총액 할인이 있으면 Items Total(할인 전) → Discount → Subtotal(할인 후 물품가).
     # 없으면 참조 양식 그대로 Subtotal 한 줄.
     if money.get("discount"):
-        gref = total_line("Items Total", f"=SUM(H{first}:H{last})")
+        gref = total_line("Items Total", f"=SUM(H{first}:H{last})", wide=True)
         dref = total_line("Discount", -money["discount"])
-        base = total_line("Subtotal", f"={gref}+{dref}")
+        base = total_line("Subtotal", f"={gref}+{dref}", wide=True, strong=True)
     else:
-        base = total_line("Subtotal", f"=SUM(H{first}:H{last})")
+        base = total_line("Subtotal", f"=SUM(H{first}:H{last})", wide=True, strong=True)
     fref = total_line("Freight", money["freight"])
     pref = total_line("Packing", money["packing"])
     iref = total_line("Insurance", money["insurance"])
