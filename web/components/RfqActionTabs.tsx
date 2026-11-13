@@ -2272,8 +2272,27 @@ function VendorQuoteDetailModal({
     }
   }
 
+  async function fillBlanksFromVendorRfq() {
+    if (!d) return;
+    setBusy(true);
+    setErr(null);
+    setParseMsg(null);
+    try {
+      const vrfq = await fetchVendorRfqDetail(d.vendor_rfq_id);
+      const r = fillBlanksFromRfq(items, vrfq.items || []);
+      setItems(r.items);
+      setParseMsg(r.rows ? `Filled blanks on ${r.rows} line(s) from Vendor RFQ — prices kept.` : "Nothing to fill — no blank Part No./Description matched.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to load Vendor RFQ items");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function loadVendorRfqItems() {
     if (!d) return;
+    if (items.some((it) => it.part_no || it.description || Number(it.cost_price))
+        && !confirm("Replace ALL current items (including prices) with the Vendor RFQ items?\n\nTo keep prices and fill only empty Part No./Description, use \"Fill blanks from RFQ\".")) return;
     setBusy(true);
     setErr(null);
     setParseMsg(null);
@@ -2446,6 +2465,16 @@ function VendorQuoteDetailModal({
                     onClick={async () => setItems(await lm.run(items))}
                   >
                     Auto-link lines
+                  </button>
+                ) : null}
+                {items.some((it) => !isOptionRow(it) && Number(it.cost_price) && !(it.part_no || it.description)) ? (
+                  <button
+                    className="btn sm"
+                    onClick={fillBlanksFromVendorRfq}
+                    disabled={busy}
+                    title="Keep prices; fill only empty Part No. / Description (by line ID, then by row order)"
+                  >
+                    Fill blanks from RFQ
                   </button>
                 ) : null}
                 <button className="btn sm" onClick={loadVendorRfqItems} disabled={busy}>
@@ -4118,10 +4147,27 @@ function VendorQuoteAction({
   }
 
   // "Load Vendor RFQ" — 선택한 Vendor RFQ에 보낸 품목을 그대로 불러와 단가만 입력하게 한다.
+  async function fillBlanksFromVendorRfq() {
+    if (vrfqId === "") return;
+    setBusy(true);
+    setErr(null);
+    setParseMsg(null);
+    try {
+      const d = await fetchVendorRfqDetail(vrfqId);
+      const r = fillBlanksFromRfq(items, d.items || []);
+      setItems(r.items);
+      setParseMsg(r.rows ? `Filled blanks on ${r.rows} line(s) from Vendor RFQ — prices kept.` : "Nothing to fill — no blank Part No./Description matched.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to load Vendor RFQ items");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function loadVendorRfqItems() {
     if (vrfqId === "") return;
     const hasData = items.some((it) => it.part_no || it.description || Number(it.qty) || Number(it.cost_price));
-    if (hasData && !confirm("Replace the current items with the selected Vendor RFQ items?")) return;
+    if (hasData && !confirm("Replace ALL current items (including prices) with the selected Vendor RFQ items?\n\nTo keep prices and fill only empty Part No./Description, use \"Fill blanks from RFQ\".")) return;
     setBusy(true);
     setErr(null);
     setParseMsg(null);
@@ -4303,6 +4349,18 @@ function VendorQuoteAction({
             lines={lm.lines}
             asked={lm.asked}
             headerActions={
+              <>
+              {items.some((it) => !isOptionRow(it) && Number(it.cost_price) && !(it.part_no || it.description)) ? (
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={fillBlanksFromVendorRfq}
+                  disabled={busy || vrfqId === ""}
+                  title="Keep prices; fill only empty Part No. / Description (by line ID, then by row order)"
+                >
+                  Fill blanks from RFQ
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="btn sm"
@@ -4312,6 +4370,7 @@ function VendorQuoteAction({
               >
                 Load Vendor RFQ items
               </button>
+              </>
             }
           />
 
@@ -4973,6 +5032,56 @@ function normalizeVendorQuoteItem(raw: Partial<VendorQuoteItem> & { manufacturer
 
 function cleanVendorQuoteItems(items: VendorQuoteItem[]): VendorQuoteItem[] {
   return items.map(normalizeVendorQuoteItem).filter((it) => it.part_no || it.description);
+}
+
+type RfqSourceItem = {
+  part_no?: string; description?: string; type?: string; serial_no?: string; maker?: string;
+  qty?: number | null; unit?: string; lid?: string; row_kind?: string;
+};
+
+/** 벤더 RFQ 품목으로 받은 견적의 "빈 칸만" 채운다 — 벤더가 품명 없이 번호 순서대로
+ *  가격만 보낸 견적을 읽으면 가격만 들어오고 Part No.·Description 이 비는데, 그걸
+ *  우리가 보낸 RFQ 에서 되짚어 채운다. 이미 적힌 값(가격·리드타임·리마크 포함)은 건드리지 않는다.
+ *  짝짓기: 줄 ID(lid)가 같은 줄이 먼저, 그다음 남은 줄끼리 번호(순서)대로. */
+function fillBlanksFromRfq(items: VendorQuoteItem[], src: RfqSourceItem[]): { items: VendorQuoteItem[]; rows: number } {
+  const pool = src.filter((s) => !isOptionRow(s as never) && (s.part_no || s.description || s.qty));
+  const used = new Set<number>();
+  const target = items.map((it) => (isOptionRow(it) ? -1 : 0));
+  // 1) lid 로 짝짓기
+  const byLid = new Map<string, number>();
+  pool.forEach((s, i) => { const l = (s.lid || "").trim(); if (l && !byLid.has(l)) byLid.set(l, i); });
+  const match: (number | null)[] = items.map((it, k) => {
+    if (target[k] < 0) return null;
+    const l = (it.lid || "").trim();
+    const i = l ? byLid.get(l) : undefined;
+    if (i !== undefined && !used.has(i)) { used.add(i); return i; }
+    return null;
+  });
+  // 2) 남은 줄은 순서대로
+  let cur = 0;
+  items.forEach((_, k) => {
+    if (target[k] < 0 || match[k] !== null) return;
+    while (cur < pool.length && used.has(cur)) cur++;
+    if (cur < pool.length) { used.add(cur); match[k] = cur++; }
+  });
+  let rows = 0;
+  const blank = (v: unknown) => v === undefined || v === null || String(v).trim() === "";
+  const out = items.map((it, k) => {
+    const i = match[k];
+    if (i === null) return it;
+    const s = pool[i];
+    const next: VendorQuoteItem = { ...it };
+    let changed = false;
+    for (const f of ["part_no", "description", "type", "serial_no", "maker", "lid"] as const) {
+      const v = (s[f] || "").trim();
+      if (v && blank(next[f])) { (next as Record<string, unknown>)[f] = v; changed = true; }
+    }
+    if (blank(next.unit) && s.unit) { next.unit = s.unit; changed = true; }
+    if ((!Number(next.qty)) && Number(s.qty)) { next.qty = Number(s.qty); changed = true; }
+    if (changed) rows++;
+    return next;
+  });
+  return { items: out, rows };
 }
 
 /** 원가 통화가 USD·KRW 밖이라 교차환율(1 cur = ? USD)이 필요한가. */
