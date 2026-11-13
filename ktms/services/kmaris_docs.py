@@ -1250,9 +1250,12 @@ def _invoice_shipping_rows(data: Dict[str, Any], incoterms_label: str = "Incoter
 def _invoice_totals_tables(form: _DocForm, item_w: List[float], money: Dict[str, float],
                            amount) -> List[Any]:
     """합계 블록 — 라벨은 Unit Price 칸, 값은 Amount 칸. PI·CI 가 같이 쓴다."""
-    rows = [("Subtotal", money["subtotal"])]
-    if money.get("discount"):   # 할인은 있을 때만 — 없으면 참조 양식 그대로
-        rows.append(("Discount", -money["discount"]))
+    # 할인이 있으면 Items Total(할인 전) → Discount → Subtotal(할인 후 물품가) 순으로 적는다.
+    # 없으면 참조 양식 그대로 Subtotal 한 줄.
+    rows = []
+    if money.get("discount"):
+        rows += [("Items Total", money["subtotal"]), ("Discount", -money["discount"])]
+    rows.append(("Subtotal", money["subtotal"] - money.get("discount", 0)))
     rows += [("Freight", money["freight"]), ("Packing", money["packing"]),
              ("Insurance", money["insurance"]), ("VAT", money["vat"])]
     totals = Table([["", form.p(k, form.label), form.p(amount(v), form.right)] for k, v in rows],

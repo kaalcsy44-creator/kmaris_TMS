@@ -6997,6 +6997,8 @@ table.mini.doc-charge-foot tfoot tr:not(.foot-grand):not(.foot-strong) :is(.tota
 table.mini.doc-charge-foot tfoot tr.foot-strong :is(.total-label, .total-value) {
   font-weight: 700;
 }
+/* Items total(할인 전 품목 합계) — 참고용이라 흐리게. 굵은 줄은 그 아래 Subtotal(할인 후). */
+table.mini.doc-charge-foot tfoot .foot-sub-label { color: var(--muted, #6b7280); }
 table.mini.doc-charge-foot tfoot tr.foot-grand :is(.total-label, .total-value) {
   font-size: calc(1em + 1px);
 }

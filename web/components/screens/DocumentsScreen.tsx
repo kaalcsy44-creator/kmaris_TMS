@@ -1501,16 +1501,8 @@ function ProformaInvoiceTab({
           </button>
         }
         // Freight/Packing/Insurance/VAT 를 품목표 tfoot 안에 넣는다(참조 양식).
-        // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT.
-        footerRows={[
-          { label: "Subtotal", strong: true, value: <DualCurrencyAmount value={subtotal} currency={currency} /> },
-          { label: "Discount (−)", value: <AmountInput className="foot-charge-input" value={discount} onChange={(e) => setDiscount(String(Math.abs(parseAmountInput(e.target.value) ?? 0) || ""))} /> },
-          { label: "Freight", value: <AmountInput className="foot-charge-input" value={freight} onChange={(e) => setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
-          { label: "Packing", value: <AmountInput className="foot-charge-input" value={packing} onChange={(e) => setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
-          { label: "Insurance", value: <AmountInput className="foot-charge-input" value={insurance} onChange={(e) => setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
-          { label: `VAT (${num(vatRate)}%)`, value: <DualCurrencyAmount value={vatAmount} currency={currency} /> },
-          { label: "Total invoice value", grand: true, value: <><DualCurrencyAmount value={totalInvoiceValue} currency={currency} /><span className="fx-note">{fxRateText()}</span></> },
-        ]}
+        // Items total − Discount = Subtotal(할인 후 물품가) → + Freight + Packing + Insurance + VAT = Total.
+        footerRows={invoiceFooterRows({ subtotal, discount, setDiscount, freight, setFreight, packing, setPacking, insurance, setInsurance, vatRate, vatAmount, totalInvoiceValue, currency })}
       />
       </fieldset>
       <div className="form-actions doc-actions">
@@ -1901,16 +1893,8 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
           </button>
         }
         // Freight/Packing/Insurance/VAT 를 품목표 tfoot 안(리스트 하단·Total 위)에 넣는다.
-        // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT.
-        footerRows={[
-          { label: "Subtotal", strong: true, value: <DualCurrencyAmount value={subtotal} currency={currency} /> },
-          { label: "Discount (−)", value: <AmountInput className="foot-charge-input" value={discount} onChange={(e) => setDiscount(String(Math.abs(parseAmountInput(e.target.value) ?? 0) || ""))} /> },
-          { label: "Freight", value: <AmountInput className="foot-charge-input" value={freight} onChange={(e) => setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
-          { label: "Packing", value: <AmountInput className="foot-charge-input" value={packing} onChange={(e) => setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
-          { label: "Insurance", value: <AmountInput className="foot-charge-input" value={insurance} onChange={(e) => setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
-          { label: `VAT (${num(vatRate)}%)`, value: <DualCurrencyAmount value={vatAmount} currency={currency} /> },
-          { label: "Total invoice value", grand: true, value: <><DualCurrencyAmount value={totalInvoiceValue} currency={currency} /><span className="fx-note">{fxRateText()}</span></> },
-        ]}
+        // Items total − Discount = Subtotal(할인 후 물품가) → + Freight + Packing + Insurance + VAT = Total.
+        footerRows={invoiceFooterRows({ subtotal, discount, setDiscount, freight, setFreight, packing, setPacking, insurance, setInsurance, vatRate, vatAmount, totalInvoiceValue, currency })}
       />
       <MissingWarning missing={data.ci?.missing || []} />
       </fieldset>
@@ -3140,6 +3124,29 @@ function withAutoCbm(it: DocumentWorkItem): DocumentWorkItem {
   const [l, w, h] = dimParts(it.dimension);
   const m3 = cbmText(l, w, h, it.pkg_qty);
   return m3 ? { ...it, measurement: m3 } : it;
+}
+
+/** PI·CI 품목표 아래 합계 줄 — Items total(할인 전) → Discount → Subtotal(할인 후 물품가)
+ *  → Freight·Packing·Insurance → VAT → Total invoice value. 발행 PDF·Excel 과 같은 순서.
+ *  편집 화면에선 할인이 없어도 줄을 고정해 둔다(입력 중 줄이 끼어들면 칸 포커스를 잃는다).
+ *  문서(PDF·Excel)는 할인이 없을 때 Items total·Discount 줄을 빼고 Subtotal 만 찍는다. */
+function invoiceFooterRows(p: {
+  subtotal: number; discount: string; setDiscount: (v: string) => void;
+  freight: string; setFreight: (v: string) => void; packing: string; setPacking: (v: string) => void;
+  insurance: string; setInsurance: (v: string) => void;
+  vatRate: number | string; vatAmount: number; totalInvoiceValue: number; currency: string;
+}) {
+  const net = p.subtotal - Math.abs(num(p.discount));
+  return [
+    { label: <span className="foot-sub-label">Items total</span>, value: <DualCurrencyAmount value={p.subtotal} currency={p.currency} /> },
+    { label: "Discount (−)", value: <AmountInput className="foot-charge-input" value={p.discount} onChange={(e) => p.setDiscount(String(Math.abs(parseAmountInput(e.target.value) ?? 0) || ""))} /> },
+    { label: "Subtotal", strong: true, value: <DualCurrencyAmount value={net} currency={p.currency} /> },
+    { label: "Freight", value: <AmountInput className="foot-charge-input" value={p.freight} onChange={(e) => p.setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
+    { label: "Packing", value: <AmountInput className="foot-charge-input" value={p.packing} onChange={(e) => p.setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
+    { label: "Insurance", value: <AmountInput className="foot-charge-input" value={p.insurance} onChange={(e) => p.setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
+    { label: `VAT (${num(p.vatRate)}%)`, value: <DualCurrencyAmount value={p.vatAmount} currency={p.currency} /> },
+    { label: "Total invoice value", grand: true, value: <><DualCurrencyAmount value={p.totalInvoiceValue} currency={p.currency} /><span className="fx-note">{fxRateText()}</span></> },
+  ];
 }
 
 function ItemEditor({

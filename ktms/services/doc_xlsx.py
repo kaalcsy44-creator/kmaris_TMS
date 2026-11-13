@@ -437,9 +437,14 @@ def _invoice_items_and_totals(form: "_FormSheet", data: Dict[str, Any], r: int, 
         r += 1
         return ref
 
-    sref = total_line("Subtotal", f"=SUM(H{first}:H{last})")
-    # 총액 할인 — 있을 때만 Subtotal 아래 마이너스 줄(없으면 참조 양식 그대로).
-    base = f"{sref}+{total_line('Discount', -money['discount'])}" if money.get("discount") else sref
+    # 총액 할인이 있으면 Items Total(할인 전) → Discount → Subtotal(할인 후 물품가).
+    # 없으면 참조 양식 그대로 Subtotal 한 줄.
+    if money.get("discount"):
+        gref = total_line("Items Total", f"=SUM(H{first}:H{last})")
+        dref = total_line("Discount", -money["discount"])
+        base = total_line("Subtotal", f"={gref}+{dref}")
+    else:
+        base = total_line("Subtotal", f"=SUM(H{first}:H{last})")
     fref = total_line("Freight", money["freight"])
     pref = total_line("Packing", money["packing"])
     iref = total_line("Insurance", money["insurance"])
