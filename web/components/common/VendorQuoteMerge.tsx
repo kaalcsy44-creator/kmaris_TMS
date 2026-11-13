@@ -91,22 +91,21 @@ export default function VendorQuoteMergeModal({
         </p>
 
         <div className="table-wrap">
-          <table className="mini wide">
+          <table className="mini vqm-table">
             <thead>
               <tr>
                 <th className="vqm-chk" />
-                <th>Received</th>
-                <th>Vendor</th>
-                <th>Quote No.</th>
-                <th>Cur.</th>
-                <th className="num">Items</th>
-                <th className="num">Total</th>
-                <th>In this quotation</th>
+                <th className="vqm-fit">Received</th>
+                <th className="vqm-vendor">Vendor</th>
+                <th className="vqm-fit">Quote No.</th>
+                <th className="vqm-fit num">Items</th>
+                <th className="vqm-fit num">Total</th>
+                <th className="vqm-fit">In this quotation</th>
               </tr>
             </thead>
             <tbody>
               {quotes.length === 0 ? (
-                <tr><td colSpan={8} className="vqm-empty">No vendor quote has been received for this deal yet.</td></tr>
+                <tr><td colSpan={7} className="vqm-empty">No vendor quote has been received for this deal yet.</td></tr>
               ) : quotes.map((q) => {
                 const loaded = hasSource(items, q.id);
                 return (
@@ -119,13 +118,15 @@ export default function VendorQuoteMergeModal({
                         onClick={(e) => e.stopPropagation()}
                       />
                     </td>
-                    <td>{q.received_date || "—"}</td>
-                    <td><VendorName name={q.vendor} /></td>
-                    <td>{q.vendor_quote_no || "—"}</td>
-                    <td>{(q.currency || "—").toUpperCase()}</td>
-                    <td className="num">{q.items.length}</td>
-                    <td className="num">{(() => { const t = quoteTotal(q.items); return t ? fmtTotal(t, q.currency) : "—"; })()}</td>
-                    <td>
+                    <td className="vqm-fit">{q.received_date || "—"}</td>
+                    <td className="vqm-vendor"><VendorName name={q.vendor} /></td>
+                    <td className="vqm-fit">{q.vendor_quote_no || "—"}</td>
+                    <td className="vqm-fit num">{q.items.length}</td>
+                    <td className="vqm-fit num">
+                      {(() => { const t = quoteTotal(q.items); return t ? fmtTotal(t, q.currency) : "—"; })()}
+                      <span className="vqm-cur">{(q.currency || "").toUpperCase()}</span>
+                    </td>
+                    <td className="vqm-fit">
                       {loaded
                         ? <span className="vqm-tag on">Already loaded</span>
                         : <span className="vqm-tag">—</span>}

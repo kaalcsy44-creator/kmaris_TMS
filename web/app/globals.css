@@ -20053,6 +20053,12 @@ tr.alt-off td.seq .alt-pick { color: #b25f00; }
 .vqm table.mini tbody tr { cursor: pointer; }
 .vqm table.mini tbody tr:hover { background: #f4f8fe; }
 .vqm-chk { width: 34px; text-align: center; }
+/* 열 폭: 짧은 값 칸은 내용만큼(줄바꿈 없이), 남는 폭은 공급사 이름 칸이 가져간다. */
+.vqm-table { width: 100%; }
+.vqm-table th, .vqm-table td { white-space: nowrap; }
+.vqm-table .vqm-fit { width: 1%; }
+.vqm-table .vqm-vendor { width: auto; min-width: 180px; }
+.vqm-cur { margin-left: 6px; font-size: 11.5px; color: #8a94a6; display: inline-block; min-width: 26px; text-align: left; }
 .vqm-empty { text-align: center; color: #8a94a6; padding: 18px 0; }
 .vqm-bad { background: #fff5f5; }
 .vqm-tag { font-size: 11.5px; color: #8a94a6; }
