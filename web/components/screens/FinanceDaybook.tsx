@@ -57,6 +57,10 @@ function descOf(r: FinanceCashflowItem): string {
       return r.ref || CATEGORY_LABEL[r.memo] || r.memo || "Other cost";
     case "credit":
       return r.party || "Credit note";
+    case "transfer":
+      return r.party || "FX conversion";
+    case "fxfee":
+      return "FX conversion fee";
   }
 }
 
@@ -77,6 +81,11 @@ function tagOf(r: FinanceCashflowItem): string {
     // 한 줄에 두 번 선다.
     case "credit":
       return "Set-off";
+    // 계좌 사이의 이동 — 매출·비용이 아니다(손익에는 환차손익만 남는다).
+    case "transfer":
+      return "FX conversion";
+    case "fxfee":
+      return "Conversion fee";
   }
 }
 
@@ -99,7 +108,9 @@ function daysLate(iso: string): number {
   return Math.max(0, Math.round((today - due) / 86400000));
 }
 
-export default function FinanceDaybook({ start, end, label, opening, currency, includePo, parkOverdue, parkExpected, first }: {
+export default function FinanceDaybook({ start, end, label, opening, currency, includePo, parkOverdue, parkExpected, first, rev = 0 }: {
+  /** 부모가 환전·기준 잔고를 바꿨을 때 올리는 눈금 — 캐시 키에 붙어 다시 받게 한다. */
+  rev?: number;
   start: string;
   end: string;
   /** 구간 이름 — 위 표의 Period 칸과 같은 말("2026-08", "8/1~8/7"). */
@@ -125,7 +136,7 @@ export default function FinanceDaybook({ start, end, label, opening, currency, i
   first: boolean;
 }) {
   const cash = (n: number) => money(n, currency);
-  const key = `finance:cashflow:items:${start}:${end}:${currency}:${includePo}:${first}::`;
+  const key = `finance:cashflow:items:${start}:${end}:${currency}:${includePo}:${first}::${rev}`;
   const { data, error } = useCachedData<FinanceCashflowItems>(
     key,
     () => fetchFinanceCashflowItems(start, end, currency, includePo, first, "")
@@ -287,6 +298,8 @@ function DaybookLine({ row, start, end, currency }: {
                   </span>
                 : null}
             </>
+          : r.kind === "transfer"
+          ? <span className="fin-db-done"> · ✓ {side === "in" ? "converted in" : "converted out"}</span>
           : r.actual
           ? <span className="fin-db-done"> · ✓ {side === "in" ? "received" : "paid"}</span>
           // 연체는 '늦었다'로 끝내지 않고 며칠인지까지 적는다 — 사흘 늦은 건과 석 달 늦은
@@ -332,7 +345,10 @@ function DaybookLine({ row, start, end, currency }: {
       label={r.ref || "(no number)"}
       apPoId={r.kind === "ar" ? undefined : r.po_id || undefined}
     />
-  ) : (r.party && r.party !== "—" ? r.party : "");
+  ) : r.kind === "transfer" || r.kind === "fxfee"
+    // 환전의 근거는 두 금액과 적용환율이다 — "$20,000.00 → ₩26,642,000 @1,332.10".
+    ? r.ref
+    : (r.party && r.party !== "—" ? r.party : "");
 
   const cls = [
     "fin-db-row",

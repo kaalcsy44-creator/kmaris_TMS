@@ -1816,6 +1816,8 @@ export type FinanceProfit = {
     other_income: number[];
     /** 투자금(자본 유입) — 통장에는 들어오지만 매출이 아니라 합계 밖에 세우는 줄. */
     investment: number[];
+    /** 실현 환차손익(환전 건별, 음수 = 손실) — 수익 합계에 든다. 옛 백엔드는 없음. */
+    fx_gain?: number[];
   };
   costs: {
     purchase: number[];
@@ -1904,8 +1906,55 @@ export type FinanceCashflowRow = {
    * 건별 내역은 장부(/cashflow/items)의 set-off 줄. 옛 백엔드는 보내지 않는다.
    */
   offset_in?: number;
+  /**
+   * 환전으로 이 계좌에 들어온/나간 몫 — 위 inflow·outflow·actual_* 안에 든 금액이다.
+   * 매출·비용 갈래(actual_in_ar 등)에는 들지 않는다. 옛 백엔드는 보내지 않는다.
+   */
+  transfer_in?: number;
+  transfer_out?: number;
   net: number;
   cumulative: number;
+};
+
+/** 환전(계좌 간 통화 이동) 한 건. */
+export type FinanceTransfer = {
+  id: number;
+  date: string;
+  from_currency: string;
+  from_amount: number;
+  to_currency: string;
+  to_amount: number;
+  /** 적용환율(1 외화 = ? KRW). */
+  rate: number;
+  fee: number;
+  fee_currency: string;
+  description: string;
+  notes: string;
+  /** 외화를 원화로 판 건에만 — 그 외화의 이동평균 장부환율과 실현 환차손익(₩, 음수=손실). */
+  book_rate: number | null;
+  fx_gain: number | null;
+};
+
+export type FinanceTransferSave = {
+  date: string;
+  from_currency: string;
+  from_amount: number;
+  to_currency: string;
+  to_amount: number;
+  fee: number;
+  fee_currency: string;
+  description: string;
+  notes: string;
+};
+
+/** 통화별 기준 잔고 — 그 날 마감 통장 잔고. */
+export type FinanceBalanceAnchor = { as_of: string; amount: number };
+export type FinanceBalanceAnchors = { anchors: Record<string, FinanceBalanceAnchor> };
+export type FinanceLedgerBalance = {
+  currency: string;
+  on: string;
+  balance: number | null;
+  anchor: (FinanceBalanceAnchor & { currency: string }) | null;
 };
 
 /** 현금흐름 — 잔고는 한 통화 안에서만 의미가 있어 통화 1개 기준으로만 낸다. */
@@ -1915,6 +1964,9 @@ export type FinanceCashflow = {
   opening: number;
   /** 기초잔고 기준일 — 첫 구간 시작일(월 단위면 이번 달 1일). */
   opening_as_of: string;
+  /** 기초잔고 출처 — anchor(저장된 기준 잔고에서 굴림)/manual/none. 옛 백엔드는 없음. */
+  opening_source?: "anchor" | "manual" | "none";
+  anchor?: (FinanceBalanceAnchor & { currency: string }) | null;
   rows: FinanceCashflowRow[];
   total_inflow: number;
   total_outflow: number;
@@ -1941,7 +1993,7 @@ export type FinanceCashflowItem = {
    * ar=매출채권, income=기타수입, payable=지급대장, ap=벤더청구, po=발주원가(추정),
    * credit=클레임 상계(크레딧 노트로 지운 미수 — 돈은 오가지 않았다).
    */
-  kind: "ar" | "income" | "payable" | "ap" | "po" | "credit";
+  kind: "ar" | "income" | "payable" | "ap" | "po" | "credit" | "transfer" | "fxfee";
   /** 예정분은 예정일, 실적분은 실제로 오간 날, 상계는 크레딧 노트 발행일. */
   date: string;
   party: string;

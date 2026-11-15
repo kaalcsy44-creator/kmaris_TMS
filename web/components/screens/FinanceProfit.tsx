@@ -168,7 +168,8 @@ export default function FinanceProfitTab() {
 
   const model = useMemo(() => {
     if (!data) return null;
-    const revenue = addRows(data.revenue.sales, data.revenue.other_income);
+    const fxGain = data.revenue.fx_gain ?? [];
+    const revenue = addRows(data.revenue.sales, data.revenue.other_income, fxGain);
     const opex = data.costs.operating.map((o) => o.values);
     const costs = addRows(data.costs.purchase, data.costs.consulting, ...opex);
     const taxes = addRows(
@@ -223,6 +224,11 @@ export default function FinanceProfitTab() {
     const lines: Line[] = [
       { name: "Sales (supply value)", values: data.revenue.sales, detail: "sales" },
       { name: "Other income", values: data.revenue.other_income, detail: "other_income" },
+      // 실현 환차손익 — 외화를 원화로 판 환율과 그 외화를 장부에 올린 환율의 차이.
+      // 환전이 없던 해에는 줄을 세우지 않는다.
+      ...(fxGain.some((v) => v)
+        ? [{ name: "FX gain / loss (realized)", values: fxGain, detail: "fx_gain" } as Line]
+        : []),
       ...investmentLine,
       { name: "Revenue", values: revenue, kind: "sum" },
       { name: "Purchases (cost)", values: data.costs.purchase, detail: "purchase" },

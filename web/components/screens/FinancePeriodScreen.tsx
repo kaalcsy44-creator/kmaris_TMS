@@ -29,6 +29,8 @@ function typeLabel(r: FinanceCashflowItem): string {
     case "payable": return `Payable · ${CATEGORY_LABEL[r.memo] || r.memo}`;
     // 상계 — 돈이 오간 적 없이 미수를 지운 줄(크레딧 노트 번호는 Reference 칸에 선다).
     case "credit": return "Set-off";
+    case "transfer": return "FX conversion";
+    case "fxfee": return "FX conversion fee";
   }
 }
 

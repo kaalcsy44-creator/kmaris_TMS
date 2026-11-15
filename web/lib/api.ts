@@ -56,6 +56,10 @@ import type {
   FinanceConsultingRow,
   SettingsConsultant,
   FinanceCashflow,
+  FinanceTransfer,
+  FinanceTransferSave,
+  FinanceBalanceAnchors,
+  FinanceLedgerBalance,
   FinanceCashflowItems,
   CashBucket,
   FinanceCalendarEvent,
@@ -1206,7 +1210,8 @@ export function fetchFinanceConsulting(): Promise<{ rows: FinanceConsultingRow[]
 export function fetchFinanceCashflow(
   unit: "month" | "week",
   count: number,
-  opening: number,
+  /** null = 저장된 기준 잔고에서 서버가 굴린다. */
+  opening: number | null,
   includePo: boolean,
   currency = "KRW",
   start = "",
@@ -1220,12 +1225,37 @@ export function fetchFinanceCashflow(
   includeExpected = false
 ): Promise<FinanceCashflow> {
   return get<FinanceCashflow>(
-    `/api/admin/finance/cashflow?unit=${unit}&count=${count}&opening=${opening}` +
+    `/api/admin/finance/cashflow?unit=${unit}&count=${count}` +
+      (opening === null ? "" : `&opening=${opening}`) +
       `&include_po=${includePo ? 1 : 0}&currency=${encodeURIComponent(currency)}` +
       `&include_overdue=${includeOverdue ? 1 : 0}` +
       `&include_expected=${includeExpected ? 1 : 0}` +
       (start ? `&start=${encodeURIComponent(start)}` : "")
   );
+}
+/** 환전(계좌 간 통화 이동) 목록 — 실현 환차손익 포함. */
+export function fetchFinanceTransfers(): Promise<{ rows: FinanceTransfer[] }> {
+  return get("/api/admin/finance/transfers");
+}
+export function createFinanceTransfer(body: FinanceTransferSave): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/finance/transfers", body);
+}
+export function updateFinanceTransfer(id: number, body: FinanceTransferSave): Promise<{ ok: boolean; id: number }> {
+  return put(`/api/admin/finance/transfers/${id}`, body);
+}
+export function deleteFinanceTransfer(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/finance/transfers/${id}`);
+}
+/** 통화별 기준 잔고(그 날 마감 통장 잔고). */
+export function fetchFinanceBalanceAnchors(): Promise<FinanceBalanceAnchors> {
+  return get("/api/admin/finance/balance-anchors");
+}
+export function saveFinanceBalanceAnchor(currency: string, asOf: string, amount: number): Promise<{ ok: boolean }> {
+  return put(`/api/admin/finance/balance-anchors/${encodeURIComponent(currency)}`, { as_of: asOf, amount });
+}
+/** on 날짜 마감 기준 KTMS 장부 잔고 — 통장과 맞춰 보는 용도. */
+export function fetchFinanceLedgerBalance(currency: string, on: string): Promise<FinanceLedgerBalance> {
+  return get(`/api/admin/finance/balance?currency=${encodeURIComponent(currency)}&on=${encodeURIComponent(on)}`);
 }
 /**
  * 현금흐름 한 구간의 건별 내역.

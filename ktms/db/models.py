@@ -1031,6 +1031,43 @@ class FinanceIncome(Base):
     created_at   = Column(DateTime, default=datetime.utcnow)
 
 
+class FinanceTransfer(Base):
+    """환전(계좌 간 통화 이동) — 외화 계좌에서 팔고 원화 계좌로 받는 것 같은 회사 안의 이동.
+
+    매출도 비용도 아니다: 한 통화 계좌에서는 유출, 다른 통화 계좌에서는 유입으로 같은 날
+    현금흐름에 서고 손익·부가세에는 들지 않는다. 다만 외화를 장부에 올린 환율과 실제로
+    판 환율이 다르면 그 차이(실현 환차손익)는 손익에 선다(finance._fx_realized).
+    적용환율은 저장하지 않는다 — 두 금액이 곧 근거이고, 환율은 거기서 나눠 나온다.
+    수수료(fee)는 환전 때 따로 떼인 금액이 있을 때만(대개 환율 안에 녹아 있다) — 그
+    통화(fee_currency) 계좌의 유출이자 운영비 '수수료'로 센다."""
+    __tablename__ = "finance_transfers"
+    id            = Column(Integer, primary_key=True)
+    date          = Column(String(10))     # 환전일 YYYY-MM-DD
+    from_currency = Column(String(10))     # 판 통화(나간 쪽)
+    from_amount   = Column(Float, default=0.0)
+    to_currency   = Column(String(10))     # 받은 통화(들어온 쪽)
+    to_amount     = Column(Float, default=0.0)
+    fee           = Column(Float, default=0.0)
+    fee_currency  = Column(String(10), default="KRW")
+    description   = Column(String(200))
+    notes         = Column(Text)
+    owner_id      = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at    = Column(DateTime, default=datetime.utcnow)
+
+
+class FinanceBalanceAnchor(Base):
+    """통화(계좌)별 기준 잔고 — '이 날 마감 때 통장 잔고가 얼마였다'는 한 점.
+
+    현금흐름은 이 한 점에서 실제로 오간 돈을 앞뒤로 굴려 창의 기초잔고를 낸다. 예전엔
+    화면에 기초잔고를 매번 손으로 넣어야 했고(저장도 안 됐다), 창의 시작월을 바꾸면
+    그 날짜 기준 잔고를 다시 구해 넣어야 했다."""
+    __tablename__ = "finance_balance_anchors"
+    currency   = Column(String(10), primary_key=True)
+    as_of      = Column(String(10))    # 이 날 마감 기준 YYYY-MM-DD
+    amount     = Column(Float, default=0.0)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
 class MarketingAsset(Base):
     """홍보 이메일 첨부용 자료 라이브러리(회사소개서·브로슈어 등). DB BLOB 저장
     (Render 파일시스템 휘발 회피 — DeliveryProof 와 동일 방식). 홍보 메일 작성 시

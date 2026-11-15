@@ -56,6 +56,7 @@ import CurrencyToggle from "@/components/common/CurrencyToggle";
 import { HeadTh, useHeadMenu, type HeadCol } from "@/components/common/tableHeadMenu";
 import { amountInputValue, parseAmountInput } from "@/components/common/itemTable";
 import FinanceDaybook from "@/components/screens/FinanceDaybook";
+import { BalanceAnchorModal, TransferForm, TransfersPanel } from "@/components/screens/FinanceTransfers";
 import FinanceProfitTab from "@/components/screens/FinanceProfit";
 import {
   CATEGORY_LABEL,
@@ -475,12 +476,13 @@ function OverviewTab() {
   const [includeExpected, setIncludeExpected] = useState(false);
   // 잔고 곡선은 한 통화 안에서만 의미가 있으므로 환산 대신 통화를 골라 본다.
   const [currency, setCurrency] = useState("KRW");
-  // 기초잔고는 통화별로 따로 기억한다 — 하나만 두면 ₩ 로 넣은 값이 $ 로 바꾼 순간
-  // 그대로 달러로 읽혀(5천만원 → $50,000,000) 잔고 곡선 전체가 엉뚱해진다.
-  const [openingByCur, setOpeningByCur] = useState<Record<string, string>>({ KRW: "0", USD: "0" });
-  const openingInput = openingByCur[currency] ?? "0";
-  const setOpeningInput = (v: string) => setOpeningByCur((m) => ({ ...m, [currency]: v }));
-  const opening = Number(openingInput) || 0;
+  // 기초잔고는 손으로 넣지 않는다 — 통화(계좌)별로 저장해 둔 기준 잔고 한 점에서 서버가
+  // 실제로 오간 돈을 굴려 창의 시작일 잔고를 낸다. 창의 시작월을 바꿔도 그대로 맞는다.
+  const [anchorOpen, setAnchorOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  // 환전·기준 잔고를 바꾼 뒤 집계와 펼친 장부를 다시 받게 하는 눈금(캐시 키에 붙는다).
+  const [rev, setRev] = useState(0);
+  const bump = () => setRev((n) => n + 1);
   // 창의 시작점(그 달 1일). 기본은 올해 1월 — 한 해가 통째로 들어오는 편이 이번 달부터
   // 앞만 보는 것보다 쓸모가 많다(지나간 달의 실적까지 함께 굴러간다).
   // 브라우저 기본 월 선택기는 창 언어를 따라가 한국어로 뜨므로 직접 고르게 둔다.
@@ -502,10 +504,10 @@ function OverviewTab() {
     });
   const cash = (n: number) => money(n, currency);
 
-  const key = `finance:cashflow:${unit}:${count}:${opening}:${includePo}:${currency}:${start}:${includeOverdue}:${includeExpected}`;
+  const key = `finance:cashflow:${unit}:${count}:${includePo}:${currency}:${start}:${includeOverdue}:${includeExpected}:${rev}`;
   const { data, error } = useCachedData<FinanceCashflow>(
     key,
-    () => fetchFinanceCashflow(unit, count, opening, includePo, currency, start, includeOverdue, includeExpected)
+    () => fetchFinanceCashflow(unit, count, null, includePo, currency, start, includeOverdue, includeExpected)
   );
   const rows = useMemo(() => data?.rows ?? [], [data]);
   // 이 집계가 예정·연체를 흐름 밖에 세워 두었나 — 펼친 장부가 같은 규칙으로 굴려야
@@ -575,12 +577,25 @@ function OverviewTab() {
           <button className={currency === "KRW" ? "on" : ""} onClick={() => setCurrency("KRW")}>₩ KRW</button>
           <button className={currency === "USD" ? "on" : ""} onClick={() => setCurrency("USD")}>$ USD</button>
         </div>
-        <label className="fin-inline-field fin-cf-opening">
-          {/* 기준일을 라벨에 박아 둔다 — 첫 구간이 이번 달 1일부터라 '오늘 잔고'를 넣으면
-              이번 달에 이미 오간 돈이 두 번 세어진다. */}
-          Opening balance ({sym(currency).trim()}) <span className="muted">as of {openingAsOf}</span>
-          <AmountInput inputMode="decimal" value={openingInput} onChange={(e) => setOpeningInput(e.target.value.replace(/,/g, ""))} style={{ width: 140 }} />
-        </label>
+        <span className="fin-inline-field fin-cf-opening">
+          {/* 기초잔고는 저장된 계좌 기준 잔고에서 굴러 나온다 — 눌러서 그 기준을 고치거나
+              통장과 맞춰 본다. 기준이 없으면 0 에서 출발한다는 것을 그대로 밝힌다. */}
+          Opening ({sym(currency).trim()}) <span className="muted">as of {openingAsOf}</span>
+          <b className="num">{data ? money(data.opening, currency) : "…"}</b>
+          <button
+            type="button"
+            className="btn sm"
+            onClick={() => setAnchorOpen(true)}
+            title={data?.anchor
+              ? `Rolled from the saved balance ${money(data.anchor.amount, currency)} at end of ${data.anchor.as_of}`
+              : "No account balance saved yet — the window starts from 0"}
+          >
+            {data?.opening_source === "none" ? "Set account balance" : "Account balance"}
+          </button>
+        </span>
+        <button type="button" className="btn sm" onClick={() => setTransferOpen(true)} title="Record money converted from one currency account to another">
+          ⇄ FX conversion
+        </button>
         <label className="check-chip fin-cf-opt" style={{ cursor: "pointer" }} title="Include vendor PO outflow (est.)">
           <input type="checkbox" checked={includePo} onChange={(e) => setIncludePo(e.target.checked)} />
           <span className="fin-opt-long"> Include vendor PO outflow (est.)</span>
@@ -670,12 +685,14 @@ function OverviewTab() {
                 ],
                 totalHref: ledgerHref(row, idx === 0, "in", "total", currency, "due"),
               }}
+              fx={row.transfer_in ?? 0}
               settled={{
                 label: "Received",
                 hint: "already in the account",
                 trade: row.actual_in_ar ?? 0,
                 other: row.actual_in_income ?? 0,
-                total: row.actual_inflow,
+                // 환전으로 들어온 몫은 받은 돈(매출·기타수입)이 아니다 — 아래 FX 줄이 따로 든다.
+                total: row.actual_inflow - (row.transfer_in ?? 0),
                 split: typeof row.actual_in_ar === "number",
                 href: [
                   ledgerHref(row, idx === 0, "in", "trade", currency, "settled"),
@@ -709,12 +726,13 @@ function OverviewTab() {
                 ],
                 totalHref: ledgerHref(row, idx === 0, "out", "total", currency, "due"),
               }}
+              fx={row.transfer_out ?? 0}
               settled={{
                 label: "Paid",
                 hint: "already out of the account",
                 trade: row.actual_out_ap ?? 0,
                 other: row.actual_out_other ?? 0,
-                total: row.actual_outflow,
+                total: row.actual_outflow - (row.transfer_out ?? 0),
                 split: typeof row.actual_out_ap === "number",
                 href: [
                   ledgerHref(row, idx === 0, "out", "trade", currency, "settled"),
@@ -790,7 +808,13 @@ function OverviewTab() {
                       옆 두 기둥의 아랫줄(Received·Paid) 합계끼리 뺀 것. 그 둘과 같은 줄에
                       서고 같은 음영을 받아, 어느 숫자에서 왔는지 자리로 먼저 읽힌다. */}
                   <tr className="fin-bucket-settled">
-                    <th scope="row">Net<div className="hint-inline">{parkExpected ? "received − paid" : "inflow − outflow"}</div></th>
+                    <th scope="row">
+                      Net
+                      <div className="hint-inline">
+                        {parkExpected ? "received − paid" : "inflow − outflow"}
+                        {(row.transfer_in ?? 0) || (row.transfer_out ?? 0) ? " ± FX" : ""}
+                      </div>
+                    </th>
                     <td className="num" style={{ color: row.net >= 0 ? "#1e7a46" : "#c0392b" }}>
                       {row.net >= 0 ? "+" : "−"}{cash(Math.abs(row.net))}
                     </td>
@@ -908,6 +932,12 @@ function OverviewTab() {
                             </div>
                           ) : null)
                           : (r.actual_inflow ? <div className="fin-cf-actual">{cash(r.actual_inflow)} received</div> : null)}
+                        {/* 환전으로 이 계좌에 들어온 몫 — 위 금액 안에 들어 있지만 매출이 아니다. */}
+                        {r.transfer_in ? (
+                          <div className="fin-cf-actual" title="Converted in from another currency account — in the figure above, but not income">
+                            incl. {cash(r.transfer_in)} FX conversion
+                          </div>
+                        ) : null}
                         {r.overdue_in ? (
                           <div className="fin-cf-overdue" title={overdueRolled ? "Included above" : "Kept out of the balance"}>
                             {cash(r.overdue_in)} overdue
@@ -931,6 +961,11 @@ function OverviewTab() {
                             </div>
                           ) : null)
                           : (r.actual_outflow ? <div className="fin-cf-actual">{cash(r.actual_outflow)} paid</div> : null)}
+                        {r.transfer_out ? (
+                          <div className="fin-cf-actual" title="Converted out to another currency account — in the figure above, but not a cost">
+                            incl. {cash(r.transfer_out)} FX conversion
+                          </div>
+                        ) : null}
                         {r.overdue_out ? (
                           <div className="fin-cf-overdue" title={overdueRolled ? "Included above" : "Kept out of the balance"}>
                             {cash(r.overdue_out)} overdue
@@ -956,6 +991,7 @@ function OverviewTab() {
                           parkOverdue={parkOverdue}
                           parkExpected={parkExpected}
                           first={i === 0}
+                          rev={rev}
                         />
                       </td>
                     </tr>
@@ -979,7 +1015,9 @@ function OverviewTab() {
               here; click a line up there for the items behind it. Each period mixes money already moved (grey, dated
               on the day it actually arrived or left) with money still expected — receivables by due date and unpaid
               payable occurrences{includePo ? " + vendor POs (estimated from order date)" : ""}.
-              So the opening balance must be your balance on {openingAsOf}, not today&apos;s. Only {currency} items are
+              The opening balance is rolled from the saved account balance (Account balance) to {openingAsOf} using
+              money that actually moved. FX conversions move money between the currency accounts on the day they
+              happened — counted in the balance, but neither income nor cost. Only {currency} items are
               counted — switch the currency toggle for the other book; nothing is converted.{parkExpected
                 ? " Money that has not moved yet — anything still expected, overdue included — is listed but kept out of the balance, so this balance is what your account actually holds. Tick “Count expected in balance” to roll it in and project ahead instead."
                 : ""} Anything already past its date and still unsettled stays on that date as overdue{parkExpected
@@ -992,6 +1030,13 @@ function OverviewTab() {
           </div>
         </>
       )}
+      <TransfersPanel key={rev} onChanged={bump} />
+      {transferOpen ? (
+        <TransferForm onClose={() => setTransferOpen(false)} onSaved={() => { setTransferOpen(false); bump(); }} />
+      ) : null}
+      {anchorOpen ? (
+        <BalanceAnchorModal currency={currency} onClose={() => setAnchorOpen(false)} onSaved={() => { setAnchorOpen(false); bump(); }} />
+      ) : null}
     </div>
   );
 }
@@ -1025,7 +1070,12 @@ type BucketRow = {
  * 세로로 더하면 그 출처의 전부, 가로로 더하면 그 상태의 전부(Total 칸).
  * 칸마다 그 조건으로 걸러 낸 목록으로 간다.
  */
-function BucketCard({ title, period, tone, cols, colHref, due, settled, allHref, currency }: {
+function BucketCard({ title, period, tone, cols, colHref, due, settled, allHref, currency, fx = 0 }: {
+  /**
+   * 환전으로 이 계좌에 들어온(유입 기둥)/나간(유출 기둥) 몫 — 매출·비용이 아니라 격자 밖의
+   * 한 줄로 선다. 0 이면 줄을 세우지 않는다.
+   */
+  fx?: number;
   title: string;
   period: string;
   tone: "in" | "out";
@@ -1094,6 +1144,19 @@ function BucketCard({ title, period, tone, cols, colHref, due, settled, allHref,
         <tbody>
           {line(due, false)}
           {line(settled, true)}
+          {fx ? (
+            <tr className="fin-bucket-settled">
+              <th scope="row">
+                FX conversion
+                <div className="hint-inline">{tone === "in" ? "converted in" : "converted out"} · not {tone === "in" ? "income" : "a cost"}</div>
+              </th>
+              <td className="num" />
+              <td className="num" />
+              <td className="num">
+                <Link className="fin-cell-link" href={allHref} title={`FX conversion · ${period}`}>{cash(fx)}</Link>
+              </td>
+            </tr>
+          ) : null}
         </tbody>
       </table>
     </div>

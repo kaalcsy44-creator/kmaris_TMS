@@ -55,7 +55,11 @@ from _core import (
     timedelta,
 )
 from calendar import monthrange
+from datetime import datetime
 
+from pydantic import BaseModel
+
+from db.models import FinanceBalanceAnchor, FinanceTransfer
 from services.fx import get_deal_base_rate, get_rates
 from services.pdf_parser import parse_payable_bill_image, parse_payable_bill_pdf_document
 
@@ -264,6 +268,341 @@ def _by_currency_sort_key(per: dict) -> tuple:
     """통화별 합계 정렬 기준 — 환산 없이 KRW, USD, 그 외 최대값 순으로 비교."""
     rest = max([v for c, v in per.items() if c not in ("KRW", "USD")] or [0.0])
     return (per.get("KRW", 0.0), per.get("USD", 0.0), rest)
+
+
+# ── 환전(계좌 간 통화 이동) · 기준 잔고 · 실현 환차손익 ─────────────────────────
+# 환전은 매출도 비용도 아니다. 판 통화 계좌에서는 유출, 받은 통화 계좌에서는 유입으로
+# 같은 날 현금흐름에 서서 두 통장 잔고를 맞추고, 손익에는 '장부환율과 실제 환율의 차이'
+# (실현 환차손익)만 남긴다. 따로 떼인 수수료는 그 통화 계좌의 유출이자 운영비다.
+
+TRANSFER_FEE_CATEGORY = "수수료"
+
+
+def _fmt_money(amount: float, cur: str) -> str:
+    cur = (cur or "KRW").upper()
+    if cur == "KRW":
+        return f"₩{amount:,.0f}"
+    if cur == "USD":
+        return f"${amount:,.2f}"
+    return f"{cur} {amount:,.2f}"
+
+
+def _transfer_rate(t) -> float:
+    """적용환율(1 외화 = ? KRW). 원화가 낀 환전만 뜻이 있고, 외화끼리면 받은/판 비율."""
+    fa, ta = float(t.from_amount or 0), float(t.to_amount or 0)
+    if not fa or not ta:
+        return 0.0
+    if (t.from_currency or "").upper() == "KRW":
+        return fa / ta
+    return ta / fa
+
+
+def _transfer_label(t) -> str:
+    """장부 한 줄의 근거 — "$20,000.00 → ₩26,642,000 @1,332.10"."""
+    rate = _transfer_rate(t)
+    return (f"{_fmt_money(float(t.from_amount or 0), t.from_currency)} → "
+            f"{_fmt_money(float(t.to_amount or 0), t.to_currency)}"
+            + (f" @{rate:,.2f}" if rate else ""))
+
+
+def _transfer_moves(t) -> list[tuple[str, str, float, str]]:
+    """환전 한 건이 통장을 움직인 몫 — [(통화, "in"/"out", 금액, "transfer"/"fee")]."""
+    out: list[tuple[str, str, float, str]] = []
+    if (t.from_amount or 0) > 0:
+        out.append(((t.from_currency or "USD").upper(), "out", round(float(t.from_amount), 2), "transfer"))
+    if (t.to_amount or 0) > 0:
+        out.append(((t.to_currency or "KRW").upper(), "in", round(float(t.to_amount), 2), "transfer"))
+    if (t.fee or 0) > 0:
+        out.append(((t.fee_currency or "KRW").upper(), "out", round(float(t.fee), 2), "fee"))
+    return out
+
+
+def _actual_net(s, cur: str, d0: date, d1: date) -> float:
+    """[d0,d1] 안에 cur 계좌에서 **실제로 오간** 돈의 순증감 — 현금흐름의 실적과 같은 출처·규칙.
+
+    기준 잔고(한 날짜의 통장 잔고)를 창의 시작일로 앞뒤로 옮길 때 쓴다. 예정은 하나도
+    들지 않는다: 통장 잔고는 실제로 오간 돈만으로 움직인다.
+    """
+    if d1 < d0:
+        return 0.0
+    cur = cur.upper()
+    net = 0.0
+    ar_rows = _finance_receivable_rows(s)
+    for _w, amt, c in _ar_receipts(ar_rows, d0, d1, _setoff_in_receipts(s, ar_rows)):
+        if (c or "KRW").upper() == cur:
+            net += amt
+    for inc in s.query(FinanceIncome).all():
+        if (inc.currency or "KRW").upper() == cur:
+            net += sum(a for _w, a in _settled_occurrences(inc, d0, d1))
+    for p in s.query(FinancePayable).all():
+        if (p.currency or "KRW").upper() == cur:
+            net -= sum(a for _w, a in _settled_occurrences(p, d0, d1))
+    for _w, amt, c in _ap_payments(_ap_record_rows(s), d0, d1):
+        if (c or "KRW").upper() == cur:
+            net -= amt
+    lo, hi = d0.isoformat(), d1.isoformat()
+    for t in s.query(FinanceTransfer).all():
+        if not (lo <= (t.date or "") <= hi):
+            continue
+        for c, side, amt, _k in _transfer_moves(t):
+            if c == cur:
+                net += amt if side == "in" else -amt
+    return net
+
+
+def _anchor_of(s, cur: str) -> dict | None:
+    a = s.query(FinanceBalanceAnchor).filter_by(currency=cur.upper()).first()
+    if not a or not a.as_of:
+        return None
+    return {"currency": a.currency, "as_of": a.as_of, "amount": round(float(a.amount or 0), 2)}
+
+
+def _balance_at_start(s, cur: str, day: date) -> float | None:
+    """day **시작** 시점(전날 마감)의 통장 잔고 — 기준 잔고에서 실적을 굴려 낸다. 기준이 없으면 None."""
+    a = _anchor_of(s, cur)
+    if not a:
+        return None
+    anchor_day = date.fromisoformat(a["as_of"])
+    if anchor_day < day:
+        # 기준일 마감 → day 전날 마감: 그 사이 실적을 더한다.
+        return a["amount"] + _actual_net(s, cur, anchor_day + timedelta(days=1), day - timedelta(days=1))
+    # 기준일이 day 이후 — day 부터 기준일까지 오간 것을 되돌린다.
+    return a["amount"] - _actual_net(s, cur, day, anchor_day)
+
+
+def _fx_realized(s) -> dict[int, dict]:
+    """환전 건별 실현 환차손익(원화) — {transfer_id: {book_rate, gain}}.
+
+    외화 계좌를 통화별 '이동평균 장부환율'로 굴린다. 들어온 외화는 장부에 올라간 환율로
+    쌓인다 — 매출 입금은 그 매출을 손익에 올린 환율(청구 달 말일 고시, finance_profit 과
+    같은 규칙), 기타수입은 받은 달 말일 고시, 원화로 사들인 외화는 산 환율. 나간 외화는
+    그때의 평균환율로 빠진다. 원화로 판 환전이면 받은 원화 − 판 외화 × 평균환율이 그 건의
+    실현 환차손익이다 — 매출을 올린 환율과 실제로 원화가 된 환율의 차이가 여기서 손익에 선다.
+    """
+    far, near = date(2000, 1, 1), date(2100, 12, 31)
+    # (날짜, 순서, 통화, 금액(+유입/−유출), 장부환율 또는 ("month", ym), transfer)
+    events: list[tuple] = []
+    ar_rows = _finance_receivable_rows(s)
+    setoff = _setoff_in_receipts(s, ar_rows)
+    ar_map = {r.id: r for r in s.query(ARRecord).all()}
+    for r in ar_rows:
+        cur = (r["currency"] or "KRW").upper()
+        if cur == "KRW" or r["paid_amount"] <= 0 or not r["paid_date"]:
+            continue
+        landed = round(r["paid_amount"] - float(setoff.get(r["id"], 0.0)), 2)
+        if landed <= 0.005:
+            continue
+        rec = ar_map.get(r["id"])
+        pd = (_ar_period_date(rec) if rec else "") or r["paid_date"]
+        events.append((r["paid_date"], 0, cur, landed, ("month", pd[:7]), None))
+    for inc in s.query(FinanceIncome).all():
+        cur = (inc.currency or "KRW").upper()
+        if cur == "KRW":
+            continue
+        for when, amt in _settled_occurrences(inc, far, near):
+            events.append((when, 0, cur, amt, ("month", when[:7]), None))
+    for p in s.query(FinancePayable).all():
+        cur = (p.currency or "KRW").upper()
+        if cur == "KRW":
+            continue
+        for when, amt in _settled_occurrences(p, far, near):
+            events.append((when, 1, cur, -amt, None, None))
+    for when, amt, c in _ap_payments(_ap_record_rows(s), far, near):
+        cur = (c or "KRW").upper()
+        if cur != "KRW":
+            events.append((when, 1, cur, -amt, None, None))
+    for t in s.query(FinanceTransfer).all():
+        if not t.date:
+            continue
+        fc, tc = (t.from_currency or "").upper(), (t.to_currency or "").upper()
+        if fc != "KRW" and (t.from_amount or 0) > 0:
+            events.append((t.date, 1, fc, -float(t.from_amount), None, t))
+        if tc != "KRW" and (t.to_amount or 0) > 0:
+            rate = _transfer_rate(t) if fc == "KRW" else ("month", t.date[:7])
+            events.append((t.date, 0, tc, float(t.to_amount), rate, None))
+        if (t.fee or 0) > 0 and (t.fee_currency or "KRW").upper() != "KRW":
+            events.append((t.date, 1, (t.fee_currency or "").upper(), -float(t.fee), None, None))
+    events.sort(key=lambda e: (e[0], e[1]))
+
+    pools: dict[str, list[float]] = {}   # 통화 → [잔액, 장부 원화액]
+    out: dict[int, dict] = {}
+    for when, _o, cur, amt, rate, t in events:
+        pool = pools.setdefault(cur, [0.0, 0.0])
+        if amt > 0:
+            r = _month_end_rate(rate[1], cur)[0] if isinstance(rate, tuple) else float(rate or 0)
+            pool[0] += amt
+            pool[1] += amt * r
+            continue
+        a = -amt
+        # 쌓인 것이 없으면(기록 누락 등) 그 달 말일 고시로 대신한다.
+        avg = pool[1] / pool[0] if pool[0] > 0.005 else _month_end_rate(when[:7], cur)[0]
+        if t is not None and (t.to_currency or "").upper() == "KRW":
+            cost = a * avg
+            out[t.id] = {"book_rate": round(avg, 4), "gain": round(float(t.to_amount or 0) - cost)}
+        pool[0] -= a
+        pool[1] -= a * avg
+        if pool[0] <= 0.005:
+            pool[0], pool[1] = 0.0, 0.0
+    return out
+
+
+def _transfer_row(t, fx: dict[int, dict]) -> dict:
+    g = fx.get(t.id) or {}
+    return {
+        "id": t.id,
+        "date": t.date or "",
+        "from_currency": (t.from_currency or "").upper(),
+        "from_amount": round(float(t.from_amount or 0), 2),
+        "to_currency": (t.to_currency or "").upper(),
+        "to_amount": round(float(t.to_amount or 0), 2),
+        "rate": round(_transfer_rate(t), 4),
+        "fee": round(float(t.fee or 0), 2),
+        "fee_currency": (t.fee_currency or "KRW").upper(),
+        "description": t.description or "",
+        "notes": t.notes or "",
+        # 실현 환차손익 — 외화를 원화로 판 건에만(원화 기준).
+        "book_rate": g.get("book_rate"),
+        "fx_gain": g.get("gain"),
+    }
+
+
+class FinanceTransferIn(BaseModel):
+    date: str
+    from_currency: str = "USD"
+    from_amount: float = 0.0
+    to_currency: str = "KRW"
+    to_amount: float = 0.0
+    fee: float | None = 0.0
+    fee_currency: str | None = "KRW"
+    description: str | None = ""
+    notes: str | None = ""
+
+
+class BalanceAnchorIn(BaseModel):
+    as_of: str
+    amount: float = 0.0
+
+
+def _apply_transfer(row: FinanceTransfer, body: FinanceTransferIn) -> None:
+    day = (body.date or "").strip()[:10]
+    try:
+        date.fromisoformat(day)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Enter the conversion date (YYYY-MM-DD).")
+    fc, tc = (body.from_currency or "").strip().upper(), (body.to_currency or "").strip().upper()
+    if not fc or not tc or fc == tc:
+        raise HTTPException(status_code=400, detail="Pick two different currencies.")
+    if (body.from_amount or 0) <= 0 or (body.to_amount or 0) <= 0:
+        raise HTTPException(status_code=400, detail="Enter both amounts — what left one account and what reached the other.")
+    row.date = day
+    row.from_currency, row.from_amount = fc, round(float(body.from_amount), 2)
+    row.to_currency, row.to_amount = tc, round(float(body.to_amount), 2)
+    row.fee = max(0.0, round(float(body.fee or 0), 2))
+    row.fee_currency = (body.fee_currency or "KRW").strip().upper() or "KRW"
+    row.description = (body.description or "").strip()[:200]
+    row.notes = (body.notes or "").strip()
+
+
+@app.get("/api/admin/finance/transfers", dependencies=[Depends(require_token)])
+def finance_transfers():
+    s = get_session()
+    try:
+        fx = _fx_realized(s)
+        rows = s.query(FinanceTransfer).order_by(FinanceTransfer.date.desc(), FinanceTransfer.id.desc()).all()
+        return {"rows": [_transfer_row(t, fx) for t in rows]}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/finance/transfers", dependencies=[Depends(require_token)])
+def create_finance_transfer(body: FinanceTransferIn, user: dict = Depends(get_current_user)):
+    s = get_session()
+    try:
+        row = FinanceTransfer(owner_id=(user or {}).get("id"))
+        _apply_transfer(row, body)
+        s.add(row)
+        s.commit()
+        return {"ok": True, "id": row.id}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/finance/transfers/{row_id}", dependencies=[Depends(require_token)])
+def update_finance_transfer(row_id: int, body: FinanceTransferIn):
+    s = get_session()
+    try:
+        row = s.query(FinanceTransfer).filter_by(id=row_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Conversion not found.")
+        _apply_transfer(row, body)
+        s.commit()
+        return {"ok": True, "id": row.id}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/finance/transfers/{row_id}", dependencies=[Depends(require_token)])
+def delete_finance_transfer(row_id: int):
+    s = get_session()
+    try:
+        row = s.query(FinanceTransfer).filter_by(id=row_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Conversion not found.")
+        s.delete(row)
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/finance/balance-anchors", dependencies=[Depends(require_token)])
+def finance_balance_anchors():
+    s = get_session()
+    try:
+        return {"anchors": {a.currency: {"as_of": a.as_of, "amount": round(float(a.amount or 0), 2)}
+                            for a in s.query(FinanceBalanceAnchor).all() if a.as_of}}
+    finally:
+        s.close()
+
+
+@app.put("/api/admin/finance/balance-anchors/{currency}", dependencies=[Depends(require_token)])
+def save_finance_balance_anchor(currency: str, body: BalanceAnchorIn):
+    cur = (currency or "").strip().upper()
+    if not cur or len(cur) > 10:
+        raise HTTPException(status_code=400, detail="Unknown currency.")
+    day = (body.as_of or "").strip()[:10]
+    try:
+        date.fromisoformat(day)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Enter the balance date (YYYY-MM-DD).")
+    s = get_session()
+    try:
+        a = s.query(FinanceBalanceAnchor).filter_by(currency=cur).first()
+        if not a:
+            a = FinanceBalanceAnchor(currency=cur)
+            s.add(a)
+        a.as_of, a.amount, a.updated_at = day, round(float(body.amount or 0), 2), datetime.utcnow()
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
+@app.get("/api/admin/finance/balance", dependencies=[Depends(require_token)])
+def finance_balance(currency: str = "KRW", on: str = ""):
+    """on 날짜 **마감** 기준 KTMS 장부 잔고 — 통장 잔고와 맞춰 보는 용도. 기준 잔고가 없으면 null."""
+    cur = (currency or "KRW").upper()
+    try:
+        day = date.fromisoformat(on[:10]) if on else date.today()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="on 날짜 형식이 올바르지 않습니다(YYYY-MM-DD).")
+    s = get_session()
+    try:
+        bal = _balance_at_start(s, cur, day + timedelta(days=1))
+        return {"currency": cur, "on": day.isoformat(),
+                "balance": None if bal is None else round(bal, 2), "anchor": _anchor_of(s, cur)}
+    finally:
+        s.close()
 
 
 @app.get("/api/admin/finance/meta", dependencies=[Depends(require_token)])
@@ -1954,6 +2293,24 @@ def finance_profit(year: int = 0, detail: str = ""):
             # 적으면 한 줄이 길어지기만 한다(그 건의 산출근거 전문은 Outflow 목록에 있다).
             note(f"op:{INBOUND_FEE_CATEGORY}", i, named_rfq(f.get("rfq_id") or 0, f["counterparty"]), krw)
 
+        # 환전 — 매출도 비용도 아니지만 두 가지가 손익에 남는다. ① 실현 환차손익: 외화를
+        # 장부에 올린 환율과 원화로 판 환율의 차이(_fx_realized). ② 따로 떼인 수수료(운영비).
+        fx_gain = z()
+        fx_by_id = _fx_realized(s)
+        for t in s.query(FinanceTransfer).all():
+            day = t.date or ""
+            if not (ys <= day <= ye):
+                continue
+            i = int(day[5:7]) - 1
+            g = fx_by_id.get(t.id)
+            if g:
+                fx_gain[i] += g["gain"]
+                note("fx_gain", i, f"{_transfer_label(t)} · book {g['book_rate']:,.2f}", g["gain"])
+            if (t.fee or 0) > 0:
+                krw = _krw_in(float(t.fee), t.fee_currency or "KRW", day[:7], fx_seen)
+                operating.setdefault(TRANSFER_FEE_CATEGORY, z())[i] += krw
+                note(f"op:{TRANSFER_FEE_CATEGORY}", i, f"FX conversion fee · {day}", krw)
+
         # 클레임 현금 부담분 — 당사가 물어 준 현장 비용. 상계로 정산한 몫은 위에서 이미
         # 매출 차감으로 잡혔으므로 여기 오지 않는다(_claim_cost_rows).
         for cr in _claim_cost_rows(s):
@@ -1991,7 +2348,7 @@ def finance_profit(year: int = 0, detail: str = ""):
         # 그 달 이익의 비중대로 나눠 싣는다. 12로 균등히 나누면 매출이 없던 달까지 세금을
         # 지고 적자로 찍혀, 달을 견주어 보는 이 표에서 오히려 사실을 가린다.
         # (실제 납부는 3월 신고·8월 중간예납이라 현금 시점과는 다르다 — 여기 값은 '떼어 둘 몫'이다.)
-        pretax = [sales[i] + other_income[i] - purchase[i] - consulting[i]
+        pretax = [sales[i] + other_income[i] + fx_gain[i] - purchase[i] - consulting[i]
                   - sum(v[i] for v in operating.values()) for i in range(12)]
         base = sum(pretax)
         nat_tax, local_tax = _corporate_tax(base)
@@ -2012,6 +2369,8 @@ def finance_profit(year: int = 0, detail: str = ""):
                 "other_income": r12(other_income),
                 # 자본 유입 — 수익이 아니라 합계 밖에 세운다.
                 "investment": r12(investment),
+                # 실현 환차손익(환전 건별, 음수 = 손실) — 수익 합계에 든다.
+                "fx_gain": r12(fx_gain),
             },
             "costs": {
                 "purchase": r12(purchase),
@@ -2094,7 +2453,7 @@ def _cashflow_buckets(unit: str, count: int, anchor: date | None = None) -> list
 
 
 @app.get("/api/admin/finance/cashflow", dependencies=[Depends(require_token)])
-def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
+def finance_cashflow(unit: str = "month", count: int = 6, opening: float | None = None,
                      include_po: int = 0, currency: str = "KRW", start: str = "",
                      include_overdue: int = 0, include_expected: int = 1):
     """현금흐름 — 유입(수금)·유출(지급 + 선택적 벤더 PO)·순증감·누적잔고.
@@ -2129,6 +2488,11 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
     include_po=1 이면 벤더 발주(PurchaseOrder) 원가를 발주일 기준 유출로 추정 반영한다.
     start(YYYY-MM 또는 YYYY-MM-DD)를 주면 그 시점부터 창을 연다 — 올해 1월처럼 지나간
     달을 앞에 붙여 실적을 함께 볼 수 있다. 비우면 오늘부터.
+
+    opening 을 주지 않으면 저장된 기준 잔고(finance_balance_anchors)에서 실적을 굴려 첫
+    구간 시작일의 잔고를 스스로 낸다(없으면 0). 환전(FinanceTransfer)은 그 통화 계좌의
+    실제 유입·유출로 흐름에 들고, transfer_in/transfer_out 으로 따로도 실린다 — 매출·
+    비용 갈래(actual_in_ar 등)에는 들지 않는다. 따로 떼인 환전 수수료는 기타비용 실적이다.
     """
     unit = "week" if unit == "week" else "month"
     # 연체는 예정의 부분집합 — 예정을 통째로 잔고 밖에 세워 두면 연체만 골라 넣을 수 없다.
@@ -2188,6 +2552,10 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
         # 유출에도 들지 않고 이 칸에만 담긴다(화면은 유입 칸 아래에 따로 적는다).
         # 수금액에 섞여 있던 몫은 위 유입 줄에서 덜어 냈으므로 여기서도 이 칸으로 온다.
         offset_in = [0.0] * count
+        # 환전 — 이 통화 계좌로 들어온/나간 몫. 위 inflow·outflow·act_in·act_out 안에 들어
+        # 있고(통장을 실제로 움직였다), 매출·비용 갈래에는 들지 않는다.
+        xfer_in = [0.0] * count
+        xfer_out = [0.0] * count
         today_iso = date.today().isoformat()
 
         def listed(overdue: bool) -> bool:
@@ -2313,6 +2681,29 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                 outflow[idx] += amt
                 act_out[idx] += amt
                 act_out_ap[idx] += amt
+        # 환전 — 그날 실제로 오간 돈. 수수료는 기타비용 실적으로 센다.
+        lo_w, hi_w = win_start.isoformat(), win_end.isoformat()
+        for t in s.query(FinanceTransfer).all():
+            if not (lo_w <= (t.date or "") <= hi_w):
+                continue
+            idx = bucket_index(t.date)
+            if idx < 0:
+                continue
+            for c, side, amt, kind in _transfer_moves(t):
+                if c != cur_sel:
+                    continue
+                if side == "in":
+                    inflow[idx] += amt
+                    act_in[idx] += amt
+                    xfer_in[idx] += amt
+                elif kind == "fee":
+                    outflow[idx] += amt
+                    act_out[idx] += amt
+                    act_out_other[idx] += amt
+                else:
+                    outflow[idx] += amt
+                    act_out[idx] += amt
+                    xfer_out[idx] += amt
         # 선택: 벤더 발주 원가를 발주일 기준 유출로 추정(AP 청구가 있는 P/O는 중복 방지 위해 제외).
         if include_po:
             ord_map = {o.id: o for o in s.query(Order).all()}
@@ -2332,6 +2723,15 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                         out_ap[idx] += _po_cost(po)
                         if include_expected:
                             outflow[idx] += _po_cost(po)
+
+        # 기초잔고 — 손으로 준 값이 우선, 없으면 저장된 기준 잔고에서 굴린다.
+        anchor = _anchor_of(s, cur_sel)
+        if opening is None:
+            rolled = _balance_at_start(s, cur_sel, win_start)
+            opening = rolled if rolled is not None else 0.0
+            opening_source = "anchor" if rolled is not None else "none"
+        else:
+            opening_source = "manual"
 
         rows = []
         cumulative = opening
@@ -2369,6 +2769,9 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
                 # 않는다(수금에 섞여 있던 몫은 그 유입 줄에서 이미 덜어 냈다).
                 # 내역은 장부의 set-off 줄에 그대로 있다.
                 "offset_in": round(offset_in[i]),
+                # 환전으로 이 계좌에 들어온/나간 몫 — 위 inflow·outflow·actual_* 안의 금액.
+                "transfer_in": round(xfer_in[i]),
+                "transfer_out": round(xfer_out[i]),
                 "net": round(net),
                 "cumulative": round(cumulative),
             })
@@ -2378,6 +2781,9 @@ def finance_cashflow(unit: str = "month", count: int = 6, opening: float = 0.0,
             "opening": round(opening),
             # 기초잔고 기준일 — 화면이 '언제 기준으로 넣어야 하는 값'인지 안내한다.
             "opening_as_of": buckets[0]["start"].isoformat(),
+            # 기초잔고가 어디서 왔나 — anchor(저장된 기준 잔고에서 굴림)/manual/none.
+            "opening_source": opening_source,
+            "anchor": anchor,
             "rows": rows,
             "total_inflow": round(sum(inflow)),
             "total_outflow": round(sum(outflow)),
@@ -2410,12 +2816,15 @@ _INFLOW_BUCKETS = {"receivables", "income", "collected"}
 _CASHFLOW_BUCKETS = {
     "receivables": lambda x: x["kind"] == "ar" and not x["actual"],
     "income": lambda x: x["kind"] == "income" and not x["actual"],
-    "collected": lambda x: x["actual"],
+    # 환전은 Received·Paid 에 들지 않는다 — 그 두 칸은 매출·비용에서 오간 돈이고, 환전은
+    # 계좌 사이의 이동이라 /cashflow 의 transfer_in/out 으로 따로 센다(수수료는 Paid 에 든다).
+    "collected": lambda x: x["actual"] and x["kind"] != "transfer",
     "payables": lambda x: not x["actual"] and (
         x["kind"] in ("ap", "po") or (x["kind"] == "payable" and x["memo"] == "거래선지급")
     ),
     "other": lambda x: not x["actual"] and x["kind"] == "payable" and x["memo"] != "거래선지급",
-    "paid": lambda x: x["actual"],
+    "paid": lambda x: x["actual"] and x["kind"] != "transfer",
+    "transfer": lambda x: x["kind"] == "transfer",
 }
 
 
@@ -2616,14 +3025,36 @@ def finance_cashflow_items(start: str = "", end: str = "", currency: str = "KRW"
                     "rfq_id": getattr(o, "rfq_id", 0) or 0, "po_id": po.id,
                 })
 
+        # 환전 — 이 통화 계좌로 들어온 몫은 유입, 나간 몫은 유출. 따로 떼인 수수료는
+        # 유출(kind=fxfee, 기타비용 실적). ref 에는 두 금액과 적용환율을 함께 적는다.
+        for t in s.query(FinanceTransfer).all():
+            if not (lo <= (t.date or "") <= hi):
+                continue
+            for c, side, amt, kind in _transfer_moves(t):
+                if c != cur_sel:
+                    continue
+                item = {
+                    "kind": "transfer" if kind == "transfer" else "fxfee",
+                    "date": t.date, "party": t.description or "FX conversion",
+                    "ref": _transfer_label(t),
+                    "memo": "FX conversion" if kind == "transfer" else "Conversion fee",
+                    "amount": amt, "actual": True, "overdue": False,
+                    "row_id": t.id, "order_id": 0, "rfq_id": 0, "po_id": 0,
+                }
+                (inflow if side == "in" else outflow).append(item)
+
         inflow.sort(key=lambda x: (x["date"], -x["amount"]))
         outflow.sort(key=lambda x: (x["date"], -x["amount"]))
         if bucket:
             if bucket not in _CASHFLOW_BUCKETS:
                 raise HTTPException(status_code=400, detail=f"bucket 값이 올바르지 않습니다({', '.join(_CASHFLOW_BUCKETS)}).")
             keep = _CASHFLOW_BUCKETS[bucket]
-            inflow = [x for x in inflow if keep(x)] if bucket in _INFLOW_BUCKETS else []
-            outflow = [] if bucket in _INFLOW_BUCKETS else [x for x in outflow if keep(x)]
+            if bucket == "transfer":
+                inflow = [x for x in inflow if keep(x)]
+                outflow = [x for x in outflow if keep(x)]
+            else:
+                inflow = [x for x in inflow if keep(x)] if bucket in _INFLOW_BUCKETS else []
+                outflow = [] if bucket in _INFLOW_BUCKETS else [x for x in outflow if keep(x)]
         # 합계는 현금만 센다 — 상계 줄은 목록에 서지만 통장을 움직이지 않았으므로,
         # 여기 더하면 이 화면의 합계가 /cashflow 그 행의 유입과 어긋난다.
         return {
