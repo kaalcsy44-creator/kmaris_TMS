@@ -221,7 +221,7 @@ export default function FinanceScreen() {
   const asTab = (TAB_ALIAS[fromUrl] ?? fromUrl) as Tab;
   const tab: Tab = TABS.includes(asTab) ? asTab : "overview";
   // 탭을 옮기면 그 탭의 갈래·기간은 새로 고른다(전 탭의 것이 따라오면 엉뚱해진다).
-  const setTab = (t: Tab) => setParams({ tab: t === "overview" ? "" : t, view: "", from: "", to: "" });
+  const setTab = (t: Tab) => setParams({ tab: t === "overview" ? "" : t, view: "", from: "", to: "", period: "" });
   return (
     <div className="action-tabs">
       <div className="page-tabs">
@@ -1584,11 +1584,15 @@ function OutflowTab() {
   // 갈래와 기간은 주소에 산다(Inflow 와 같은 규약).
   const { params, setParams } = useFinanceNav();
   const viewParam = params.get("view") || "";
+  // 기본 갈래는 Total, 기본 기간은 이번 달(Monthly) — 'All time' 은 period=all 로 명시해야 걸린다.
   const view: OutflowView = (["payables", "consulting", "other", "total"] as const).includes(viewParam as OutflowView)
-    ? (viewParam as OutflowView) : "payables";
-  const setView = (v: OutflowView) => setParams({ view: v === "payables" ? "" : v });
-  const from = params.get("from") || "";
-  const to = params.get("to") || "";
+    ? (viewParam as OutflowView) : "total";
+  const setView = (v: OutflowView) => setParams({ view: v === "total" ? "" : v });
+  const rawFrom = params.get("from") || "";
+  const rawTo = params.get("to") || "";
+  const allTime = params.get("period") === "all";
+  const [from, to] = rawFrom || rawTo || allTime ? [rawFrom, rawTo] : monthBounds(thisMonthStr());
+  const setPeriod = (f: string, t: string) => setParams({ from: f, to: t, period: f || t ? "" : "all" });
   // 통화 필터 — Inflow 와 같은 규약(주소의 cur).
   const cur = asLedgerCur(params.get("cur"));
   const st = asLedgerStatus(params.get("st"));
@@ -1850,7 +1854,7 @@ function OutflowTab() {
         <div className="fin-ledger-filters">
           <LedgerStatusPick st={st} names={["Payable", "Paid"]} onChange={(v) => setParams({ st: v })} />
           <LedgerCurrency cur={cur} onChange={(c) => setParams({ cur: c })} />
-          <LedgerPeriod from={from} to={to} onChange={(f, t) => setParams({ from: f, to: t })} />
+          <LedgerPeriod from={from} to={to} onChange={setPeriod} />
         </div>
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "8px 0 10px" }}>
