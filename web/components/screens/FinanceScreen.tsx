@@ -1187,11 +1187,15 @@ function InflowTab() {
   // 곧장 건너뛰고, 그 화면을 그대로 링크로 넘길 수 있어야 한다.
   const { params, setParams } = useFinanceNav();
   const viewParam = params.get("view") || "";
+  // 기본 갈래는 Total, 기본 기간은 이번 달(Monthly) — Outflow 와 같은 규약. 'All time' 은 period=all.
   const view: InflowView = (["receivables", "income", "total"] as const).includes(viewParam as InflowView)
-    ? (viewParam as InflowView) : "receivables";
-  const setView = (v: InflowView) => setParams({ view: v === "receivables" ? "" : v });
-  const from = params.get("from") || "";
-  const to = params.get("to") || "";
+    ? (viewParam as InflowView) : "total";
+  const setView = (v: InflowView) => setParams({ view: v === "total" ? "" : v });
+  const rawFrom = params.get("from") || "";
+  const rawTo = params.get("to") || "";
+  const allTime = params.get("period") === "all";
+  const [from, to] = rawFrom || rawTo || allTime ? [rawFrom, rawTo] : monthBounds(thisMonthStr());
+  const setPeriod = (f: string, t: string) => setParams({ from: f, to: t, period: f || t ? "" : "all" });
   // 통화도 주소에 산다(갈래·기간과 같은 규약) — '₩만 본 이 화면'을 그대로 넘길 수 있게.
   const cur = asLedgerCur(params.get("cur"));
   // 정산 여부 — 격자의 세로축이 그대로 넘어온다. 기본은 전부(수금이 끝난 청구서가
@@ -1281,7 +1285,7 @@ function InflowTab() {
         <div className="fin-ledger-filters">
           <LedgerStatusPick st={st} names={["Receivable", "Received"]} onChange={(v) => setParams({ st: v })} />
           <LedgerCurrency cur={cur} onChange={(c) => setParams({ cur: c })} />
-          <LedgerPeriod from={from} to={to} onChange={(f, t) => setParams({ from: f, to: t })} />
+          <LedgerPeriod from={from} to={to} onChange={setPeriod} />
         </div>
       </div>
       <p className="hint-inline" style={{ display: "block", margin: "8px 0 10px" }}>{hint}</p>
