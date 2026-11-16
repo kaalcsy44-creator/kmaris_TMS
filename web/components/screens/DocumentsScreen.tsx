@@ -2314,7 +2314,7 @@ type PartyField = {
 const PARTY_MASTER: Omit<PartyField, "key">[] = [
   { label: "Company Name", master: (o) => o.customer || "" },
   { label: "Contact", master: (o) => o.customer_contact || "" },
-  { label: "e-mail", master: (o) => o.customer_email || "" },
+  { label: "Email / Phone", master: (o) => o.customer_email || "" },
   { label: "Address", wide: true, master: (o) => o.customer_address || "", options: (o) => o.customer_addresses ?? [] },
 ];
 // 수하인 회사명은 Shipping Mark 의 C/O 와 같은 값(sm_consignee)을 그대로 쓴다.

@@ -507,7 +507,7 @@ def make_commercial_invoice_xlsx(
     r = form.pairs(r, [("Company Name", consignee.get("name", ""), "Company Name", buyer.get("name", "")),
                        ("Address", consignee.get("address", ""), "Address", buyer.get("address", "")),
                        ("Contact", consignee.get("contact", ""), "Contact", buyer.get("contact", "")),
-                       ("e-mail", consignee.get("email", ""), "e-mail", buyer.get("email", ""))],
+                       ("Email / Phone", consignee.get("email", ""), "Email / Phone", buyer.get("email", ""))],
                    heights={1: 34.2})
     r = form.band(r, "SHIPPING INFORMATION")
     r = form.pairs(r, _invoice_shipping_rows(data, "Incoterms® 2020") + [
@@ -568,7 +568,7 @@ def _make_service_proforma_invoice_xlsx(data: Dict[str, Any], company: Dict[str,
     wb, form, r = _invoice_sheet(data, company, "PROFORMA INVOICE", "Proforma Invoice")
     r = form.band(r, "BUYER")
     r = form.pairs(r, [("Company Name", buyer.get("name", ""), "Address", buyer.get("address", "")),
-                       ("Contact", buyer.get("contact", ""), "e-mail", buyer.get("email", ""))],
+                       ("Contact", buyer.get("contact", ""), "Email / Phone", buyer.get("email", ""))],
                    heights={0: 30.6, 1: 18.6})
     r += 1
     r = form.band(r, "SERVICE INFORMATION")
@@ -619,7 +619,7 @@ def make_proforma_invoice_xlsx(
     wb, form, r = _invoice_sheet(data, company, "PROFORMA INVOICE", "Proforma Invoice")
     r = form.band(r, "BUYER")
     r = form.pairs(r, [("Company Name", buyer.get("name", ""), "Address", buyer.get("address", "")),
-                       ("Contact", buyer.get("contact", ""), "e-mail", buyer.get("email", ""))],
+                       ("Contact", buyer.get("contact", ""), "Email / Phone", buyer.get("email", ""))],
                    heights={0: 30.6, 1: 18.6})
     r += 1
     r = form.band(r, "SHIPPING INFORMATION")
@@ -701,7 +701,7 @@ def make_packing_list_xlsx(
     r = form.pairs(r, [("Company Name", consignee.get("name", ""), "Company Name", buyer.get("name", "")),
                        ("Address", consignee.get("address", ""), "Address", buyer.get("address", "")),
                        ("Contact", consignee.get("contact", ""), "Contact", buyer.get("contact", "")),
-                       ("e-mail", consignee.get("email", ""), "e-mail", buyer.get("email", ""))],
+                       ("Email / Phone", consignee.get("email", ""), "Email / Phone", buyer.get("email", ""))],
                    heights={1: 29.4})
     r = form.band(r, "SHIPPING INFORMATION")
     r = form.pairs(r, _invoice_shipping_rows(data) + [

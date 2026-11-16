@@ -963,7 +963,7 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
               form.pairs([("Company Name", consignee.get("name", ""), "Company Name", buyer.get("name", "")),
                           ("Address", consignee.get("address", ""), "Address", buyer.get("address", "")),
                           ("Contact", consignee.get("contact", ""), "Contact", buyer.get("contact", "")),
-                          ("e-mail", consignee.get("email", ""), "e-mail", buyer.get("email", ""))], quad)]
+                          ("Email / Phone", consignee.get("email", ""), "Email / Phone", buyer.get("email", ""))], quad)]
 
     story += [form.band("SHIPPING INFORMATION"),
               form.pairs(_invoice_shipping_rows(data, "Incoterms® 2020")
@@ -1382,7 +1382,7 @@ def _make_service_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, 
                              ("PO No.", shipping.get("po_no", ""))], quad), Spacer(1, 3 * mm)]
     story += [form.band("BUYER"),
               form.pairs([("Company Name", buyer.get("name", ""), "Address", buyer.get("address", "")),
-                          ("Contact", buyer.get("contact", ""), "e-mail", buyer.get("email", ""))], quad),
+                          ("Contact", buyer.get("contact", ""), "Email / Phone", buyer.get("email", ""))], quad),
               Spacer(1, 3 * mm)]
     story += [form.band("SERVICE INFORMATION"),
               form.pairs(service_info_rows(data), quad), Spacer(1, 3 * mm)]
@@ -1454,7 +1454,7 @@ def _make_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) ->
                              ("PO No.", shipping.get("po_no", ""))], quad), Spacer(1, 3 * mm)]
     story += [form.band("BUYER"),
               form.pairs([("Company Name", buyer.get("name", ""), "Address", buyer.get("address", "")),
-                          ("Contact", buyer.get("contact", ""), "e-mail", buyer.get("email", ""))], quad),
+                          ("Contact", buyer.get("contact", ""), "Email / Phone", buyer.get("email", ""))], quad),
               Spacer(1, 3 * mm)]
     story += [form.band("SHIPPING INFORMATION"),
               form.pairs(_invoice_shipping_rows(data)
@@ -2100,7 +2100,7 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
               form.pairs([("Company Name", consignee.get("name", ""), "Company Name", buyer.get("name", "")),
                           ("Address", consignee.get("address", ""), "Address", buyer.get("address", "")),
                           ("Contact", consignee.get("contact", ""), "Contact", buyer.get("contact", "")),
-                          ("e-mail", consignee.get("email", ""), "e-mail", buyer.get("email", ""))], quad)]
+                          ("Email / Phone", consignee.get("email", ""), "Email / Phone", buyer.get("email", ""))], quad)]
     story += [form.band("SHIPPING INFORMATION"),
               form.pairs(_invoice_shipping_rows(data)
                          + [("Packing", terms.get("packing_type", ""),
