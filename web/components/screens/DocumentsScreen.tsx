@@ -1485,7 +1485,6 @@ function ProformaInvoiceTab({
         <HsCodeField value={shipping.hs_code || ""} onChange={(v) => setShipping({ ...shipping, hs_code: v })} items={includedRows(items)} docNo={data.pi?.pi_no || ""} onApplyLines={(byNo) => setItems(applyLineHs(items, byNo))} />
       </div>
       <DocDefaultsHint order={data.order} />
-      <BankInfoSection currency={currency} />
       </div>
       </div>
       <ItemEditor
@@ -1506,7 +1505,9 @@ function ProformaInvoiceTab({
         // Items total − Discount = Subtotal(할인 후 물품가) → + Freight + Packing + Insurance + VAT = Total.
         footerRows={invoiceFooterRows({ subtotal, discount, setDiscount, freight, setFreight, packing, setPacking, insurance, setInsurance, vatRate, vatAmount, totalInvoiceValue, currency })}
       />
+      {/* 입력 순서 = 발행 문서 순서: 합계 → REMARK → PACKING INFORMATION → BANK INFORMATION. */}
       <PiOptionalSections terms={terms} setTerms={setTerms} />
+      <BankInfoSection currency={currency} />
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
@@ -1570,7 +1571,7 @@ function PiOptionalSections({
       </label>
       {remarkOn ? (
         <textarea
-          className="pi-opt-body"
+          className="po-textarea small pi-opt-body"
           rows={3}
           value={terms.pi_remark || ""}
           onChange={(e) => set("pi_remark", e.target.value)}
@@ -1583,7 +1584,7 @@ function PiOptionalSections({
       </label>
       {packingOn ? (
         <div className="pi-opt-body">
-          <div className="form-grid doc-form-grid">
+          <div className="pi-pack-grid">
             <Field
               label="Total Packages"
               value={terms.pi_packing_total || ""}
@@ -1758,7 +1759,6 @@ function ServiceProformaInvoiceTab({
         <ComboField label="Payment Terms" value={terms.payment_terms || ""} onChange={(v) => setTerms({ ...terms, payment_terms: v })} options={PAYMENT_OPTIONS} />
       </div>
       <DocDefaultsHint order={data.order} />
-      <BankInfoSection currency={currency} />
       </div>
       </div>
       <ItemEditor
@@ -1778,7 +1778,9 @@ function ServiceProformaInvoiceTab({
           { label: "Total invoice value", grand: true, value: <><DualCurrencyAmount value={total} currency={currency} /><span className="fx-note">{fxRateText()}</span></> },
         ]}
       />
+      {/* 입력 순서 = 발행 문서 순서: 합계 → REMARK → PACKING INFORMATION → BANK INFORMATION. */}
       <PiOptionalSections terms={terms} setTerms={setTerms} />
+      <BankInfoSection currency={currency} />
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">

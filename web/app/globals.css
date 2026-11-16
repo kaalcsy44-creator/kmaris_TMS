@@ -21670,4 +21670,24 @@ td.seq .seq-lid.seq-lids { white-space: normal; color: #0055a8; font-weight: 600
 }
 .pi-optional .pi-opt-toggle input { width: 16px; height: 16px; margin: 0; }
 .pi-optional .pi-opt-body { margin: 0 0 6px 24px; }
-.pi-optional textarea.pi-opt-body { display: block; width: calc(100% - 24px); box-sizing: border-box; resize: vertical; }
+/* 다른 문서 입력칸과 같은 폭(2/3)·같은 글씨체(.po-textarea) — 좁은 화면에선 전폭. */
+.pi-optional textarea.pi-opt-body {
+  display: block; width: calc(66.6667% - 24px); box-sizing: border-box;
+}
+/* PACKING — 발행 문서와 같은 배치: Total Packages 한 줄 전체 + Package 1·2 를 한 줄에 둘씩. */
+.pi-pack-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  max-width: calc(66.6667% - 24px);
+  margin-bottom: 8px;
+}
+.pi-pack-grid .form-field { min-width: 0; }
+.pi-pack-grid .form-field--wide { grid-column: 1 / -1; }
+@media (max-width: 1200px) {
+  .pi-optional textarea.pi-opt-body { width: calc(100% - 24px); }
+  .pi-pack-grid { max-width: none; }
+}
+@media (max-width: 720px) {
+  .pi-pack-grid { grid-template-columns: minmax(0, 1fr); }
+}
