@@ -1609,6 +1609,16 @@ export function registerMakerAsVendor(
 ): Promise<{ ok: boolean; created: boolean; vendor: VendorOption }> {
   return post(`/api/admin/settings/makers/${id}/as-vendor`, {});
 }
+/** 이미 있는 회사(rowId = 그 회사의 한 줄)에 담당자 한 명을 더한다 — 회사 값은 그 줄을
+ *  본뜨고 사람 값만 새로(Copy as new 와 같은 결과). 발신 화면의 Contact 칸에서 쓴다. */
+export type NewContactInput = { contact: string; duty: string; email: string; contact_phone: string };
+export function addPartnerContact(
+  kind: "vendors" | "makers",
+  rowId: number,
+  body: NewContactInput
+): Promise<{ ok: boolean; id: number; name: string }> {
+  return post(`/api/admin/settings/${kind}/${rowId}/add-contact`, body);
+}
 export function updateSettingsMaker(id: number, body: Omit<SettingsMaker, "id">): Promise<{ ok: boolean; id: number }> {
   return put(`/api/admin/settings/makers/${id}`, body);
 }

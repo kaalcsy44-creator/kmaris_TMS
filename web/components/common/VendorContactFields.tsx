@@ -11,8 +11,9 @@
 // 발신은 한 건이다(회사 한 곳에 보낸 한 통이지, 두 곳에 보낸 두 건이 아니다).
 // 고른 담당자 중 첫 사람이 대표로 저장되고(vendor_id), 나머지는 받는 사람 주소에
 // 함께 실린다.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { VendorOption } from "@/lib/types";
+import { addPartnerContact, type NewContactInput } from "@/lib/api";
 import VendorSelect from "@/components/common/VendorSelect";
 
 type Company = {
@@ -93,6 +94,19 @@ export function contactIdsFromEmail(
     .map((c) => c.id);
 }
 
+/** 발신 화면에서 바로 더한 담당자를 목록에 얹는다 — 부모가 들고 있는 명부를 다시 받아
+ *  올 때까지(받아 오면 같은 id 라 겹치지 않는다) 방금 더한 사람이 칸에서 빠지지 않게. */
+export function useWithAddedContacts(base: VendorOption[]) {
+  const [added, setAdded] = useState<VendorOption[]>([]);
+  const list = useMemo(() => {
+    const ids = new Set(base.map((v) => v.id));
+    const extra = added.filter((a) => !ids.has(a.id));
+    return extra.length ? [...base, ...extra] : base;
+  }, [base, added]);
+  const add = useCallback((v: VendorOption) => setAdded((p) => [...p, v]), []);
+  return [list, add] as const;
+}
+
 /** 담당자 한 줄에 보일 이름 — 이름이 없으면 메일 주소, 그것도 없으면 자리만 지킨다. */
 function contactName(v: VendorOption): string {
   return (v.contact || "").trim() || (v.email || "").trim() || "(no contact name)";
@@ -105,6 +119,8 @@ export default function VendorContactFields({
   onChange,
   disabled = false,
   label = "Vendor",
+  addKind,
+  onContactAdded,
 }: {
   vendors: VendorOption[];
   /** 고른 담당자 레코드 id. 첫 번째가 대표(저장되는 vendor_id). */
@@ -113,6 +129,10 @@ export default function VendorContactFields({
   disabled?: boolean;
   /** 회사 칸 이름 — 메이커에 직접 물을 때도 같은 두 칸(회사 → 담당자)을 쓴다. */
   label?: string;
+  /** 주어지면 Contact 목록 끝에 "+ Add contact" 가 선다 — 고른 회사에 담당자를 바로
+   *  더한다(서버 명부에 저장). 새 사람은 방금 고른 사람들 뒤에 함께 체크된다. */
+  addKind?: "vendors" | "makers";
+  onContactAdded?: (opt: VendorOption, ids: number[]) => void;
 }) {
   const companies = useMemo(() => groupVendorContacts(vendors), [vendors]);
   const company = useMemo(
@@ -188,6 +208,31 @@ export default function VendorContactFields({
           onToggle={toggleContact}
           disabled={disabled}
           companyLabel={label.toLowerCase()}
+          onAdd={
+            addKind && onContactAdded
+              ? async (input) => {
+                  if (!company) return;
+                  const r = await addPartnerContact(addKind, company.repId, input);
+                  const rep = company.contacts[0];
+                  const opt: VendorOption = {
+                    id: r.id,
+                    name: r.name || company.name,
+                    contact: input.contact,
+                    email: input.email,
+                    emails: input.email ? [input.email] : [],
+                    phone: input.contact_phone,
+                    phones: input.contact_phone ? [input.contact_phone] : [],
+                    address: rep?.address,
+                    addresses: rep?.addresses,
+                    logo: company.logo,
+                    maker_id: rep?.maker_id ?? null,
+                    uses: 0,
+                  };
+                  const ids = [...company.contacts.filter((c) => value.includes(c.id)).map((c) => c.id), r.id];
+                  onContactAdded(opt, ids);
+                }
+              : undefined
+          }
         />
       </div>
     </>
@@ -201,14 +246,66 @@ function ContactSelect({
   onToggle,
   disabled,
   companyLabel,
+  onAdd,
 }: {
   company: Company | null;
   value: number[];
   onToggle: (id: number) => void;
   disabled: boolean;
   companyLabel: string;
+  onAdd?: (input: NewContactInput) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  // 목록 안에서 펼치는 새 담당자 입력 — 열려 있을 때만 값이 산다.
+  const blank: NewContactInput = { contact: "", duty: "", email: "", contact_phone: "" };
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState<NewContactInput>(blank);
+  const [saving, setSaving] = useState(false);
+  const [addErr, setAddErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) {
+      setAdding(false);
+      setDraft(blank);
+      setAddErr(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  async function submitAdd() {
+    if (!onAdd || saving) return;
+    if (!draft.contact.trim() && !draft.email.trim()) {
+      setAddErr("Enter a name or an email.");
+      return;
+    }
+    if (draft.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email.trim())) {
+      setAddErr("Check the email address.");
+      return;
+    }
+    setSaving(true);
+    setAddErr(null);
+    try {
+      await onAdd({
+        contact: draft.contact.trim(),
+        duty: draft.duty.trim(),
+        email: draft.email.trim(),
+        contact_phone: draft.contact_phone.trim(),
+      });
+      setAdding(false);
+      setDraft(blank);
+    } catch (e) {
+      setAddErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void submitAdd();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setAdding(false);
+    }
+  };
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -271,6 +368,55 @@ function ContactSelect({
               </li>
             );
           })}
+          {onAdd ? (
+            adding ? (
+              <li className="vcon-add-form" onClick={(e) => e.stopPropagation()}>
+                <div className="vcon-add-title">New contact at {company.name}</div>
+                <div className="vcon-add-grid">
+                  <input
+                    autoFocus
+                    placeholder="Name"
+                    value={draft.contact}
+                    onChange={(e) => setDraft({ ...draft, contact: e.target.value })}
+                    onKeyDown={onKey}
+                  />
+                  <input
+                    placeholder="Position (optional)"
+                    value={draft.duty}
+                    onChange={(e) => setDraft({ ...draft, duty: e.target.value })}
+                    onKeyDown={onKey}
+                  />
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={draft.email}
+                    onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+                    onKeyDown={onKey}
+                  />
+                  <input
+                    placeholder="Phone (optional)"
+                    value={draft.contact_phone}
+                    onChange={(e) => setDraft({ ...draft, contact_phone: e.target.value })}
+                    onKeyDown={onKey}
+                  />
+                </div>
+                {addErr ? <div className="vcon-add-err">{addErr}</div> : null}
+                <div className="vcon-add-actions">
+                  <span className="vcon-add-note">Saved to Partners as a new contact of this company.</span>
+                  <button type="button" className="btn ghost" onClick={() => setAdding(false)} disabled={saving}>
+                    Cancel
+                  </button>
+                  <button type="button" className="btn primary" onClick={() => void submitAdd()} disabled={saving}>
+                    {saving ? "Adding…" : "Add"}
+                  </button>
+                </div>
+              </li>
+            ) : (
+              <li className="vsel-item vcon-add" role="option" aria-selected={false} onClick={() => setAdding(true)}>
+                + Add contact
+              </li>
+            )
+          ) : null}
           <li className="vcon-foot">
             <span>{value.length} selected</span>
             <button type="button" className="btn ghost" onClick={() => setOpen(false)}>

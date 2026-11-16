@@ -9933,6 +9933,24 @@ table.mini .num {
   margin-top: 4px; padding: 6px 8px 2px; border-top: 1px solid #eaf0f7;
   font-size: 11px; color: #7c8aa0;
 }
+/* 목록 끝 "+ Add contact" — 고른 회사에 담당자를 바로 더한다. */
+.vcon-add { color: var(--blue); font-weight: 600; border-top: 1px solid #eaf0f7; margin-top: 4px; }
+.vcon-add-form {
+  list-style: none; padding: 8px 8px 6px; margin-top: 4px;
+  border-top: 1px solid #eaf0f7; cursor: default;
+}
+.vcon-add-title { font-size: 11.5px; font-weight: 700; color: #3c4a5e; margin-bottom: 6px; }
+.vcon-add-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.vcon-add-grid input {
+  width: 100%; height: 30px; box-sizing: border-box; padding: 0 8px;
+  border: 1px solid #cdd9e8; border-radius: 7px; font: inherit; font-size: 12.5px; background: #fff;
+}
+.vcon-add-err { margin-top: 6px; font-size: 11.5px; color: #c62828; }
+.vcon-add-actions { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.vcon-add-note { flex: 1; font-size: 11px; color: #7c8aa0; }
+@media (max-width: 520px) {
+  .vcon-add-grid { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* 거래선 추천(2단계 RFQ Sent) — 품목 분류·거래이력·취급품목으로 고른 후보.
    결정을 대신하지 않는다는 뜻이 보이도록 입력 필드가 아니라 '메모지'처럼 둔다. */

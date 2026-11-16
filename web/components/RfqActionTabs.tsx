@@ -97,8 +97,10 @@ import {
 } from "@/lib/quoteMerge";
 import VendorContactFields, {
   contactIdsFromEmail,
+  useWithAddedContacts,
   vendorContactEmails,
 } from "./common/VendorContactFields";
+import { invalidateCache } from "@/lib/useCachedData";
 import VendorSuggest from "./common/VendorSuggest";
 import CustomerName from "./common/CustomerName";
 import { imageFromClipboard } from "@/lib/imagePaste";
@@ -1370,7 +1372,7 @@ function VendorRfqList({
 
 function VendorRfqDetailModal({
   id,
-  vendors,
+  vendors: vendorsBase,
   autoEdit,
   onClose,
   onChanged,
@@ -1401,13 +1403,16 @@ function VendorRfqDetailModal({
   const [party, setParty] = useState<"vendor" | "maker">("vendor");
   const [makerContactIds, setMakerContactIds] = useState<number[]>([]);
   const makers = useMakerOptions();
-  const makerOpts = useMemo<VendorOption[]>(
+  const makerOptsBase = useMemo<VendorOption[]>(
     () => makers.map((m) => ({
       id: m.id, name: m.name, contact: m.contact, logo: m.logo || undefined,
       email: (m.emails?.[0] || m.email || "").trim(),
     })),
     [makers]
   );
+  // Contact 칸에서 바로 더한 담당자 — 명부를 다시 받기 전에도 칸에 남아 있게 얹는다.
+  const [vendors, addVendorOpt] = useWithAddedContacts(vendorsBase);
+  const [makerOpts, addMakerOpt] = useWithAddedContacts(makerOptsBase);
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("");
   const [sentAt, setSentAt] = useState("");
@@ -1473,10 +1478,11 @@ function VendorRfqDetailModal({
   useEffect(() => { loadDetail(); }, [loadDetail]);
 
   // 저장본과 벤더 목록이 모두 오면 그때 고른 담당자를 되살린다(목록이 늦게 와도, 편집을
-  // 되돌려도 저장본 기준으로 돌아온다).
+  // 되돌려도 저장본 기준으로 돌아온다). 받아 온 명부(vendorsBase)만 본다 — Contact 칸에서
+  // 담당자를 더해 목록이 늘 때마다 다시 돌면 방금 체크한 새 사람이 저장본으로 지워진다.
   useEffect(() => {
-    setContactIds(contactIdsFromEmail(vendors, d?.vendor_id || "", d?.vendor_email || ""));
-  }, [vendors, d]);
+    setContactIds(contactIdsFromEmail(vendorsBase, d?.vendor_id || "", d?.vendor_email || ""));
+  }, [vendorsBase, d]);
 
   async function loadCustomerRfqItems() {
     if (!d?.rfq_id) return;
@@ -1662,6 +1668,13 @@ function VendorRfqDetailModal({
                       setMakerContactIds(ids);
                       setEmail(vendorContactEmails(makerOpts, ids));
                     }}
+                    addKind="makers"
+                    onContactAdded={(opt, ids) => {
+                      addMakerOpt(opt);
+                      invalidateCache("settings-makers");
+                      setMakerContactIds(ids);
+                      setEmail(vendorContactEmails([...makerOpts, opt], ids));
+                    }}
                   />
                 ) : (
                   /* 벤더는 회사로 한 번, 담당자는 그 안에서 따로(여럿 가능) 고른다. */
@@ -1673,6 +1686,13 @@ function VendorRfqDetailModal({
                       setVendorId(ids[0] ?? "");
                       // 고른 담당자들의 주소로 받는 사람을 채운다(그대로 고쳐 쓸 수 있다).
                       setEmail(vendorContactEmails(vendors, ids));
+                    }}
+                    addKind="vendors"
+                    onContactAdded={(opt, ids) => {
+                      addVendorOpt(opt);
+                      setContactIds(ids);
+                      setVendorId(ids[0] ?? "");
+                      setEmail(vendorContactEmails([...vendors, opt], ids));
                     }}
                   />
                 )}
@@ -3428,7 +3448,7 @@ function ProjectSelect({
 
 function VendorRfqAction({
   rfqId,
-  vendors,
+  vendors: vendorsBase,
   kmarisNo,
   seedLids,
   onDone,
@@ -3456,13 +3476,16 @@ function VendorRfqAction({
   const makers = useMakerOptions();
   const maker = makerId === "" ? null : makers.find((m) => m.id === makerId) ?? null;
   // 메이커 명부도 레코드 1건 = 담당자 1명이라, 거래선과 같은 두 칸(회사 → 담당자)에 싣는다.
-  const makerOpts = useMemo<VendorOption[]>(
+  const makerOptsBase = useMemo<VendorOption[]>(
     () => makers.map((m) => ({
       id: m.id, name: m.name, contact: m.contact, logo: m.logo || undefined,
       email: (m.emails?.[0] || m.email || "").trim(),
     })),
     [makers]
   );
+  // Contact 칸에서 바로 더한 담당자 — 명부를 다시 받기 전에도 칸에 남아 있게 얹는다.
+  const [vendors, addVendorOpt] = useWithAddedContacts(vendorsBase);
+  const [makerOpts, addMakerOpt] = useWithAddedContacts(makerOptsBase);
   const [to, setTo] = useState("");   // Recipient email(벤더 선택 시 자동 채움, 편집 가능)
   const [lang, setLang] = useState<"en" | "ko">("en");
   const [notes, setNotes] = useState("");
@@ -3599,10 +3622,10 @@ function VendorRfqAction({
   // 담당자 선택 → 그 사람들의 주소를 Recipient email 로 자동 채움(편집 뷰와 동일 동작).
   // 여럿을 골라도 발신은 한 건이다 — 대표(첫 사람)가 이 Vendor RFQ 의 벤더로 저장되고,
   // 나머지는 받는 사람 주소에 함께 실린다.
-  function pickContacts(ids: number[]) {
+  function pickContacts(ids: number[], list: VendorOption[] = vendors) {
     setContactIds(ids);
     setVendorId(ids[0] ?? "");
-    setTo(vendorContactEmails(vendors, ids));
+    setTo(vendorContactEmails(list, ids));
   }
 
   // 수신처 종류를 바꾸면 반대쪽 선택은 지운다 — 화면에 보이지 않는 선택이 남아 있다가
@@ -3620,13 +3643,13 @@ function VendorRfqAction({
 
   // 메이커 담당자 선택 — 여기서는 명부만 고른다(거래선으로 심는 것은 실제로 필요해지는
   // 순간). 여럿을 고르면 그 주소들이 받는 사람에 함께 실린다(거래선과 같다).
-  function pickMakerContacts(ids: number[]) {
+  function pickMakerContacts(ids: number[], list: VendorOption[] = makerOpts) {
     setMakerContactIds(ids);
     setMakerId(ids[0] ?? "");
     setVendorId("");          // 앞서 심어 둔 거래선이 있으면 다시 해석한다
     setContactIds([]);
     setPreviews([]);
-    setTo(vendorContactEmails(makerOpts, ids));
+    setTo(vendorContactEmails(list, ids));
   }
 
   /** 발신에 쓸 거래선 id. 메이커를 골랐으면 그 회사를 거래선 명부에도 세우고(멱등)
@@ -3818,11 +3841,26 @@ function VendorRfqAction({
             label="Maker"
             vendors={makerOpts}
             value={makerContactIds}
-            onChange={pickMakerContacts}
+            onChange={(ids) => pickMakerContacts(ids)}
+            addKind="makers"
+            onContactAdded={(opt, ids) => {
+              addMakerOpt(opt);
+              invalidateCache("settings-makers");
+              pickMakerContacts(ids, [...makerOpts, opt]);
+            }}
           />
         ) : (
           /* 벤더는 회사로 한 번, 담당자는 그 안에서 따로(여럿 가능) 고른다. */
-          <VendorContactFields vendors={vendors} value={contactIds} onChange={pickContacts} />
+          <VendorContactFields
+            vendors={vendors}
+            value={contactIds}
+            onChange={(ids) => pickContacts(ids)}
+            addKind="vendors"
+            onContactAdded={(opt, ids) => {
+              addVendorOpt(opt);
+              pickContacts(ids, [...vendors, opt]);
+            }}
+          />
         )}
         <div className="form-field">
           <label>K-Maris RFQ No.</label>

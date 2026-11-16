@@ -1,6 +1,8 @@
 """K-Maris TMS — settings routes (split from admin_api.py; behavior unchanged)."""
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from fastapi import Body
 
 from services.vendor_scan import scan_partner
@@ -1529,6 +1531,54 @@ def create_maker(body: MakerCreate):
         return {"ok": True, "id": m.id, "synced": synced}
     finally:
         s.close()
+
+
+class ContactAdd(BaseModel):
+    contact: str = ""
+    duty: str = ""
+    email: str = ""
+    contact_phone: str = ""
+
+
+def _add_contact_to_company(kind: str, row_id: int, body: ContactAdd) -> dict:
+    """이미 있는 회사(row_id 가 그 회사의 한 줄)에 담당자 한 명을 더한다 — 발신 화면의
+    Contact 칸에서 바로. 회사 값(주소·분류·로고·결제조건…)은 그 줄을 본뜨고, 사람 값만
+    새로 받는다(Settings 의 Copy as new 와 같은 결과). 짝 명부(거래선↔메이커)에 같은
+    회사가 있으면 그쪽에도 같은 담당자가 선다(_sync_contact_twins)."""
+    Model = _PARTNER_KINDS[kind]
+    contact = (body.contact or "").strip()
+    email = (body.email or "").strip()
+    if not (contact or email):
+        raise HTTPException(status_code=400, detail="Enter the contact's name or email.")
+    s = get_session()
+    try:
+        tpl = s.query(Model).filter_by(id=row_id).first()
+        if not tpl:
+            raise HTTPException(status_code=404, detail="Company not found.")
+        phone = (body.contact_phone or "").strip()
+        src = SimpleNamespace(
+            contact=contact, duty=(body.duty or "").strip(),
+            emails=[email] if email else [], email=email,
+            phones=[phone] if phone else [], contact_phone=phone,
+            regions=list(getattr(tpl, "regions", None) or []), country=tpl.country or "",
+        )
+        obj = _new_contact_like(Model, tpl, src)
+        s.add(obj)
+        synced = _sync_contact_twins(s, kind, None, obj)
+        s.commit()
+        return {"ok": True, "id": obj.id, "name": obj.name, "synced": synced}
+    finally:
+        s.close()
+
+
+@app.post("/api/admin/settings/vendors/{row_id}/add-contact", dependencies=[Depends(require_token)])
+def add_vendor_contact(row_id: int, body: ContactAdd):
+    return _add_contact_to_company("vendors", row_id, body)
+
+
+@app.post("/api/admin/settings/makers/{row_id}/add-contact", dependencies=[Depends(require_token)])
+def add_maker_contact(row_id: int, body: ContactAdd):
+    return _add_contact_to_company("makers", row_id, body)
 
 
 @app.put("/api/admin/settings/makers/{row_id}", dependencies=[Depends(require_token)])
