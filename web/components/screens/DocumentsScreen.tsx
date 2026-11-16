@@ -1541,10 +1541,67 @@ function ProformaInvoiceTab({
 }
 
 /** Proforma Invoice 선택 블록 — REMARK · PACKING INFORMATION.
- *  체크하면 발행 문서(PDF·Excel)의 합계 아래·BANK INFORMATION 위에 제목과 함께 찍히고,
- *  끄면 적어 둔 내용은 남겨 둔 채 제목째 빠진다(다시 켜면 그대로 돌아온다).
- *  terms 가 문자열 맵이라 켜짐은 "1"/"", 패키지 목록은 줄바꿈으로 이어 pi_packages 에 저장한다
- *  (서버 services.kmaris_docs.pi_optional_sections 가 같은 키를 읽는다). */
+ *  제목 오른쪽 끝 체크박스로 켜고 끈다. 입력란은 늘 보이고, 꺼 두면 비활성(내용은 남아 있다).
+ *  켠 블록만 발행 문서(PDF·Excel)의 합계 아래·BANK INFORMATION 위에 제목과 함께 찍힌다.
+ *
+ *  PACKING 은 입력은 세부 칸(개수·포장 종류·W×D×H·G/W·N/W)으로 받고, 문서에 찍을 문장은
+ *  여기서 만들어 pi_packing_total / pi_packages 에 넣는다 — 서버(pi_optional_sections)는 그 문장만
+ *  읽으므로 출력 형식은 그대로다. 세부 칸은 다시 열어 고칠 수 있게 pi_packing_rows(JSON)에 둔다.
+ *  terms 가 문자열 맵이라 켜짐은 "1"/"" 로 저장한다. */
+type PiPackRow = { type: string; w: string; d: string; h: string; gw: string; nw: string };
+const PI_MAX_PACKAGES = 30;
+const blankPack = (): PiPackRow => ({ type: "", w: "", d: "", h: "", gw: "", nw: "" });
+
+function readPackRows(terms: Record<string, string>): PiPackRow[] {
+  try {
+    const v = JSON.parse(terms.pi_packing_rows || "[]");
+    if (Array.isArray(v) && v.length) return v.map((x) => ({ ...blankPack(), ...(x || {}) }));
+  } catch {
+    /* 깨진 값이면 빈 한 줄로 시작 */
+  }
+  return [blankPack()];
+}
+
+/** "Wooden Case" ×2 → "2 Wooden Cases" (Box → Boxes). */
+function pluralPack(n: number, word: string): string {
+  if (n === 1) return `1 ${word}`;
+  return `${n} ${/(s|x|ch|sh)$/i.test(word) ? `${word}es` : `${word}s`}`;
+}
+
+/** 세부 칸 → 문서 문장. Total: "2 Packages (1 Wooden Case + 1 Carton Box)",
+ *  Package: "50 × 50 × 60 cm / Approx. 60 kg G/W / Approx. 55 kg N/W" (빈 칸은 뺀다). */
+function packTexts(rows: PiPackRow[]): { total: string; packages: string[] } {
+  const counts = new Map<string, number>();
+  for (const r of rows) {
+    const t = r.type.trim();
+    if (t) counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
+  const kinds = [...counts].map(([t, n]) => pluralPack(n, t)).join(" + ");
+  const n = rows.length;
+  const total = `${n} Package${n === 1 ? "" : "s"}${kinds ? ` (${kinds})` : ""}`;
+  const packages = rows.map((r) => {
+    const bits: string[] = [];
+    const dims = [r.w, r.d, r.h].map((x) => x.trim());
+    if (dims.every(Boolean)) bits.push(`${dims.join(" × ")} cm`);
+    if (r.gw.trim()) bits.push(`Approx. ${r.gw.trim()} kg G/W`);
+    if (r.nw.trim()) bits.push(`Approx. ${r.nw.trim()} kg N/W`);
+    return bits.join(" / ");
+  });
+  return { total, packages };
+}
+
+function PiSectionHead({ title, on, onToggle }: { title: string; on: boolean; onToggle: (v: boolean) => void }) {
+  return (
+    <div className="sub-h doc-sec-h pi-sec-head">
+      <span>{title}</span>
+      <label className="pi-sec-check" title={on ? "Printed on the Proforma Invoice" : "Not printed — check to include"}>
+        <input type="checkbox" checked={on} onChange={(e) => onToggle(e.target.checked)} />
+        <span>Include</span>
+      </label>
+    </div>
+  );
+}
+
 function PiOptionalSections({
   terms,
   setTerms,
@@ -1555,70 +1612,90 @@ function PiOptionalSections({
   const set = (key: string, value: string) => setTerms((t) => ({ ...t, [key]: value }));
   const remarkOn = !!terms.pi_remark_on;
   const packingOn = !!terms.pi_packing_on;
-  const pkgs = (terms.pi_packages || "").split("\n");
-  const setPkgs = (list: string[]) => set("pi_packages", list.join("\n"));
+  const rows = readPackRows(terms);
+  function setRows(next: PiPackRow[]) {
+    const { total, packages } = packTexts(next);
+    setTerms((t) => ({
+      ...t,
+      pi_packing_rows: JSON.stringify(next),
+      pi_packing_total: total,
+      pi_packages: packages.join("\n"),
+    }));
+  }
+  const setCount = (n: number) =>
+    setRows(n <= rows.length ? rows.slice(0, n) : [...rows, ...Array.from({ length: n - rows.length }, blankPack)]);
+  const patch = (i: number, key: keyof PiPackRow, v: string) =>
+    setRows(rows.map((r, j) => (j === i ? { ...r, [key]: v } : r)));
+  const preview = packTexts(rows);
   return (
     <div className="pi-optional">
-      <div className="sub-h doc-sec-h" style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-        <span>Optional sections</span>
-        <span className="hint-inline" style={{ fontWeight: 400 }}>
-          Checked sections print below the totals with their title — unchecked ones are left out of the document.
-        </span>
-      </div>
-      <label className="pi-opt-toggle">
-        <input type="checkbox" checked={remarkOn} onChange={(e) => set("pi_remark_on", e.target.checked ? "1" : "")} />
-        <b>Remark</b>
-      </label>
-      {remarkOn ? (
+      <PiSectionHead title="Remark" on={remarkOn} onToggle={(v) => set("pi_remark_on", v ? "1" : "")} />
+      <fieldset className="pi-sec-body" disabled={!remarkOn}>
         <textarea
-          className="po-textarea small pi-opt-body"
+          className="po-textarea small"
           rows={3}
           value={terms.pi_remark || ""}
           onChange={(e) => set("pi_remark", e.target.value)}
           placeholder="One line per bullet (•) — e.g. DDP terms are not applicable due to uncertainties in local import clearance…"
         />
-      ) : null}
-      <label className="pi-opt-toggle">
-        <input type="checkbox" checked={packingOn} onChange={(e) => set("pi_packing_on", e.target.checked ? "1" : "")} />
-        <b>Packing information</b>
-      </label>
-      {packingOn ? (
-        <div className="pi-opt-body">
-          <div className="pi-pack-grid">
-            <Field
-              label="Total Packages"
-              value={terms.pi_packing_total || ""}
-              onChange={(v) => set("pi_packing_total", v)}
-              placeholder="2 Packages (1 Wooden Case + 1 Carton)"
-              wide
-            />
-            {pkgs.map((pk, i) => (
-              <label className="form-field" key={i}>
-                <span>Package {i + 1}</span>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input
-                    value={pk}
-                    onChange={(e) => setPkgs(pkgs.map((x, j) => (j === i ? e.target.value : x)))}
-                    placeholder="50 × 50 × 60 cm / Approx. 60 kg G/W"
-                    style={{ flex: 1 }}
-                  />
-                  <button
-                    type="button"
-                    className="btn sm"
-                    title="Remove this package"
-                    onClick={() => setPkgs(pkgs.filter((_, j) => j !== i))}
-                  >
-                    ×
-                  </button>
-                </div>
-              </label>
-            ))}
+      </fieldset>
+
+      <PiSectionHead
+        title="Packing information"
+        on={packingOn}
+        onToggle={(v) => {
+          // 켤 때 세부 칸에서 문장을 한 번 만들어 둔다(손대지 않고 저장해도 개수 줄이 찍히게).
+          if (v) setRows(rows);
+          set("pi_packing_on", v ? "1" : "");
+        }}
+      />
+      <fieldset className="pi-sec-body" disabled={!packingOn}>
+        <div className="pi-pack-top">
+          <label className="form-field">
+            <span>Total packages</span>
+            <select value={rows.length} onChange={(e) => setCount(Number(e.target.value))}>
+              {Array.from({ length: PI_MAX_PACKAGES }, (_, k) => k + 1).map((k) => (
+                <option key={k} value={k}>{k}</option>
+              ))}
+            </select>
+          </label>
+          <div className="pi-pack-preview" title="Printed as">
+            <span className="hint-inline">Prints as</span> <b>{preview.total}</b>
           </div>
-          <button type="button" className="btn sm" onClick={() => setPkgs([...pkgs, ""])}>
-            + Add package
-          </button>
         </div>
-      ) : null}
+        <table className="pi-pack-table">
+          <thead>
+            <tr>
+              <th>Package</th>
+              <th>Package type</th>
+              <th>Dimension W × D × H (cm)</th>
+              <th>G/W (kg)</th>
+              <th>N/W (kg)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td className="pi-pack-no">Package {i + 1}</td>
+                <td>
+                  <PackingKindSelect value={r.type} onChange={(v) => patch(i, "type", v)} />
+                </td>
+                <td>
+                  <span className="pack-dim">
+                    <input className="num" value={r.w} onChange={(e) => patch(i, "w", e.target.value)} placeholder="W" />
+                    <em>×</em>
+                    <input className="num" value={r.d} onChange={(e) => patch(i, "d", e.target.value)} placeholder="D" />
+                    <em>×</em>
+                    <input className="num" value={r.h} onChange={(e) => patch(i, "h", e.target.value)} placeholder="H" />
+                  </span>
+                </td>
+                <td><input className="num" value={r.gw} onChange={(e) => patch(i, "gw", e.target.value)} /></td>
+                <td><input className="num" value={r.nw} onChange={(e) => patch(i, "nw", e.target.value)} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </fieldset>
     </div>
   );
 }

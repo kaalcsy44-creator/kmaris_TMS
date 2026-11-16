@@ -21663,31 +21663,38 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
 /* 완제품 줄(한 줄이 여러 딜 라인을 덮음) — No. 칸 "L01–L14". 범위가 여럿이면 칸 안에서 줄바꿈. */
 td.seq .seq-lid.seq-lids { white-space: normal; color: #0055a8; font-weight: 600; line-height: 1.25; }
 
-/* Proforma Invoice 선택 블록(REMARK · PACKING INFORMATION) — 체크한 블록만 문서에 찍힌다. */
-.pi-optional { margin-top: 14px; }
-.pi-optional .pi-opt-toggle {
-  display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; cursor: pointer; width: fit-content;
+/* Proforma Invoice 선택 블록(REMARK · PACKING INFORMATION) — 제목 오른쪽 끝 체크박스로 켠다.
+   입력란은 늘 보이고 꺼 두면 비활성. 폭은 위쪽 문서 입력칸과 같은 2/3. */
+.pi-optional { max-width: 66.6667%; }
+.pi-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pi-sec-check {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 12px; font-weight: 500; color: var(--muted);
 }
-.pi-optional .pi-opt-toggle input { width: 16px; height: 16px; margin: 0; }
-.pi-optional .pi-opt-body { margin: 0 0 6px 24px; }
-/* 다른 문서 입력칸과 같은 폭(2/3)·같은 글씨체(.po-textarea) — 좁은 화면에선 전폭. */
-.pi-optional textarea.pi-opt-body {
-  display: block; width: calc(66.6667% - 24px); box-sizing: border-box;
+.pi-sec-check input { width: 16px; height: 16px; margin: 0; cursor: pointer; }
+.pi-sec-body { border: 0; padding: 0; margin: 0; min-width: 0; }
+.pi-sec-body:disabled { opacity: .5; }
+.pi-sec-body textarea { display: block; }
+.pi-pack-top { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 8px; flex-wrap: wrap; }
+.pi-pack-top .form-field { width: 140px; margin: 0; }
+.pi-pack-preview { padding-bottom: 8px; font-size: 12.5px; }
+.pi-pack-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.pi-pack-table th {
+  text-align: left; font-size: 11.5px; font-weight: 600; color: var(--muted);
+  padding: 0 6px 4px; white-space: nowrap;
 }
-/* PACKING — 발행 문서와 같은 배치: Total Packages 한 줄 전체 + Package 1·2 를 한 줄에 둘씩. */
-.pi-pack-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
-  max-width: calc(66.6667% - 24px);
-  margin-bottom: 8px;
+.pi-pack-table td { padding: 3px 6px; vertical-align: middle; }
+.pi-pack-table th:nth-child(1) { width: 84px; }
+.pi-pack-table th:nth-child(2) { width: 24%; }
+.pi-pack-table th:nth-child(3) { width: 36%; }
+.pi-pack-table td.pi-pack-no { font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+.pi-pack-table select,
+.pi-pack-table input {
+  width: 100%; height: 34px; border: 1px solid #cdd9e8; border-radius: 8px;
+  padding: 0 8px; font-size: 12.5px; font-family: inherit; background: #fff; box-sizing: border-box;
 }
-.pi-pack-grid .form-field { min-width: 0; }
-.pi-pack-grid .form-field--wide { grid-column: 1 / -1; }
+.pi-pack-table input.num { text-align: right; }
+.pi-pack-table .pack-dim input { text-align: center; }
 @media (max-width: 1200px) {
-  .pi-optional textarea.pi-opt-body { width: calc(100% - 24px); }
-  .pi-pack-grid { max-width: none; }
-}
-@media (max-width: 720px) {
-  .pi-pack-grid { grid-template-columns: minmax(0, 1fr); }
+  .pi-optional { max-width: none; }
 }
