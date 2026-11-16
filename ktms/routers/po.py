@@ -248,6 +248,8 @@ def order_detail(order_id: int):
             "tracking_token": o.tracking_token or "",
             "steps": steps,
             "items": [_item_view(it) for it in (o.items or [])],
+            # 총액 할인율(%) — null 이면 이 칸이 생기기 전 오더(화면은 0 으로 보이고 저장 시 그대로 둔다).
+            "discount_pct": getattr(o, "discount_pct", None),
             "terms": getattr(o, "terms", None) or {},
             "source_files": getattr(o, "source_files", None) or [],
             "vendor_pos": vendor_po_view,
@@ -359,6 +361,7 @@ def po_work_options():
                 "currency": o.currency or (qtn.currency if qtn else None) or "USD",
                 "status": _status_label(stage, rfq.work_type) if rfq else _enum_val(o.status),
                 "items": [_item_view(it) for it in (o.items or [])],
+                "discount_pct": getattr(o, "discount_pct", None),
                 # 공통 식별 컬럼
                 "project_title": (getattr(rfq, "project_title", None) or "") if rfq else "",
                 "contact_person": (getattr(rfq, "contact_person", None) or "") if rfq else "",
@@ -503,6 +506,7 @@ def create_order(body: OrderCreate):
             currency=(body.currency or (qtn.currency if qtn else None) or "USD"),
             trade_type=(body.trade_type or "수출").strip() or "수출",
             promised_delivery=body.promised_delivery or None,
+            discount_pct=body.discount_pct,
             status=OrderStatus.RECEIVED,
             items=items,
             terms=body.terms or {},
@@ -545,6 +549,8 @@ def update_order(order_id: int, body: OrderUpdate):
             order.trade_type = (body.trade_type or "수출").strip() or "수출"
         if body.promised_delivery is not None:
             order.promised_delivery = body.promised_delivery or None
+        if body.discount_pct is not None:
+            order.discount_pct = float(body.discount_pct or 0)
         if body.items is not None:
             items = []
             for it in body.items:

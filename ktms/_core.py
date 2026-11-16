@@ -2703,6 +2703,7 @@ class OrderCreate(BaseModel):
     currency: str | None = "USD"
     trade_type: str = "수출"
     promised_delivery: str | None = None
+    discount_pct: float | None = None  # 총액 할인율(%) — 견적과 같은 뜻
     items: list[PoWorkItem] = []
     terms: dict | None = None
     source_files: list[dict] = []      # Auto-fill 소스 파일 메타(영구 보관)
@@ -2716,6 +2717,7 @@ class OrderUpdate(BaseModel):
     currency: str | None = None
     trade_type: str | None = None
     promised_delivery: str | None = None
+    discount_pct: float | None = None  # 보내면 교체(0 = 할인 없음), 안 보내면 그대로
     items: list[PoWorkItem] | None = None
     terms: dict | None = None
     source_files: list[dict] | None = None  # 보내면 소스 파일 메타 전체 교체
@@ -2979,6 +2981,22 @@ def _quotation_total(items, discount_pct: float = 0.0) -> float:
     except (TypeError, ValueError):
         disc = 0.0
     return round(amt * (1 - disc / 100.0), 2)
+
+
+def _order_discount(order) -> float:
+    """오더 총액 할인액(양수). 견적서와 같은 규칙(quotation_discount — 정수 반올림)이라
+    견적 Final 과 오더 Final 이 같은 숫자가 된다. 할인 없음·구 오더(NULL)는 0."""
+    pct = getattr(order, "discount_pct", None)
+    if not pct:
+        return 0.0
+    from services.kmaris_docs import quotation_discount
+    disc, _ = quotation_discount(_total_amount(getattr(order, "items", None) or []), pct)
+    return float(disc or 0)
+
+
+def _order_total(order) -> float:
+    """고객 P/O(오더) 최종 금액 — 품목 합계(Subtotal) − 총액 할인."""
+    return round(_total_amount(getattr(order, "items", None) or []) - _order_discount(order), 2)
 
 
 def _same_person(a: str, b: str) -> bool:
@@ -3250,8 +3268,19 @@ def _doc_defaults(session, order: Order) -> dict:
         rfq = _rfq_for_order(session, order)
         if rfq is not None:
             q = _project_quotation(session, rfq.id)
-    return _doc_defaults_from(getattr(order, "terms", None),
-                              getattr(order, "currency", ""), q)
+    out = _doc_defaults_from(getattr(order, "terms", None),
+                             getattr(order, "currency", ""), q)
+    # 오더에 총액 할인을 적었으면(5단계 Summary) 그 값이 PI/CI 할인 기본값이다 — 견적 뒤
+    # 협상으로 할인이 바뀌었을 수 있다. NULL(구 오더)일 때만 위의 견적 할인을 쓴다.
+    if getattr(order, "discount_pct", None) is not None:
+        disc = _order_discount(order)
+        out["discount"] = f"{disc:g}" if disc else ""
+        out.setdefault("sources", {})
+        if disc:
+            out["sources"]["discount"] = "order"
+        else:
+            out["sources"].pop("discount", None)
+    return out
 
 
 def _doc_defaults_from(order_terms, order_currency, q) -> dict:
@@ -5238,6 +5267,8 @@ __all__ = [
     "_project_no_map",
     "_deal_state_map",
     "_quotation_total",
+    "_order_total",
+    "_order_discount",
     "_read_company_profile",
     "_reload_perms",
     "_rfq_for_order",

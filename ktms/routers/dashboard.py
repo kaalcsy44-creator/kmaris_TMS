@@ -59,7 +59,7 @@ from _core import (
     _days_since_iso,
     steps_for,
     _status_label,
-    _total_amount,
+    _total_amount, _order_total,
     _vrfq_sent_iso,
     _vquote_recv_iso,
     app,
@@ -560,7 +560,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 disp_cur = (getattr(orders_all[0], "currency", None) or "USD").upper()
                 total_usd = 0.0
                 for oo in orders_all:
-                    t = _total_amount(oo.items or [])
+                    t = _order_total(oo)
                     oc = (getattr(oo, "currency", None) or "USD").upper()
                     total_usd += (t / usd_krw_rate()) if oc == "KRW" else t
                 order_amount = (
@@ -591,7 +591,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 if oo.po_no and oo.po_no not in _po_nos:
                     _po_nos.append(oo.po_no)
                 _oc = (getattr(oo, "currency", None) or "USD").upper()
-                _st = _total_amount(oo.items or [])
+                _st = _order_total(oo)
                 _sales_usd += (_st / usd_krw_rate()) if _oc == "KRW" else _st
                 for _vp in s.query(PurchaseOrder).filter_by(order_id=oo.id).all():
                     _has_po = True
@@ -1279,7 +1279,7 @@ def statistics(months: int = 12):
                 # 견적 미연결 오더는 오더 자체 통화로 집계한다. (예전엔 무조건 USD 로 넣어
                 # order.currency='KRW' 인 오더의 KRW 금액이 USD 버킷을 오염시켰다.)
                 cur = _cur2(getattr(o, "currency", None) or "USD")
-                amt = _total_amount(o.items or [])
+                amt = _order_total(o)
             order_series[cur][mo] += amt
             _pad_items(pad_ord_items, o.items)
 
@@ -1542,7 +1542,7 @@ def statistics(months: int = 12):
             sales = purchase = 0.0
             has_po = False
             for oo in prj_orders:
-                sales += _usd(_total_amount(oo.items or []), getattr(oo, "currency", None))
+                sales += _usd(_order_total(oo), getattr(oo, "currency", None))
                 for vp in pos_by_order.get(oo.id, []):
                     has_po = True
                     pt = _total_amount(vp.items or []) or _items_cost_total(vp.items or [])
@@ -1714,7 +1714,7 @@ def statistics_debug(month: str | None = None):
                 src = f"quotation #{qtn.id} · currency={qtn.currency!r}"
             else:
                 bucket = _cur2(getattr(o, "currency", None) or "USD")
-                amt = _total_amount(o.items or [])
+                amt = _order_total(o)
                 src = f"no quotation → order.currency={getattr(o, 'currency', None)!r}"
             won[bucket] += amt
             won_rows.append({

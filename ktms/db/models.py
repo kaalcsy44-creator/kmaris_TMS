@@ -589,6 +589,10 @@ class Order(Base):
     po_no          = Column(String(100))
     date           = Column(String(10))
     currency       = Column(String(10), default="USD")  # 주문 통화(USD/KRW). 미지정 시 연결 견적 통화 사용
+    # 총액 할인율(%) — 견적(Quotation.discount_pct)과 같은 뜻. 품목 단가는 할인 전 값 그대로 두고
+    # Subtotal − Discount = Final 로 계산한다(단가에 나눠 먹이면 줄마다 반올림이 쌓여 견적 최종가와 어긋난다).
+    # NULL = 이 칸이 생기기 전 오더(할인을 단가에 넣었거나 할인 없음) — PI/CI 할인 기본값은 견적에서 찾는다.
+    discount_pct   = Column(Float)
     trade_type     = Column(String(10), default="수출", nullable=False)  # 거래구분: 수출/내수(국내공급)
     service_info   = Column(JSON, default=dict)  # 서비스 업무 7~10단계 입력값 {"7":{...},...}
     # 수동 완료 표시 {"11":"2026-08-07T15:02", ...} — 고객 P/O(오더) 단위로 기록한다.

@@ -158,6 +158,8 @@ _MIGRATIONS = {
         "fx_rate": "FLOAT",
     },
     "orders": {
+        # 총액 할인율(%) — 견적과 같은 Subtotal − Discount = Final. NULL = 구 오더.
+        "discount_pct":      "FLOAT",
         "promised_delivery": "VARCHAR(10)",
         "shipped_date":      "VARCHAR(10)",
         "delivered_date":    "VARCHAR(10)",

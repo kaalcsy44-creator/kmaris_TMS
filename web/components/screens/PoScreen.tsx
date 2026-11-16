@@ -3,6 +3,7 @@
 import AmountInput from "@/components/common/AmountInput";
 import { filenameFromDisposition } from "@/lib/download";
 import DecimalsSelect from "@/components/common/DecimalsSelect";
+import DiscountSummary from "@/components/common/DiscountSummary";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
@@ -357,6 +358,9 @@ function OrderDetailModal({
   const [tradeType, setTradeType] = useState("수출");
   const [promised, setPromised] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([]);
+  // 총액 할인율(%) — 견적과 같은 Subtotal − Discount = Final. null = 이 칸이 생기기 전 오더:
+  // 손대지 않으면 저장할 때도 보내지 않는다(PI/CI 할인 기본값이 계속 견적에서 오도록).
+  const [discountPct, setDiscountPct] = useState<number | null>(null);
   const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
   const [ocrBusy, setOcrBusy] = useState(false);
@@ -383,6 +387,7 @@ function OrderDetailModal({
         setCurrency(d.currency || "USD");
         setPromised(d.promised_delivery || "");
         setItems(d.items.length ? d.items.map(normalizeItem) : [blankItem()]);
+        setDiscountPct(d.discount_pct ?? null);
         setTerms(withDefaultTerms(d.terms));
         setOcrFiles(Array.isArray(d.source_files) ? d.source_files : []);
         setOcrMsg(null);
@@ -406,6 +411,7 @@ function OrderDetailModal({
     }
     setCurrency(q.currency || currency);
     setItems(q.items.length ? quoteItemsForOrder(q, terms.decimals) : [blankItem()]);
+    setDiscountPct(Number(q.discount_pct || 0));
     setOcrMsg(`Loaded ${q.items.length} item(s) from quotation ${q.qtn_no}${discountNote(q)}.`);
   }
 
@@ -501,6 +507,7 @@ function OrderDetailModal({
         currency,
         trade_type: tradeType,
         promised_delivery: promised || null,
+        ...(discountPct != null ? { discount_pct: discountPct } : {}),
         items: cleanItems(items),
         terms,
         source_files: ocrFiles,
@@ -706,12 +713,18 @@ function OrderDetailModal({
               ) : null
             }
           />
+          <DiscountSummary
+            subtotal={orderSubtotal(items)}
+            discountPct={discountPct ?? 0}
+            onDiscountChange={setDiscountPct}
+            currency={currency}
+          />
           <TermsEditor terms={terms} onChange={setTerms} />
           </fieldset>
           <div className="form-actions">
             <StageTotal
-              label="Total"
-              value={includedRows(items).reduce((s, it) => s + Number(it.amount || 0), 0)}
+              label={discountPct ? "Final" : "Total"}
+              value={orderFinal(items, discountPct)}
               currency={currency}
             />
             {!canWriteNow ? (
@@ -1511,6 +1524,7 @@ function CustomerPoNewForm({
   const [tradeType, setTradeType] = useState("수출");
   const [promised, setPromised] = useState("");
   const [items, setItems] = useState<PoWorkItem[]>([blankItem()]);
+  const [discountPct, setDiscountPct] = useState(0); // 총액 할인율(%) — 견적과 같은 뜻
   const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
   const [busy, setBusy] = useState(false);
@@ -1644,6 +1658,7 @@ function CustomerPoNewForm({
         currency,
         trade_type: tradeType,
         promised_delivery: promised || null,
+        discount_pct: discountPct,
         items: cleanItems(items),
         terms,
         source_files: ocrFiles,
@@ -1652,6 +1667,7 @@ function CustomerPoNewForm({
       setPoNo("");
       setPromised("");
       setItems([blankItem()]);
+      setDiscountPct(0);
       setTerms(withDefaultTerms());
       setOcrFiles([]);
       onChanged();
@@ -1674,6 +1690,7 @@ function CustomerPoNewForm({
     }
     setCurrency(linkedQuote.currency || currency);
     setItems(linkedQuote.items.length ? quoteItemsForOrder(linkedQuote, terms.decimals) : [blankItem()]);
+    setDiscountPct(Number(linkedQuote.discount_pct || 0));
     setOcrMsg(`Loaded ${linkedQuote.items.length} item(s) from quotation ${linkedQuote.qtn_no}${discountNote(linkedQuote)}.`);
     setErr(null);
   }
@@ -1830,12 +1847,19 @@ function CustomerPoNewForm({
         }
       />
 
+      <DiscountSummary
+        subtotal={orderSubtotal(items)}
+        discountPct={discountPct}
+        onDiscountChange={setDiscountPct}
+        currency={currency}
+      />
+
       <TermsEditor terms={terms} onChange={setTerms} />
 
       <div className="form-actions">
         <StageTotal
-          label="Total"
-          value={includedRows(items).reduce((s, it) => s + Number(it.amount || 0), 0)}
+          label={discountPct ? "Final" : "Total"}
+          value={orderFinal(items, discountPct)}
           currency={currency}
         />
         <button
@@ -2763,10 +2787,10 @@ function normalizeItem(it: Partial<PoWorkItem>): PoWorkItem {
 }
 
 /**
- * 고객 견적 → 오더 품목. 견적에 총액 할인(discount_pct)이 있으면 그 할인가가 최종가이므로
- * 각 단가에 같은 비율을 먹여 불러온다(예전엔 할인 전 단가가 그대로 들어와 오더가 견적보다 컸다).
- * 단가는 고른 자릿수(기본 0)로 반올림 — 줄마다 반올림하므로 합계가 견적 최종가와
- * 몇 원/센트 다를 수 있다.
+ * 고객 견적 → 오더 품목. 단가는 견적의 판매 단가 그대로 가져오고, 총액 할인은 단가에
+ * 먹이지 않고 오더의 할인율(discount_pct)로 따로 이어받는다 — 견적과 똑같이
+ * Subtotal − Discount = Final 로 계산해야 오더 Final 이 견적 Final 과 같은 숫자가 된다.
+ * (예전엔 할인율을 단가마다 곱해 반올림했더니 줄마다 오차가 쌓여 USD 7,500 이 7,506 이 됐다.)
  */
 function quoteItemsForOrder(
   q: { items: PoWorkItem[]; discount_pct?: number; currency?: string },
@@ -2774,15 +2798,20 @@ function quoteItemsForOrder(
 ): PoWorkItem[] {
   // 같은 라인의 대안 중 합계에서 뺀 줄(alt_off)은 고객이 고르지 않은 안이라 오더로 넘기지 않는다.
   const rows = q.items.filter((it) => !(it as { alt_off?: boolean }).alt_off).map(normalizeItem);
-  const d = Number(q.discount_pct || 0);
   // 자릿수를 정해 두었으면 그 자리, 아니면 0(정수) — 발행 문서 기본과 같다.
-  const digits = decimals ?? 0;
-  if (!d) return rows.map((it) => roundPoItem(it, digits));
-  return rows.map((it) => {
-    const up = Number(it.unit_price ?? 0);
-    if (!up) return it;
-    return roundPoItem({ ...it, unit_price: up * (1 - d / 100) }, digits);
-  });
+  return rows.map((it) => roundPoItem(it, decimals ?? 0));
+}
+
+/** 오더 품목 합계(Subtotal) — 제외한 줄·옵션 제목 줄은 뺀다. */
+function orderSubtotal(items: PoWorkItem[]): number {
+  return includedRows(items).reduce((s, it) => s + Number(it.amount || 0), 0);
+}
+
+/** 오더 최종 금액 = Subtotal − 총액 할인. 화면의 Discount 줄(DiscountSummary)과 같은 계산. */
+function orderFinal(items: PoWorkItem[], discountPct: number | null | undefined): number {
+  const sub = orderSubtotal(items);
+  const disc = Math.round(sub * (Number(discountPct || 0) / 100) * 100) / 100;
+  return Math.round((sub - disc) * 100) / 100;
 }
 
 /** 단가를 n 자리로 반올림하고 금액 = 반올림 단가 × 수량(다시 n 자리). 단가가 없으면 금액만 반올림. */
@@ -2799,7 +2828,7 @@ function roundPoItem(it: PoWorkItem, n: number): PoWorkItem {
 
 function discountNote(q: { discount_pct?: number }): string {
   const d = Number(q.discount_pct || 0);
-  return d ? ` (discount ${d}% applied to unit prices)` : "";
+  return d ? ` (discount ${Math.round(d * 100) / 100}% carried to Summary)` : "";
 }
 
 function cleanItems(items: PoWorkItem[]): PoWorkItem[] {

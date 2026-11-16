@@ -27,7 +27,7 @@ except Exception:
 
 # 앱과 '완전히 동일한' 집계 함수를 재사용해 로직 차이가 없도록 한다.
 from _core import (  # noqa: E402
-    get_session, _quotation_total, _total_amount, _cur2, _month_key,
+    get_session, _quotation_total, _total_amount, _order_total, _cur2, _month_key,
     _rfq_for_order, manual_stage_dates,
 )
 from db.models import (  # noqa: E402
@@ -75,7 +75,7 @@ def main() -> None:
                 src = f"qtn#{qtn.id} currency={qtn.currency!r}"
             else:
                 bucket = _cur2(getattr(o, "currency", None) or "USD")
-                amt = _total_amount(o.items or [])
+                amt = _order_total(o)
                 src = f"no quotation → order.currency={getattr(o, 'currency', None)!r}"
             won[bucket] += amt
             rfq = _rfq_for_order(s, o)

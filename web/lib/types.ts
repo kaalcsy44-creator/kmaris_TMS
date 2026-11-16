@@ -498,6 +498,8 @@ export type PoDetail = {
   shipped_date: string;
   delivered_date: string;
   tracking_token: string;
+  /** 총액 할인율(%) — 견적과 같은 Subtotal − Discount = Final. null = 이 칸이 생기기 전 오더. */
+  discount_pct?: number | null;
   steps: RfqStep[];
   items: RfqItem[];
   terms?: QuotationTerms;
@@ -646,7 +648,7 @@ export type PoWorkOptions = {
     status: string;
     currency: string;
     amount: number;
-    discount_pct?: number; // 견적 총액 할인율(%) — 오더로 불러올 때 단가에 반영
+    discount_pct?: number; // 견적 총액 할인율(%) — 오더로 불러올 때 오더 할인율로 이어받는다
     vendor_quote_no: string; // 이 견적이 링크한 벤더 견적번호(미링크면 "")
     items: PoWorkItem[];
   }[];
@@ -668,6 +670,7 @@ export type PoWorkOptions = {
     currency: string;
     status: string;
     items: PoWorkItem[];
+    discount_pct?: number | null; // 총액 할인율(%) — null = 구 오더
     project_title?: string;
     contact_person?: string;
     assignee?: string;

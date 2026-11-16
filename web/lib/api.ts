@@ -726,6 +726,7 @@ export function createOrder(body: {
   currency?: string;
   trade_type?: string;
   promised_delivery?: string | null;
+  discount_pct?: number | null;
   items: PoWorkItem[];
   terms?: QuotationTerms;
   source_files?: RfqSourceFile[];
@@ -3025,6 +3026,7 @@ export function updateOrder(
     currency?: string;
     trade_type?: string;
     promised_delivery?: string | null;
+    discount_pct?: number; // 보내면 교체(0 = 할인 없음), 안 보내면 그대로
     items?: PoWorkItem[];
     terms?: QuotationTerms;
     source_files?: RfqSourceFile[];

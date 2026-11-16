@@ -46,7 +46,7 @@ from _core import (
     _finance_payable_row,
     _finance_receivable_rows,
     _items_cost_total,
-    _total_amount,
+    _total_amount, _order_total,
     app,
     date,
     get_current_user,
@@ -1948,7 +1948,7 @@ def finance_consulting():
             if rid not in rfq_ids or rid in invoiced:
                 continue
             cur = (o.currency or "USD").upper()
-            ordered.setdefault(rid, {})[cur] = ordered.get(rid, {}).get(cur, 0.0) + _total_amount(o.items)
+            ordered.setdefault(rid, {})[cur] = ordered.get(rid, {}).get(cur, 0.0) + _order_total(o)
 
         # 매출이 실제로 들어왔는가 — 수수료를 언제 내보낼지가 여기서 정해진다. 소개비는
         # 받은 돈에서 떼어 주는 것이라, 고객 돈이 통장에 들어오기 전에는 지급 예정일이
@@ -3573,7 +3573,7 @@ def finance_project_summary(rfq_id: int):
             terms = o.terms or {}
             order_rows.append({
                 "id": o.id, "po_no": o.po_no or "", "date": o.date or "", "currency": cur,
-                "amount": round(_total_amount(o.items), 2), "trade_type": o.trade_type or "",
+                "amount": round(_order_total(o), 2), "trade_type": o.trade_type or "",
                 "promised_delivery": o.promised_delivery or "", "delivered_date": o.delivered_date or "",
                 "incoterms": " ".join(x for x in (terms.get("incoterms") or "", terms.get("delivery_place") or "") if x),
                 "payment_terms": terms.get("payment_terms") or "",
