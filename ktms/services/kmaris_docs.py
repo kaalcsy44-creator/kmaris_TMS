@@ -1284,9 +1284,10 @@ def _invoice_totals_tables(form: _DocForm, item_w: List[float], money: Dict[str,
 
 
 def _invoice_item_table(form: _DocForm, data: Dict[str, Any], items: List[Dict[str, Any]],
-                        currency: str, item_w: List[float], amount) -> Table:
+                        currency: str, item_w: List[float], amount,
+                        min_rows: int = PI_MIN_ITEM_ROWS) -> Table:
     """PI·CI 품목표 — No./Description/Part No./HS Code/Qty/Unit Price/Amount 7열.
-    품목이 적으면 참조 양식처럼 빈 줄로 채워 표 높이를 지킨다."""
+    품목이 적으면 참조 양식처럼 빈 줄로 채워 표 높이를 지킨다(min_rows 까지)."""
     shipping = data.get("shipping", {}) or {}
     headers = ["No.", "Description", "Part No.", "HS Code", "Qty", "Unit Price", f"Amount ({currency})"]
     rows: List[List[Any]] = [[form.p(h, form.th) for h in headers]]
@@ -1296,7 +1297,7 @@ def _invoice_item_table(form: _DocForm, data: Dict[str, Any], items: List[Dict[s
                      form.p(it.get("hs_code") or shipping.get("hs_code", ""), form.center),
                      form.p(f"{it['qty']:g}", form.center), form.p(amount(it["unit_price"]), form.right),
                      form.p(amount(it["amount"]), form.right)])
-    filler = max(0, PI_MIN_ITEM_ROWS - len(items))
+    filler = max(0, min_rows - len(items))
     rows += [[""] * 7 for _ in range(filler)]
     table = Table(rows, colWidths=item_w, repeatRows=1,
                   rowHeights=[None] * (len(items) + 1) + [16] * filler)
@@ -1312,6 +1313,74 @@ def bank_name_address(company: Dict[str, Any], foreign: bool) -> str:
     name = (company.get("fx_bank_name") or "").strip()
     addr = (company.get("fx_bank_address") or "").strip()
     return "\n".join(x for x in (name, addr) if x)
+
+
+def pi_optional_sections(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Proforma Invoice 의 선택 블록 — REMARK · PACKING INFORMATION.
+
+    화면(7단계 Proforma Invoice 탭)에서 블록마다 체크박스로 넣고 뺀다. 체크를 끈 블록은
+    적어 둔 내용이 남아 있어도 제목째 찍지 않는다(다시 켜면 그 내용이 돌아온다).
+    값은 PI 의 terms 에 산다: pi_remark_on/pi_remark, pi_packing_on/pi_packing_total/pi_packages
+    (켜짐은 "1"/빈 문자열, pi_packages 는 줄바꿈으로 이은 문자열 또는 목록).
+    REMARK 는 줄마다 글머리표(•)를 붙인다 — 사용자 샘플 양식이 그렇다.
+    PACKING 행: Total Packages 한 줄(전폭) + Package 1·2 … 를 두 개씩 한 줄에."""
+    t = data.get("terms") or {}
+    remark: List[str] = []
+    if t.get("pi_remark_on"):
+        for ln in str(t.get("pi_remark") or "").splitlines():
+            ln = ln.strip()
+            if not ln:
+                continue
+            if ln[0] in "-*·":
+                ln = ln[1:].strip()
+            remark.append(ln if ln.startswith("•") else f"• {ln}")
+    packing: List[tuple] = []
+    if t.get("pi_packing_on"):
+        total = str(t.get("pi_packing_total") or "").strip()
+        raw = t.get("pi_packages") or []
+        # 화면은 terms 를 문자열로만 다뤄 줄바꿈으로 이어 보낸다 — 목록도 받는다.
+        if isinstance(raw, str):
+            raw = raw.splitlines()
+        pkgs = [str(x or "").strip() for x in raw]
+        pkgs = [x for x in pkgs if x]
+        if total:
+            packing.append(("Total Packages", total, "", ""))
+        for i in range(0, len(pkgs), 2):
+            row = [f"Package {i + 1}", pkgs[i], "", ""]
+            if i + 1 < len(pkgs):
+                row[2:] = [f"Package {i + 2}", pkgs[i + 1]]
+            packing.append(tuple(row))
+    return {"remark": remark, "packing": packing}
+
+
+def pi_min_item_rows(data: Dict[str, Any]) -> int:
+    """PI 품목표 빈 채움 줄 수 — REMARK·PACKING 을 넣으면 그만큼 줄여 한 장에 들어가게 한다
+    (채움 줄은 모양일 뿐인데, 그대로 두면 하단 푸터 한 줄만 2쪽으로 밀려 빈 페이지가 생긴다)."""
+    sec = pi_optional_sections(data)
+    used = (2 + len(sec["remark"]) if sec["remark"] else 0) + (1 + len(sec["packing"]) if sec["packing"] else 0)
+    return max(0, PI_MIN_ITEM_ROWS - used)
+
+
+def _pi_optional_blocks(form: "_DocForm", data: Dict[str, Any], quad: List[float]) -> List[Any]:
+    """REMARK · PACKING INFORMATION(PDF) — 체크한 블록만. 합계와 BANK INFORMATION 사이."""
+    sec = pi_optional_sections(data)
+    out: List[Any] = []
+    if sec["remark"]:
+        note = Table([[form.p("\n".join(sec["remark"]))]], colWidths=[form.page_width])
+        note.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY),
+                                  ("VALIGN", (0, 0), (-1, -1), "TOP")] + form.CELL))
+        out += [form.band("REMARK"), note]
+    if sec["packing"]:
+        t = form.pairs(sec["packing"], quad)
+        # 짝 없는 줄(Total Packages·홀수 마지막 Package)은 값 칸을 오른쪽 끝까지 편다.
+        extra = []
+        for i, row in enumerate(sec["packing"]):
+            if not row[2]:
+                extra += [("SPAN", (1, i), (3, i)), ("BACKGROUND", (1, i), (3, i), colors.white)]
+        if extra:
+            t.setStyle(TableStyle(extra))
+        out += [form.band("PACKING INFORMATION"), t]
+    return out
 
 
 def _bank_block(form: _DocForm, company: Dict[str, Any], currency: str, quad: List[float]) -> List[Any]:
@@ -1394,7 +1463,7 @@ def _make_service_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, 
                      form.p(f"{it['qty']:g}", form.center), form.p(it.get("unit", ""), form.center),
                      form.p(amount(it["unit_price"]), form.right),
                      form.p(amount(it["amount"]), form.right)])
-    filler = max(0, PI_MIN_ITEM_ROWS - len(items))
+    filler = max(0, pi_min_item_rows(data) - len(items))
     rows += [[""] * 6 for _ in range(filler)]
     table = Table(rows, colWidths=item_w, repeatRows=1,
                   rowHeights=[None] * (len(items) + 1) + [16] * filler)
@@ -1408,7 +1477,7 @@ def _make_service_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, 
                                ("BACKGROUND", (0, 0), (-1, -1), LIGHT_BLUE)] + form.CELL))
     story.append(grand)
 
-    story += [Spacer(1, 3 * mm)] + _bank_block(form, company, currency, quad)
+    story += [Spacer(1, 3 * mm)] + _pi_optional_blocks(form, data, quad) + _bank_block(form, company, currency, quad)
     story += [form.band("DECLARATION"),
               form.declaration("We hereby certify that this Proforma Invoice is true and correct."),
               Spacer(1, 2 * mm)]
@@ -1460,9 +1529,10 @@ def _make_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) ->
               form.pairs(_invoice_shipping_rows(data)
                          + [("Currency", currency, "Country of Origin", shipping.get("sm_origin", ""))], quad),
               Spacer(1, 3 * mm)]
-    story.append(_invoice_item_table(form, data, items, currency, item_w, amount))
+    story.append(_invoice_item_table(form, data, items, currency, item_w, amount,
+                                     min_rows=pi_min_item_rows(data)))
     story += _invoice_totals_tables(form, item_w, money, amount)
-    story += [Spacer(1, 3 * mm)] + _bank_block(form, company, currency, quad)
+    story += [Spacer(1, 3 * mm)] + _pi_optional_blocks(form, data, quad) + _bank_block(form, company, currency, quad)
     story += [form.band("DECLARATION"),
               form.declaration("We hereby certify that this Proforma Invoice is true and correct."),
               Spacer(1, 2 * mm)]

@@ -1506,6 +1506,7 @@ function ProformaInvoiceTab({
         // Items total − Discount = Subtotal(할인 후 물품가) → + Freight + Packing + Insurance + VAT = Total.
         footerRows={invoiceFooterRows({ subtotal, discount, setDiscount, freight, setFreight, packing, setPacking, insurance, setInsurance, vatRate, vatAmount, totalInvoiceValue, currency })}
       />
+      <PiOptionalSections terms={terms} setTerms={setTerms} />
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
@@ -1534,6 +1535,89 @@ function ProformaInvoiceTab({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Proforma Invoice 선택 블록 — REMARK · PACKING INFORMATION.
+ *  체크하면 발행 문서(PDF·Excel)의 합계 아래·BANK INFORMATION 위에 제목과 함께 찍히고,
+ *  끄면 적어 둔 내용은 남겨 둔 채 제목째 빠진다(다시 켜면 그대로 돌아온다).
+ *  terms 가 문자열 맵이라 켜짐은 "1"/"", 패키지 목록은 줄바꿈으로 이어 pi_packages 에 저장한다
+ *  (서버 services.kmaris_docs.pi_optional_sections 가 같은 키를 읽는다). */
+function PiOptionalSections({
+  terms,
+  setTerms,
+}: {
+  terms: Record<string, string>;
+  setTerms: (fn: (t: Record<string, string>) => Record<string, string>) => void;
+}) {
+  const set = (key: string, value: string) => setTerms((t) => ({ ...t, [key]: value }));
+  const remarkOn = !!terms.pi_remark_on;
+  const packingOn = !!terms.pi_packing_on;
+  const pkgs = (terms.pi_packages || "").split("\n");
+  const setPkgs = (list: string[]) => set("pi_packages", list.join("\n"));
+  return (
+    <div className="pi-optional">
+      <div className="sub-h doc-sec-h" style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+        <span>Optional sections</span>
+        <span className="hint-inline" style={{ fontWeight: 400 }}>
+          Checked sections print below the totals with their title — unchecked ones are left out of the document.
+        </span>
+      </div>
+      <label className="pi-opt-toggle">
+        <input type="checkbox" checked={remarkOn} onChange={(e) => set("pi_remark_on", e.target.checked ? "1" : "")} />
+        <b>Remark</b>
+      </label>
+      {remarkOn ? (
+        <textarea
+          className="pi-opt-body"
+          rows={3}
+          value={terms.pi_remark || ""}
+          onChange={(e) => set("pi_remark", e.target.value)}
+          placeholder="One line per bullet (•) — e.g. DDP terms are not applicable due to uncertainties in local import clearance…"
+        />
+      ) : null}
+      <label className="pi-opt-toggle">
+        <input type="checkbox" checked={packingOn} onChange={(e) => set("pi_packing_on", e.target.checked ? "1" : "")} />
+        <b>Packing information</b>
+      </label>
+      {packingOn ? (
+        <div className="pi-opt-body">
+          <div className="form-grid doc-form-grid">
+            <Field
+              label="Total Packages"
+              value={terms.pi_packing_total || ""}
+              onChange={(v) => set("pi_packing_total", v)}
+              placeholder="2 Packages (1 Wooden Case + 1 Carton)"
+              wide
+            />
+            {pkgs.map((pk, i) => (
+              <label className="form-field" key={i}>
+                <span>Package {i + 1}</span>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    value={pk}
+                    onChange={(e) => setPkgs(pkgs.map((x, j) => (j === i ? e.target.value : x)))}
+                    placeholder="50 × 50 × 60 cm / Approx. 60 kg G/W"
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    className="btn sm"
+                    title="Remove this package"
+                    onClick={() => setPkgs(pkgs.filter((_, j) => j !== i))}
+                  >
+                    ×
+                  </button>
+                </div>
+              </label>
+            ))}
+          </div>
+          <button type="button" className="btn sm" onClick={() => setPkgs([...pkgs, ""])}>
+            + Add package
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1694,6 +1778,7 @@ function ServiceProformaInvoiceTab({
           { label: "Total invoice value", grand: true, value: <><DualCurrencyAmount value={total} currency={currency} /><span className="fx-note">{fxRateText()}</span></> },
         ]}
       />
+      <PiOptionalSections terms={terms} setTerms={setTerms} />
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">

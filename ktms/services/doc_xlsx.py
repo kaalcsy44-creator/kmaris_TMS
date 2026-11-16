@@ -14,6 +14,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 from services.kmaris_docs import (
+    pi_optional_sections,
     bank_name_address, origin_mark, incoterms_text,
     normalize_items, calc_totals, _num, DOC_TITLES, doc_parties,
     packing_totals, consignee_mark_lines, _dim_parts, cbm, _invoice_shipping_rows,
@@ -575,7 +576,8 @@ def _make_service_proforma_invoice_xlsx(data: Dict[str, Any], company: Dict[str,
     r = form.pairs(r, service_info_rows(data))
     r += 1
     r = _service_pi_items_and_total(form, data, r, currency)
-    r = _pi_bank_block(form, company, r, currency)
+    r, drew = _pi_optional_xlsx(form, data, r)
+    r = _pi_bank_block(form, company, r, currency, gap=not drew)
 
     last = _invoice_closing(form, company, r - 1, "Proforma Invoice")
     form.page_setup(last)
@@ -585,9 +587,42 @@ def _make_service_proforma_invoice_xlsx(data: Dict[str, Any], company: Dict[str,
     return out.getvalue()
 
 
-def _pi_bank_block(form: "_FormSheet", company: Dict[str, Any], r: int, currency: str) -> int:
-    """BANK INFORMATION — 통화에 맞는 계좌(외화/원화)를 Settings 에서 가져온다."""
+def _pi_optional_xlsx(form: "_FormSheet", data: Dict[str, Any], r: int) -> tuple:
+    """REMARK · PACKING INFORMATION(Excel) — PDF 와 같은 규칙(pi_optional_sections).
+    (다음 행, 블록을 하나라도 그렸는지) 를 돌려준다 — 그렸으면 BANK 가 바로 붙는다."""
+    sec = pi_optional_sections(data)
+    if not (sec["remark"] or sec["packing"]):
+        return r, False
     r += 1
+    if sec["remark"]:
+        r = form.band(r, "REMARK")
+        text = "\n".join(sec["remark"])
+        form.cell(r, "full", text, font=form.normal, align=form.left)
+        form.bd(r, 1, r, form.ncol)
+        # 병합 칸은 자동 높이가 안 된다 — 줄 수(전폭 약 95자)로 어림한다.
+        lines = sum(max(1, -(-len(x) // 95)) for x in sec["remark"])
+        form.ws.row_dimensions[r].height = max(17.4, 14.5 * lines + 4)
+        r += 1
+    if sec["packing"]:
+        r = form.band(r, "PACKING INFORMATION")
+        for k1, v1, k2, v2 in sec["packing"]:
+            if k2:
+                r = form.pair_row(r, k1, v1, k2, v2)
+                continue
+            form.cell(r, "label1", k1, fill=form.gray, font=form.boldsm, align=form.left)
+            c1 = form.blocks["value1"][0]
+            form.merge(r, c1, r, form.ncol)
+            form.put(r, c1, v1, font=form.normal, align=form.left)
+            form.bd(r, 1, r, form.ncol)
+            form.ws.row_dimensions[r].height = 17.4
+            r += 1
+    return r, True
+
+
+def _pi_bank_block(form: "_FormSheet", company: Dict[str, Any], r: int, currency: str, gap: bool = True) -> int:
+    """BANK INFORMATION — 통화에 맞는 계좌(외화/원화)를 Settings 에서 가져온다."""
+    if gap:
+        r += 1
     r = form.band(r, "BANK INFORMATION")
     foreign = currency != "KRW"
     holder = (company.get("fx_bank_holder") if foreign else company.get("bank_holder")) or company.get("company_name_en", "")
@@ -629,7 +664,8 @@ def make_proforma_invoice_xlsx(
     r += 1
     r = _invoice_items_and_totals(form, data, r, currency)
 
-    r = _pi_bank_block(form, company, r, currency)
+    r, drew = _pi_optional_xlsx(form, data, r)
+    r = _pi_bank_block(form, company, r, currency, gap=not drew)
 
     last = _invoice_closing(form, company, r - 1, "Proforma Invoice")
     form.page_setup(last)
