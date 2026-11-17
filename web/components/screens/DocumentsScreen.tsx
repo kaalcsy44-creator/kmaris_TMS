@@ -1458,7 +1458,12 @@ function ProformaInvoiceTab({
   // 통화·거래조건·선적 장소는 상위 단계(고객 P/O·견적)에서 정한 값을 이어받는다(빈 칸만).
   const [currency, setCurrency] = useState(data.pi?.currency || data.order.doc_defaults?.currency || "USD");
   const [vatRate, setVatRate] = useState(data.pi?.vat_rate ?? 0);
-  const firstHs = (data.pi?.items || data.order.items || []).find((i) => i.hs_code)?.hs_code || "";
+  // 문서 기본 HS = **저장된 기본값**(shipping.hs_code). 저장된 문서가 있는데 첫 줄 코드를 기본값으로
+  // 삼으면, 그 코드와 같은 줄을 모두 빈칸(=기본값)으로 바꾼 뒤 기본값은 저장된 빈 값으로 덮여
+  // 줄별 HS 가 화면에서 사라지고 다시 저장하면 지워진다(2026-11-17 P-049). 새 문서일 때만 첫 줄에서 고른다.
+  const firstHs = data.pi
+    ? (data.pi.shipping?.hs_code || "")
+    : (data.order.items || []).find((i) => i.hs_code)?.hs_code || "";
   const [items, setItems] = useState<DocumentWorkItem[]>(lineHsItems(data.pi?.items || data.order.items, firstHs));
   function initialTerms(): Record<string, string> {
     return docDefaultTerms(data.order, data.pi?.terms);
@@ -2023,7 +2028,10 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
   const [currency, setCurrency] = useState(data.ci?.currency || tpl?.currency || data.order.doc_defaults?.currency || "USD");
   const [vatRate, setVatRate] = useState(data.ci?.vat_rate ?? tpl?.vat_rate ?? 0);
   // HS Code — 문서 기본값(shipping.hs_code) + 줄별 코드(item.hs_code, 비우면 기본값). lineHsItems 참고.
-  const firstHs = (baseItems || []).find((i) => i.hs_code)?.hs_code || tpl?.shipping?.hs_code || "";
+  // 문서 기본 HS = 저장된 기본값(위 PI 탭 주석 참고 — 첫 줄 코드를 쓰면 줄별 HS 가 사라진다).
+  const firstHs = data.ci
+    ? (data.ci.shipping?.hs_code || "")
+    : (baseItems || []).find((i) => i.hs_code)?.hs_code || tpl?.shipping?.hs_code || "";
   const [items, setItems] = useState<DocumentWorkItem[]>(lineHsItems(baseItems, firstHs));
   // Incoterms · Payment Terms — CI/PDF/Excel 의 Shipping Information 에 출력.
   // 새 포장은 대표 CI 의 조건을 잇되 부대비용·할인은 비운다(대표 CI 에 이미 실렸다).
@@ -2042,7 +2050,8 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
   const [shipping, setShipping] = useState<Record<string, string>>(initialShipping());
   const [terms, setTerms] = useState<Record<string, string>>(initialTerms());
   // 총액 할인(양수 금액) — 저장값이 없으면 견적의 할인액(doc_defaults.discount)을 이어받는다.
-  const initialDiscount = () => data.ci?.terms?.discount ?? data.order.doc_defaults?.discount ?? "";
+  // 새 포장(2번째 CI~)은 할인을 비운다 — 견적 할인은 대표 CI 에 이미 실렸다.
+  const initialDiscount = () => data.ci?.terms?.discount ?? (pkg.isNew ? "" : data.order.doc_defaults?.discount ?? "");
   const [discount, setDiscount] = useState<string>(initialDiscount());
   const [freight, setFreight] = useState(data.ci?.terms?.freight || "");
   const [packing, setPacking] = useState(data.ci?.terms?.packing || "");
