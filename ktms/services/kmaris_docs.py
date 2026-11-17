@@ -995,7 +995,7 @@ def _make_commercial_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) 
               Spacer(1, 3 * mm)]
 
     story.append(_invoice_item_table(form, data, items, currency, item_w, amount))
-    story += _invoice_totals_tables(form, item_w, money, amount)
+    story += _invoice_totals_tables(form, item_w, money, amount, merge_charges=True)
     story += [Spacer(1, 3 * mm), form.band("DECLARATION"),
               form.declaration("We hereby certify that this Commercial Invoice is true and correct."),
               Spacer(1, 2 * mm)]
@@ -1271,8 +1271,9 @@ def _invoice_shipping_rows(data: Dict[str, Any], incoterms_label: str = "Incoter
 
 
 def _invoice_totals_tables(form: _DocForm, item_w: List[float], money: Dict[str, float],
-                           amount) -> List[Any]:
-    """합계 블록 — 라벨은 Unit Price 칸, 값은 Amount 칸. PI·CI 가 같이 쓴다."""
+                           amount, merge_charges: bool = False) -> List[Any]:
+    """합계 블록 — 라벨은 Unit Price 칸, 값은 Amount 칸. PI·CI 가 같이 쓴다.
+    merge_charges: Freight·Packing·Insurance 를 한 줄("Freight, Packing, Insurance, etc.")로 — CI."""
     # 할인이 있으면 Items Total(할인 전) → Discount → Subtotal(할인 후 물품가) 순으로 적는다.
     # 없으면 참조 양식 그대로 Subtotal 한 줄.
     # 위계(Excel 과 같다): Items Total·Subtotal 은 TOTAL INVOICE VALUE 처럼 A~G 를 합친 넓은 줄
@@ -1282,14 +1283,24 @@ def _invoice_totals_tables(form: _DocForm, item_w: List[float], money: Dict[str,
     if money.get("discount"):
         rows += [("Items Total", money["subtotal"], "wide"), ("Discount", -money["discount"], "charge")]
     rows.append(("Subtotal", money["subtotal"] - money.get("discount", 0), "wide"))
-    rows += [("Freight", money["freight"], "charge"), ("Packing", money["packing"], "charge"),
-             ("Insurance", money["insurance"], "charge"), ("VAT", money["vat"], "charge")]
+    if merge_charges:
+        # 라벨이 길어 Unit Price 칸에선 세 줄로 접힌다 — 왼쪽 빈 칸까지 합쳐 한 줄로 쓴다.
+        rows.append(("Freight, Packing, Insurance, etc.", money["freight"] + money["packing"] + money["insurance"],
+                     "charge_wide"))
+    else:
+        rows += [("Freight", money["freight"], "charge"), ("Packing", money["packing"], "charge"),
+                 ("Insurance", money["insurance"], "charge")]
+    rows.append(("VAT", money["vat"], "charge"))
     data_rows, style = [], [("LINEBEFORE", (0, 0), (0, -1), .35, MID_GRAY),
                             ("LINEAFTER", (0, 0), (0, -1), .35, MID_GRAY)]
     for i, (k, v, kind) in enumerate(rows):
         if kind == "charge":
             data_rows.append(["", form.p(k, form.right), form.p(amount(v), form.right)])
             style += [("GRID", (1, i), (-1, i), .35, MID_GRAY), ("BACKGROUND", (1, i), (1, i), LIGHT_GRAY)]
+        elif kind == "charge_wide":
+            data_rows.append([form.p(k, form.right), "", form.p(amount(v), form.right)])
+            style += [("SPAN", (0, i), (1, i)), ("GRID", (0, i), (-1, i), .35, MID_GRAY),
+                      ("BACKGROUND", (0, i), (1, i), LIGHT_GRAY)]
         else:
             data_rows.append([form.p(k, form.grand), "", form.p(amount(v), form.grand_right)])
             style += [("SPAN", (0, i), (1, i)), ("GRID", (0, i), (-1, i), .35, MID_GRAY),

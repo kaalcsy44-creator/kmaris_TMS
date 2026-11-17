@@ -402,7 +402,8 @@ def _invoice_sheet(data: Dict[str, Any], company: Dict[str, Any], title: str, sh
     return wb, form, r + 1
 
 
-def _invoice_items_and_totals(form: "_FormSheet", data: Dict[str, Any], r: int, currency: str):
+def _invoice_items_and_totals(form: "_FormSheet", data: Dict[str, Any], r: int, currency: str,
+                              merge_charges: bool = False):
     """PI·CI 공통 품목표 + 합계 — 금액은 수식이라 받는 쪽에서 고쳐도 합계가 따라온다."""
     items = normalize_items(data.get("items", []))
     shipping = data.get("shipping", {}) or {}
@@ -428,7 +429,7 @@ def _invoice_items_and_totals(form: "_FormSheet", data: Dict[str, Any], r: int, 
         r += 1
     last = r - 1
 
-    def total_line(label, value, wide=False):
+    def total_line(label, value, wide=False, label_from=6):
         """wide: TOTAL INVOICE VALUE 처럼 A~G 를 합친 넓은 줄(Items Total·Subtotal).
         나머지(Discount·Freight·…)는 F~G 의 작은 라벨 줄."""
         nonlocal r
@@ -438,10 +439,11 @@ def _invoice_items_and_totals(form: "_FormSheet", data: Dict[str, Any], r: int, 
             form.put(r, 8, value, font=form.bold, align=form.right, fmt=num_fmt)
             form.bd(r, 1, r, form.ncol)
         else:      # 라벨은 회색 칸·보통 굵기(품목 글자 크기), 오른쪽 정렬
-            form.merge(r, 6, r, 7)
-            form.put(r, 6, label, fill=form.gray, font=form.item_font, align=form.right)
+            # label_from: 라벨이 긴 줄(CI 의 합친 부대비용)은 왼쪽 칸까지 넓혀 한 줄로 보이게.
+            form.merge(r, label_from, r, 7)
+            form.put(r, label_from, label, fill=form.gray, font=form.item_font, align=form.right)
             form.put(r, 8, value, font=form.item_font, align=form.right, fmt=num_fmt)
-            form.bd(r, 6, r, form.ncol)
+            form.bd(r, label_from, r, form.ncol)
         form.ws.row_dimensions[r].height = 18
         ref = f"H{r}"
         r += 1
@@ -455,9 +457,15 @@ def _invoice_items_and_totals(form: "_FormSheet", data: Dict[str, Any], r: int, 
         base = total_line("Subtotal", f"={gref}+{dref}", wide=True)
     else:
         base = total_line("Subtotal", f"=SUM(H{first}:H{last})", wide=True)
-    fref = total_line("Freight", money["freight"])
-    pref = total_line("Packing", money["packing"])
-    iref = total_line("Insurance", money["insurance"])
+    if merge_charges:
+        # CI: 부대비용을 한 줄로(PDF 와 같다). 뒤 수식이 그대로 쓰도록 나머지 참조는 0.
+        fref = total_line("Freight, Packing, Insurance, etc.",
+                          money["freight"] + money["packing"] + money["insurance"], label_from=4)
+        pref = iref = "0"
+    else:
+        fref = total_line("Freight", money["freight"])
+        pref = total_line("Packing", money["packing"])
+        iref = total_line("Insurance", money["insurance"])
     # VAT 는 부대비용까지 더한 금액에 매긴다(입력 화면·PDF 와 같은 계산).
     vref = total_line("VAT", f"=({base}+{fref}+{pref}+{iref})*{money['vat_rate']}")
     form.merge(r, 1, r, 7)
@@ -516,7 +524,7 @@ def make_commercial_invoice_xlsx(
         ("Currency", currency, "", ""),
     ])
     r += 1
-    r = _invoice_items_and_totals(form, data, r, currency)
+    r = _invoice_items_and_totals(form, data, r, currency, merge_charges=True)
     last = _invoice_closing(form, company, r, "Commercial Invoice")
 
     form.page_setup(last)

@@ -1000,14 +1000,12 @@ function PackageDocs({ kind, data, onChanged }: { kind: "ci" | "sm" | "pl"; data
 }
 
 // ── 포장별 금액 나누기 — 오더 전체 대비 다른 포장 CI 에 넣은 몫과 남은 금액 ───────────────
-type ChargeKey = "items" | "discount" | "freight" | "packing" | "insurance" | "total";
+type ChargeKey = "items" | "discount" | "charges" | "total";
 type Money = Record<ChargeKey, number>;
 const SPLIT_ROWS: { key: ChargeKey; label: string }[] = [
   { key: "items", label: "Items total" },
   { key: "discount", label: "Discount (−)" },
-  { key: "freight", label: "Freight" },
-  { key: "packing", label: "Packing" },
-  { key: "insurance", label: "Insurance" },
+  { key: "charges", label: "Freight, Packing, Insurance, etc." },
   { key: "total", label: "Total invoice value" },
 ];
 
@@ -1019,9 +1017,9 @@ function round2(n: number): number {
 function invoiceMoney(items: DocumentWorkItem[] | undefined, terms: Record<string, string> | undefined, vatRate: number | string): Money {
   const it = includedRows(items || []).reduce((s, i) => s + num(i.amount), 0);
   const d = Math.abs(num(terms?.discount));
-  const f = num(terms?.freight), p = num(terms?.packing), ins = num(terms?.insurance);
-  const base = it - d + f + p + ins;
-  return { items: it, discount: d, freight: f, packing: p, insurance: ins, total: base * (1 + num(vatRate) / 100) };
+  const ch = num(terms?.freight) + num(terms?.packing) + num(terms?.insurance);
+  const base = it - d + ch;
+  return { items: it, discount: d, charges: ch, total: base * (1 + num(vatRate) / 100) };
 }
 
 type PackageSplit = {
@@ -1041,7 +1039,7 @@ type PackageSplit = {
 function packageSplit(data: DocumentDetail, ciId: number): PackageSplit {
   const cis = data.cis || [];
   const others = cis.filter((c) => c.id !== ciId);
-  const sum: Money = { items: 0, discount: 0, freight: 0, packing: 0, insurance: 0, total: 0 };
+  const sum: Money = { items: 0, discount: 0, charges: 0, total: 0 };
   for (const c of others) {
     const m = invoiceMoney(c.items, c.terms, c.vat_rate);
     for (const k of Object.keys(sum) as ChargeKey[]) sum[k] += m[k];
@@ -1055,7 +1053,7 @@ function packageSplit(data: DocumentDetail, ciId: number): PackageSplit {
     const it = includedRows(data.order.items || []).reduce((s, i) => s + num(i.amount), 0);
     const d = Math.abs(num(data.order.doc_defaults?.discount));
     // P/O 에는 운임·포장비·보험료가 없다 — 모르는 값으로 두고, 총액도 부대비용을 모르니 비운다.
-    whole = { items: it, discount: d, freight: null, packing: null, insurance: null, total: null };
+    whole = { items: it, discount: d, charges: null, total: null };
     wholeFrom = "P/O";
   }
   const remainingBefore = Object.fromEntries(
@@ -2177,8 +2175,9 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
   };
   const initialDiscount = () => data.ci?.terms?.discount
     ?? (pkg.isNew ? remainingInit("discount") : data.order.doc_defaults?.discount ?? "");
+  // CI 는 부대비용을 한 줄(freight 칸)로 받는다 — 새 포장의 그 줄 = 남은 부대비용 합계.
   const initialCharge = (k: "freight" | "packing" | "insurance") =>
-    data.ci?.terms?.[k] || (pkg.isNew ? remainingInit(k) : "");
+    data.ci?.terms?.[k] || (pkg.isNew && k === "freight" ? remainingInit("charges") : "");
   const [discount, setDiscount] = useState<string>(initialDiscount());
   const [freight, setFreight] = useState(initialCharge("freight"));
   const [packing, setPacking] = useState(initialCharge("packing"));
@@ -2311,7 +2310,7 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
         }
         // Freight/Packing/Insurance/VAT 를 품목표 tfoot 안(리스트 하단·Total 위)에 넣는다.
         // Items total − Discount = Subtotal(할인 후 물품가) → + Freight + Packing + Insurance + VAT = Total.
-        footerRows={invoiceFooterRows({ subtotal, discount, setDiscount, freight, setFreight, packing, setPacking, insurance, setInsurance, vatRate, vatAmount, totalInvoiceValue, currency })}
+        footerRows={invoiceFooterRows({ subtotal, discount, setDiscount, freight, setFreight, packing, setPacking, insurance, setInsurance, vatRate, vatAmount, totalInvoiceValue, currency, mergeCharges: true })}
       />
       {split.show || pkg.isNew ? (
         <PackageSplitPanel
@@ -3586,15 +3585,36 @@ function invoiceFooterRows(p: {
   freight: string; setFreight: (v: string) => void; packing: string; setPacking: (v: string) => void;
   insurance: string; setInsurance: (v: string) => void;
   vatRate: number | string; vatAmount: number; totalInvoiceValue: number; currency: string;
+  /** CI: Freight·Packing·Insurance 를 한 줄로 받는다(값은 freight 에, 나머지는 비움). */
+  mergeCharges?: boolean;
 }) {
   const net = p.subtotal - Math.abs(num(p.discount));
+  const charges = num(p.freight) + num(p.packing) + num(p.insurance);
+  const chargeRows = p.mergeCharges
+    ? [{
+        label: "Freight, Packing, Insurance, etc.",
+        value: (
+          <AmountInput
+            className="foot-charge-input"
+            value={p.packing || p.insurance ? String(round2(charges)) : p.freight}
+            onChange={(e) => {
+              p.setFreight(String(parseAmountInput(e.target.value) ?? ""));
+              p.setPacking("");
+              p.setInsurance("");
+            }}
+          />
+        ),
+      }]
+    : [
+        { label: "Freight", value: <AmountInput className="foot-charge-input" value={p.freight} onChange={(e) => p.setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
+        { label: "Packing", value: <AmountInput className="foot-charge-input" value={p.packing} onChange={(e) => p.setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
+        { label: "Insurance", value: <AmountInput className="foot-charge-input" value={p.insurance} onChange={(e) => p.setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
+      ];
   return [
     { label: <span className="foot-sub-label">Items total</span>, value: <DualCurrencyAmount value={p.subtotal} currency={p.currency} /> },
     { label: "Discount (−)", value: <AmountInput className="foot-charge-input" value={p.discount} onChange={(e) => p.setDiscount(String(Math.abs(parseAmountInput(e.target.value) ?? 0) || ""))} /> },
     { label: "Subtotal", strong: true, value: <DualCurrencyAmount value={net} currency={p.currency} /> },
-    { label: "Freight", value: <AmountInput className="foot-charge-input" value={p.freight} onChange={(e) => p.setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
-    { label: "Packing", value: <AmountInput className="foot-charge-input" value={p.packing} onChange={(e) => p.setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
-    { label: "Insurance", value: <AmountInput className="foot-charge-input" value={p.insurance} onChange={(e) => p.setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
+    ...chargeRows,
     { label: `VAT (${num(p.vatRate)}%)`, value: <DualCurrencyAmount value={p.vatAmount} currency={p.currency} /> },
     { label: "Total invoice value", grand: true, value: <><DualCurrencyAmount value={p.totalInvoiceValue} currency={p.currency} /><span className="fx-note">{fxRateText()}</span></> },
   ];
