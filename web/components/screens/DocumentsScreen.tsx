@@ -1906,6 +1906,11 @@ function PiOptionalSections({
             ))}
           </tbody>
         </table>
+        <p className="hint-inline" style={{ marginTop: 6 }}>
+          Linked with the Packing List total row (package count · type · size · G/W · N/W) — whichever you save
+          last updates the other. With one CI the PL total = all packages; when packages are split into
+          separate CIs, Package 1 ↔ PL-1, Package 2 ↔ PL-2…
+        </p>
       </fieldset>
     </div>
   );
@@ -2572,7 +2577,8 @@ function PackingListTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: P
       <p className="hint-inline" style={{ marginTop: 6 }}>
         여러 품목이 상자 하나에 들어가면 품목별로 나누지 말고 <b>합계행에 전체 포장 규격</b>(개수·종류·N.W.·G.W.·용적·L×W×H cm)을
         적으세요. 비워 두면 품목별 입력의 합계(회색 안내값)가 문서에 나갑니다. 이 값은 <b>Shipping Mark 탭의 케이스 수·중량·치수와 같은 값</b>이라
-        한쪽에서 고치면 양쪽 다 바뀝니다. 용적은 치수를 적으면 자동으로 계산해 보여줍니다.
+        한쪽에서 고치면 양쪽 다 바뀝니다. <b>Proforma Invoice 의 Packing information 과도 연동</b>됩니다 — 저장하면 PI 포장 정보가 이 값으로
+        맞춰지고, PI 에서 고쳐 저장하면 이 합계행이 바뀝니다(CI 를 포장별로 나눴으면 Package 1 ↔ PL-1, Package 2 ↔ PL-2). 용적은 치수를 적으면 자동으로 계산해 보여줍니다.
       </p>
       <label className="form-field" style={{ marginTop: 16 }}>
         <span>Packing Information</span>

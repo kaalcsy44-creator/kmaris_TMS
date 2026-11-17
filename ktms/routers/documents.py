@@ -83,6 +83,7 @@ from _core import (
 )
 from pydantic import BaseModel
 
+from services import packing_sync
 from services import hs_suggest as _hs
 
 
@@ -414,12 +415,17 @@ def _apply_pi(s, pi, body: ProformaInvoiceSave, *, order_id, rfq_id):
             pi.order_id = order_id
         if rfq_id and not pi.rfq_id:
             pi.rfq_id = rfq_id
+    old_rows = packing_sync.pi_rows(pi.terms)
     pi.date = body.date or pi.date or date.today().isoformat()
     pi.currency = body.currency or "USD"
     pi.vat_rate = body.vat_rate or 0.0
     pi.items = body.items or []
     pi.shipping = body.shipping or {}
     pi.terms = body.terms or {}
+    # Packing information 을 고쳤으면 Packing List 합계행(CI 의 포장 규격)도 같이 맞춘다.
+    oid = pi.order_id or order_id
+    if oid and packing_sync.pi_rows(pi.terms) != old_rows:
+        packing_sync.push_pi_to_cis(pi, _order_cis(s, oid))
     return pi
 
 
@@ -653,8 +659,13 @@ def save_commercial_invoice(order_id: int, body: CommercialInvoiceSave, ci_id: i
         ci.currency = body.currency or "USD"
         ci.vat_rate = body.vat_rate or 0.0
         ci.items = body.items or []
+        old_pack = packing_sync.totals_of(ci.shipping)
         ci.shipping = body.shipping or {}
         ci.terms = body.terms or {}
+        # Packing List 합계행(포장 규격)을 고쳤으면 PI 의 Packing information 도 같이 맞춘다.
+        if packing_sync.totals_of(ci.shipping) != old_pack:
+            s.flush()
+            packing_sync.push_cis_to_pi(_latest_pi(s, order.id), _order_cis(s, order.id))
         s.commit()
         return {"ok": True, "id": ci.id, "ci_no": ci.ci_no}
     finally:

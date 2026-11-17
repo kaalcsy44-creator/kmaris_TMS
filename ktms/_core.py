@@ -3479,6 +3479,10 @@ def _document_detail_payload(session, order: Order) -> dict:
                                  for c in cis if pls.get(c.id)])
     sa = _latest_sa(session, order.id)
     tax = _latest_tax(session, ci.id if ci else None)
+    # PI Packing information ↔ PL 합계행: 한쪽만 적혀 있으면 빈 쪽에 보여 준다(services/packing_sync).
+    from services import packing_sync
+    pi_terms_view, pack_sh = packing_sync.fill_views(
+        (pi.terms or {}) if pi else None, [c.shipping or {} for c in cis])
     pod = (session.query(DeliveryProof).filter_by(order_id=order.id)
            .order_by(DeliveryProof.created_at.desc()).first())
     rfq = _rfq_for_order(session, order)
@@ -3556,14 +3560,15 @@ def _document_detail_payload(session, order: Order) -> dict:
             "vat_rate": pi.vat_rate or 0.0,
             "items": pi.items or [],
             "shipping": pi.shipping or {},
-            "terms": pi.terms or {},
+            "terms": pi_terms_view or {},
             "missing": _missing_items(order.items or [], pi.items or []),
         },
-        "ci": _ci_view(order, ci, ci_union),
+        "ci": ({**_ci_view(order, ci, ci_union), "shipping": pack_sh[0]} if ci else None),
         "pl": _pl_view(order, pl, pl_union, ci),
         # 포장별 분리 발행 — CI 한 벌마다 딸린 PL 과 함께(먼저 만든 순, 첫 벌 = 대표).
-        "cis": [{**_ci_view(order, c, ci_union), "pl": _pl_view(order, pls.get(c.id), pl_union, c)}
-                for c in cis],
+        "cis": [{**_ci_view(order, c, ci_union), "shipping": pack_sh[i],
+                 "pl": _pl_view(order, pls.get(c.id), pl_union, c)}
+                for i, c in enumerate(cis)],
         # 아직 어느 CI 에도 안 들어간 오더 품목 — 새 CI(다음 포장)의 초기 품목.
         "ci_remaining": _ci_remaining(order.items or [], cis) if cis else (order.items or []),
         "sa": None if not sa else {
