@@ -148,7 +148,12 @@ def from_records(session, lines: list[dict], exclude_doc: str = "") -> dict:
         row = {**ln, "code": "", "alt": "", "source": "", "confidence": "", "reason": ""}
         key = _pn(ln.get("part_no"))
         h, m = hist.get(key), master.get(key) or {}
-        if h:
+        cur = norm_code(ln.get("hs_code"))
+        if cur:
+            # 이미 코드가 적힌 줄은 다시 묻지 않는다(전체 Suggest 가 채운 줄을 또 AI 에 보내지 않게).
+            # 다시 확인하려면 그 줄의 칸을 비우거나 줄별 Suggest 를 쓴다.
+            row.update(code=cur, source="current", confidence="high", reason="Already on this line")
+        elif h:
             more = f" +{len(h['docs']) - 1}" if len(h["docs"]) > 1 else ""
             row.update(code=h["code"], source="history", confidence="high",
                        reason=f"Used before on {h['docs'][0]}{more}")

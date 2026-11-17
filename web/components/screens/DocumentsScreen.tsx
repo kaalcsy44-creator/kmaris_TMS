@@ -29,6 +29,7 @@ import {
   fetchCompanyProfile,
   fetchCustomers,
   fetchCustomerPartyOptions,
+  suggestHsCodes,
   type PartyOptions,
 } from "@/lib/api";
 import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
@@ -1593,6 +1594,7 @@ function ProformaInvoiceTab({
         currency={currency}
         tableId="pi-items"
         hsDefault={shipping.hs_code || ""}
+        hsDocNo={data.pi?.pi_no || ""}
         decimals={decimalsOf(terms.decimals)}
         onDecimals={(d) => setTerms((t) => ({ ...t, decimals: d == null ? "" : String(d) }))}
         headerActions={
@@ -2166,6 +2168,7 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
         currency={currency}
         tableId="ci-items"
         hsDefault={shipping.hs_code || ""}
+        hsDocNo={data.ci?.ci_no || ""}
         decimals={decimalsOf(terms.decimals)}
         onDecimals={(d) => setTerms((t) => ({ ...t, decimals: d == null ? "" : String(d) }))}
         headerActions={
@@ -3473,6 +3476,7 @@ function ItemEditor({
   headerActions,
   footerRows,
   hsDefault,
+  hsDocNo,
   packingTotals,
   decimals: decimalsProp = null,
   onDecimals,
@@ -3502,8 +3506,33 @@ function ItemEditor({
   /** 주면(PI·CI) 줄별 HS Code 칸을 Maker 뒤에 둔다. 값은 문서 기본 HS Code — 빈 줄의 회색 안내값이자
    *  저장 시 빈 줄에 들어가는 값. 줄에 적은 코드가 우선한다. */
   hsDefault?: string;
+  /** 지금 편집 중인 문서 번호 — 줄별 HS Suggest 가 이 문서 값을 근거에서 뺀다. */
+  hsDocNo?: string;
 }) {
   const hs = hsDefault !== undefined && !packing;
+  // 줄별 HS Suggest — 그 줄 하나만 묻는다(지난 문서 → 마스터 → 보관된 AI 답 → AI).
+  const [hsBusy, setHsBusy] = useState<number | null>(null);
+  const [hsNote, setHsNote] = useState<Record<number, string>>({});
+  async function suggestRowHs(i: number) {
+    const it = items[i];
+    if (!it?.part_no && !it?.description) return;
+    setHsBusy(i);
+    try {
+      const r = await suggestHsCodes([{ part_no: it.part_no, description: it.description, maker: it.maker }], hsDocNo || "");
+      const ln = r.lines[0];
+      const src: Record<string, string> = { history: "Used before", master: "Item master", saved: "Saved AI answer", ai: "AI" };
+      if (ln?.code) {
+        setItems(items.map((x, k) => (k === i ? { ...x, hs_code: ln.code } : x)));
+        setHsNote((n) => ({ ...n, [i]: `${src[ln.source] || ln.source} · ${ln.confidence} — ${ln.reason}${ln.alt ? ` (alt ${ln.alt})` : ""}` }));
+      } else {
+        setHsNote((n) => ({ ...n, [i]: ln?.reason || "No code found for this line." }));
+      }
+    } catch (e) {
+      setHsNote((n) => ({ ...n, [i]: e instanceof Error ? e.message : "Suggestion failed" }));
+    } finally {
+      setHsBusy(null);
+    }
+  }
   const o = hs ? 1 : 0;   // HS 칸이 끼면 Qty 이후 열 번호가 하나씩 밀린다
   // 단가·금액을 발행 자릿수로 반올림(금액 = 반올림 단가 × 수량을 다시 반올림). 안 고르면 0 자리.
   const decimals: number = decimalsProp ?? 0;
@@ -3699,13 +3728,25 @@ function ItemEditor({
                 <td><textarea {...keys.cell(i, 2)} className="wrapcell" rows={1} value={item.maker || ""} onChange={(e) => patch(i, "maker", e.target.value)} /></td>
                 {hs ? (
                   <td>
-                    <input
-                      {...keys.cell(i, 3)}
-                      value={item.hs_code || ""}
-                      placeholder={hsDefault || ""}
-                      title={hsDefault ? `Blank = document default ${hsDefault}` : "HS Code for this line"}
-                      onChange={(e) => patch(i, "hs_code", e.target.value)}
-                    />
+                    <div className="hs-cell">
+                      <input
+                        {...keys.cell(i, 3)}
+                        value={item.hs_code || ""}
+                        placeholder={hsDefault || ""}
+                        title={hsNote[i] || (hsDefault ? `Blank = document default ${hsDefault}` : "HS Code for this line")}
+                        onChange={(e) => patch(i, "hs_code", e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="hs-cell-btn"
+                        disabled={hsBusy !== null || (!item.part_no && !item.description)}
+                        title={hsNote[i] || "Suggest an HS Code for this line only"}
+                        aria-label="Suggest HS Code for this line"
+                        onClick={() => suggestRowHs(i)}
+                      >
+                        {hsBusy === i ? "…" : "✦"}
+                      </button>
+                    </div>
                   </td>
                 ) : null}
                 <td><AmountInput {...keys.cell(i, 3 + o)} className="num" value={item.qty} onChange={(e) => patch(i, "qty", e.target.value)} /></td>

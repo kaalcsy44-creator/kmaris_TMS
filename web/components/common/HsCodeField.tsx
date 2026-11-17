@@ -8,7 +8,9 @@ import { suggestHsCodes, type HsSuggestLine, type HsSuggestResult } from "@/lib/
    이 칸은 문서 기본 코드(줄별 HS Code 칸을 비운 줄에 쓰인다). onApplyLines 를 주면 추천 코드를
    줄마다 넣을 수 있다 — 줄마다 코드가 다를 때. */
 
-const SOURCE: Record<string, string> = { history: "Used before", master: "Item master", saved: "Saved AI answer", ai: "AI" };
+const SOURCE: Record<string, string> = {
+  current: "Already set", history: "Used before", master: "Item master", saved: "Saved AI answer", ai: "AI",
+};
 
 /** 같은 코드를 받은 줄끼리 묶는다 — 줄이 많은 코드가 위로. 코드를 못 찾은 줄은 맨 아래. */
 function groupLines(lines: HsSuggestLine[]) {
@@ -28,7 +30,7 @@ export default function HsCodeField({
 }: {
   value: string;
   onChange: (v: string) => void;
-  items: { part_no?: string; description?: string; maker?: string }[];
+  items: { part_no?: string; description?: string; maker?: string; hs_code?: string }[];
   /** 지금 편집 중인 문서 번호 — 이 문서의 값은 근거에서 뺀다. */
   docNo: string;
   /** 주면 "Apply to each line" — 추천 코드를 줄마다 넣는다(키 = items 의 1부터 순번). */
@@ -46,7 +48,8 @@ export default function HsCodeField({
     try {
       setResult(
         await suggestHsCodes(
-          items.map(({ part_no, description, maker }) => ({ part_no, description, maker })),
+          // 이미 코드가 적힌 줄은 그 코드를 함께 보낸다 — 서버가 그대로 두고 AI 에 묻지 않는다(빈 줄만 추천).
+          items.map(({ part_no, description, maker, hs_code }) => ({ part_no, description, maker, hs_code })),
           docNo,
         ),
       );
@@ -69,7 +72,7 @@ export default function HsCodeField({
             type="button"
             className="btn sm"
             disabled={busy || !hasLines}
-            title={hasLines ? "Suggest from past documents and the item master, then AI for the rest" : "Add items first"}
+            title={hasLines ? "Suggest codes for lines whose HS Code is blank (past documents → item master → saved AI answers → AI). Lines that already have a code are kept." : "Add items first"}
             onClick={run}
           >
             {busy ? "Checking…" : "Suggest"}

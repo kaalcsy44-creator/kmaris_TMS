@@ -21960,3 +21960,38 @@ td.seq .seq-lid.seq-lids { white-space: normal; color: #0055a8; font-weight: 600
 .pkg-chip.add:hover {
   color: var(--ink);
 }
+
+/* 품목표 줄별 HS Code 칸 + 그 줄만 추천 버튼 */
+.hs-cell {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.hs-cell input {
+  flex: 1;
+  min-width: 0;
+}
+.hs-cell-btn {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.hs-cell-btn:hover:not(:disabled) {
+  color: var(--navy);
+  border-color: var(--navy);
+}
+.hs-cell-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+@media print {
+  .hs-cell-btn { display: none; }
+}

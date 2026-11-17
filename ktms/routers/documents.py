@@ -246,6 +246,7 @@ class HsSuggestLine(BaseModel):
     part_no: str | None = ""
     description: str | None = ""
     maker: str | None = ""
+    hs_code: str | None = ""   # 이미 적힌 코드 — 있으면 그대로 두고 AI 에 보내지 않는다
 
 
 class HsSuggestIn(BaseModel):
@@ -257,7 +258,8 @@ class HsSuggestIn(BaseModel):
 def hs_suggest(body: HsSuggestIn):
     """품목 줄 → HS 코드 추천(지난 문서·품목 마스터, 없으면 Claude). 저장하지 않는다."""
     lines = [{"no": i + 1, "part_no": (l.part_no or "").strip(),
-              "description": (l.description or "").strip(), "maker": (l.maker or "").strip()}
+              "description": (l.description or "").strip(), "maker": (l.maker or "").strip(),
+              "hs_code": (l.hs_code or "").strip()}
              for i, l in enumerate(body.lines)]
     lines = [l for l in lines if l["part_no"] or l["description"]]
     if not lines:

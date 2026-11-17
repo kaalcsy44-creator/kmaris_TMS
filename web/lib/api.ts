@@ -2044,7 +2044,7 @@ export type HsSuggestLine = {
   maker: string;
   code: string;
   alt: string;
-  source: "history" | "master" | "saved" | "ai" | "";
+  source: "current" | "history" | "master" | "saved" | "ai" | "";
   confidence: "high" | "medium" | "low" | "";
   reason: string;
 };
@@ -2055,7 +2055,7 @@ export type HsSuggestResult = {
   note: string;
 };
 export function suggestHsCodes(
-  lines: { part_no?: string; description?: string; maker?: string }[],
+  lines: { part_no?: string; description?: string; maker?: string; hs_code?: string }[],
   excludeDoc = "",
 ): Promise<HsSuggestResult> {
   return post<HsSuggestResult>("/api/admin/hs-suggest", { lines, exclude_doc: excludeDoc });
