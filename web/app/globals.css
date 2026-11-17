@@ -21751,3 +21751,66 @@ td.seq .seq-lid.seq-lids { white-space: normal; color: #0055a8; font-weight: 600
   padding: 10px 16px; border-radius: 10px; background: #14532d; color: #fff;
   font-size: 13px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
 }
+
+/* ── 회사 신규 등록 창 — PC 가로 배치(왼쪽 Company · 오른쪽 Contact) ──────────────
+   MasterSection 의 wideForm. 칸마다 .msf-<키> 껍데기가 씌워져 있어 자리를 키로 잡는다.
+   세로 스크롤 없이 한 화면에 들도록 긴 안내문은 걷고 붙여넣기 상자는 낮춘다. */
+.msw { display: grid; grid-template-columns: minmax(0, 2.3fr) minmax(0, 1fr); gap: 18px; }
+.msw > section { min-width: 0; }
+.msw-person { border-left: 1px solid var(--line, #e5e9f0); padding-left: 18px; }
+.msw-h {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted, #6b7280); margin-bottom: 8px;
+}
+.pl-modal--form .msw .msw-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-flow: row dense;
+  gap: 10px 14px;
+  align-items: start;
+}
+.pl-modal--form .msw .msw-pgrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 12px; }
+.msw .msf { min-width: 0; }
+.msw .msf > .form-field, .msw .msf > .mv-field { margin: 0; }
+/* 자리 — 이름·주소는 두 칸, 홈페이지(+자동 채우기 상자)는 오른쪽 절반 두 줄, 문장 칸은 반씩 */
+.msw .msf-name, .msw .msf-address { grid-column: span 2; }
+.msw .msf-website { grid-column: span 2; grid-row: span 2; }
+.msw .msf-roles { grid-column: span 2; }
+.msw .msf-specialization, .msw .msf-note { grid-column: span 2; order: 1; }
+/* 2단 폼에서 한 줄을 통째로 쓰던 칸들 — 여기서는 제 칸(.msf)에 머문다 */
+.msw .msw-grid .logo-field,
+.msw .msw-grid .company-area-field,
+.msw .msw-grid .mv-field { grid-column: auto; }
+.msw .company-area-field textarea { height: 76px; }
+/* 오른쪽 판: 담당자 이름·담당 분야 반씩, 이메일·전화·지역은 한 줄씩 */
+.msw .msw-pgrid .mv-field { grid-column: 1 / -1; }
+/* 홈페이지 자동 채우기 — ①②를 나란히, 긴 설명은 걷는다 */
+.msw .site-fill-box { flex-direction: row; gap: 12px; margin-top: 8px; padding: 8px 10px; }
+.msw .site-fill-box > * { flex: 1 1 0; min-width: 0; }
+.msw .scan-panel > .hint-inline:last-child { display: none; }
+/* 로고·명함 상자 낮추기 */
+.msw .logo-drop { min-height: 52px; padding: 6px; }
+.msw .logo-preview { max-height: 44px; }
+.msw .logo-actions input[type="file"] { max-width: 100%; font-size: 12px; }
+.msw .bc-scan { padding: 8px 10px; margin-bottom: 10px; }
+.msw .bc-scan-head { margin-bottom: 6px; }
+.msw .bc-scan-head .hint-inline { display: none; }
+.msw .bc-scan .bc-drop { min-height: 44px; }
+.msw .bc-preview { max-height: 60px; }
+/* 단계 안내 띠도 한 줄로 */
+.pl-modal--form:has(.msw) .pn-flow-banner { flex-direction: row; align-items: center; gap: 14px; padding: 7px 12px; }
+
+@media (max-width: 1100px) {
+  .msw { display: block; }
+  .msw-person { border-left: 0; padding-left: 0; margin-top: 14px; }
+  .msw .msf { display: contents; }
+  .pl-modal--form .msw .msw-grid,
+  .pl-modal--form .msw .msw-pgrid { grid-template-columns: 1fr 1fr; }
+  .msw .msw-grid .logo-field,
+  .msw .msw-grid .company-area-field,
+  .msw .msw-grid .mv-field { grid-column: 1 / -1; }
+  .msw .site-fill-box { flex-direction: column; }
+}
+@media (max-width: 720px) {
+  .pl-modal--form .msw .msw-grid,
+  .pl-modal--form .msw .msw-pgrid { grid-template-columns: 1fr; }
+}

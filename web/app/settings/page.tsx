@@ -6823,35 +6823,68 @@ Every contact of ${names.length === 1 ? "this company" : "these companies"} is r
     : hideCompany
     ? `＋ New contact — ${requiredValue}`
     : "+ New";
+  // 회사째 새로 등록하는 창(회사 칸 + 사람 칸이 함께 선다)은 PC 에서 가로로 넓게 편다 —
+  // 왼쪽 Company · 오른쪽 Contact 두 판으로 나눠, 세로로 굴리지 않고 한 화면에 다 든다.
+  // 좁은 화면(≤1100px)에서는 CSS 가 이 판들을 풀어 예전처럼 한 줄로 쌓는다.
+  const wideForm = !!companyFields?.length && !hideCompany;
+  const renderOne = ([key, label]: [keyof T, string]) => {
+    const custom = renderField?.({ key, label, form, setForm, rows });
+    if (custom) return custom;
+    return (
+      <TextField
+        label={label}
+        type={numeric.includes(key) ? "number" : "text"}
+        value={String(form[key] ?? "")}
+        onChange={(v) => setForm({ ...form, [key]: numeric.includes(key) ? Number(v) : v })}
+      />
+    );
+  };
+  const wrapOne = (f: [keyof T, string]) => (
+    <div key={String(f[0])} className={`msf msf-${String(f[0])}`}>{renderOne(f)}</div>
+  );
   const editor = editId !== null ? (
-    <Modal title={flowOpen && newFlow?.title ? newFlow.title : editorTitle} onClose={cancel} form>
+    <Modal
+      title={flowOpen && newFlow?.title ? newFlow.title : editorTitle}
+      onClose={cancel}
+      form
+      maxWidth={wideForm ? 1320 : undefined}
+    >
       {flowOpen && newFlow?.banner ? <div className="pn-flow-banner">{newFlow.banner}</div> : null}
       {copying && copyHint ? <div className="ms-copy-hint">{copyHint}</div> : null}
-      {topForm?.(form, setForm, rows)}
-      {hideCompany ? (
-        // 회사 이름은 창 제목이 들었다 — 여기서는 무엇이 이 창에 없는지와 어디서
-        // 고치는지만 밝힌다. 없는 칸을 찾아 헤매지 않게.
-        <div className="ms-of-company">
-          Address, website, terms, logo and the rest of the company details belong to the
-          company — edit them in 🏢 Company info.
+      {wideForm ? (
+        <div className="msw">
+          <section className="msw-co">
+            <div className="msw-h">Company</div>
+            <div className="form-grid msw-grid">
+              {shownFields.filter(([k]) => companyFields!.includes(k)).map(wrapOne)}
+            </div>
+          </section>
+          <section className="msw-person">
+            <div className="msw-h">Contact</div>
+            {topForm?.(form, setForm, rows)}
+            <div className="form-grid msw-pgrid">
+              {shownFields.filter(([k]) => !companyFields!.includes(k)).map(wrapOne)}
+              {extraForm?.(form, setForm, { isEdit })}
+            </div>
+          </section>
         </div>
-      ) : null}
-      <div className="form-grid">
-        {shownFields.map(([key, label]) => {
-          const custom = renderField?.({ key, label, form, setForm, rows });
-          if (custom) return <Fragment key={String(key)}>{custom}</Fragment>;
-          return (
-            <TextField
-              key={String(key)}
-              label={label}
-              type={numeric.includes(key) ? "number" : "text"}
-              value={String(form[key] ?? "")}
-              onChange={(v) => setForm({ ...form, [key]: numeric.includes(key) ? Number(v) : v })}
-            />
-          );
-        })}
-        {extraForm?.(form, setForm, { isEdit })}
-      </div>
+      ) : (
+        <>
+          {topForm?.(form, setForm, rows)}
+          {hideCompany ? (
+            // 회사 이름은 창 제목이 들었다 — 여기서는 무엇이 이 창에 없는지와 어디서
+            // 고치는지만 밝힌다. 없는 칸을 찾아 헤매지 않게.
+            <div className="ms-of-company">
+              Address, website, terms, logo and the rest of the company details belong to the
+              company — edit them in 🏢 Company info.
+            </div>
+          ) : null}
+          <div className="form-grid">
+            {shownFields.map((f) => <Fragment key={String(f[0])}>{renderOne(f)}</Fragment>)}
+            {extraForm?.(form, setForm, { isEdit })}
+          </div>
+        </>
+      )}
       <div className="form-actions">
         {(isEdit ? canEdit : canCreate) ? (
           <button className="btn primary" disabled={!requiredValue} onClick={save}>
