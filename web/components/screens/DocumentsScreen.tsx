@@ -3,7 +3,7 @@
 import AmountInput from "@/components/common/AmountInput";
 import { filenameFromDisposition } from "@/lib/download";
 import DecimalsSelect, { decimalsOf } from "@/components/common/DecimalsSelect";
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   archiveIssuedDoc,
@@ -887,12 +887,8 @@ function DocEditorContent({
             <ProformaInvoiceTab key={`pi-${data.order.id}-${data.pi?.id ?? 0}`} data={data} onChanged={afterChange} target={{ orderId: data.order.id }} />
           ) : kind === "spi" ? (
             <ServiceProformaInvoiceTab key={`spi-${data.order.id}-${data.pi?.id ?? 0}`} data={data} onChanged={afterChange} target={{ orderId: data.order.id }} />
-          ) : kind === "ci" ? (
-            <CommercialInvoiceTab key={`ci-${data.order.id}-${data.ci?.id ?? 0}`} data={data} onChanged={afterChange} />
-          ) : kind === "sm" ? (
-            <ShippingMarksTab key={`sm-${data.order.id}-${data.ci?.id ?? 0}`} data={data} onChanged={afterChange} />
-          ) : kind === "pl" ? (
-            <PackingListTab key={`pl-${data.order.id}-${data.pl?.id ?? 0}`} data={data} onChanged={afterChange} />
+          ) : kind === "ci" || kind === "sm" || kind === "pl" ? (
+            <PackageDocs kind={kind} data={data} onChanged={afterChange} />
           ) : kind === "pod" ? (
             <PodTab key={`pod-${data.order.id}`} data={data} onChanged={afterChange} />
           ) : (
@@ -900,6 +896,104 @@ function DocEditorContent({
           )}
         </>
       ) : null}
+    </>
+  );
+}
+
+// ── 포장(패키지)별 분리 발행 ─────────────────────────────────────────────────
+// 한 P/O 를 여러 포장으로 나눠 보내면 포장마다 CI·PL·Shipping Mark 를 따로 낸다(2026-11-17).
+// CI 한 벌 = 포장 하나, PL·Shipping Mark 는 그 CI 에 딸린다. 첫 벌이 대표 CI —
+// 9단계 세금계산서·AR 은 대표 CI 에 붙는다(청구는 P/O 하나에 한 번).
+export type PkgSel = {
+  /** 고른 CI id(새 포장 작성 중이면 0). */
+  ciId: number;
+  /** 몇 번째 포장(1부터). 번호 자동 규칙(-CI-2, -PL-2)에 쓴다. */
+  setNo: number;
+  isNew: boolean;
+  /** 새 포장 CI 의 초기값(당사자·운송·조건)을 빌려 올 대표 CI. */
+  template: DocumentDetail["ci"];
+};
+
+// CI·PL·Shipping Mark 탭은 탭을 바꿀 때마다 새로 그려진다 — 고른 포장을 오더별로 기억한다.
+const pkgChoice = new Map<number, number | "new">();
+
+function PackageDocs({ kind, data, onChanged }: { kind: "ci" | "sm" | "pl"; data: DocumentDetail; onChanged: () => void }) {
+  const cis = data.cis ?? (data.ci ? [{ ...data.ci, pl: data.pl }] : []);
+  const [sel, setSelState] = useState<number | "new">(() => {
+    const v = pkgChoice.get(data.order.id);
+    if (v === "new" && kind === "ci") return "new";
+    return typeof v === "number" && cis.some((c) => c.id === v) ? v : (cis[0]?.id ?? 0);
+  });
+  // 새 포장 CI 를 저장하고 다시 불러오면 그 CI 를 고른 상태로 둔다.
+  const prevCount = useRef(cis.length);
+  useEffect(() => {
+    if (cis.length > prevCount.current && sel === "new") setSel(cis[cis.length - 1].id);
+    else if (typeof sel === "number" && sel && !cis.some((c) => c.id === sel)) setSel(cis[0]?.id ?? 0);
+    prevCount.current = cis.length;
+  }, [cis.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  function setSel(v: number | "new") {
+    pkgChoice.set(data.order.id, v);
+    setSelState(v);
+  }
+
+  const isNew = sel === "new" || cis.length === 0;
+  const idx = isNew ? -1 : Math.max(0, cis.findIndex((c) => c.id === sel));
+  const cur = isNew ? null : cis[idx];
+  const pkg: PkgSel = {
+    ciId: cur?.id ?? 0,
+    setNo: isNew ? cis.length + 1 : idx + 1,
+    isNew: cis.length > 0 && isNew,
+    template: cis[0] ?? null,
+  };
+  const view: DocumentDetail = cur ? { ...data, ci: cur, pl: cur.pl } : { ...data, ci: null, pl: null };
+  const canSplit = kind === "ci" && cis.length > 0 && data.order.id > 0 && canEditDoc(data);
+  const showBar = cis.length > 1 || sel === "new" || canSplit;
+
+  return (
+    <>
+      {showBar ? (
+        <div className="pkg-bar" role="tablist" aria-label="Packages">
+          <span className="pkg-bar-label">Packages</span>
+          {cis.map((c, i) => (
+            <button
+              key={c.id}
+              type="button"
+              className={`pkg-chip${!isNew && c.id === cur?.id ? " on" : ""}`}
+              onClick={() => setSel(c.id)}
+              title={i === 0 ? "Main CI — the tax invoice / billing (stage 9) is attached to this one" : undefined}
+            >
+              #{i + 1} · {c.ci_no || "CI"}{c.pl ? " · PL ✓" : ""}
+            </button>
+          ))}
+          {sel === "new" ? (
+            <button type="button" className="pkg-chip on">#{cis.length + 1} · new</button>
+          ) : null}
+          {canSplit && sel !== "new" ? (
+            <button
+              type="button"
+              className="pkg-chip add"
+              onClick={() => setSel("new")}
+              title="Shipping in several packages? Issue a separate Commercial Invoice + Packing List for the next package"
+            >
+              ＋ Add package (separate CI · PL)
+            </button>
+          ) : null}
+          {sel === "new" ? (
+            <span className="hint-inline">
+              New package — items not yet on any CI are loaded. Save to create its CI, then fill its Packing List / Shipping Mark.
+            </span>
+          ) : cis.length > 1 ? (
+            <span className="hint-inline">Each package has its own CI · PL · Shipping Mark. Billing (stage 9) uses #1.</span>
+          ) : null}
+        </div>
+      ) : null}
+      {kind === "ci" ? (
+        <CommercialInvoiceTab key={`ci-${data.order.id}-${pkg.ciId}-${pkg.isNew}`} data={view} pkg={pkg} onChanged={onChanged} />
+      ) : kind === "sm" ? (
+        <ShippingMarksTab key={`sm-${data.order.id}-${pkg.ciId}`} data={view} pkg={pkg} onChanged={onChanged} />
+      ) : (
+        <PackingListTab key={`pl-${data.order.id}-${pkg.ciId}-${view.pl?.id ?? 0}`} data={view} pkg={pkg} onChanged={onChanged} />
+      )}
     </>
   );
 }
@@ -1911,30 +2005,38 @@ function serviceInfoDefaults(order: DocumentDetail["order"]): Record<string, str
   };
 }
 
-function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
-  // CI 번호 자동생성 규칙 = P/O 번호 + "-CI". 값이 없거나 규칙과 같으면 자동, 아니면 직접입력.
-  const autoCiNo = data.order.po_no ? `${data.order.po_no}-CI` : "";
+function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: PkgSel; onChanged: () => void }) {
+  // CI 번호 자동생성 규칙 = P/O 번호 + "-CI"(포장 2부터 "-CI-2"). 값이 없거나 규칙과 같으면 자동, 아니면 직접입력.
+  const autoCiNo = data.order.po_no ? `${data.order.po_no}-CI${pkg.setNo > 1 ? `-${pkg.setNo}` : ""}` : "";
+  // 새 포장 CI — 품목은 아직 어느 CI 에도 안 실린 것, 당사자·운송·조건은 대표 CI 에서 빌려 온다
+  // (포장 규격·케이스 수는 포장마다 다르므로 빼고).
+  const tpl = pkg.isNew ? pkg.template : null;
+  const tplShipping = tpl ? Object.fromEntries(Object.entries(tpl.shipping || {})
+    .filter(([k]) => !Object.values(PACKING_TOTAL_KEYS).includes(k) && k !== "shipping_marks")) : undefined;
+  const baseItems = data.ci?.items || (pkg.isNew ? data.ci_remaining : undefined) || data.order.items;
   const [ciNo, setCiNo] = useState(data.ci?.ci_no || autoCiNo);
   const [ciMode, setCiMode] = useState<"auto" | "manual">(
     data.ci?.ci_no && data.ci.ci_no !== autoCiNo ? "manual" : "auto",
   );
   const [date, setDate] = useState(data.ci?.date || today());
   // 통화·거래조건·선적 장소는 상위 단계(고객 P/O·견적)에서 정한 값을 이어받는다(빈 칸만).
-  const [currency, setCurrency] = useState(data.ci?.currency || data.order.doc_defaults?.currency || "USD");
-  const [vatRate, setVatRate] = useState(data.ci?.vat_rate ?? 0);
+  const [currency, setCurrency] = useState(data.ci?.currency || tpl?.currency || data.order.doc_defaults?.currency || "USD");
+  const [vatRate, setVatRate] = useState(data.ci?.vat_rate ?? tpl?.vat_rate ?? 0);
   // HS Code — 문서 기본값(shipping.hs_code) + 줄별 코드(item.hs_code, 비우면 기본값). lineHsItems 참고.
-  const firstHs = (data.ci?.items || data.order.items || []).find((i) => i.hs_code)?.hs_code || "";
-  const [items, setItems] = useState<DocumentWorkItem[]>(lineHsItems(data.ci?.items || data.order.items, firstHs));
+  const firstHs = (baseItems || []).find((i) => i.hs_code)?.hs_code || tpl?.shipping?.hs_code || "";
+  const [items, setItems] = useState<DocumentWorkItem[]>(lineHsItems(baseItems, firstHs));
   // Incoterms · Payment Terms — CI/PDF/Excel 의 Shipping Information 에 출력.
+  // 새 포장은 대표 CI 의 조건을 잇되 부대비용·할인은 비운다(대표 CI 에 이미 실렸다).
   function initialTerms(): Record<string, string> {
-    return docDefaultTerms(data.order, data.ci?.terms);
+    const tt = tpl ? { ...(tpl.terms || {}), discount: "", freight: "", packing: "", insurance: "" } : undefined;
+    return docDefaultTerms(data.order, data.ci?.terms ?? tt);
   }
   function initialShipping(): Record<string, string> {
     return {
       hs_code: firstHs,
       ...defaultMarkFields(data.order),
       // 저장값 우선 + 빈 운송·장소 칸은 상위 단계 값(없으면 기존 기본값)으로 채운다.
-      ...docDefaultShipping(data.order, initialTerms().incoterms || "", data.ci?.shipping),
+      ...docDefaultShipping(data.order, initialTerms().incoterms || "", data.ci?.shipping ?? tplShipping),
     };
   }
   const [shipping, setShipping] = useState<Record<string, string>>(initialShipping());
@@ -1963,8 +2065,11 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       // 구조화 Shipping Mark → PDF 출력용 문자열로 합성해 함께 저장.
       const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
       const outTerms = { ...terms, discount, freight, packing, insurance };
-      await saveCommercialInvoice(data.order.id, { ci_no: ciNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms: outTerms });
+      await saveCommercialInvoice(data.order.id, { ci_no: ciNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms: outTerms },
+        { ciId: pkg.ciId, isNew: pkg.isNew });
       onChanged();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -1975,9 +2080,9 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     setCiNo(data.ci?.ci_no || autoCiNo);
     setCiMode(data.ci?.ci_no && data.ci.ci_no !== autoCiNo ? "manual" : "auto");
     setDate(data.ci?.date || today());
-    setCurrency(data.ci?.currency || data.order.doc_defaults?.currency || "USD");
-    setVatRate(data.ci?.vat_rate ?? 0);
-    setItems(lineHsItems(data.ci?.items || data.order.items, firstHs));
+    setCurrency(data.ci?.currency || tpl?.currency || data.order.doc_defaults?.currency || "USD");
+    setVatRate(data.ci?.vat_rate ?? tpl?.vat_rate ?? 0);
+    setItems(lineHsItems(baseItems, firstHs));
     setShipping(initialShipping());
     setTerms(initialTerms());
     setDiscount(initialDiscount());
@@ -1991,7 +2096,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
     if (!confirm("Delete this Commercial Invoice? (its Packing List is also removed)")) return;
     setBusy(true);
     try {
-      await deleteCommercialInvoice(data.order.id);
+      await deleteCommercialInvoice(data.order.id, pkg.ciId);
       onChanged();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Delete failed");
@@ -2055,9 +2160,17 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
         decimals={decimalsOf(terms.decimals)}
         onDecimals={(d) => setTerms((t) => ({ ...t, decimals: d == null ? "" : String(d) }))}
         headerActions={
-          <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
-            Load order items
-          </button>
+          <>
+            {pkg.setNo > 1 || pkg.isNew ? (
+              <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.ci_remaining || []))}
+                title="Order items not yet on any other package's CI">
+                Load remaining items
+              </button>
+            ) : null}
+            <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.order.items))}>
+              Load order items
+            </button>
+          </>
         }
         // Freight/Packing/Insurance/VAT 를 품목표 tfoot 안(리스트 하단·Total 위)에 넣는다.
         // Items total − Discount = Subtotal(할인 후 물품가) → + Freight + Packing + Insurance + VAT = Total.
@@ -2067,7 +2180,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
-          <DocPreviewButton target={{ orderId: data.order.id }} kind="ci/pdf" filename="Commercial Invoice.pdf" disabled={!data.ci} xlsxKind="ci/xlsx" />
+          <DocPreviewButton target={{ orderId: data.order.id, ciId: pkg.ciId }} kind="ci/pdf" filename="Commercial Invoice.pdf" disabled={!data.ci} xlsxKind="ci/xlsx" />
         </div>
         <div className="doc-actions-center">
           <span className="hint-inline">Total invoice value {dualCurrencyText(totalInvoiceValue, currency)} · {fxRateText()}</span>
@@ -2098,7 +2211,7 @@ function CommercialInvoiceTab({ data, onChanged }: { data: DocumentDetail; onCha
 
 // Shipping Mark 전용 탭 — 케이스 마킹(sm_*) 입력. 값은 CI 레코드의 shipping 에 저장되며
 // 저장은 기존 CI 엔드포인트를 재사용(다른 CI 필드는 그대로 보존하고 sm_* 만 갱신).
-function ShippingMarksTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
+function ShippingMarksTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: PkgSel; onChanged: () => void }) {
   const [shipping, setShipping] = useState<Record<string, string>>({
     ...defaultMarkFields(data.order),
     ...(data.ci?.shipping || {}),
@@ -2121,7 +2234,7 @@ function ShippingMarksTab({ data, onChanged }: { data: DocumentDetail; onChanged
         items: data.ci.items || [],
         shipping: outShipping,
         terms: data.ci.terms || {},
-      });
+      }, { ciId: pkg.ciId });
       onChanged();
     } finally {
       setBusy(false);
@@ -2143,7 +2256,7 @@ function ShippingMarksTab({ data, onChanged }: { data: DocumentDetail; onChanged
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
-          <DocPreviewButton target={{ orderId: data.order.id }} kind="sm/pdf" filename="Shipping Mark.pdf" disabled={!data.ci} xlsxKind="sm/xlsx" />
+          <DocPreviewButton target={{ orderId: data.order.id, ciId: pkg.ciId }} kind="sm/pdf" filename="Shipping Mark.pdf" disabled={!data.ci} xlsxKind="sm/xlsx" />
         </div>
         <div className="doc-actions-center" />
         <div className="doc-actions-right">
@@ -2176,11 +2289,11 @@ const PL_READONLY_KEYS = new Set([
 // 케이스 마킹(sm_*)은 Shipping Mark 탭에서 CI 에 저장하므로 PL 은 운송 정보만 자체 저장한다.
 const PL_EDITABLE_KEYS = ["carrier", "bl_awb_no", "etd", "eta"];
 
-function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {
+function PackingListTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: PkgSel; onChanged: () => void }) {
   // Packing List 는 자체 번호·발행일이 없다 — 송장(Commercial Invoice)에 딸려 나가는 서류라
   // 머리표에 송장번호·송장일자를 싣는다. 저장·파일명·문서 현황 목록에 쓸 식별자만 있으면 되므로
   // 번호는 "P/O 번호-PL", 날짜는 송장일자로 자동으로 정한다(입력란 없음).
-  const plNo = data.pl?.pl_no || (data.order.po_no ? `${data.order.po_no}-PL` : "");
+  const plNo = data.pl?.pl_no || (data.order.po_no ? `${data.order.po_no}-PL${pkg.setNo > 1 ? `-${pkg.setNo}` : ""}` : "");
   const date = data.pl?.date || data.ci?.date || today();
   const [packingInfo, setPackingInfo] = useState(data.pl?.packing_info || "");
   const seed = data.pl?.items || data.ci?.items || data.order.items;
@@ -2227,7 +2340,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
       items: data.ci.items || [],
       shipping: { ...ciShipping, shipping_marks: composeShippingMarks(ciShipping) },
       terms: data.ci.terms || {},
-    });
+    }, { ciId: pkg.ciId });
   }
 
   async function save() {
@@ -2239,7 +2352,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
       for (const k of PL_EDITABLE_KEYS) {
         if (shipping[k] !== undefined && shipping[k] !== "") outShipping[k] = shipping[k];
       }
-      await savePackingList(data.order.id, { pl_no: plNo, date, items, packing_info: packingInfo, shipping: outShipping });
+      await savePackingList(data.order.id, { pl_no: plNo, date, items, packing_info: packingInfo, shipping: outShipping }, pkg.ciId);
       await saveSharedPackingTotals();
       onChanged();
     } finally {
@@ -2258,7 +2371,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
     if (!confirm("Delete this Packing List?")) return;
     setBusy(true);
     try {
-      await deletePackingList(data.order.id);
+      await deletePackingList(data.order.id, pkg.ciId);
       onChanged();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Delete failed");
@@ -2330,7 +2443,7 @@ function PackingListTab({ data, onChanged }: { data: DocumentDetail; onChanged: 
       </fieldset>
       <div className="form-actions doc-actions">
         <div className="doc-actions-left">
-          <DocPreviewButton target={{ orderId: data.order.id }} kind="pl/pdf" filename="Packing List.pdf" disabled={!data.pl} xlsxKind="pl/xlsx" />
+          <DocPreviewButton target={{ orderId: data.order.id, ciId: pkg.ciId }} kind="pl/pdf" filename="Packing List.pdf" disabled={!data.pl} xlsxKind="pl/xlsx" />
         </div>
         <div className="doc-actions-center" />
         <div className="doc-actions-right">
@@ -2363,7 +2476,11 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
   const [supplyType, setSupplyType] = useState("Export / Zero-rated");
   const [buyerNo, setBuyerNo] = useState(data.order.customer_tax_id || "");
   const [vatRate, setVatRate] = useState(0);
-  const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(data.tax?.items || data.ci?.items || data.order.items));
+  // 포장별로 CI 를 나눴으면 청구 품목은 모든 CI 를 합친 것(청구는 P/O 하나에 한 번).
+  const allCiItems = (data.cis && data.cis.length > 1)
+    ? data.cis.flatMap((c) => c.items || [])
+    : data.ci?.items;
+  const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(data.tax?.items || allCiItems || data.order.items));
   const [busy, setBusy] = useState(false);
   const currency = data.ci?.currency || "USD";
   const total = useMemo(() => includedRows(items).reduce((sum, item) => sum + num(item.amount), 0), [items]);
@@ -2408,7 +2525,7 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
         currency={currency}
         tableId="tax-items"
         headerActions={
-          <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.ci?.items || data.order.items))}>
+          <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(allCiItems || data.order.items))}>
             Load CI items
           </button>
         }

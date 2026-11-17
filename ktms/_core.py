@@ -3090,6 +3090,26 @@ def _latest_ci(session, order_id: int):
     )
 
 
+def _order_cis(session, order_id: int) -> list:
+    """이 오더의 Commercial Invoice 전부(먼저 만든 순). 포장(패키지)별로 CI·PL 을 나눠
+    발행하면 여러 장이 된다(2026-11-17). 첫 장 = 대표 CI — 세금계산서·AR 은 여기에 단다."""
+    return (session.query(CommercialInvoice).filter_by(order_id=order_id)
+            .order_by(CommercialInvoice.id.asc()).all())
+
+
+def _primary_ci(session, order_id: int):
+    """대표 CI(첫 장) — 세금계산서(9단계)·청구가 붙는 CI. 한 장뿐이면 _latest_ci 와 같다."""
+    return (session.query(CommercialInvoice).filter_by(order_id=order_id)
+            .order_by(CommercialInvoice.id.asc()).first())
+
+
+def _pick_ci(session, order_id: int, ci_id: int | None = None):
+    """화면이 고른 CI(ci_id) — 다른 오더의 것이면 None. ci_id 가 없으면 대표 CI."""
+    if ci_id:
+        return session.query(CommercialInvoice).filter_by(id=ci_id, order_id=order_id).first()
+    return _primary_ci(session, order_id)
+
+
 def _latest_pl(session, ci_id: int | None):
     if not ci_id:
         return None
@@ -3119,6 +3139,17 @@ def _latest_tax(session, ci_id: int | None):
         .order_by(TaxInvoiceData.id.desc())
         .first()
     )
+
+
+def _split_doc_items(docs_items: list[list[dict]]) -> list[dict]:
+    """나눠 발행한 문서(CI·PL 여러 장)의 품목을 한데 모아 누락 경고에 쓴다.
+
+    한 장이면 그대로(제외 행 포함 — 기존 규칙). 여러 장이면 실제로 나가는 행(제외 아님)만
+    센다 — 1번 CI 에서 2번 포장 품목을 '제외'로 남겨 두는 식으로 나누기 때문이다."""
+    if len(docs_items) <= 1:
+        return list(docs_items[0] if docs_items else [])
+    return [i for items in docs_items for i in (items or [])
+            if isinstance(i, dict) and not i.get("excluded")]
 
 
 def _missing_items(order_items: list[dict], doc_items: list[dict]) -> list[dict]:
@@ -3332,12 +3363,62 @@ def _doc_defaults_from(order_terms, order_currency, q) -> dict:
     return out
 
 
+def _ci_view(order, ci, union_items) -> dict | None:
+    if not ci:
+        return None
+    return {
+        "id": ci.id,
+        "ci_no": ci.ci_no or "",
+        "date": ci.date or "",
+        "currency": ci.currency or "USD",
+        "vat_rate": ci.vat_rate or 0.0,
+        "items": ci.items or [],
+        "shipping": ci.shipping or {},
+        "terms": ci.terms or {},
+        # 누락은 나눠 발행한 CI 전체를 합쳐서 본다 — 2번 포장에 간 품목은 누락이 아니다.
+        "missing": _missing_items(order.items or [], union_items),
+    }
+
+
+def _pl_view(order, pl, union_items) -> dict | None:
+    if not pl:
+        return None
+    return {
+        "id": pl.id,
+        "pl_no": pl.pl_no or "",
+        "date": pl.date or "",
+        "items": pl.items or [],
+        "packing_info": pl.packing_info or "",
+        "shipping": pl.shipping or {},
+        "missing": _missing_items(order.items or [], union_items),
+    }
+
+
+def _remaining_items(order_items: list[dict], doc_items: list[dict]) -> list[dict]:
+    """오더 품목 중 문서들에 아직 덜 실린 것(모자란 수량만큼) — 새 CI 의 초기 품목."""
+    short = {(str(m.get("part_no") or "").strip().upper()
+              or str(m.get("description") or "").strip().upper()): m["order_qty"] - m["doc_qty"]
+             for m in _missing_items(order_items, doc_items)}
+    out = []
+    for it in order_items or []:
+        k = (str(it.get("part_no") or "").strip().upper()
+             or str(it.get("description") or "").strip().upper())
+        if k in short and short[k] > 0:
+            out.append({**it, "qty": short.pop(k)})
+    return out
+
+
 def _document_detail_payload(session, order: Order) -> dict:
     cust = _customer_for_order(session, order)
     vessel = _vessel_for_order(session, order)
     pi = _latest_pi(session, order.id)
-    ci = _latest_ci(session, order.id)
-    pl = _latest_pl(session, ci.id if ci else None)
+    # CI·PL 은 포장별로 여러 벌일 수 있다 — 화면은 cis 로 고르고, ci·pl 은 대표(첫 벌)다.
+    cis = _order_cis(session, order.id)
+    ci = cis[0] if cis else None
+    pls = {c.id: _latest_pl(session, c.id) for c in cis}
+    pl = pls.get(ci.id) if ci else None
+    ci_union = _split_doc_items([c.items or [] for c in cis])
+    pl_union = _split_doc_items([p.items or [] for p in pls.values() if p])
     sa = _latest_sa(session, order.id)
     tax = _latest_tax(session, ci.id if ci else None)
     pod = (session.query(DeliveryProof).filter_by(order_id=order.id)
@@ -3420,26 +3501,13 @@ def _document_detail_payload(session, order: Order) -> dict:
             "terms": pi.terms or {},
             "missing": _missing_items(order.items or [], pi.items or []),
         },
-        "ci": None if not ci else {
-            "id": ci.id,
-            "ci_no": ci.ci_no or "",
-            "date": ci.date or "",
-            "currency": ci.currency or "USD",
-            "vat_rate": ci.vat_rate or 0.0,
-            "items": ci.items or [],
-            "shipping": ci.shipping or {},
-            "terms": ci.terms or {},
-            "missing": _missing_items(order.items or [], ci.items or []),
-        },
-        "pl": None if not pl else {
-            "id": pl.id,
-            "pl_no": pl.pl_no or "",
-            "date": pl.date or "",
-            "items": pl.items or [],
-            "packing_info": pl.packing_info or "",
-            "shipping": pl.shipping or {},
-            "missing": _missing_items(order.items or [], pl.items or []),
-        },
+        "ci": _ci_view(order, ci, ci_union),
+        "pl": _pl_view(order, pl, pl_union),
+        # 포장별 분리 발행 — CI 한 벌마다 딸린 PL 과 함께(먼저 만든 순, 첫 벌 = 대표).
+        "cis": [{**_ci_view(order, c, ci_union), "pl": _pl_view(order, pls.get(c.id), pl_union)}
+                for c in cis],
+        # 아직 어느 CI 에도 안 들어간 오더 품목 — 새 CI(다음 포장)의 초기 품목.
+        "ci_remaining": _remaining_items(order.items or [], ci_union) if cis else (order.items or []),
         "sa": None if not sa else {
             "id": sa.id,
             "sa_no": sa.sa_no or "",
@@ -5244,6 +5312,9 @@ __all__ = [
     "_kst",
     "_kst_iso",
     "_latest_ci",
+    "_order_cis",
+    "_primary_ci",
+    "_pick_ci",
     "_latest_pi",
     "_latest_pl",
     "_latest_sa",

@@ -21915,3 +21915,48 @@ td.seq .seq-lid.seq-lids { white-space: normal; color: #0055a8; font-weight: 600
 .line-charge.off { border-color: var(--line, #dfe3ea); background: transparent; color: var(--muted); font-weight: 500; }
 :root[data-theme="dark"] .line-charge:not(.off) { background: rgba(201, 162, 74, .15); color: #e7c46f; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .line-charge:not(.off) { background: rgba(201, 162, 74, .15); color: #e7c46f; } }
+
+/* 포장(패키지)별 분리 발행 — CI·PL·Shipping Mark 위의 포장 선택 줄 */
+.pkg-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--zebra);
+}
+.pkg-bar-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-right: 2px;
+}
+.pkg-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pkg-chip.on {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.pkg-chip.add {
+  border-style: dashed;
+  color: var(--muted);
+}
+.pkg-chip.add:hover {
+  color: var(--ink);
+}

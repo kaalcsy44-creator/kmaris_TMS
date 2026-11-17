@@ -43,6 +43,9 @@ from _core import (
     _first_rfq_iso,
     _kst_iso,
     _latest_ci,
+    _order_cis,
+    _pick_ci,
+    _primary_ci,
     _latest_pi,
     ar_from_pi,
     _latest_pl,
@@ -105,8 +108,8 @@ def documents_overview():
         # ci_id → pl/tax 존재 매핑
         ci_by_order: dict[int, CommercialInvoice] = {}
         for ci in s.query(CommercialInvoice).all():
-            # 오더당 최신 CI 1건
-            if ci.order_id not in ci_by_order or ci.id > ci_by_order[ci.order_id].id:
+            # 오더당 대표 CI 1건(첫 장 — 포장별로 나눠도 세금계산서는 여기에 붙는다)
+            if ci.order_id not in ci_by_order or ci.id < ci_by_order[ci.order_id].id:
                 ci_by_order[ci.order_id] = ci
         pl_ci_ids = {pl.ci_id for pl in s.query(PackingList).all()}
         pl_no_by_ci = {pl.ci_id: pl.pl_no for pl in s.query(PackingList).all()}
@@ -616,13 +619,16 @@ def project_proforma_invoice_xlsx(rfq_id: int):
 
 @app.post("/api/admin/documents/{order_id}/ci",
           dependencies=[Depends(require_token)])
-def save_commercial_invoice(order_id: int, body: CommercialInvoiceSave):
+def save_commercial_invoice(order_id: int, body: CommercialInvoiceSave, ci_id: int = 0, new: bool = False):
     s = get_session()
     try:
         order = s.query(Order).filter_by(id=order_id).first()
         if not order:
             raise HTTPException(status_code=404, detail="Order瑜?李얠쓣 ???놁뒿?덈떎.")
-        ci = _latest_ci(s, order_id)
+        # new=1 = 다음 포장용 CI 를 한 장 더(포장별 분리 발행, 2026-11-17). ci_id = 고른 CI 수정.
+        ci = None if new else _pick_ci(s, order_id, ci_id)
+        if ci_id and not new and not ci:
+            raise HTTPException(status_code=404, detail="Commercial Invoice가 없습니다.")
         if not ci:
             ci = CommercialInvoice(
                 ci_no=_manual_doc_no(s, CommercialInvoice, "ci_no", body.ci_no, None),
@@ -646,11 +652,11 @@ def save_commercial_invoice(order_id: int, body: CommercialInvoiceSave):
 
 @app.get("/api/admin/documents/{order_id}/ci/pdf",
          dependencies=[Depends(require_token)])
-def commercial_invoice_pdf(order_id: int):
+def commercial_invoice_pdf(order_id: int, ci_id: int = 0):
     s = get_session()
     try:
         order = s.query(Order).filter_by(id=order_id).first()
-        ci = _latest_ci(s, order_id) if order else None
+        ci = _pick_ci(s, order_id, ci_id) if order else None
         if not order or not ci:
             raise HTTPException(status_code=404, detail="Commercial Invoice瑜?李얠쓣 ???놁뒿?덈떎.")
         payload = build_payload(
@@ -671,12 +677,12 @@ def commercial_invoice_pdf(order_id: int):
 
 @app.get("/api/admin/documents/{order_id}/sm/pdf",
          dependencies=[Depends(require_token)])
-def shipping_mark_pdf(order_id: int):
+def shipping_mark_pdf(order_id: int, ci_id: int = 0):
     """Shipping Mark(케이스 마킹) PDF — 마킹 데이터(sm_*)는 CI 레코드의 shipping 에 보관된다."""
     s = get_session()
     try:
         order = s.query(Order).filter_by(id=order_id).first()
-        ci = _latest_ci(s, order_id) if order else None
+        ci = _pick_ci(s, order_id, ci_id) if order else None
         if not order or not ci:
             raise HTTPException(status_code=404, detail="Commercial Invoice가 없습니다.")
         payload = build_payload(
@@ -696,12 +702,12 @@ def shipping_mark_pdf(order_id: int):
 
 @app.get("/api/admin/documents/{order_id}/sm/xlsx",
          dependencies=[Depends(require_token)])
-def shipping_mark_xlsx(order_id: int):
+def shipping_mark_xlsx(order_id: int, ci_id: int = 0):
     """Shipping Mark Excel — PDF 와 같은 데이터·구성(마킹 데이터는 CI 의 shipping 에 보관)."""
     s = get_session()
     try:
         order = s.query(Order).filter_by(id=order_id).first()
-        ci = _latest_ci(s, order_id) if order else None
+        ci = _pick_ci(s, order_id, ci_id) if order else None
         if not order or not ci:
             raise HTTPException(status_code=404, detail="Commercial Invoice가 없습니다.")
         payload = build_payload(
@@ -724,12 +730,12 @@ def shipping_mark_xlsx(order_id: int):
 
 @app.get("/api/admin/documents/{order_id}/ci/xlsx",
          dependencies=[Depends(require_token)])
-def commercial_invoice_xlsx(order_id: int):
+def commercial_invoice_xlsx(order_id: int, ci_id: int = 0):
     """Commercial Invoice 전용 Excel — CI 탭 입력을 지정 양식으로 렌더링."""
     s = get_session()
     try:
         order = s.query(Order).filter_by(id=order_id).first()
-        ci = _latest_ci(s, order_id) if order else None
+        ci = _pick_ci(s, order_id, ci_id) if order else None
         if not order or not ci:
             raise HTTPException(status_code=404, detail="Commercial Invoice가 없습니다.")
         payload = build_payload(
@@ -757,17 +763,23 @@ def commercial_invoice_xlsx(order_id: int):
 
 @app.delete("/api/admin/documents/{order_id}/ci",
             dependencies=[Depends(require_token)])
-def delete_commercial_invoice(order_id: int):
+def delete_commercial_invoice(order_id: int, ci_id: int = 0):
     """Commercial Invoice 삭제. 하위 Packing List 는 함께 삭제(CI 없이는 존재 불가).
     다운스트림 세금계산서(9단계)가 있으면 막는다 — 먼저 그걸 삭제해야 한다."""
     s = get_session()
     try:
-        ci = _latest_ci(s, order_id)
+        ci = _pick_ci(s, order_id, ci_id)
         if not ci:
             raise HTTPException(status_code=404, detail="Commercial Invoice가 없습니다.")
         if s.query(TaxInvoiceData).filter_by(ci_id=ci.id).first():
             raise HTTPException(status_code=400,
                 detail="세금계산서가 있어 삭제할 수 없습니다. 먼저 9단계 세금계산서를 삭제하세요.")
+        # 나눠 발행 중이면 대표 CI(첫 장)는 다른 장이 남아 있는 동안 지우지 않는다 — 대표가
+        # 바뀌면 9단계 세금계산서·AR 이 엉뚱한 CI 를 보게 된다. 나중 장부터 지운다.
+        cis = _order_cis(s, order_id)
+        if len(cis) > 1 and cis[0].id == ci.id:
+            raise HTTPException(status_code=400,
+                detail="포장별로 나눈 CI 가 더 있습니다. 첫 번째 CI 는 나머지 CI 를 먼저 삭제한 뒤 지우세요.")
         # 하위 Packing List 를 CI 삭제보다 먼저 DB 에 반영해야 FK 제약(Postgres)에 안 걸린다.
         s.query(PackingList).filter_by(ci_id=ci.id).delete(synchronize_session=False)
         s.flush()
@@ -809,8 +821,8 @@ def reset_stage(order_id: int, stage: int):
                 detail=f"이 P/O는 {cur}단계까지 완료돼 있습니다. {stage}단계보다 위 단계부터 순서대로 초기화하세요.")
 
         if stage == 7:
-            ci = _latest_ci(s, order_id)
-            if ci:  # 하위 PL → CI → SA 순(FK 제약 회피)
+            # 포장별로 나눠 발행한 CI 전부(+하위 PL) → SA 순(FK 제약 회피)
+            for ci in _order_cis(s, order_id):
                 s.query(PackingList).filter_by(ci_id=ci.id).delete(synchronize_session=False)
                 s.flush()
                 s.delete(ci)
@@ -824,7 +836,7 @@ def reset_stage(order_id: int, stage: int):
             if hasattr(order, "delivered_date"):
                 order.delivered_date = None
         elif stage == 9:
-            ci = _latest_ci(s, order_id)
+            ci = _primary_ci(s, order_id)
             if ci:
                 tax = _latest_tax(s, ci.id)
                 if tax:
@@ -852,11 +864,11 @@ def reset_stage(order_id: int, stage: int):
 
 @app.post("/api/admin/documents/{order_id}/pl",
           dependencies=[Depends(require_token)])
-def save_packing_list(order_id: int, body: PackingListSave):
+def save_packing_list(order_id: int, body: PackingListSave, ci_id: int = 0):
     s = get_session()
     try:
         order = s.query(Order).filter_by(id=order_id).first()
-        ci = _latest_ci(s, order_id) if order else None
+        ci = _pick_ci(s, order_id, ci_id) if order else None
         if not order or not ci:
             raise HTTPException(status_code=400, detail="먼저 Commercial Invoice를 생성하세요.")
         pl = _latest_pl(s, ci.id)
@@ -883,11 +895,11 @@ def save_packing_list(order_id: int, body: PackingListSave):
 
 @app.get("/api/admin/documents/{order_id}/pl/pdf",
          dependencies=[Depends(require_token)])
-def packing_list_pdf(order_id: int):
+def packing_list_pdf(order_id: int, ci_id: int = 0):
     s = get_session()
     try:
         order = s.query(Order).filter_by(id=order_id).first()
-        ci = _latest_ci(s, order_id) if order else None
+        ci = _pick_ci(s, order_id, ci_id) if order else None
         pl = _latest_pl(s, ci.id if ci else None)
         if not order or not ci or not pl:
             raise HTTPException(status_code=404, detail="Packing List瑜?李얠쓣 ???놁뒿?덈떎.")
@@ -903,12 +915,12 @@ def packing_list_pdf(order_id: int):
 
 @app.get("/api/admin/documents/{order_id}/pl/xlsx",
          dependencies=[Depends(require_token)])
-def packing_list_xlsx(order_id: int):
+def packing_list_xlsx(order_id: int, ci_id: int = 0):
     """Packing List 전용 Excel — PL 탭 입력을 지정 양식으로 렌더링."""
     s = get_session()
     try:
         order = s.query(Order).filter_by(id=order_id).first()
-        ci = _latest_ci(s, order_id) if order else None
+        ci = _pick_ci(s, order_id, ci_id) if order else None
         pl = _latest_pl(s, ci.id if ci else None)
         if not order or not ci or not pl:
             raise HTTPException(status_code=404, detail="Packing List가 없습니다.")
@@ -946,10 +958,10 @@ def _packing_list_payload(s, order, ci, pl) -> dict:
 
 @app.delete("/api/admin/documents/{order_id}/pl",
             dependencies=[Depends(require_token)])
-def delete_packing_list(order_id: int):
+def delete_packing_list(order_id: int, ci_id: int = 0):
     s = get_session()
     try:
-        ci = _latest_ci(s, order_id)
+        ci = _pick_ci(s, order_id, ci_id)
         pl = _latest_pl(s, ci.id if ci else None)
         if not pl:
             raise HTTPException(status_code=404, detail="Packing List가 없습니다.")
@@ -993,7 +1005,7 @@ def shipping_advice_pdf(order_id: int):
     try:
         order = s.query(Order).filter_by(id=order_id).first()
         sa = _latest_sa(s, order_id) if order else None
-        ci = _latest_ci(s, order_id) if order else None
+        ci = _primary_ci(s, order_id) if order else None
         if not order or not sa:
             raise HTTPException(status_code=404, detail="Shipping Advice瑜?李얠쓣 ???놁뒿?덈떎.")
         payload = build_payload(
@@ -1033,7 +1045,7 @@ def send_shipping_advice(order_id: int, body: ShippingAdviceSend):
     try:
         order = s.query(Order).filter_by(id=order_id).first()
         sa = _latest_sa(s, order_id) if order else None
-        ci = _latest_ci(s, order_id) if order else None
+        ci = _primary_ci(s, order_id) if order else None
         if not order or not sa:
             raise HTTPException(status_code=404, detail="Shipping Advice瑜?李얠쓣 ???놁뒿?덈떎.")
         cust = _customer_for_order(s, order)
@@ -1066,7 +1078,7 @@ def save_tax_invoice(order_id: int, body: TaxInvoiceSave):
     s = get_session()
     try:
         order = s.query(Order).filter_by(id=order_id).first()
-        ci = _latest_ci(s, order_id) if order else None
+        ci = _primary_ci(s, order_id) if order else None
         if not order or not ci:
             raise HTTPException(status_code=400, detail="먼저 Commercial Invoice를 생성하세요.")
         tax = _latest_tax(s, ci.id)
@@ -1111,7 +1123,7 @@ def tax_invoice_xlsx(order_id: int):
     s = get_session()
     try:
         order = s.query(Order).filter_by(id=order_id).first()
-        ci = _latest_ci(s, order_id) if order else None
+        ci = _primary_ci(s, order_id) if order else None
         tax = _latest_tax(s, ci.id if ci else None)
         if not order or not ci or not tax:
             raise HTTPException(status_code=404, detail="Tax Invoice Data瑜?李얠쓣 ???놁뒿?덈떎.")

@@ -1221,6 +1221,10 @@ export type DocumentDetail = {
     shipping?: Record<string, string>;
     missing: { part_no: string; description: string; order_qty: number; doc_qty: number }[];
   };
+  /** 포장(패키지)별로 나눠 발행한 CI 전부 + 각 CI 의 PL. 첫 벌 = 대표(ci·pl 과 같다). */
+  cis?: (NonNullable<DocumentDetail["ci"]> & { pl: DocumentDetail["pl"] })[];
+  /** 아직 어느 CI 에도 안 들어간 오더 품목 — 다음 포장 CI 의 초기 품목. */
+  ci_remaining?: DocumentWorkItem[];
   sa: null | {
     id: number;
     sa_no: string;

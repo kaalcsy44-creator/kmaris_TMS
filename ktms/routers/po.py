@@ -210,7 +210,7 @@ def order_detail(order_id: int):
             "item_count": len(po.items or []),
         } for po in vpos]
 
-        ci = s.query(CommercialInvoice).filter_by(order_id=o.id).order_by(CommercialInvoice.id.desc()).first()
+        ci = s.query(CommercialInvoice).filter_by(order_id=o.id).order_by(CommercialInvoice.id.asc()).first()  # 대표 CI(첫 장)
         sa = s.query(ShippingAdvice).filter_by(order_id=o.id).order_by(ShippingAdvice.id.desc()).first()
         pl = (s.query(PackingList).filter_by(ci_id=ci.id).order_by(PackingList.id.desc()).first()
               if ci else None)

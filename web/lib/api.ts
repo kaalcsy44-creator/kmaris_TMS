@@ -964,7 +964,8 @@ export function updateDocumentMilestone(
 /** 문서 API 의 대상 — 고객 P/O(오더) 단위이거나, 아직 오더가 없는 프로젝트(딜) 단위.
  *  Proforma Invoice 는 4단계(견적 발송·선급금 청구)에서도 만드는데 그때는 오더가 없어
  *  딜에 달아 둔다. 서버가 같은 한 장으로 이어 주므로 화면은 어느 쪽으로 불러도 된다. */
-export type DocTarget = { orderId: number } | { rfqId: number };
+/** ciId: 포장별로 나눈 CI 중 어느 것(CI·PL·Shipping Mark 내려받기). 없으면 대표 CI. */
+export type DocTarget = { orderId: number; ciId?: number } | { rfqId: number };
 
 export function docApiBase(t: DocTarget): string {
   return "orderId" in t ? `/api/admin/documents/${t.orderId}` : `/api/admin/projects/${t.rfqId}`;
@@ -1004,13 +1005,21 @@ export function saveCommercialInvoice(
     items: DocumentWorkItem[];
     shipping: Record<string, string>;
     terms?: Record<string, string>;
-  }
+  },
+  /** ciId = 고친 CI(0 이면 대표 CI). isNew = 다음 포장용 CI 를 한 장 더 만든다. */
+  opt: { ciId?: number; isNew?: boolean } = {}
 ): Promise<{ ok: boolean; id: number; ci_no: string }> {
-  return post(`/api/admin/documents/${orderId}/ci`, body);
+  return post(`/api/admin/documents/${orderId}/ci${ciQuery(opt.ciId, opt.isNew)}`, body);
 }
 
-export function deleteCommercialInvoice(orderId: number): Promise<{ ok: boolean }> {
-  return del(`/api/admin/documents/${orderId}/ci`);
+/** 포장별 분리 발행 — 어느 CI(와 그 PL)를 다루는지 쿼리로 넘긴다(없으면 대표 CI). */
+export function ciQuery(ciId?: number, isNew?: boolean): string {
+  if (isNew) return "?new=true";
+  return ciId ? `?ci_id=${ciId}` : "";
+}
+
+export function deleteCommercialInvoice(orderId: number, ciId?: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/documents/${orderId}/ci${ciQuery(ciId)}`);
 }
 
 // 단계(7~11) 초기화 — 이 오더에서 해당 단계의 완료 근거를 한 번에 제거해 앞 단계로 되돌린다.
@@ -1039,13 +1048,14 @@ export function savePackingList(
     items: DocumentWorkItem[];
     packing_info?: string;
     shipping?: Record<string, string>;
-  }
+  },
+  ciId?: number
 ): Promise<{ ok: boolean; id: number; pl_no: string }> {
-  return post(`/api/admin/documents/${orderId}/pl`, body);
+  return post(`/api/admin/documents/${orderId}/pl${ciQuery(ciId)}`, body);
 }
 
-export function deletePackingList(orderId: number): Promise<{ ok: boolean }> {
-  return del(`/api/admin/documents/${orderId}/pl`);
+export function deletePackingList(orderId: number, ciId?: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/documents/${orderId}/pl${ciQuery(ciId)}`);
 }
 
 export function saveTaxInvoice(
@@ -1066,7 +1076,8 @@ export function documentDownloadUrl(
   target: DocTarget,
   kind: "pi/pdf" | "pi/xlsx" | "ci/pdf" | "ci/xlsx" | "sm/pdf" | "sm/xlsx" | "pl/pdf" | "pl/xlsx" | "tax/xlsx"
 ): string {
-  return `${API_BASE}${docApiBase(target)}/${kind}`;
+  const q = "orderId" in target && /^(ci|pl|sm)\//.test(kind) ? ciQuery(target.ciId) : "";
+  return `${API_BASE}${docApiBase(target)}/${kind}${q}`;
 }
 
 // ── 9) POD(인도 증빙) 파일 + 단계 완료 콜 ─────────────────────────────────────
