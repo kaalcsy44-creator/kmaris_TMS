@@ -999,6 +999,116 @@ function PackageDocs({ kind, data, onChanged }: { kind: "ci" | "sm" | "pl"; data
   );
 }
 
+// ── 포장별 금액 나누기 — 오더 전체 대비 다른 포장 CI 에 넣은 몫과 남은 금액 ───────────────
+type ChargeKey = "items" | "discount" | "freight" | "packing" | "insurance" | "total";
+type Money = Record<ChargeKey, number>;
+const SPLIT_ROWS: { key: ChargeKey; label: string }[] = [
+  { key: "items", label: "Items total" },
+  { key: "discount", label: "Discount (−)" },
+  { key: "freight", label: "Freight" },
+  { key: "packing", label: "Packing" },
+  { key: "insurance", label: "Insurance" },
+  { key: "total", label: "Total invoice value" },
+];
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/** 문서 한 장의 금액 — 발행 PDF 와 같은 계산(제외 행 빼고, 할인 차감, VAT 가산). */
+function invoiceMoney(items: DocumentWorkItem[] | undefined, terms: Record<string, string> | undefined, vatRate: number | string): Money {
+  const it = includedRows(items || []).reduce((s, i) => s + num(i.amount), 0);
+  const d = Math.abs(num(terms?.discount));
+  const f = num(terms?.freight), p = num(terms?.packing), ins = num(terms?.insurance);
+  const base = it - d + f + p + ins;
+  return { items: it, discount: d, freight: f, packing: p, insurance: ins, total: base * (1 + num(vatRate) / 100) };
+}
+
+type PackageSplit = {
+  /** 여러 포장일 때만 패널을 보인다. */
+  show: boolean;
+  /** 오더 전체 금액의 출처 — PI 가 있으면 PI(운임 등 부대비용까지 실린 한 장), 없으면 P/O. */
+  wholeFrom: "PI" | "P/O";
+  /** 오더 전체. 모르는 칸(P/O 에는 운임 등이 없다)은 null. */
+  whole: Record<ChargeKey, number | null>;
+  /** 이 CI 를 뺀 다른 포장 CI 들의 합. */
+  others: Money;
+  otherCount: number;
+  /** 이 CI 를 넣기 전의 남은 금액(= 전체 − 다른 CI). 전체를 모르면 null. */
+  remainingBefore: Record<ChargeKey, number | null>;
+};
+
+function packageSplit(data: DocumentDetail, ciId: number): PackageSplit {
+  const cis = data.cis || [];
+  const others = cis.filter((c) => c.id !== ciId);
+  const sum: Money = { items: 0, discount: 0, freight: 0, packing: 0, insurance: 0, total: 0 };
+  for (const c of others) {
+    const m = invoiceMoney(c.items, c.terms, c.vat_rate);
+    for (const k of Object.keys(sum) as ChargeKey[]) sum[k] += m[k];
+  }
+  let whole: Record<ChargeKey, number | null>;
+  let wholeFrom: "PI" | "P/O";
+  if (data.pi) {
+    whole = invoiceMoney(data.pi.items, data.pi.terms, data.pi.vat_rate);
+    wholeFrom = "PI";
+  } else {
+    const it = includedRows(data.order.items || []).reduce((s, i) => s + num(i.amount), 0);
+    const d = Math.abs(num(data.order.doc_defaults?.discount));
+    // P/O 에는 운임·포장비·보험료가 없다 — 모르는 값으로 두고, 총액도 부대비용을 모르니 비운다.
+    whole = { items: it, discount: d, freight: null, packing: null, insurance: null, total: null };
+    wholeFrom = "P/O";
+  }
+  const remainingBefore = Object.fromEntries(
+    (Object.keys(sum) as ChargeKey[]).map((k) => [k, whole[k] == null ? null : (whole[k] as number) - sum[k]]),
+  ) as Record<ChargeKey, number | null>;
+  return { show: cis.length > 1, wholeFrom, whole, others: sum, otherCount: others.length, remainingBefore };
+}
+
+function PackageSplitPanel({ split, current, currency }: { split: PackageSplit; current: Money; currency: string }) {
+  const f = (n: number | null) =>
+    n == null ? "—" : n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return (
+    <div className="pkg-split">
+      <div className="pkg-split-head">
+        <b>Split across packages</b>
+        <span className="hint-inline">
+          Whole order = {split.wholeFrom === "PI" ? "Proforma Invoice" : "customer P/O (charges unknown — add them on the PI)"} ·
+          “Left” = whole − other packages − this CI. Amounts in {currency}.
+        </span>
+      </div>
+      <table className="pkg-split-table">
+        <thead>
+          <tr>
+            <th />
+            <th>Whole order ({split.wholeFrom})</th>
+            <th>Other packages ({split.otherCount})</th>
+            <th>This CI</th>
+            <th>Left</th>
+          </tr>
+        </thead>
+        <tbody>
+          {SPLIT_ROWS.map(({ key, label }) => {
+            const rb = split.remainingBefore[key];
+            const left = rb == null ? null : round2(rb - current[key]);
+            const state = left == null ? "" : Math.abs(left) < 0.005 ? " ok" : left < 0 ? " over" : " open";
+            return (
+              <tr key={key} className={key === "total" ? "grand" : undefined}>
+                <th>{label}</th>
+                <td>{f(split.whole[key] == null ? null : round2(split.whole[key] as number))}</td>
+                <td>{f(round2(split.others[key]))}</td>
+                <td>{f(round2(current[key]))}</td>
+                <td className={`left${state}`}>
+                  {left == null ? "—" : Math.abs(left) < 0.005 ? "0 ✓" : f(left)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // 오더 작업 모달(행 클릭 수정용).
 function DocEditorModal({
   orderId,
@@ -2053,11 +2163,21 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
   const [terms, setTerms] = useState<Record<string, string>>(initialTerms());
   // 총액 할인(양수 금액) — 저장값이 없으면 견적의 할인액(doc_defaults.discount)을 이어받는다.
   // 새 포장(2번째 CI~)은 할인을 비운다 — 견적 할인은 대표 CI 에 이미 실렸다.
-  const initialDiscount = () => data.ci?.terms?.discount ?? (pkg.isNew ? "" : data.order.doc_defaults?.discount ?? "");
+  // 포장별로 금액을 나눌 때 — 오더 전체(PI, 없으면 P/O)에서 다른 포장 CI 에 이미 넣은 몫을 뺀 나머지.
+  // 새 포장 CI 는 할인·운임·포장비·보험료를 이 나머지로 시작한다(남은 게 없으면 빈칸).
+  const split = useMemo(() => packageSplit(data, pkg.ciId), [data, pkg.ciId]);
+  const remainingInit = (k: ChargeKey) => {
+    const r = split.remainingBefore[k];
+    return r != null && r > 0.005 ? String(round2(r)) : "";
+  };
+  const initialDiscount = () => data.ci?.terms?.discount
+    ?? (pkg.isNew ? remainingInit("discount") : data.order.doc_defaults?.discount ?? "");
+  const initialCharge = (k: "freight" | "packing" | "insurance") =>
+    data.ci?.terms?.[k] || (pkg.isNew ? remainingInit(k) : "");
   const [discount, setDiscount] = useState<string>(initialDiscount());
-  const [freight, setFreight] = useState(data.ci?.terms?.freight || "");
-  const [packing, setPacking] = useState(data.ci?.terms?.packing || "");
-  const [insurance, setInsurance] = useState(data.ci?.terms?.insurance || "");
+  const [freight, setFreight] = useState(initialCharge("freight"));
+  const [packing, setPacking] = useState(initialCharge("packing"));
+  const [insurance, setInsurance] = useState(initialCharge("insurance"));
   const [busy, setBusy] = useState(false);
   // Total invoice value = 품목 소계 + Freight + Packing + Insurance + VAT.
   // 소계는 문서에서 제외한 행을 뺀 금액(발행 PDF·Excel 과 같은 기준).
@@ -2097,9 +2217,9 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
     setShipping(initialShipping());
     setTerms(initialTerms());
     setDiscount(initialDiscount());
-    setFreight(data.ci?.terms?.freight || "");
-    setPacking(data.ci?.terms?.packing || "");
-    setInsurance(data.ci?.terms?.insurance || "");
+    setFreight(initialCharge("freight"));
+    setPacking(initialCharge("packing"));
+    setInsurance(initialCharge("insurance"));
   }
 
   async function del() {
@@ -2188,6 +2308,13 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
         // Items total − Discount = Subtotal(할인 후 물품가) → + Freight + Packing + Insurance + VAT = Total.
         footerRows={invoiceFooterRows({ subtotal, discount, setDiscount, freight, setFreight, packing, setPacking, insurance, setInsurance, vatRate, vatAmount, totalInvoiceValue, currency })}
       />
+      {split.show || pkg.isNew ? (
+        <PackageSplitPanel
+          split={split}
+          current={invoiceMoney(items, { discount, freight, packing, insurance }, vatRate)}
+          currency={currency}
+        />
+      ) : null}
       <MissingWarning missing={data.ci?.missing || []} />
       </fieldset>
       <div className="form-actions doc-actions">

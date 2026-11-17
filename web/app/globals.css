@@ -21995,3 +21995,52 @@ td.seq .seq-lid.seq-lids { white-space: normal; color: #0055a8; font-weight: 600
 @media print {
   .hs-cell-btn { display: none; }
 }
+
+/* 포장별 금액 나누기 패널(CI) */
+.pkg-split {
+  margin: 14px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--zebra);
+}
+.pkg-split-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+}
+.pkg-split-table {
+  width: 100%;
+  max-width: 760px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.pkg-split-table th,
+.pkg-split-table td {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+.pkg-split-table thead th {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.pkg-split-table tbody th {
+  text-align: left;
+  font-weight: 600;
+}
+.pkg-split-table tr.grand th,
+.pkg-split-table tr.grand td {
+  font-weight: 700;
+  border-bottom: 0;
+}
+.pkg-split-table td.left.ok { color: #067647; }
+.pkg-split-table td.left.open { color: #b54708; font-weight: 700; }
+.pkg-split-table td.left.over { color: #b42318; font-weight: 700; }
+@media (max-width: 640px) {
+  .pkg-split { overflow-x: auto; }
+}
