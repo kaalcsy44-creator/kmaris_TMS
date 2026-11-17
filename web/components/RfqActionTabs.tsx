@@ -3911,9 +3911,10 @@ function VendorRfqAction({
           발신 기록)에 심어지므로, 고르기만 하고 그만두면 명부는 그대로다. */}
       {party === "maker" ? (
         <span className="hint-inline">
-          {maker
-            ? `${maker.name} joins the vendor list once you draft the email or mark this as sent — the quote, P/O and payment that follow all run through a vendor. Picking it here alone changes nothing.`
-            : "Pick the manufacturer you are asking directly. Register it under Partners ▸ Maker first if it is not listed."}
+          {/* 방금 약식 등록한 메이커는 명부(makers)를 다시 받기 전이라 makerOpts 에서 이름을 찾는다. */}
+          {makerId !== ""
+            ? `${maker?.name || makerOpts.find((o) => o.id === makerId)?.name || "This maker"} joins the vendor list once you draft the email or mark this as sent — the quote, P/O and payment that follow all run through a vendor. Picking it here alone changes nothing.`
+            : "Pick the manufacturer you are asking directly. If it is not listed, add it with “+ New maker” at the bottom of the Maker list."}
         </span>
       ) : null}
       {rfqId ? (

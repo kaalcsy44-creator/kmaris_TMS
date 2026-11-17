@@ -13,7 +13,12 @@
 // 함께 실린다.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { VendorOption } from "@/lib/types";
-import { addPartnerContact, type NewContactInput } from "@/lib/api";
+import {
+  addPartnerContact,
+  createSettingsMaker,
+  createSettingsVendor,
+  type NewContactInput,
+} from "@/lib/api";
 import VendorSelect from "@/components/common/VendorSelect";
 
 type Company = {
@@ -130,7 +135,9 @@ export default function VendorContactFields({
   /** 회사 칸 이름 — 메이커에 직접 물을 때도 같은 두 칸(회사 → 담당자)을 쓴다. */
   label?: string;
   /** 주어지면 Contact 목록 끝에 "+ Add contact" 가 선다 — 고른 회사에 담당자를 바로
-   *  더한다(서버 명부에 저장). 새 사람은 방금 고른 사람들 뒤에 함께 체크된다. */
+   *  더한다(서버 명부에 저장). 새 사람은 방금 고른 사람들 뒤에 함께 체크된다.
+   *  회사 칸 목록 끝에도 "+ New vendor/maker" 가 서서, 명부에 없는 회사를 약식 등록하고
+   *  곧바로 고른다(1단계의 New Customer·New Vessel 과 같은 자리). */
   addKind?: "vendors" | "makers";
   onContactAdded?: (opt: VendorOption, ids: number[]) => void;
 }) {
@@ -163,6 +170,10 @@ export default function VendorContactFields({
     [companies]
   );
 
+  // 약식 등록 창 — 열려 있을 때만 이름 초안을 들고 있다.
+  const [creating, setCreating] = useState<string | null>(null);
+  const canCreate = !!(addKind && onContactAdded) && !disabled;
+
   function pickCompany(repId: number | "") {
     if (repId === "") {
       onChange([]);
@@ -190,7 +201,7 @@ export default function VendorContactFields({
 
   return (
     <>
-      <div className="form-field">
+      <div className="form-field vnew-anchor">
         <label>{label}</label>
         <VendorSelect
           value={company ? company.repId : ""}
@@ -198,7 +209,26 @@ export default function VendorContactFields({
           onChange={pickCompany}
           disabled={disabled}
           placeholder={`Select a ${label.toLowerCase()}…`}
+          onCreate={canCreate ? (draft) => setCreating(draft) : undefined}
+          createLabel={`+ New ${label.toLowerCase()}`}
         />
+        {creating !== null && addKind && onContactAdded ? (
+          <QuickCompanyCreate
+            kind={addKind}
+            label={label}
+            defaultName={creating}
+            companies={companies}
+            onPickExisting={(repId) => {
+              pickCompany(repId);
+              setCreating(null);
+            }}
+            onCancel={() => setCreating(null)}
+            onCreated={(opt) => {
+              onContactAdded(opt, [opt.id]);
+              setCreating(null);
+            }}
+          />
+        ) : null}
       </div>
       <div className="form-field">
         <label>Contact</label>
@@ -236,6 +266,157 @@ export default function VendorContactFields({
         />
       </div>
     </>
+  );
+}
+
+// 명부에 없는 회사를 발신 화면에서 바로 등록한다 — 회사명·담당자·메일·전화·국가만.
+// 나머지(분류·메이커·주소·로고)는 Partners 에서 채운다. 같은 이름이 이미 있으면 새로
+// 만들지 않고 그 회사를 고르게 한다(한 회사가 두 번 서면 거래 이력이 갈라진다).
+function QuickCompanyCreate({
+  kind,
+  label,
+  defaultName,
+  companies,
+  onPickExisting,
+  onCancel,
+  onCreated,
+}: {
+  kind: "vendors" | "makers";
+  label: string;
+  defaultName: string;
+  companies: Company[];
+  onPickExisting: (repId: number) => void;
+  onCancel: () => void;
+  onCreated: (opt: VendorOption) => void;
+}) {
+  const [d, setD] = useState({ name: defaultName, contact: "", email: "", phone: "", country: "" });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const key = d.name.trim().toLowerCase().replace(/\s+/g, " ");
+  const dup = key ? companies.find((c) => c.key === key) ?? null : null;
+
+  // 바깥을 누르면 닫는다 — 저장 중에는 그대로 둔다.
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node) && !saving) onCancel();
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [onCancel, saving]);
+
+  async function submit() {
+    if (saving) return;
+    const name = d.name.trim();
+    const email = d.email.trim();
+    const phone = d.phone.trim();
+    const country = d.country.trim();
+    if (!name) {
+      setErr(`Enter a ${label.toLowerCase()} name.`);
+      return;
+    }
+    if (dup) {
+      setErr(`“${dup.name}” is already listed — pick it instead.`);
+      return;
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setErr("Check the email address.");
+      return;
+    }
+    setSaving(true);
+    setErr(null);
+    const body = {
+      name,
+      contact: d.contact.trim(),
+      email,
+      contact_phone: phone,
+      country,
+      emails: email ? [email] : [],
+      phones: phone ? [phone] : [],
+      regions: country ? [country] : [],
+    };
+    try {
+      const r =
+        kind === "makers"
+          ? await createSettingsMaker({
+              ...body,
+              duty: "",
+              address: "",
+              website: "",
+              specialization: "",
+              note: "",
+              logo: "",
+              addresses: [],
+              category_ids: [],
+            })
+          : await createSettingsVendor(body);
+      onCreated({
+        id: r.id,
+        name,
+        contact: body.contact,
+        email,
+        emails: body.emails,
+        phone,
+        phones: body.phones,
+        uses: 0,
+      });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setSaving(false);
+    }
+  }
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void submit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation(); // 모달까지 닫히지 않게
+      onCancel();
+    }
+  };
+  const field = (k: keyof typeof d) => ({
+    value: d[k],
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setD({ ...d, [k]: e.target.value }),
+    onKeyDown: onKey,
+  });
+
+  return (
+    <div className="vnew-pop" ref={ref} role="dialog" aria-label={`New ${label.toLowerCase()}`}>
+      <div className="vcon-add-title">New {label.toLowerCase()} — quick register</div>
+      <div className="vcon-add-grid">
+        <input autoFocus className="vnew-wide" placeholder={`${label} name *`} {...field("name")} />
+        <input placeholder="Contact name" {...field("contact")} />
+        <input type="email" placeholder="Email" {...field("email")} />
+        <input placeholder="Phone (optional)" {...field("phone")} />
+        <input placeholder="Country (optional)" {...field("country")} />
+      </div>
+      {dup ? (
+        <div className="vnew-dup">
+          “{dup.name}” is already listed.
+          <button type="button" className="btn ghost sm" onClick={() => onPickExisting(dup.repId)}>
+            Use it
+          </button>
+        </div>
+      ) : null}
+      {err ? <div className="vcon-add-err">{err}</div> : null}
+      <div className="vcon-add-actions">
+        <span className="vcon-add-note">
+          Saved to Partners ▸ {kind === "makers" ? "Maker" : "Vendor"} — fill in the rest there later.
+        </span>
+        <button type="button" className="btn ghost" onClick={onCancel} disabled={saving}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn primary"
+          onClick={() => void submit()}
+          disabled={saving || !d.name.trim() || !!dup}
+        >
+          {saving ? "Saving…" : `Create ${label}`}
+        </button>
+      </div>
+    </div>
   );
 }
 

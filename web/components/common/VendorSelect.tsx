@@ -31,12 +31,18 @@ export default function VendorSelect({
   options,
   placeholder = "Select…",
   disabled,
+  onCreate,
+  createLabel = "+ New",
 }: {
   value: number | "";
   onChange: (id: number | "") => void;
   options: VendorSelectOption[];
   placeholder?: string;
   disabled?: boolean;
+  /** 주어지면 목록 끝에 "+ New …" 줄이 선다 — 명부에 없는 곳을 그 자리에서 약식 등록한다.
+   *  검색 중이던 낱말을 이름 초안으로 넘긴다. */
+  onCreate?: (draftName: string) => void;
+  createLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   // 키보드 이동 위치. -1 = 첫 항목(선택 해제 = placeholder).
@@ -225,6 +231,21 @@ export default function VendorSelect({
           ))}
           {searching && ordered.length === 0 ? (
             <li className="vsel-empty" role="presentation">No match for “{q.trim()}”.</li>
+          ) : null}
+          {onCreate ? (
+            <li
+              className="vsel-item vsel-create"
+              role="option"
+              aria-selected={false}
+              onClick={() => {
+                const draft = q.trim();
+                close();
+                onCreate(draft);
+              }}
+            >
+              {createLabel}
+              {searching ? <span className="vcon-sub"> “{q.trim()}”</span> : null}
+            </li>
           ) : null}
         </ul>
       ) : null}

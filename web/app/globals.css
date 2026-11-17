@@ -9951,6 +9951,17 @@ table.mini .num {
 @media (max-width: 520px) {
   .vcon-add-grid { grid-template-columns: minmax(0, 1fr); }
 }
+/* 회사 칸 목록 끝 "+ New vendor/maker" 와 그 약식 등록 창(칸 바로 아래에 뜬다). */
+.vsel-create { color: var(--blue); font-weight: 600; border-top: 1px solid #eaf0f7; margin-top: 4px; }
+.vnew-anchor { position: relative; }
+.vnew-pop {
+  position: absolute; top: 100%; left: 0; z-index: 60; margin-top: 4px;
+  width: min(460px, calc(100vw - 32px)); box-sizing: border-box; padding: 10px 10px 8px;
+  background: #fff; border: 1px solid #cdd9e8; border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(20, 40, 80, .16);
+}
+.vnew-pop .vnew-wide { grid-column: 1 / -1; }
+.vnew-dup { margin-top: 6px; font-size: 11.5px; color: #8a5a00; display: flex; align-items: center; gap: 6px; }
 
 /* 거래선 추천(2단계 RFQ Sent) — 품목 분류·거래이력·취급품목으로 고른 후보.
    결정을 대신하지 않는다는 뜻이 보이도록 입력 필드가 아니라 '메모지'처럼 둔다. */
