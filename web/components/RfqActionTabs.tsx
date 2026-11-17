@@ -153,7 +153,7 @@ import {
 } from "./common/itemTable";
 import FxRateControl, { FxMode } from "./common/FxRateControl";
 import { useItemGrid, ItemTh, ItemGridStyle, ItemColsButton, igSpan, type ItemCol } from "./common/itemGrid";
-import { OPTION_ROW_KIND, isOptionRow, countedItems, hasOptions, optionPlan, applyLineAlts, lineGroups } from "../lib/quoteOptions";
+import { OPTION_ROW_KIND, isOptionRow, countedItems, hasOptions, optionPlan, applyLineAlts, lineGroups, isChargeRow, CHARGE_RE } from "../lib/quoteOptions";
 import CategoryCell from "./common/CategoryCell";
 import { useMakerOptions } from "./common/MakerCell";
 import QuotationPreview from "./QuotationPreview";
@@ -6753,11 +6753,34 @@ function CustomerQuoteItemEditor({
                   {entry.seq}
                   {it.lid ? (
                     <span className={`seq-lid${(it.lids?.length ?? 0) > 1 ? " seq-lids" : ""}`}
-                          title={(it.lids?.length ?? 0) > 1
+                          title={isChargeRow(it)
+                            ? `Charge for ${(it.lids?.length ?? 0) > 1 ? it.lids!.join(", ") : it.lid} — always counted in the Total, never an alternative`
+                            : (it.lids?.length ?? 0) > 1
                             ? `One complete item covering ${it.lids!.length} project lines: ${it.lids!.join(", ")} — printed the same way on the quotation`
                             : "Line ID — also printed on the quotation sent to the customer"}>
                       {(it.lids?.length ?? 0) > 1 ? lineRangeText(it.lids!) : it.lid}
                     </span>
+                  ) : null}
+                  {/* 부대비용(운임 등) — 품목들에 딸린 비용이라 대안으로 묶지 않고 늘 합계에 넣는다.
+                      품명으로 가늠하므로 잘못 짚었으면 눌러서 보통 품목으로 돌린다. */}
+                  {isChargeRow(it) ? (
+                    <button
+                      type="button"
+                      className="line-charge"
+                      title="Charge (freight, packing …) — counted in the Total and never grouped as an alternative of the item with the same line. Click if this row is actually an item."
+                      onClick={() => onChange(items.map((x, n) => (n === i ? { ...x, charge: false } : x)))}
+                    >
+                      CHARGE
+                    </button>
+                  ) : it.charge === false && CHARGE_RE.test(String(it.description || "")) ? (
+                    <button
+                      type="button"
+                      className="line-charge off"
+                      title="Marked as an item. Click to treat it as a charge again."
+                      onClick={() => onChange(items.map((x, n) => (n === i ? { ...x, charge: null } : x)))}
+                    >
+                      item
+                    </button>
                   ) : null}
                   {/* 같은 라인이 여러 줄 — 대안이면 합계에 넣을 한 줄을 고르고, 세트면 모두 넣는다. */}
                   {groups.has(String(it.lid || "")) ? (() => {

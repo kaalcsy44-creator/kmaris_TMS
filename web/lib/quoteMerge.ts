@@ -308,6 +308,12 @@ export type SyncChange = {
 type SrcLine = { lid?: string; lids?: string[]; part_no?: string; description?: string;
                  lead_time?: string; remark?: string; row_kind?: string | null };
 
+// lib/quoteOptions isChargeRow 와 같은 규칙(이 파일은 node --test 로 돌아 값 import 를 하지 않는다).
+const CHARGE_LIKE =
+  /\b(freight|shipping|courier|forwarding|postage)\b|\b(delivery|packing|packaging|handling|crating|transport(?:ation)?|insurance|bank|express)\s+(cost|costs|charge|charges|fee|fees)\b|운임|배송비|택배비|포장비|운송비|운반비|수수료/i;
+const isChargeLike = (it: CustomerQuoteItem) =>
+  it.charge === true || (it.charge !== false && CHARGE_LIKE.test(String(it.description || "")));
+
 const norm = (v: unknown) => String(v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 const lidsText = (it: { lid?: string; lids?: string[] | null }) =>
   (it.lids && it.lids.length > 1 ? it.lids : [it.lid || ""]).filter(Boolean).join(", ");
@@ -384,7 +390,8 @@ export function sourceChanges(
     if (!fields.length) return;
     const q = byId.get(Number(it.src_vq_id))!;
     let warn: string | undefined;
-    if (want.lid && want.lid !== have.lid) {
+    // 부대비용 줄(운임 등)은 L번호가 겹쳐도 대안으로 묶이지 않는다 — 경고할 일이 아니다.
+    if (want.lid && want.lid !== have.lid && !isChargeLike(it)) {
       const other = items.findIndex((x, n) => n !== i && !isOptionRow(x) && String(x.lid || "").trim() === want.lid);
       if (other >= 0)
         warn = `${want.lid} is already on another row (${items[other].description || items[other].part_no || "—"}) — rows sharing a line are grouped as alternatives, so only one of them counts in the Total.`;

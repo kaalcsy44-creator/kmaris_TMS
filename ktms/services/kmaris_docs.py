@@ -144,6 +144,28 @@ def _num(value: Any) -> float:
 OPTION_ROW_KIND = "option"
 
 
+# 부대비용 줄(운임·포장비·택배비 등) — 품목이 아니라 품목들에 딸린 비용이다. 이 줄에 L번호를
+# 달아도(어느 품목들의 운임인지 표시) 같은 L의 품목과 대안/세트로 묶지 않는다 — 묶으면
+# 둘 중 하나가 합계에서 빠지고 소싱보드는 품목 단가에 운임을 더한다. web/lib/quoteOptions.ts
+# isChargeRow 와 같은 규칙. charge=True/False 로 사람이 정하면 그쪽이 먼저다.
+CHARGE_RE = re.compile(
+    r"\b(freight|shipping|courier|forwarding|postage)\b"
+    r"|\b(delivery|packing|packaging|handling|crating|transport(?:ation)?|insurance|bank|express)"
+    r"\s+(cost|costs|charge|charges|fee|fees)\b"
+    r"|운임|배송비|택배비|포장비|운송비|운반비|수수료",
+    re.I,
+)
+
+
+def is_charge_row(raw: Any) -> bool:
+    if not isinstance(raw, dict) or is_option_row(raw):
+        return False
+    flag = raw.get("charge")
+    if flag is not None:
+        return bool(flag)
+    return bool(CHARGE_RE.search(str(raw.get("description") or "")))
+
+
 def is_option_row(raw: Any) -> bool:
     """옵션 표시행(품목이 아니라 그 아래 품목들을 묶는 제목 행)인가."""
     return isinstance(raw, dict) and str(raw.get("row_kind") or "") == OPTION_ROW_KIND
@@ -169,7 +191,7 @@ def option_blocks(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not blocks:
             blocks.append({"no": None, "title": "", "items": [], "amount": 0.0})
         blocks[-1]["items"].append(raw)
-        if not raw.get("alt_off"):   # 합계에서 뺀 대안 줄은 소계에도 넣지 않는다
+        if not raw.get("alt_off") or is_charge_row(raw):   # 합계에서 뺀 대안 줄은 소계에도 넣지 않는다(운임은 대안이 아니다)
             blocks[-1]["amount"] += _num(raw.get("amount", 0))
     return blocks
 
@@ -305,7 +327,7 @@ def normalize_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "dimension": raw.get("dimension", ""),
                 "hs_code": raw.get("hs_code", ""),
                 # 같은 라인(lid)의 대안 중 합계에 넣지 않는 줄 — 표에는 "Alt." 로 찍힌다.
-                "alt_off": (not option) and bool(raw.get("alt_off")),
+                "alt_off": (not option) and bool(raw.get("alt_off")) and not is_charge_row(raw),
             }
         )
     return normalized

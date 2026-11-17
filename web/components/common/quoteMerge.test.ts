@@ -218,7 +218,7 @@ test("sync: 3단계에서 고친 L번호·납기만 가져오고 값은 그대�
   const r = sourceChanges(items, [src]);
   assert.equal(r.changes.length, 2);
   assert.deepEqual(r.changes[0].fields.map((f) => f.key), ["lead_time"]);
-  assert.ok(r.changes[1].warn, "운임이 L01을 달면 대안 묶음 경고");
+  assert.equal(r.changes[1].warn, undefined, "운임은 L01을 달아도 대안으로 묶이지 않는다");
   const out = applySourceChanges(items, r.changes);
   assert.equal(out[0].lead_time, "5 weeks");
   assert.equal(out[0].cost_price, 100);
@@ -244,4 +244,17 @@ test("sync: lids 가 풀리면 걷는다", () => {
   const r = sourceChanges(items, [vq([{ description: "Freight cost", lid: "L01" }])]);
   const out = applySourceChanges(items, r.changes);
   assert.equal(out[0].lids, undefined);
+});
+
+test("sync: 운임 줄은 L번호가 품목과 겹쳐도 경고하지 않는다", () => {
+  const items = [
+    row({ part_no: "P1", description: "Nitric Acid", lid: "L15", src_vq_id: 7 }),
+    row({ description: "Freight cost", src_vq_id: 7 }),
+  ];
+  const r = sourceChanges(items, [vq([
+    { part_no: "P1", description: "Nitric Acid", lid: "L15" },
+    { description: "Freight cost", lid: "L15", lids: ["L15", "L16"] },
+  ])]);
+  assert.equal(r.changes.length, 1);
+  assert.equal(r.changes[0].warn, undefined);
 });

@@ -793,6 +793,9 @@ export type CustomerQuoteItem = {
   line_mode?: "alt" | "set" | null;
   /** 대안 묶음에서 합계에 넣지 않는 줄 — 문서엔 "Alt." 로 찍히고 Total·마진·딜 금액에서 빠진다. */
   alt_off?: boolean;
+  /** 부대비용 줄(운임 등) — true/false 는 사람이 정한 값, 비우면 품명으로 가늠(lib/quoteOptions isChargeRow).
+   *  L번호는 "어느 품목들의 비용인지" 표시일 뿐이고, 대안으로 묶이지 않아 언제나 합계에 든다. */
+  charge?: boolean | null;
   /** 원가 출처 — 이 줄의 원가를 준 공급사 견적. 한 장의 고객 견적에 여러 공급사 견적을
    *  합쳐 담을 수 있어서(web/lib/quoteMerge.ts), 출처는 문서가 아니라 줄이 안고 다닌다.
    *  내부용이다 — 고객이 받는 견적서·Excel 에는 한 글자도 찍히지 않는다. */

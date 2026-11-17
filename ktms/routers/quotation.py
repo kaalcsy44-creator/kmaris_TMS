@@ -58,7 +58,7 @@ from _core import (
     usd_krw_rate,
 )
 from services.fx import get_rates
-from services.kmaris_docs import line_range_text, quotation_validity_text
+from services.kmaris_docs import is_charge_row, line_range_text, quotation_validity_text
 from services.mail_compose import build_attachments, compose_body, compose_parts
 from services.item_ledger import apply_line_categories
 
@@ -551,7 +551,7 @@ def _combined_quotation_payload(s, rfq_id: int, ids: str):
 
     def sort_key(pair):
         lid = str(pair[1].get("lid") or "").strip()
-        if not lid:
+        if not lid or is_charge_row(pair[1]):   # 운임 등 부대비용은 L번호를 달았어도 맨 뒤
             return (2, 0)
         return (0, rank[lid]) if lid in rank else (1, lid_num(lid))
 

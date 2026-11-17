@@ -77,7 +77,7 @@ from services.pdf_parser import (
 )
 from services.vendor_xlsx import make_vendor_rfq_quote_xlsx
 from services.doc_xlsx import make_document_xlsx
-from services.kmaris_docs import is_option_row, option_blocks
+from services.kmaris_docs import is_charge_row, is_option_row, option_blocks
 from services.quote_response_parser import parse_vendor_quote_bytes, excel_to_text
 from db.models import (
     RFQ, Customer, CustomerContact, Vessel, Vendor, VendorContact, User, UserRole, RolePermission, ItemMaster, ItemCategory, DocSequence,
@@ -758,7 +758,7 @@ def _counted_rows(items) -> list:
     return [
         i for i in (items or [])
         if isinstance(i, dict) and not i.get("excluded") and not is_option_row(i)
-        and not i.get("alt_off")
+        and (not i.get("alt_off") or is_charge_row(i))   # 운임은 대안이 아니다
     ]
 
 
@@ -1892,7 +1892,9 @@ def index_doc_by_line(base_items, doc_items, kits: bool = False) -> dict[str, di
     보드가 통째로 비어 "아무 데도 안 물어봤다"로 읽힌다.
     """
     base = [it for it in (base_items or []) if isinstance(it, dict)]
-    doc = [it for it in (doc_items or []) if isinstance(it, dict) and not is_option_row(it)]
+    # 운임 같은 부대비용 줄은 L번호를 달았어도 품목 값이 아니다(세트로 합산되면 단가가 부푼다).
+    doc = [it for it in (doc_items or [])
+           if isinstance(it, dict) and not is_option_row(it) and not is_charge_row(it)]
     keys = [line_id_of(b) or f"#{i + 1}" for i, b in enumerate(base)]
     named = {k for k, b in zip(keys, base) if line_id_of(b)}
     out: dict[str, dict] = {}
@@ -1966,7 +1968,7 @@ def doc_line_alts(base_items, doc_items, modes=None) -> dict[str, list[dict]]:
                if isinstance(b, dict) and line_id_of(b)}
     groups: dict[str, list[dict]] = {}
     for d in doc_items or []:
-        if isinstance(d, dict) and not is_option_row(d) and line_id_of(d) in base_of:
+        if isinstance(d, dict) and not is_option_row(d) and not is_charge_row(d) and line_id_of(d) in base_of:
             groups.setdefault(line_id_of(d), []).append(d)
     out: dict[str, list[dict]] = {}
     for lid, group in groups.items():
@@ -3589,7 +3591,7 @@ def _doc_items_from_quotation(quo) -> list[dict]:
     for it in (quo.items or []) if quo else []:
         if not isinstance(it, dict):
             continue
-        if it.get("alt_off"):   # 합계에서 뺀 대안 줄 — 청구 대상이 아니다
+        if it.get("alt_off") and not is_charge_row(it):   # 합계에서 뺀 대안 줄 — 청구 대상이 아니다
             continue
         out.append({
             "part_no": it.get("part_no") or "",

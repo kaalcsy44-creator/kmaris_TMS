@@ -19,7 +19,21 @@ export type OptionRowLike = {
   lid?: string | null;
   line_mode?: "alt" | "set" | null;
   alt_off?: boolean | null;
+  /** 부대비용 줄(운임 등) 표식 — true/false 는 사람이 정한 값, 비우면 품명으로 가늠한다. */
+  charge?: boolean | null;
 };
+
+/** 부대비용 줄(운임·포장비·택배비 등)을 품명으로 가늠하는 규칙 — 서버 kmaris_docs.CHARGE_RE 와 같다. */
+export const CHARGE_RE =
+  /\b(freight|shipping|courier|forwarding|postage)\b|\b(delivery|packing|packaging|handling|crating|transport(?:ation)?|insurance|bank|express)\s+(cost|costs|charge|charges|fee|fees)\b|운임|배송비|택배비|포장비|운송비|운반비|수수료/i;
+
+/** 부대비용 줄인가 — 품목이 아니라 품목들에 딸린 비용이다. L번호를 달아도(어느 품목들의
+ *  운임인지 표시) 같은 L의 품목과 대안/세트로 묶지 않고, 언제나 합계에 들어간다. */
+export function isChargeRow(it: OptionRowLike | null | undefined): boolean {
+  if (!it || isOptionRow(it)) return false;
+  if (it.charge === true || it.charge === false) return it.charge;
+  return CHARGE_RE.test(String(it.description || ""));
+}
 
 export function isOptionRow(it: OptionRowLike | null | undefined): boolean {
   return String(it?.row_kind || "") === OPTION_ROW_KIND;
@@ -76,7 +90,7 @@ export function optionBlocks<T extends OptionRowLike>(items: readonly T[] | null
  *  옵션마다 Subtotal 을 세우고 맨 아래 Total 은 그것들을 모두 더한 값이다. 서버의
  *  _counted_rows 와 같은 규칙이라, 화면의 Final 과 목록·마진의 숫자가 한 값이 된다. */
 export function countedItems<T extends OptionRowLike>(items: readonly T[] | null | undefined): T[] {
-  return (items || []).filter((it) => !isOptionRow(it) && !it.alt_off);
+  return (items || []).filter((it) => !isOptionRow(it) && (!it.alt_off || isChargeRow(it)));
 }
 
 /** 같은 라인(lid) 줄 묶음 — 두 줄 이상인 라인만. 값은 원본 배열 위치(위에서부터). */
@@ -84,7 +98,8 @@ export function lineGroups<T extends OptionRowLike>(items: readonly T[]): Map<st
   const by = new Map<string, number[]>();
   items.forEach((it, i) => {
     const lid = String(it.lid || "").trim();
-    if (!lid || isOptionRow(it)) return;
+    // 운임 같은 부대비용 줄은 L번호가 같아도 대안 묶음이 아니다(묶으면 합계에서 빠진다).
+    if (!lid || isOptionRow(it) || isChargeRow(it)) return;
     by.set(lid, [...(by.get(lid) || []), i]);
   });
   for (const [k, v] of by) if (v.length < 2) by.delete(k);

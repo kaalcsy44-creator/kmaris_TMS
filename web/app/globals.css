@@ -21837,3 +21837,9 @@ td.seq .seq-lid.seq-lids { white-space: normal; color: #0055a8; font-weight: 600
   :root:not([data-theme="light"]) .sync-row.on { background: rgba(80, 140, 220, .12); }
 }
 :root[data-theme="dark"] .sync-row.on { background: rgba(80, 140, 220, .12); }
+
+/* 부대비용 줄(운임 등) 표식 — 대안 묶음이 아니라 늘 합계에 든다 */
+.line-charge { display: block; margin-top: 2px; padding: 0 4px; border: 1px solid #c9a24a; border-radius: 4px; background: #fff7e3; color: #8a6200; font-size: 9.5px; font-weight: 700; letter-spacing: .02em; cursor: pointer; line-height: 1.5; }
+.line-charge.off { border-color: var(--line, #dfe3ea); background: transparent; color: var(--muted); font-weight: 500; }
+:root[data-theme="dark"] .line-charge:not(.off) { background: rgba(201, 162, 74, .15); color: #e7c46f; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .line-charge:not(.off) { background: rgba(201, 162, 74, .15); color: #e7c46f; } }
