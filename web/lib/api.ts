@@ -2044,7 +2044,7 @@ export type HsSuggestLine = {
   maker: string;
   code: string;
   alt: string;
-  source: "history" | "master" | "ai" | "";
+  source: "history" | "master" | "saved" | "ai" | "";
   confidence: "high" | "medium" | "low" | "";
   reason: string;
 };

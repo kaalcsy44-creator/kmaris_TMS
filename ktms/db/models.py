@@ -351,6 +351,21 @@ class ItemCategory(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class HsSuggestCache(Base):
+    """AI(Claude)가 낸 HS 코드 추천을 남겨 둔다 — 같은 품목을 다시 물으면 API 를 다시 부르지 않고
+    이것을 돌려준다(2026-11-17 사용자 요청). 열쇠 = 품번 키(_pn), 품번이 짧으면 품명 키."""
+    __tablename__ = "hs_suggest_cache"
+    id          = Column(Integer, primary_key=True)
+    key         = Column(String(200), unique=True, nullable=False, index=True)
+    part_no     = Column(String(100))
+    description = Column(String(400))
+    code        = Column(String(20))
+    alt         = Column(String(20))
+    confidence  = Column(String(10))
+    reason      = Column(Text)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+
+
 class ItemMaster(Base):
     __tablename__ = "item_master"
     id          = Column(Integer, primary_key=True)

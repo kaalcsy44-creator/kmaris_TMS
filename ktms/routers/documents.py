@@ -273,6 +273,14 @@ def hs_suggest(body: HsSuggestIn):
             ai = _hs.classify(records["pending"], records["reference"])
         except ValueError as exc:
             raise HTTPException(status_code=502, detail=f"HS suggestion failed: {exc}") from exc
+        # AI 답을 남긴다 — 같은 품목은 다음부터 API 없이 불러온다. 보관 실패가 추천을 막지 않는다.
+        s = get_session()
+        try:
+            _hs.save_ai(s, records["pending"], ai)
+        except Exception:
+            s.rollback()
+        finally:
+            s.close()
     return _hs.merge(records, ai)
 
 

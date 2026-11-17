@@ -16,10 +16,11 @@ Claude 는 6단위(국제 공통)만 답한다. 10단위 HSK 는 나라별 세�
 from __future__ import annotations
 
 import re
+from datetime import datetime
 
 from sqlalchemy import func
 
-from db.models import CommercialInvoice, ItemCategory, ItemMaster, ProformaInvoice
+from db.models import CommercialInvoice, HsSuggestCache, ItemCategory, ItemMaster, ProformaInvoice
 from services.pdf_parser import _anthropic_client, _api_error_message, _parse_response
 
 _MODEL = "claude-opus-5-5"
@@ -91,6 +92,40 @@ def _master(session, lines: list[dict]) -> dict[str, dict]:
     return out
 
 
+def cache_key(ln: dict) -> str:
+    """AI 답 보관 열쇠 — 품번(4자 이상)이면 품번, 아니면 품명(대소문자·공백 무시)."""
+    k = _pn(ln.get("part_no"))
+    if len(k) >= 4:
+        return "P:" + k
+    d = re.sub(r"\s+", " ", (ln.get("description") or "").strip().upper())
+    return ("D:" + d)[:200] if d else ""
+
+
+def _cached(session, lines: list[dict]) -> dict[str, HsSuggestCache]:
+    keys = {k for k in (cache_key(ln) for ln in lines) if k}
+    if not keys:
+        return {}
+    return {r.key: r for r in session.query(HsSuggestCache).filter(HsSuggestCache.key.in_(keys)).all()}
+
+
+def save_ai(session, pending: list[dict], ai: dict | None) -> None:
+    """AI 답(코드를 낸 줄만)을 보관한다 — 다음번엔 API 없이 이것을 쓴다. 이미 있으면 새 답으로."""
+    by_no = (ai or {}).get("by_no") or {}
+    for ln in pending:
+        found = by_no.get(ln["no"])
+        k = cache_key(ln)
+        if not k or not found or not found.get("code"):
+            continue
+        row = session.query(HsSuggestCache).filter_by(key=k).first() or HsSuggestCache(key=k)
+        row.part_no = (ln.get("part_no") or "")[:100]
+        row.description = (ln.get("description") or "")[:400]
+        row.code, row.alt = found["code"], found.get("alt") or ""
+        row.confidence, row.reason = found.get("confidence") or "", found.get("reason") or ""
+        row.created_at = datetime.utcnow()
+        session.add(row)
+    session.commit()
+
+
 def _reference(session) -> list[str]:
     """품목 분류의 참고 코드 — 프롬프트에 함께 넘긴다."""
     rows = (session.query(ItemCategory.name, ItemCategory.hs_code)
@@ -107,6 +142,7 @@ def from_records(session, lines: list[dict], exclude_doc: str = "") -> dict:
     keys = {k for k in (_pn(ln.get("part_no")) for ln in lines) if len(k) >= 4}
     hist = _history(session, keys, exclude_doc) if keys else {}
     master = _master(session, lines)
+    cache = _cached(session, lines)
     out, pending = [], []
     for ln in lines:
         row = {**ln, "code": "", "alt": "", "source": "", "confidence": "", "reason": ""}
@@ -119,6 +155,10 @@ def from_records(session, lines: list[dict], exclude_doc: str = "") -> dict:
         elif m.get("code"):
             row.update(code=m["code"], source="master", confidence="high",
                        reason="Recorded in the item master")
+        elif (c := cache.get(cache_key(ln))) and c.code:
+            # 전에 AI 가 답한 품목 — API 를 다시 부르지 않는다.
+            row.update(code=c.code, alt=c.alt or "", source="saved", confidence=c.confidence or "medium",
+                       reason=(c.reason or "") + f" (AI answer saved {c.created_at:%Y-%m-%d})")
         else:
             pending.append({**ln, "hint": m.get("hint", "")})
         out.append(row)

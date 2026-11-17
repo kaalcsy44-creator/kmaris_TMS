@@ -8,7 +8,7 @@ import { suggestHsCodes, type HsSuggestLine, type HsSuggestResult } from "@/lib/
    이 칸은 문서 기본 코드(줄별 HS Code 칸을 비운 줄에 쓰인다). onApplyLines 를 주면 추천 코드를
    줄마다 넣을 수 있다 — 줄마다 코드가 다를 때. */
 
-const SOURCE: Record<string, string> = { history: "Used before", master: "Item master", ai: "AI" };
+const SOURCE: Record<string, string> = { history: "Used before", master: "Item master", saved: "Saved AI answer", ai: "AI" };
 
 /** 같은 코드를 받은 줄끼리 묶는다 — 줄이 많은 코드가 위로. 코드를 못 찾은 줄은 맨 아래. */
 function groupLines(lines: HsSuggestLine[]) {
