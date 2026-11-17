@@ -58,6 +58,7 @@ from _core import (
     usd_krw_rate,
 )
 from services.fx import get_rates
+from services.kmaris_docs import line_range_text, quotation_validity_text
 from services.mail_compose import build_attachments, compose_body, compose_parts
 from services.item_ledger import apply_line_categories
 
@@ -509,12 +510,21 @@ def _combined_quotation_payload(s, rfq_id: int, ids: str):
 
     order: list[str] = []
     lines: dict[str, dict] = {}
+    src: dict[str, int] = {}          # 줄 열쇠 → 그 줄을 낸 견적 id(라인 표시·조건 풀이용)
     for x in qtns:
+        seen_lid: dict[str, int] = {}
         for i, it in enumerate(x.items or []):
             if not isinstance(it, dict):
                 continue
             lid = str(it.get("lid") or "").strip()
-            key = lid if lid and not is_option_row(it) else f"{x.id}#{i}"
+            if lid and not is_option_row(it):
+                # 같은 견적 안에 같은 lid 가 여럿(대안 줄) — 몇 번째인지까지 열쇠에 넣어야
+                # 대안 줄이 본 줄을 덮어 사라지지 않는다.
+                n = seen_lid.get(lid, 0)
+                seen_lid[lid] = n + 1
+                key = f"{lid}#{n}"
+            else:
+                key = f"{x.id}#{i}"
             row = dict(it)
             if x.id != base.id:
                 tag = f"per {x.qtn_no}"
@@ -522,15 +532,51 @@ def _combined_quotation_payload(s, rfq_id: int, ids: str):
             if key not in lines:
                 order.append(key)
                 lines[key] = row
+                src[key] = x.id
             elif priced(it):
                 lines[key] = row
-    items = [lines[k] for k in order]
-    # 모두 딜 품목 줄(lid)이면 RFQ 순서로 세운다 — 재견적에만 있던 품목이 맨 끝에 붙지 않게.
+                src[key] = x.id
+    keyed = [(k, lines[k]) for k in order]
+
+    # 라인(L) 번호 순서로 세운다 — 견적 순서대로 붙이면 재견적 품목이 엉뚱한 자리에 선다.
+    # RFQ 의 품목 순서가 첫째 기준, RFQ 에 없는 lid 는 번호로, lid 없는 줄(운임 등)은 맨 뒤.
+    # 옵션 블록이 있는 견적은 줄의 자리가 곧 블록이라 건드리지 않는다.
     rfq = s.query(RFQ).filter_by(id=rfq_id).first()
     rank = {str(it.get("lid") or ""): n for n, it in enumerate((rfq.items or []) if rfq else [])
             if isinstance(it, dict) and it.get("lid")}
-    if rank and all(str(it.get("lid") or "") in rank for it in items):
-        items.sort(key=lambda it: rank[str(it.get("lid"))])
+
+    def lid_num(lid: str) -> int:
+        m = re.search(r"(\d+)$", lid)
+        return int(m.group(1)) if m else 10 ** 6
+
+    def sort_key(pair):
+        lid = str(pair[1].get("lid") or "").strip()
+        if not lid:
+            return (2, 0)
+        return (0, rank[lid]) if lid in rank else (1, lid_num(lid))
+
+    if not any(is_option_row(it) for _, it in keyed):
+        keyed.sort(key=sort_key)   # 안정 정렬 — 같은 라인의 대안 줄, lid 없는 줄은 제 차례 유지
+    items = [it for _, it in keyed]
+
+    # 견적별로 이 통합본에 실린 라인 — Remark 머리표와 조건 풀이에 쓴다.
+    lids_of: dict[int, list[str]] = {}
+    for k, it in keyed:
+        lid = str(it.get("lid") or "").strip()
+        if lid and lid not in lids_of.setdefault(src[k], []):
+            lids_of[src[k]].append(lid)
+
+    def lid_key(l: str):
+        return (rank.get(l, 10 ** 6), lid_num(l))
+
+    def lids_label(*qids: int) -> str:
+        """견적 여럿의 라인을 합쳐 라인 순서로 — 이어진 번호는 범위로 접는다."""
+        got = sorted({l for q in qids for l in (lids_of.get(q) or [])}, key=lid_key)
+        return line_range_text(got)
+
+    def first_lid(*qids: int):
+        got = [lid_key(l) for q in qids for l in (lids_of.get(q) or [])]
+        return min(got) if got else (10 ** 7, 0)
 
     payload = _quotation_payload(s, base)
     payload["items"] = items
@@ -538,16 +584,62 @@ def _combined_quotation_payload(s, rfq_id: int, ids: str):
     if len(nos) > 1:
         payload["doc_no"] = " + ".join(nos)
     terms = dict(payload.get("terms") or {})
+    multi = len(qtns) > 1
     seen, notes = set(), []
-    for x in qtns:
+    # 라인 순서로 — 견적을 낸 차례가 아니라 그 견적이 실은 첫 라인의 차례대로 적는다.
+    for x in sorted(qtns, key=lambda q: first_lid(q.id)):
+        # 견적 단위 Remark 는 어느 품목 얘기인지 흐려진다 — 그 견적이 실은 라인을 앞에 붙인다.
+        tag = lids_label(x.id) if multi else ""
         for line in str((x.terms or {}).get("remarks") or "").splitlines():
-            if line.strip() and line.strip() not in seen:
-                seen.add(line.strip())
-                notes.append(line.strip())
+            t = line.strip()
+            if not t:
+                continue
+            if tag and not t.startswith("["):
+                t = f"[{tag}] {t}"
+            if t not in seen:
+                seen.add(t)
+                notes.append(t)
     if len(nos) > 1:
         notes.append(f"Consolidated copy of {', '.join(nos)} — where an item was re-quoted, "
                      "the later quotation applies.")
     terms["remarks"] = "\n".join(notes)
+
+    # 견적마다 다른 조건(유효기간·인도 조건) — 같으면 한 문장, 다르면 라인 묶음별로 풀어 쓴다.
+    if multi:
+        used = [x for x in qtns if lids_of.get(x.id)] or qtns
+
+        def grouped(val_of) -> list[tuple[str, str]]:
+            out: dict[str, list[int]] = {}
+            for x in used:
+                out.setdefault(val_of(x), []).append(x.id)
+            ordered = sorted(out.values(), key=lambda qs: first_lid(*qs))
+            vals = {tuple(qs): v for v, qs in out.items()}
+            return [(vals[tuple(qs)], lids_label(*qs) or "other lines") for qs in ordered]
+
+        def validity(x) -> str:
+            vu = str(x.valid_until or "").strip()[:10]
+            if vu:
+                return f"until {vu}"
+            t = quotation_validity_text("", str(x.date or ""))
+            return t.removeprefix("Quotation validity: ").rstrip(".")
+
+        override: dict[str, str] = {}
+        vg = grouped(validity)
+        if len(vg) > 1:
+            override["validity"] = "Quotation validity: " + "; ".join(
+                f"[{lab}] {v}" for v, lab in vg) + "."
+
+        def delivery(x) -> str:
+            tm = x.terms or {}
+            return (f"{tm.get('incoterms') or 'EXW (Ex Works)'} "
+                    f"{tm.get('delivery_place') or 'Busan, Republic of Korea'}")
+
+        dg = grouped(delivery)
+        if len(dg) > 1:
+            override["delivery_term"] = "Delivery term (Incoterms 2020): " + "; ".join(
+                f"[{lab}] {v}" for v, lab in dg) + "."
+        if override:
+            terms["clause_override"] = override
     payload["terms"] = terms
     return payload, (" + ".join(nos) if nos else "Quotation")
 

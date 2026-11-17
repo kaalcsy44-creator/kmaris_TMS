@@ -2330,6 +2330,10 @@ def quotation_standard_terms(terms: Dict[str, Any], validity_days: int = 30,
     terms["extra_clauses"] 는 사용자가 직접 추가한 문장으로 표준 문장 뒤에 붙인다.
     Remarks 는 여기 섞지 않는다 — 품목표와 T&C 사이의 별도 Remark 섹션에서 찍는다."""
     catalog = quotation_clause_catalog(terms, validity_days, valid_until, quote_date)
+    # 통합 견적본: 견적마다 값이 다른 문장(유효기간·인도 조건)을 라인별로 풀어 쓴 문장으로 갈음한다.
+    over = terms.get("clause_override")
+    if isinstance(over, dict) and over:
+        catalog = [(cid, str(over.get(cid) or text)) for cid, text in catalog]
     picked = terms.get("clauses")
     if isinstance(picked, list):
         chosen = set(str(c) for c in picked)
