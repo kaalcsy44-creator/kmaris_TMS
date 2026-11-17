@@ -2296,7 +2296,10 @@ function PackingListTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: P
   const plNo = data.pl?.pl_no || (data.order.po_no ? `${data.order.po_no}-PL${pkg.setNo > 1 ? `-${pkg.setNo}` : ""}` : "");
   const date = data.pl?.date || data.ci?.date || today();
   const [packingInfo, setPackingInfo] = useState(data.pl?.packing_info || "");
-  const seed = data.pl?.items || data.ci?.items || data.order.items;
+  // 품목은 CI 를 따른다 — CI 에서 '제외'한 줄(다른 포장으로 가는 것)은 PL 에 싣지 않는다.
+  // 저장된 PL 은 서버가 이미 CI 에 맞춰 준다(품목·수량은 CI, 포장 실측만 PL).
+  const ciShipItems = (data.ci?.items || []).filter((i) => !i.excluded);
+  const seed = data.pl?.items || (data.ci ? ciShipItems : data.order.items);
   const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(seed, true));
   // 선적정보·Shipping Mark — CI 값을 기본 상속하고, PL 이 저장한 값이 있으면 그것을 우선.
   // 사용자가 수정한 항목만 PL 로 저장되며 나머지는 CI 를 따라간다.
@@ -2362,7 +2365,7 @@ function PackingListTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: P
 
   function cancel() {
     setPackingInfo(data.pl?.packing_info || "");
-    setItems(normalizeItems(data.pl?.items || data.ci?.items || data.order.items, true));
+    setItems(normalizeItems(seed, true));
     setShipping(initialShipping());
   }
 
@@ -2413,7 +2416,7 @@ function PackingListTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: P
         packing
         tableId="pl-items"
         headerActions={
-          <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.ci?.items || data.order.items, true))}>
+          <button className="btn sm" disabled={busy} onClick={() => setItems(normalizeItems(data.ci ? ciShipItems : data.order.items, true))}>
             Load CI items
           </button>
         }
@@ -2424,6 +2427,9 @@ function PackingListTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: P
           kindPlaceholder: data.ci?.terms?.packing_type || "",
         }}
       />
+      <p className="hint-inline" style={{ marginTop: 6 }}>
+        품목·수량·단위는 이 포장의 <b>Commercial Invoice 를 따라갑니다</b>(CI 를 고치면 PL 도 바뀝니다). PL 에서는 포장 실측(개수·종류·N.W.·G.W.·용적·치수)과 비고만 저장됩니다.
+      </p>
       <p className="hint-inline" style={{ marginTop: 6 }}>
         여러 품목이 상자 하나에 들어가면 품목별로 나누지 말고 <b>합계행에 전체 포장 규격</b>(개수·종류·N.W.·G.W.·용적·L×W×H cm)을
         적으세요. 비워 두면 품목별 입력의 합계(회색 안내값)가 문서에 나갑니다. 이 값은 <b>Shipping Mark 탭의 케이스 수·중량·치수와 같은 값</b>이라

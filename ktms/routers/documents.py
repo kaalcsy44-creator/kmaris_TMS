@@ -46,6 +46,7 @@ from _core import (
     _order_cis,
     _pick_ci,
     _primary_ci,
+    _sync_pl_items,
     _latest_pi,
     ar_from_pi,
     _latest_pl,
@@ -944,7 +945,8 @@ def _packing_list_payload(s, order, ci, pl) -> dict:
         customer=_customer_for_order(s, order),
         vessel=_vessel_for_order(s, order),
         # 거래조건(Incoterms/Payment Terms/Packing)은 PL 서식에도 실리며 CI 값을 따른다.
-        items=pl.items or [], terms=ci.terms or {},
+        # 품목은 CI 를 따르고 포장 실측만 PL 값(_sync_pl_items) — CI 를 고치면 PL 도 따라간다.
+        items=_sync_pl_items(ci.items or [], pl.items or []), terms=ci.terms or {},
         currency=ci.currency or "USD",
         shipping=merged_shipping, po_no=order.po_no or "",
         export_ref=_project_no_for_order(s, order),

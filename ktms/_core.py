@@ -3380,18 +3380,75 @@ def _ci_view(order, ci, union_items) -> dict | None:
     }
 
 
-def _pl_view(order, pl, union_items) -> dict | None:
+def _item_key(it: dict) -> str:
+    """CI 줄 ↔ PL 줄 짝짓기 열쇠 — 라인 ID, 없으면 품번, 없으면 품명."""
+    return (str(it.get("lid") or "").strip().upper()
+            or str(it.get("part_no") or "").strip().upper()
+            or str(it.get("description") or "").strip().upper())
+
+
+# PL 에서만 적는 칸 — 포장 실측. 나머지(품번·품명·수량·단위·HS…)는 CI 를 따른다.
+PL_OWN_FIELDS = ("package", "pkg_qty", "pkg_kind", "net_weight", "gross_weight",
+                 "measurement", "dimension")
+
+
+def _sync_pl_items(ci_items: list[dict], pl_items: list[dict]) -> list[dict]:
+    """PL 품목 = 그 CI 의 발행 품목(제외 아님)을 그대로 따르고, 포장 실측 칸만 PL 저장값을 얹는다.
+
+    CI 를 고치면(품목 추가·삭제·수량·제외) PL 도 같이 바뀐다 — 포장별로 CI·PL 을 나눠
+    발행할 때 두 서류가 어긋나지 않게(2026-11-17). PL 에서 '제외'한 줄은 제외 그대로 둔다.
+    같은 열쇠가 여러 줄이면 나온 순서대로 짝짓는다."""
+    pool: dict[str, list[dict]] = {}
+    for it in pl_items or []:
+        if isinstance(it, dict):
+            pool.setdefault(_item_key(it), []).append(it)
+    out = []
+    for it in ci_items or []:
+        if not isinstance(it, dict) or it.get("excluded"):
+            continue
+        row = {k: v for k, v in it.items() if k not in PL_OWN_FIELDS}
+        row["excluded"] = False
+        mates = pool.get(_item_key(it))
+        if mates:
+            pl_row = mates.pop(0)
+            for k in PL_OWN_FIELDS:
+                if pl_row.get(k) not in (None, ""):
+                    row[k] = pl_row[k]
+            if pl_row.get("remark"):
+                row["remark"] = pl_row["remark"]
+            row["excluded"] = bool(pl_row.get("excluded"))
+        out.append(row)
+    return out
+
+
+def _pl_view(order, pl, union_items, ci=None) -> dict | None:
     if not pl:
         return None
     return {
         "id": pl.id,
         "pl_no": pl.pl_no or "",
         "date": pl.date or "",
-        "items": pl.items or [],
+        "items": _sync_pl_items(ci.items or [], pl.items or []) if ci else (pl.items or []),
         "packing_info": pl.packing_info or "",
         "shipping": pl.shipping or {},
         "missing": _missing_items(order.items or [], union_items),
     }
+
+
+def _ci_remaining(order_items: list[dict], cis) -> list[dict]:
+    """다음 포장 CI 의 초기 품목 = ① 앞 CI 에서 '제외'로 남겨 둔 줄(그 CI 에서 고친 내용 그대로,
+    다른 CI 에 이미 실렸으면 빼고) + ② 그래도 어느 CI 에도 없는 오더 품목(모자란 수량만큼)."""
+    shipped = [i for c in cis for i in (c.items or []) if isinstance(i, dict) and not i.get("excluded")]
+    shipped_keys = {_item_key(i) for i in shipped}
+    held, seen = [], set()
+    for c in cis:
+        for it in c.items or []:
+            if isinstance(it, dict) and it.get("excluded"):
+                k = _item_key(it)
+                if k and k not in shipped_keys and k not in seen:
+                    seen.add(k)
+                    held.append({**it, "excluded": False})
+    return held + _remaining_items(order_items, shipped + held)
 
 
 def _remaining_items(order_items: list[dict], doc_items: list[dict]) -> list[dict]:
@@ -3418,7 +3475,8 @@ def _document_detail_payload(session, order: Order) -> dict:
     pls = {c.id: _latest_pl(session, c.id) for c in cis}
     pl = pls.get(ci.id) if ci else None
     ci_union = _split_doc_items([c.items or [] for c in cis])
-    pl_union = _split_doc_items([p.items or [] for p in pls.values() if p])
+    pl_union = _split_doc_items([_sync_pl_items(c.items or [], pls[c.id].items or [])
+                                 for c in cis if pls.get(c.id)])
     sa = _latest_sa(session, order.id)
     tax = _latest_tax(session, ci.id if ci else None)
     pod = (session.query(DeliveryProof).filter_by(order_id=order.id)
@@ -3502,12 +3560,12 @@ def _document_detail_payload(session, order: Order) -> dict:
             "missing": _missing_items(order.items or [], pi.items or []),
         },
         "ci": _ci_view(order, ci, ci_union),
-        "pl": _pl_view(order, pl, pl_union),
+        "pl": _pl_view(order, pl, pl_union, ci),
         # 포장별 분리 발행 — CI 한 벌마다 딸린 PL 과 함께(먼저 만든 순, 첫 벌 = 대표).
-        "cis": [{**_ci_view(order, c, ci_union), "pl": _pl_view(order, pls.get(c.id), pl_union)}
+        "cis": [{**_ci_view(order, c, ci_union), "pl": _pl_view(order, pls.get(c.id), pl_union, c)}
                 for c in cis],
         # 아직 어느 CI 에도 안 들어간 오더 품목 — 새 CI(다음 포장)의 초기 품목.
-        "ci_remaining": _remaining_items(order.items or [], ci_union) if cis else (order.items or []),
+        "ci_remaining": _ci_remaining(order.items or [], cis) if cis else (order.items or []),
         "sa": None if not sa else {
             "id": sa.id,
             "sa_no": sa.sa_no or "",
@@ -5315,6 +5373,7 @@ __all__ = [
     "_order_cis",
     "_primary_ci",
     "_pick_ci",
+    "_sync_pl_items",
     "_latest_pi",
     "_latest_pl",
     "_latest_sa",
