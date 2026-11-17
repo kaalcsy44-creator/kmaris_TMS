@@ -11742,6 +11742,78 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 @media print {
   .drive-chip { display: none; }
 }
+/* 드라이브 폴더 만들기 확인 창 */
+.dfc-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(15, 23, 42, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.dfc-dialog {
+  width: min(520px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.2);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--ink);
+  font-size: 13.5px;
+}
+.dfc-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+.dfc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.dfc-field > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.dfc-field input:not([type="checkbox"]) {
+  font: inherit;
+  padding: 6px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+}
+.dfc-subs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.dfc-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+.dfc-list {
+  margin: 0;
+  padding-left: 4px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+  word-break: break-all;
+}
+.dfc-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .pl-pic-chip {
   display: inline-flex;
   align-items: center;

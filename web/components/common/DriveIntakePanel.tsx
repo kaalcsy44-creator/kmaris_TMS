@@ -7,8 +7,9 @@
 
 import { DRIVE_MAX_UPLOAD, type DriveUploadResult } from "@/lib/api";
 
-export type DriveIntake = { files: File[]; text: string };
-export const EMPTY_INTAKE: DriveIntake = { files: [], text: "" };
+/** createFolder: 프로젝트 폴더가 없으면 만들어도 된다(폴더 + 01 RFQ 만) — 사람이 체크할 때만. */
+export type DriveIntake = { files: File[]; text: string; createFolder: boolean };
+export const EMPTY_INTAKE: DriveIntake = { files: [], text: "", createFolder: false };
 
 function fmtSize(n: number) {
   return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)}MB` : `${Math.max(1, Math.round(n / 1024))}KB`;
@@ -93,6 +94,19 @@ export default function DriveIntakePanel({
         />
       </label>
 
+      <label className="dfc-sub">
+        <input
+          type="checkbox"
+          checked={value.createFolder}
+          disabled={busy}
+          onChange={(e) => onChange({ ...value, createFolder: e.target.checked })}
+        />
+        <span>
+          If this project has no Drive folder yet, create it (project folder + 01 RFQ only).
+          Unchecked → nothing is uploaded until you create the folder with 📁 Create folder.
+        </span>
+      </label>
+
       {canUploadNow ? (
         <button
           type="button"
@@ -114,6 +128,9 @@ export default function DriveIntakePanel({
             {intakeSummary(result)} ·{" "}
             <a href={result.rfq_folder_url} target="_blank" rel="noopener noreferrer">open folder</a>
           </div>
+          {(result.created ?? []).map((c) => (
+            <div key={c} className="hint-inline">📁 Created: {c}</div>
+          ))}
           {[...result.skipped, ...result.failed].map((x, i) => (
             <div key={i} className="hint-inline warn">⚠ {x.name} — {x.reason}</div>
           ))}

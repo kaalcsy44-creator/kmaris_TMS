@@ -3,8 +3,8 @@
 // RFQ 후보 함 — 메일함에서 찾은 새 RFQ 를 사람이 확인해 프로젝트로 세운다.
 //
 // 판정은 서버가 매일 아침 메일 일과 끝에 한다(services/rfq_detect.py). 여기서는 고객·선박·
-// 제목을 확인·고친 뒤 Approve 한 번으로 프로젝트 등록 + 드라이브 폴더 + 첨부·메일 본문
-// `01 RFQ` 저장이 끝난다. 자동 승인은 없다 — 홍보 메일 하나가 프로젝트가 되면 이력이
+// 제목을 확인·고친 뒤 Approve 한 번으로 프로젝트 등록. 드라이브 폴더 + 첨부·메일 본문
+// `01 RFQ` 저장은 Save to Drive 를 체크했을 때만(2026-11-17). 자동 승인은 없다 — 홍보 메일 하나가 프로젝트가 되면 이력이
 // 오염되고 되돌리기 어렵다.
 // 화면 문구는 나머지 화면과 같이 영문(주석만 국문).
 
@@ -30,6 +30,7 @@ type Draft = {
   vessel: string;
   title: string;
   workType: "PARTS" | "SERVICE";
+  saveToDrive: boolean;     // 체크해야만 드라이브 폴더(+01 RFQ)를 만들고 메일·첨부 저장
 };
 
 const FORBIDDEN = /[\\/:*?"<>|\r\n\t]+/g;
@@ -92,6 +93,7 @@ export default function RfqCandidatesPanel({ onCountChange }: { onCountChange?: 
           vessel: r.vessel,
           title: r.item_title,
           workType: r.work_type,
+          saveToDrive: false,
         };
       }
       return next;
@@ -154,6 +156,7 @@ export default function RfqCandidatesPanel({ onCountChange }: { onCountChange?: 
         ...(v ? { vessel_id: v.id } : { vessel_name: d.vessel.trim() }),
         project_title: d.title.trim(),
         work_type: d.workType,
+        save_to_drive: d.saveToDrive,
       });
       setDone((p) => ({ ...p, [r.id]: res }));
       onCountChange?.(Math.max(0, (rows?.length ?? 1) - 1));
@@ -171,8 +174,8 @@ export default function RfqCandidatesPanel({ onCountChange }: { onCountChange?: 
       <div className="rfqc-head">
         <span className="hint-inline">
           New RFQs found in the mailbox (sales@ · samcho@). Nothing is created until you approve —
-          Approve registers the project, creates its Drive folder and saves the mail and its
-          attachments into <b>01 RFQ</b>.
+          Approve registers the project. Its Drive folder is created (and the mail and attachments
+          saved into <b>01 RFQ</b>) only when <b>Save to Drive</b> is checked.
         </span>
         <button className="btn sm" disabled={scanBusy} onClick={scan} title="Check recent unfiled mail now">
           {scanBusy ? "Scanning…" : "🔍 Scan now"}
@@ -217,8 +220,12 @@ export default function RfqCandidatesPanel({ onCountChange }: { onCountChange?: 
             {res ? (
               <div className="rfqc-result">
                 <span className="action-ok">
-                  ✓ Project created{res.rfq_no && res.rfq_no !== "-" ? ` — ${res.rfq_no}` : ""} · Drive: {res.saved.length} file(s) saved
+                  ✓ Project created{res.rfq_no && res.rfq_no !== "-" ? ` — ${res.rfq_no}` : ""}
+                  {res.folder_url || res.drive_error ? ` · Drive: ${res.saved.length} file(s) saved` : " · no Drive folder (create it later with 📁 Create folder)"}
                 </span>
+                {(res.created ?? []).map((c) => (
+                  <div key={c} className="hint-inline">📁 Created: {c}</div>
+                ))}
                 {res.folder_url ? (
                   <a href={res.folder_url} target="_blank" rel="noopener noreferrer"> · 📁 open folder</a>
                 ) : null}
@@ -309,7 +316,15 @@ export default function RfqCandidatesPanel({ onCountChange }: { onCountChange?: 
                   </label>
                 </div>
                 <div className="rfqc-foot">
-                  <span className="rfqc-folder" title="Drive folder that Approve will create">📁 {folder}</span>
+                  <label className="dfc-sub rfqc-folder" title="Only when checked: create this Drive folder (+ 01 RFQ) and save the mail and its attachments there">
+                    <input
+                      type="checkbox"
+                      checked={d.saveToDrive}
+                      disabled={busy}
+                      onChange={(e) => setDraft(r.id, { saveToDrive: e.target.checked })}
+                    />
+                    📁 Save to Drive: {folder}
+                  </label>
                   {d.vessel.trim() && !vessels.some((v) => v.name.trim().toLowerCase() === d.vessel.trim().toLowerCase()) ? (
                     <span className="hint-inline">new vessel will be registered</span>
                   ) : null}

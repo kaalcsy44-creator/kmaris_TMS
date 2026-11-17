@@ -642,7 +642,7 @@ export default function NewRfqForm({
     setIntakeBusy(true);
     setIntakeErr(null);
     try {
-      const r = await uploadRfqDriveFiles(rfqId, files, intake.text);
+      const r = await uploadRfqDriveFiles(rfqId, files, intake.text, intake.createFolder);
       const skipped = [...r.skipped, ...big.map((f) => ({ name: f.name, reason: "over 50MB — not sent" }))];
       const res = { ...r, skipped };
       setIntakeRes(res);

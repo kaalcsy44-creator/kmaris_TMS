@@ -231,16 +231,21 @@ def _create_folder(parent_id: str, name: str) -> str:
     return r.json()["id"]
 
 
-def ensure_folder(parent_id: str, name: str) -> str:
-    """parent 아래 `name` 폴더의 ID. 없으면 만든다(멱등)."""
+def ensure_folder_report(parent_id: str, name: str) -> tuple[str, bool]:
+    """(parent 아래 `name` 폴더 ID, 이번에 새로 만들었는가). 없으면 만든다(멱등)."""
     name = sanitize_name(name)
     if not name:
         raise DriveError("폴더 이름이 비어 있습니다.")
     with _lock_for(parent_id):
         found = _children(parent_id, name=name, folders_only=True)
         if found:
-            return sorted(found, key=lambda f: f["id"])[0]["id"]
-        return _create_folder(parent_id, name)
+            return sorted(found, key=lambda f: f["id"])[0]["id"], False
+        return _create_folder(parent_id, name), True
+
+
+def ensure_folder(parent_id: str, name: str) -> str:
+    """parent 아래 `name` 폴더의 ID. 없으면 만든다(멱등)."""
+    return ensure_folder_report(parent_id, name)[0]
 
 
 def ensure_project_folder(project_name: str, *, work_type: str | None = None,
@@ -259,21 +264,38 @@ def ensure_project_folder(project_name: str, *, work_type: str | None = None,
     return ensure_folder(root, project_name)
 
 
-def ensure_subfolders(project_folder_id: str) -> dict[str, str]:
-    """`01 RFQ`·`02 QTN`·`03 PO`·`04 INV` 를 갖추고 {"RFQ": id, ...} 를 돌려준다.
+def ensure_subfolders_report(project_folder_id: str,
+                             keys=None) -> tuple[dict[str, str], list[str]]:
+    """하위 폴더 중 `keys`(기본: 넷 다)를 갖추고 ({"RFQ": id, ...}, 새로 만든 이름들).
 
     이미 있는 폴더는 이름이 조금 달라도(`RFQ`, `03 PO PI`) 그 자리로 인정하고 이름을
-    바꾸지 않는다. 없는 것만 표준 이름으로 만든다.
+    바꾸지 않는다. 없는 것만 표준 이름으로 만든다. keys 에 없는 칸은 만들지 않는다.
     """
+    want = [k.upper() for k in (keys or SUBFOLDERS.keys())]
+    bad = [k for k in want if k not in SUBFOLDERS]
+    if bad:
+        raise DriveError(f"알 수 없는 하위 폴더: {', '.join(bad)}")
     with _lock_for(project_folder_id):
         existing = {f["name"].strip().upper(): f["id"]
                     for f in sorted(_children(project_folder_id, folders_only=True),
                                     key=lambda f: f["id"], reverse=True)}
         out: dict[str, str] = {}
+        created: list[str] = []
         for key, (canonical, aliases) in SUBFOLDERS.items():
+            if key not in want:
+                continue
             hit = next((existing[a.upper()] for a in aliases if a.upper() in existing), None)
-            out[key] = hit or _create_folder(project_folder_id, canonical)
-        return out
+            if hit:
+                out[key] = hit
+            else:
+                out[key] = _create_folder(project_folder_id, canonical)
+                created.append(canonical)
+        return out, created
+
+
+def ensure_subfolders(project_folder_id: str, keys=None) -> dict[str, str]:
+    """`01 RFQ`·`02 QTN`·`03 PO`·`04 INV`(또는 keys 만)를 갖추고 {"RFQ": id, ...}."""
+    return ensure_subfolders_report(project_folder_id, keys)[0]
 
 
 def ensure_project(project_name: str, *, work_type: str | None = None,
@@ -284,11 +306,11 @@ def ensure_project(project_name: str, *, work_type: str | None = None,
 
 
 def subfolder_id(project_folder_id: str, key: str) -> str:
-    """하위 폴더 하나(RFQ/QTN/PO/INV)의 ID. 없으면 만든다."""
+    """하위 폴더 하나(RFQ/QTN/PO/INV)의 ID. 없으면 **그 하나만** 만든다."""
     key = key.upper()
     if key not in SUBFOLDERS:
         raise DriveError(f"알 수 없는 하위 폴더: {key}")
-    return ensure_subfolders(project_folder_id)[key]
+    return ensure_subfolders(project_folder_id, [key])[key]
 
 
 # ── 파일 ──────────────────────────────────────────────────────────────────────

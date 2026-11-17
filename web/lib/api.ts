@@ -310,6 +310,8 @@ export function fetchDriveEnabled(): Promise<{ enabled: boolean }> {
 export type DriveUploadResult = {
   folder_url: string;
   rfq_folder_url: string;
+  /** 이번 업로드로 새로 만든 폴더(프로젝트 폴더·01 RFQ). */
+  created?: string[];
   saved: { name: string; url: string }[];
   skipped: { name: string; reason: string }[];
   failed: { name: string; reason: string }[];
@@ -318,11 +320,13 @@ export type DriveUploadResult = {
 export const DRIVE_MAX_UPLOAD = 50 * 1024 * 1024;
 /** 접수 첨부를 프로젝트 폴더 `01 RFQ` 에 올린다. 메신저 대화(intakeText)는 `00 접수내용.md`. */
 export function uploadRfqDriveFiles(
-  rfqId: number, files: File[], intakeText = ""
+  rfqId: number, files: File[], intakeText = "", createFolder = false
 ): Promise<DriveUploadResult> {
   const fd = new FormData();
   for (const f of files) fd.append("files", f, f.name || "file");
   fd.append("intake_text", intakeText);
+  // 폴더가 없을 때 만들어도 되는가 — 사람이 체크했을 때만(아니면 서버가 409).
+  fd.append("create_folder", createFolder ? "true" : "false");
   return postForm<DriveUploadResult>(`/api/admin/rfq/${rfqId}/drive-files`, fd);
 }
 /** RFQ 후보 — 받은 메일에서 찾은 새 RFQ(services/rfq_detect.py). 승인해야 프로젝트가 선다. */
@@ -371,6 +375,7 @@ export type RfqApproveResult = {
   rfq_id: number;
   rfq_no: string;
   folder_url: string;
+  created?: string[];
   saved: { name: string; url: string }[];
   skipped: { name: string; reason: string }[];
   failed: { name: string; reason: string }[];
@@ -386,6 +391,8 @@ export function approveRfqCandidate(
     project_title: string;
     work_type: "PARTS" | "SERVICE";
     customer_rfq_no?: string;
+    /** 드라이브 폴더(+01 RFQ)를 만들고 메일 본문·첨부 저장 — 체크했을 때만. */
+    save_to_drive?: boolean;
   }
 ): Promise<RfqApproveResult> {
   return post(`/api/admin/rfq-candidates/${id}/approve`, body);
@@ -418,9 +425,26 @@ export function archiveIssuedDocUrl(objectUrl: string, filename: string, ref: st
     .then((b) => archiveIssuedDoc(b, filename, ref, doc))
     .catch((e) => console.warn(`[drive] ${filename} not archived`, e));
 }
-/** "폴더 만들기" — 멱등(이미 있으면 그 폴더를 잇는다). 드라이브 실패는 502. */
-export function createRfqDriveFolder(rfqId: number): Promise<RfqDriveFolder> {
-  return post<RfqDriveFolder>(`/api/admin/rfq/${rfqId}/drive-folder`, {});
+/** "폴더 만들기" 확인 창 — 만들어질 폴더 이름·위치·하위 폴더(드라이브에 쓰지 않는다). */
+export type DriveSubKey = "RFQ" | "QTN" | "PO" | "INV";
+export type RfqDriveFolderPreview = {
+  linked: boolean;
+  name: string;
+  root: "PARTS" | "SERVICE";
+  /** 같은 이름의 (어느 딜에도 안 걸린) 폴더가 이미 있어 그것을 잇게 된다. */
+  reuse_existing: boolean;
+  folder_url: string;
+  subfolders: { key: DriveSubKey; name: string }[];
+};
+export function previewRfqDriveFolder(rfqId: number): Promise<RfqDriveFolderPreview> {
+  return get<RfqDriveFolderPreview>(`/api/admin/rfq/${rfqId}/drive-folder/preview`);
+}
+/** "폴더 만들기" — 사람이 확인 창에서 승인했을 때만. 멱등(이미 있으면 그 폴더를 잇는다).
+ *  created = 이번에 새로 만든 폴더(이미 있던 것은 빠진다). 드라이브 실패는 502. */
+export function createRfqDriveFolder(
+  rfqId: number, opts: { name?: string; subfolders?: DriveSubKey[] } = {}
+): Promise<RfqDriveFolder & { folder_name: string; created: string[] }> {
+  return post(`/api/admin/rfq/${rfqId}/drive-folder`, opts);
 }
 
 export function createRfq(body: {

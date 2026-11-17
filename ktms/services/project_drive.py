@@ -3,8 +3,9 @@
 drive_svc 는 드라이브만 알고, 이 모듈은 KTMS 레코드를 안다 — 폴더 이름을 RFQ·고객사·
 선박에서 만들고, 만든 폴더의 ID 를 RFQ 에 적는다.
 
-드라이브 실패가 프로젝트 등록을 막지 않는다. 등록 응답이 나간 뒤(백그라운드) 폴더를
-만들고, 실패하면 drive_folder_id 가 빈 채로 남아 화면이 "폴더 만들기"를 띄운다.
+폴더는 자동으로 만들지 않는다(2026-11-17 사용자 요청). 등록·승인·업로드·발행 어디서도
+몰래 만들지 않고, 사람이 "Create folder" 확인 창에서 이름·하위 폴더를 보고 승인할 때만
+만든다(첨부 업로드에서 "폴더 만들고 올리기"를 고른 경우 포함). 만든 것은 created 로 돌려준다.
 """
 from __future__ import annotations
 
@@ -41,13 +42,13 @@ def folder_name(s, rfq: RFQ) -> str:
                                          ves.name if ves else "", rfq.project_title or "")
 
 
-def _free_folder_name(s, rfq: RFQ, wt: str) -> tuple[str, str | None]:
+def _free_folder_name(s, rfq: RFQ, wt: str, base: str | None = None) -> tuple[str, str | None]:
     """(이 RFQ 가 쓸 폴더 이름, 이어 쓸 기존 폴더 ID|None).
 
     같은 이름 폴더가 이미 **다른 프로젝트에 연결돼** 있으면 ' (2)' 를 붙인다 — 같은 날 같은
     고객·선박에 제목이 빈 딜 둘이 한 폴더를 나눠 쓰지 않게. 연결 안 된 같은 이름 폴더
     (사람이 먼저 만들어 둔 것)는 그대로 이어 쓴다."""
-    base = folder_name(s, rfq)
+    base = drive_svc.sanitize_name(base or "") or folder_name(s, rfq)
     root = drive_svc.root_id(wt)
     for n in range(1, 50):
         nm = base if n == 1 else f"{base} ({n})"
@@ -72,12 +73,16 @@ def status(rfq: RFQ) -> dict:
     }
 
 
-def ensure_rfq_folder(rfq_id: int) -> dict:
-    """RFQ 의 프로젝트 폴더(+01~04 하위 폴더)를 갖추고 링크를 적는다. 멱등.
+NO_FOLDER = "이 프로젝트에는 아직 드라이브 폴더가 없습니다 — 📁 Create folder 로 먼저 만드세요."
 
-    이미 연결된 폴더가 살아 있으면 그것을 쓰고(이름이 바뀌었어도), 없으면 루트에서
-    같은 이름을 찾거나 새로 만든다. 실패는 DriveError 로 올라간다.
-    """
+ALL_SUBS = tuple(drive_svc.SUBFOLDERS.keys())          # ("RFQ", "QTN", "PO", "INV")
+
+
+def preview_rfq_folder(rfq_id: int) -> dict:
+    """"폴더 만들기" 확인 창용 — 무엇이 만들어질지 미리 보여 준다(드라이브에 쓰지 않는다).
+
+    reuse_existing: 루트에 같은 이름의 (어느 딜에도 안 걸린) 폴더가 이미 있어 새로 만들지
+    않고 그것을 잇게 되는 경우."""
     s = get_session()
     try:
         rfq = s.query(RFQ).filter_by(id=rfq_id).first()
@@ -87,16 +92,64 @@ def ensure_rfq_folder(rfq_id: int) -> dict:
         if not drive_svc.enabled(wt):
             raise drive_svc.DriveError("드라이브 연동이 설정되지 않았습니다.")
         linked = getattr(rfq, "drive_folder_id", None)
-        if linked and drive_svc.get_folder(linked):
-            out = drive_svc.ensure_project("", work_type=wt, folder_id=linked)
+        if linked:
+            meta = drive_svc.get_folder(linked)
+            if meta:
+                return {"linked": True, "name": meta.get("name", ""), "root": wt,
+                        "reuse_existing": True, "folder_url": drive_svc.folder_url(linked),
+                        "subfolders": [{"key": k, "name": drive_svc.SUBFOLDERS[k][0]} for k in ALL_SUBS]}
+        name, free_id = _free_folder_name(s, rfq, wt)
+        return {"linked": False, "name": name, "root": wt, "reuse_existing": bool(free_id),
+                "folder_url": drive_svc.folder_url(free_id) if free_id else "",
+                "subfolders": [{"key": k, "name": drive_svc.SUBFOLDERS[k][0]} for k in ALL_SUBS]}
+    finally:
+        s.close()
+
+
+def ensure_rfq_folder(rfq_id: int, *, create: bool = False, subs=ALL_SUBS,
+                      name: str | None = None) -> dict:
+    """RFQ 의 프로젝트 폴더와 하위 폴더 `subs` 를 갖추고 링크를 적는다. 멱등.
+
+    create=False(기본): 프로젝트 폴더가 연결돼 있지 않으면 만들지 않고 DriveError(NO_FOLDER).
+    폴더는 사람이 "Create folder" 로 확인하고 만들 때만 생긴다(2026-11-17 사용자 요청).
+    이미 연결된 폴더가 살아 있으면 그것을 쓴다(이름이 바뀌었어도).
+    반환에 이번에 **새로 만든** 것들(created)을 담는다 — 화면이 그대로 보여 준다.
+    """
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if rfq is None:
+            raise drive_svc.DriveError(f"RFQ {rfq_id} 가 없습니다.")
+        wt = work_type_key(rfq)
+        if not drive_svc.enabled(wt):
+            raise drive_svc.DriveError("드라이브 연동이 설정되지 않았습니다.")
+        created: list[str] = []
+        linked = getattr(rfq, "drive_folder_id", None)
+        meta = drive_svc.get_folder(linked) if linked else None
+        if meta:
+            fid, fname = linked, meta.get("name", "")
+        elif not create:
+            raise drive_svc.DriveError(NO_FOLDER)
         else:
-            name, free_id = _free_folder_name(s, rfq, wt)
-            out = drive_svc.ensure_project(name, work_type=wt, folder_id=free_id)
-        if rfq.drive_folder_id != out["folder_id"]:
-            rfq.drive_folder_id = out["folder_id"]
-            rfq.drive_folder_url = out["folder_url"]
+            root = drive_svc.root_id(wt)
+            fname, free_id = _free_folder_name(s, rfq, wt, name)
+            if free_id:
+                fid = free_id
+            else:
+                fid, made = drive_svc.ensure_folder_report(root, fname)
+                if made:
+                    created.append(drive_svc.sanitize_name(fname))
+        sub, made_subs = drive_svc.ensure_subfolders_report(fid, subs) if subs else ({}, [])
+        prefix = drive_svc.sanitize_name(fname)
+        created += [f"{prefix}/{n}" for n in made_subs]
+        if rfq.drive_folder_id != fid:
+            rfq.drive_folder_id = fid
+            rfq.drive_folder_url = drive_svc.folder_url(fid)
             s.commit()
-        return out
+        if created:
+            log.info("project_drive: RFQ %s — 생성 %s", rfq_id, created)
+        return {"folder_id": fid, "folder_url": drive_svc.folder_url(fid), "folder_name": fname,
+                "sub": sub, "created": created}
     finally:
         s.close()
 
@@ -125,14 +178,17 @@ def intake_markdown(s, rfq: RFQ, text: str, by: str, at: str) -> str:
 
 
 def save_intake(rfq_id: int, files: list, text: str = "", *, by: str = "", at: str = "",
-                text_name: str = "00 접수내용.md", raw_text: bool = False) -> dict:
+                text_name: str = "00 접수내용.md", raw_text: bool = False,
+                create_folder: bool = False) -> dict:
     """접수 첨부를 `01 RFQ` 에 올린다. 파일명은 원본 그대로, 같은 이름이면 ' (2)'.
 
     files: [(파일명, 읽기 가능한 파일 객체, 크기, mime)]. 50MB 초과는 건너뛰고, 한 파일이
-    실패해도 나머지는 계속 올린다(부분 실패 허용). 폴더를 못 만들면 DriveError.
+    실패해도 나머지는 계속 올린다(부분 실패 허용).
+    프로젝트 폴더가 없으면: create_folder=True(사람이 "폴더 만들고 올리기"를 고름)일 때만
+    폴더 + `01 RFQ` 하나를 만들고, 아니면 DriveError(NO_FOLDER). 만든 것은 created 로 돌려준다.
     """
-    folder = ensure_rfq_folder(rfq_id)
-    rfq_dir = drive_svc.subfolder_id(folder["folder_id"], "RFQ")
+    folder = ensure_rfq_folder(rfq_id, create=create_folder, subs=("RFQ",))
+    rfq_dir = folder["sub"]["RFQ"]
     saved, skipped, failed = [], [], []
     for name, stream, size, mime in files:
         name = name or "file"
@@ -161,7 +217,7 @@ def save_intake(rfq_id: int, files: list, text: str = "", *, by: str = "", at: s
         except drive_svc.DriveError as exc:
             failed.append({"name": text_name, "reason": str(exc)[:200]})
     return {"folder_url": folder["folder_url"], "rfq_folder_url": drive_svc.folder_url(rfq_dir),
-            "saved": saved, "skipped": skipped, "failed": failed}
+            "created": folder["created"], "saved": saved, "skipped": skipped, "failed": failed}
 
 
 # ── 발행 문서 보관(다운로드할 때 함께) ─────────────────────────────────────────
@@ -251,23 +307,16 @@ def archive_doc(ref: str, doc: str, filename: str, data: bytes, mime: str) -> di
         s.close()
     if not rfq_id:
         return {"status": "no_project", "name": filename, "url": ""}
-    folder = ensure_rfq_folder(rfq_id)
-    target = drive_svc.subfolder_id(folder["folder_id"], key)
-    fp = fingerprint(data, filename)
+    try:
+        folder = ensure_rfq_folder(rfq_id, subs=(key,))      # 폴더를 새로 만들지는 않는다
+    except drive_svc.DriveError as exc:
+        if str(exc) == NO_FOLDER:
+            return {"status": "no_folder", "name": filename, "url": ""}
+        raise
+    target = folder["sub"][key]
+    fp =fingerprint(data, filename)
     up = drive_svc.upload_file(target, filename, data, mime or "application/octet-stream",
                                app_properties={"ktms_fp": fp, "ktms_doc": doc},
                                skip_if_prop="ktms_fp")
     return {"status": "same" if up["skipped"] else "saved", "name": up["name"], "url": up["url"],
-            "folder": key}
-
-
-def ensure_rfq_folder_quietly(rfq_id: int) -> None:
-    """등록 직후 백그라운드로 부른다 — 연동이 꺼져 있으면 아무것도 안 하고, 실패는 로그만."""
-    s = get_session()
-    try:
-        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
-        if rfq is None or not drive_svc.enabled(work_type_key(rfq)):
-            return
-    finally:
-        s.close()
-    drive_svc.try_call(ensure_rfq_folder, rfq_id)
+            "folder": key, "created": folder["created"]}

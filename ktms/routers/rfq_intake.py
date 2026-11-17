@@ -117,6 +117,8 @@ class ApproveIn(BaseModel):
     project_title: str = ""
     work_type: str = "PARTS"                # PARTS | SERVICE
     customer_rfq_no: str = ""
+    # 드라이브 폴더(+01 RFQ)를 만들고 메일 본문·첨부를 저장할지 — 사람이 고를 때만(기본 끔).
+    save_to_drive: bool = False
 
 
 def _mail_head(m: EmailMessage) -> str:
@@ -141,7 +143,8 @@ def _mail_head(m: EmailMessage) -> str:
 @app.post("/api/admin/rfq-candidates/{cand_id}/approve", dependencies=[Depends(require_token)])
 def approve_rfq_candidate(cand_id: int, body: ApproveIn, background: BackgroundTasks,
                           user: dict = Depends(get_current_user)):
-    """승인 — 프로젝트 등록 + 드라이브 폴더 + 첨부·메일 본문 `01 RFQ` + 메일을 새 딜에 붙임.
+    """승인 — 프로젝트 등록 + 메일을 새 딜에 붙임. save_to_drive 일 때만 드라이브 폴더
+    (+`01 RFQ`)를 만들고 첨부·메일 본문을 저장한다(2026-11-17 사용자 요청).
 
     프로젝트가 서면 승인은 끝난 것이다. 드라이브(메일 원본 받기·업로드)가 실패해도 되돌리지
     않고 결과에 사유만 싣는다 — 첨부는 프로젝트 화면의 Drive files 로 다시 올릴 수 있다."""
@@ -233,7 +236,10 @@ def approve_rfq_candidate(cand_id: int, body: ApproveIn, background: BackgroundT
 
     # 메일 원본을 다시 받아 첨부 + 본문을 01 RFQ 에. 실패해도 승인은 그대로.
     out = {"ok": True, "rfq_id": rfq_id, "rfq_no": created.get("rfq_no", ""),
-           "folder_url": "", "saved": [], "skipped": [], "failed": [], "drive_error": ""}
+           "folder_url": "", "created": [], "saved": [], "skipped": [], "failed": [],
+           "drive_error": ""}
+    if not body.save_to_drive:
+        return out
     try:
         raw = mail_sync.fetch_raw_message(mail["message_id"], mail["account"])
         files, body_text = [], mail["body"]
@@ -246,8 +252,9 @@ def approve_rfq_candidate(cand_id: int, body: ApproveIn, background: BackgroundT
         else:
             out["drive_error"] = "메일함에서 원본을 찾지 못해 첨부는 올리지 못했습니다(본문만 저장)."
         text = mail["head"] + body_text + "\n"
-        res =project_drive.save_intake(rfq_id, files, text, text_name="00 메일본문.md", raw_text=True)
-        out.update({k: res[k] for k in ("folder_url", "saved", "skipped", "failed")})
+        res = project_drive.save_intake(rfq_id, files, text, text_name="00 메일본문.md",
+                                        raw_text=True, create_folder=True)
+        out.update({k: res[k] for k in ("folder_url", "created", "saved", "skipped", "failed")})
     except drive_svc.DriveError as exc:
         out["drive_error"] = f"드라이브: {exc}"[:300]
     except Exception as exc:

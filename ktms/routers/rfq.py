@@ -72,6 +72,7 @@ from _core import (
     steps_for,
 )
 from fastapi import BackgroundTasks, Form, UploadFile
+from pydantic import BaseModel
 from services.item_ledger import apply_line_categories
 from services import mail_sync
 from services import drive_svc, project_drive
@@ -444,9 +445,8 @@ def create_rfq(body: RfqCreate, background: BackgroundTasks,
         # 라인에서 고른 분류(선택)를 품목 마스터에 반영 — 뒤에 다시 배정할 일을 없앤다.
         apply_line_categories(s, items)
         s.commit()
-        # 드라이브 프로젝트 폴더는 응답이 나간 뒤에 만든다 — 드라이브가 느리거나 죽어도
-        # 등록은 그대로 끝난다. 실패하면 링크가 빈 채로 남고 화면이 "폴더 만들기"를 띄운다.
-        background.add_task(project_drive.ensure_rfq_folder_quietly, rfq.id)
+        # 드라이브 폴더는 등록 때 만들지 않는다 — 사람이 📁 Create folder 로 확인하고 만든다
+        # (2026-11-17 사용자 요청: 원할 때, 원하는 것만, 무엇이 생겼는지 보이게).
         return {"ok": True, "id": rfq.id, "rfq_no": _rfq_no_disp(rfq_no)}
     finally:
         s.close()
@@ -475,6 +475,7 @@ def drive_enabled():
 def upload_rfq_drive_files(rfq_id: int,
                            files: list[UploadFile] = File(default=[]),
                            intake_text: str = Form(""),
+                           create_folder: bool = Form(False),
                            user: dict = Depends(get_current_user)):
     """접수 첨부(메일·메신저 무관)를 프로젝트 폴더의 `01 RFQ` 에 올린다.
 
@@ -493,8 +494,11 @@ def upload_rfq_drive_files(rfq_id: int,
         return project_drive.save_intake(
             rfq_id, items, intake_text,
             by=str(user.get("username") or user.get("name") or ""),
-            at=_kst_iso(datetime.utcnow()).replace("T", " "))
+            at=_kst_iso(datetime.utcnow()).replace("T", " "),
+            create_folder=create_folder)
     except drive_svc.DriveError as exc:
+        if str(exc) == project_drive.NO_FOLDER:
+            raise HTTPException(status_code=409, detail=str(exc))
         raise HTTPException(status_code=502, detail=f"드라이브에 올리지 못했습니다: {exc}")
 
 
@@ -523,14 +527,33 @@ def archive_issued_doc(file: UploadFile = File(...), ref: str = Form(...), doc: 
         raise HTTPException(status_code=502, detail=f"드라이브에 남기지 못했습니다: {exc}")
 
 
-@app.post("/api/admin/rfq/{rfq_id}/drive-folder", dependencies=[Depends(require_token)])
-def create_rfq_drive_folder(rfq_id: int):
-    """"폴더 만들기" — 등록 때 못 만든 폴더를 다시 시도한다(멱등: 있으면 그것을 잇는다)."""
+@app.get("/api/admin/rfq/{rfq_id}/drive-folder/preview", dependencies=[Depends(require_token)])
+def preview_rfq_drive_folder(rfq_id: int):
+    """"폴더 만들기" 확인 창 — 만들어질 폴더 이름·위치·하위 폴더(드라이브에 쓰지 않는다)."""
     try:
-        out = project_drive.ensure_rfq_folder(rfq_id)
+        return project_drive.preview_rfq_folder(rfq_id)
+    except drive_svc.DriveError as exc:
+        raise HTTPException(status_code=502, detail=f"드라이브를 확인하지 못했습니다: {exc}")
+
+
+class DriveFolderCreate(BaseModel):
+    name: str = ""                                          # 비우면 기본 이름
+    subfolders: list[str] = ["RFQ", "QTN", "PO", "INV"]     # 만들 하위 폴더(고른 것만)
+
+
+@app.post("/api/admin/rfq/{rfq_id}/drive-folder", dependencies=[Depends(require_token)])
+def create_rfq_drive_folder(rfq_id: int, body: DriveFolderCreate | None = None):
+    """"폴더 만들기" — 사람이 확인 창에서 승인했을 때만 부른다. 멱등(있으면 그것을 잇는다).
+
+    응답 created = 이번에 새로 만든 폴더 목록(이미 있던 것은 빠진다)."""
+    body = body or DriveFolderCreate()
+    try:
+        out = project_drive.ensure_rfq_folder(rfq_id, create=True, subs=tuple(body.subfolders),
+                                              name=body.name or None)
     except drive_svc.DriveError as exc:
         raise HTTPException(status_code=502, detail=f"드라이브 폴더를 만들지 못했습니다: {exc}")
-    return {"enabled": True, "folder_id": out["folder_id"], "folder_url": out["folder_url"]}
+    return {"enabled": True, "folder_id": out["folder_id"], "folder_url": out["folder_url"],
+            "folder_name": out["folder_name"], "created": out["created"]}
 
 
 @app.post("/api/admin/rfq/{rfq_id}/assign-no", dependencies=[Depends(require_token)])
