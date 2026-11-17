@@ -21716,3 +21716,38 @@ td.seq .seq-lid.seq-lids { white-space: normal; color: #0055a8; font-weight: 600
 @media (max-width: 1200px) {
   .pi-optional { max-width: none; }
 }
+
+/* ── Partners 우하단 통합 등록(＋ New) ─────────────────────────────── */
+.pn-kind-label { font-size: 12px; font-weight: 700; color: var(--muted, #6b7280); margin: 4px 0 6px; }
+.pn-kind-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.pn-kind {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 10px 14px; border: 1.5px solid #d6dce5; border-radius: 10px;
+  background: #fff; cursor: pointer; font: inherit; color: inherit;
+}
+.pn-kind:hover { border-color: #9db8d9; background: #f7faff; }
+.pn-kind.on { border-color: var(--blue, #0055a8); background: #eef5ff; }
+.pn-kind-check { font-size: 18px; width: 20px; color: var(--blue, #0055a8); line-height: 1; }
+.pn-kind-icon { font-size: 22px; line-height: 1; }
+.pn-kind-text { display: flex; flex-direction: column; gap: 2px; }
+.pn-kind-text small { color: var(--muted, #6b7280); font-size: 12px; }
+.pn-kind-note {
+  font-size: 12.5px; color: #334155; background: #f5f8fc; border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 10px;
+}
+.pn-flow-banner {
+  display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px;
+  padding: 10px 12px; border-radius: 8px; background: #eef5ff; font-size: 12.5px;
+}
+.pn-flow-steps { display: flex; gap: 6px; flex-wrap: wrap; }
+.pn-flow-steps span {
+  padding: 2px 10px; border-radius: 999px; background: #fff; border: 1px solid #c9d6e8; color: #64748b;
+}
+.pn-flow-steps span.on { background: var(--blue, #0055a8); border-color: var(--blue, #0055a8); color: #fff; font-weight: 700; }
+.pn-flow-steps span.done { color: #15803d; border-color: #9fd3b0; }
+.pn-flow-note { color: #334155; }
+.pn-flow-toast {
+  position: fixed; right: 28px; bottom: 84px; z-index: 41;
+  padding: 10px 16px; border-radius: 10px; background: #14532d; color: #fff;
+  font-size: 13px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}

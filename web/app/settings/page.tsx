@@ -1019,6 +1019,20 @@ const PARTNER_KIND_LABEL: Record<PartnerImportKind, string> = {
 };
 
 /** 명부 사이를 옮기고 나면 양쪽이 다 낡는다 — 로고 캐시도, 메이커 목록도. */
+/** Partners 화면 우하단 통합 등록(＋ New)이 표에 건네는 요청.
+ *  token 이 바뀔 때마다 그 표의 신규 등록 창을 seed 값으로 채워 연다(0 = 요청 없음).
+ *  창에서 Add 가 성공하면 onCreated(저장한 값), 취소하면 onCancel — 여러 명부를 골랐으면
+ *  부르는 쪽이 다음 명부의 창을 이어서 연다. 이 값을 받는 표는 도구줄의 + New 를 감춘다
+ *  (등록의 문은 우하단 하나다). */
+export type PartnerNewFlow = {
+  token: number;
+  seed: Record<string, unknown>;
+  title?: string;
+  banner?: ReactNode;
+  onCreated: (body: Record<string, unknown>) => void;
+  onCancel: () => void;
+};
+
 function invalidatePartnerCaches() {
   invalidateCustomerLogos();
   invalidateVendorLogos();
@@ -1051,7 +1065,7 @@ const EMPTY_MAKER: SettingsMaker = {
  * 그 id 를 들고 있으므로, 고르는 자리는 회사 단위로 모아 보여 주고(useMakerCompanies)
  * 담당자 줄을 지울 때는 서버가 남은 줄로 그 참조를 옮긴다(delete_maker).
  */
-export function MakersTab() {
+export function MakersTab({ newFlow }: { newFlow?: PartnerNewFlow } = {}) {
   const catText = useCategoryText();
   const catNames = useCategoryNames();
   const [company, setCompany] = useState<CompanyNavCtx<SettingsMaker> | null>(null);
@@ -1109,6 +1123,7 @@ export function MakersTab() {
       />
     ) : null}
     <MasterSection<SettingsMaker>
+      newFlow={newFlow}
       title="Maker"
       empty={EMPTY_MAKER}
       reloadKey={reloadKey}
@@ -1305,7 +1320,7 @@ export function MakersTab() {
   );
 }
 
-export function CustomersTab() {
+export function CustomersTab({ newFlow }: { newFlow?: PartnerNewFlow } = {}) {
   // 회사 공통정보 편집 대상 그룹(같은 회사명의 담당자 레코드들). null = 닫힘.
   // 회사 목록 전체와 지금 보고 있는 자리 — 창 안에서 옆 회사로 건너뛰려면 이웃을 알아야 한다.
   const [company, setCompany] = useState<
@@ -1400,6 +1415,7 @@ export function CustomersTab() {
       />
     ) : null}
     <MasterSection<SettingsCustomer>
+      newFlow={newFlow}
       title="Customer"
       empty={EMPTY_CUSTOMER}
       reloadKey={reloadKey}
@@ -3331,7 +3347,7 @@ const EMPTY_VENDOR: SettingsVendor = {
   addresses: [], emails: [], phones: [], regions: [], category_ids: [], maker_ids: [],
 };
 
-export function VendorsTab() {
+export function VendorsTab({ newFlow }: { newFlow?: PartnerNewFlow } = {}) {
   const catText = useCategoryText();
   const makerText = useMakerText();
   const makerNames = useMakerNames();
@@ -3410,6 +3426,7 @@ export function VendorsTab() {
       />
     ) : null}
     <MasterSection<SettingsVendor>
+      newFlow={newFlow}
       title="Vendor"
       empty={EMPTY_VENDOR}
       reloadKey={reloadKey}
@@ -3610,7 +3627,7 @@ export function VendorsTab() {
   );
 }
 
-export function VesselsTab() {
+export function VesselsTab({ newFlow }: { newFlow?: PartnerNewFlow } = {}) {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   useEffect(() => {
     fetchCustomers().then(setCustomers).catch(() => setCustomers([]));
@@ -3677,6 +3694,7 @@ export function VesselsTab() {
 
   return (
     <MasterSection<SettingsVessel>
+      newFlow={newFlow}
       title="Vessel Management"
       // 예전엔 다섯 칸뿐이라 좌우 2열로 나눴다. 선주·ISM 관리사가 붙어 한 줄이 길어져
       // 이제 한 열로 둔다.
@@ -6078,6 +6096,7 @@ function MasterSection<T extends { id: number }>({
   bulk,
   rowDetail,
   scope,
+  newFlow,
 }: {
   title: string;
   empty: T;
@@ -6205,6 +6224,8 @@ function MasterSection<T extends { id: number }>({
   /** 표 위에 세우는 갈래 탭(품목표: 대분류). render 는 불러온 전체 줄을 받아 탭과
    *  건수를 그리고, test 를 통과한 줄만 검색·열 필터로 넘어간다. */
   scope?: { render: (rows: T[]) => ReactNode; test: (row: T) => boolean };
+  /** 우하단 통합 등록이 건넨 요청(PartnerNewFlow 주석 참고). 주면 도구줄 + New 는 감춘다. */
+  newFlow?: PartnerNewFlow;
 }) {
   const NEW_ID = -1; // editId 센티넬: 신규 등록 편집기
   const [rows, setRows] = useState<T[]>([]);
@@ -6278,6 +6299,20 @@ function MasterSection<T extends { id: number }>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows]);
 
+  // 지금 열린 신규 등록 창이 우하단 통합 등록에서 열렸는가 — 저장·취소를 그쪽에 알린다.
+  const [flowOpen, setFlowOpen] = useState(false);
+  useEffect(() => {
+    if (!newFlow?.token) return;
+    setForm({ ...empty, ...(newFlow.seed as Partial<T>), id: 0 } as T);
+    setErr("");
+    setCopying(false);
+    setNewCompany("");
+    setEditId(NEW_ID);
+    setFlowOpen(true);
+    // 요청(token)이 바뀔 때만 — seed 객체는 렌더마다 새로 만들어진다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newFlow?.token]);
+
   function openNew() {
     setForm(empty);
     setErr("");
@@ -6311,12 +6346,19 @@ function MasterSection<T extends { id: number }>({
     setNewCompany(String(form[requiredKeys[0]] ?? ""));
     setEditId(NEW_ID);
   }
-  function cancel() {
+  function close() {
     setForm(empty);
     setErr("");
     setCopying(false);
     setNewCompany("");
     setEditId(null);
+    setFlowOpen(false);
+  }
+  // 사용자가 창을 닫음 — 통합 등록 중이었다면 남은 명부도 함께 접는다.
+  function cancel() {
+    const wasFlow = flowOpen;
+    close();
+    if (wasFlow) newFlow?.onCancel();
   }
 
   async function save() {
@@ -6325,9 +6367,11 @@ function MasterSection<T extends { id: number }>({
       const body = stripId(form);
       if (editId && editId > 0) await update(editId, body);
       else await create(body);
-      cancel();
+      const wasFlow = flowOpen;
+      close();
       refresh();
       onSaved?.();
+      if (wasFlow) newFlow?.onCreated(body as Record<string, unknown>);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
     }
@@ -6379,7 +6423,7 @@ function MasterSection<T extends { id: number }>({
     setErr("");
     try {
       await remove(editId);
-      cancel();
+      close();
       refresh();
       onSaved?.();
     } catch (e) {
@@ -6780,7 +6824,8 @@ Every contact of ${names.length === 1 ? "this company" : "these companies"} is r
     ? `＋ New contact — ${requiredValue}`
     : "+ New";
   const editor = editId !== null ? (
-    <Modal title={editorTitle} onClose={cancel} form>
+    <Modal title={flowOpen && newFlow?.title ? newFlow.title : editorTitle} onClose={cancel} form>
+      {flowOpen && newFlow?.banner ? <div className="pn-flow-banner">{newFlow.banner}</div> : null}
       {copying && copyHint ? <div className="ms-copy-hint">{copyHint}</div> : null}
       {topForm?.(form, setForm, rows)}
       {hideCompany ? (
@@ -6883,7 +6928,7 @@ Every contact of ${names.length === 1 ? "this company" : "these companies"} is r
             }
           />
         ) : null}
-        {canCreate ? (
+        {canCreate && !newFlow ? (
           <button className="btn primary" onClick={openNew} disabled={editId === NEW_ID}>
             + New
           </button>
