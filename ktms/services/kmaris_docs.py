@@ -1564,7 +1564,7 @@ def _make_proforma_invoice_pdf(data: Dict[str, Any], company: Dict[str, Any]) ->
               Spacer(1, 3 * mm)]
     story.append(_invoice_item_table(form, data, items, currency, item_w, amount,
                                      min_rows=pi_min_item_rows(data)))
-    story += _invoice_totals_tables(form, item_w, money, amount)
+    story += _invoice_totals_tables(form, item_w, money, amount, merge_charges=True)
     story += [Spacer(1, 3 * mm)] + _pi_optional_blocks(form, data, quad) + _bank_block(form, company, currency, quad)
     story += [form.band("DECLARATION"),
               form.declaration("We hereby certify that this Proforma Invoice is true and correct."),

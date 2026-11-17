@@ -1712,7 +1712,7 @@ function ProformaInvoiceTab({
         }
         // Freight/Packing/Insurance/VAT 를 품목표 tfoot 안에 넣는다(참조 양식).
         // Items total − Discount = Subtotal(할인 후 물품가) → + Freight + Packing + Insurance + VAT = Total.
-        footerRows={invoiceFooterRows({ subtotal, discount, setDiscount, freight, setFreight, packing, setPacking, insurance, setInsurance, vatRate, vatAmount, totalInvoiceValue, currency })}
+        footerRows={invoiceFooterRows({ subtotal, discount, setDiscount, freight, setFreight, packing, setPacking, insurance, setInsurance, vatRate, vatAmount, totalInvoiceValue, currency, mergeCharges: true })}
       />
       {/* 입력 순서 = 발행 문서 순서: 합계 → REMARK → PACKING INFORMATION → BANK INFORMATION. */}
       <PiOptionalSections terms={terms} setTerms={setTerms} />

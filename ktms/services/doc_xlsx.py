@@ -670,7 +670,7 @@ def make_proforma_invoice_xlsx(
         ("Currency", currency, "Country of Origin", shipping.get("sm_origin", "")),
     ])
     r += 1
-    r = _invoice_items_and_totals(form, data, r, currency)
+    r = _invoice_items_and_totals(form, data, r, currency, merge_charges=True)
 
     r, drew = _pi_optional_xlsx(form, data, r)
     r = _pi_bank_block(form, company, r, currency, gap=not drew)
