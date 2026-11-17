@@ -8,12 +8,14 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
   appendItems,
+  applySourceChanges,
   attributeLegacySource,
   costConvertible,
   costSources,
   lineKey,
   manualLines,
   soleSourceId,
+  sourceChanges,
   withoutSource,
 } from "../../lib/quoteMerge.ts";
 import type { CustomerQuoteItem } from "../../lib/types.ts";
@@ -199,4 +201,47 @@ test("이미 출처가 적힌 줄은 옛 링크가 덮어쓰지 않는다", () =
   const r = attributeLegacySource(items, vq, "KRW");
   assert.equal(r.stamped, 0);
   assert.equal(r.items[0].src_vq_id, 1);
+});
+
+// ── Sync from vendor quote ──
+const vq = (items: object[]) => ({ id: 7, vendor: "V", vendor_quote_no: "VQ-7", items: items as never[] });
+
+test("sync: 3단계에서 고친 L번호·납기만 가져오고 값은 그대로", () => {
+  const items = [
+    row({ part_no: "P1", description: "Pump", lid: "L01", src_vq_id: 7, cost_price: 100, unit_price: 130 }),
+    row({ description: "Freight cost", src_vq_id: 7, cost_price: 50 }),
+  ];
+  const src = vq([
+    { part_no: "P1", description: "Pump", lid: "L01", lead_time: "5 weeks" },
+    { part_no: "", description: "Freight cost", lid: "L01", lids: ["L01", "L02"] },
+  ]);
+  const r = sourceChanges(items, [src]);
+  assert.equal(r.changes.length, 2);
+  assert.deepEqual(r.changes[0].fields.map((f) => f.key), ["lead_time"]);
+  assert.ok(r.changes[1].warn, "운임이 L01을 달면 대안 묶음 경고");
+  const out = applySourceChanges(items, r.changes);
+  assert.equal(out[0].lead_time, "5 weeks");
+  assert.equal(out[0].cost_price, 100);
+  assert.equal(out[1].lid, "L01");
+  assert.deepEqual(out[1].lids, ["L01", "L02"]);
+});
+
+test("sync: 출처 L번호가 비면 지우지 않고, 짝 못 찾은 줄·사라진 견적은 센다", () => {
+  const items = [
+    row({ part_no: "P1", description: "Pump", lid: "L01", src_vq_id: 7 }),
+    row({ part_no: "ZZ", description: "Other", src_vq_id: 7 }),
+    row({ part_no: "P9", description: "Gone", src_vq_id: 99 }),
+    row({ part_no: "M", description: "Manual" }),
+  ];
+  const r = sourceChanges(items, [vq([{ part_no: "P1", description: "Pump", lid: "" }])]);
+  assert.equal(r.changes.length, 0);
+  assert.equal(r.unmatched, 1);
+  assert.equal(r.missing, 1);
+});
+
+test("sync: lids 가 풀리면 걷는다", () => {
+  const items = [row({ description: "Freight cost", lid: "L01", lids: ["L01", "L02"], src_vq_id: 7 })];
+  const r = sourceChanges(items, [vq([{ description: "Freight cost", lid: "L01" }])]);
+  const out = applySourceChanges(items, r.changes);
+  assert.equal(out[0].lids, undefined);
 });

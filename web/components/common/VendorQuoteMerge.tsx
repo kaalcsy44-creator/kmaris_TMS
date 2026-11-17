@@ -22,7 +22,7 @@ import VendorName from "@/components/common/VendorName";
 import { hasSource } from "@/lib/quoteMerge";
 import { countedItems } from "@/lib/quoteOptions";
 import { canConvert, type Fx } from "@/components/common/itemTable";
-import type { CostSource } from "@/lib/quoteMerge";
+import type { CostSource, SyncChange } from "@/lib/quoteMerge";
 import type { CustomerQuoteItem, VendorQuoteForImport } from "@/lib/types";
 
 export type MergeMode = "append" | "replace";
@@ -199,6 +199,7 @@ export function QuoteSourceBand({
   costCurrency,
   onDrop,
   onOpen,
+  onSync,
   disabled,
 }: {
   sources: CostSource[];
@@ -210,6 +211,8 @@ export function QuoteSourceBand({
   costCurrency: string;
   onDrop?: (vqId: number) => void;
   onOpen?: () => void;
+  /** 3단계에서 고친 L번호·품명·납기·Remark 를 다시 가져온다(값은 그대로). */
+  onSync?: () => void;
   disabled?: boolean;
 }) {
   if (sources.length === 0 && manual === 0 && !legacy) return null;
@@ -253,9 +256,96 @@ export function QuoteSourceBand({
           No source · {manual} line{manual === 1 ? "" : "s"}
         </span>
       ) : null}
+      {onSync && !disabled && sources.length > 0 ? (
+        <button
+          type="button"
+          className="btn sm qsb-add"
+          onClick={onSync}
+          title="Bring over Line IDs, descriptions, lead times and remarks edited in stage 3 — prices and margins stay as they are"
+        >
+          ⟳ Sync from vendor quotes
+        </button>
+      ) : null}
       {onOpen && !disabled ? (
         <button type="button" className="btn sm qsb-add" onClick={onOpen}>+ Vendor quote</button>
       ) : null}
     </div>
+  );
+}
+
+const SYNC_LABEL: Record<string, string> = {
+  lid: "Line", lids: "Covers", description: "Description", lead_time: "Lead time", remark: "Remark",
+};
+
+/** 출처 다시 맞추기 미리보기 — 바뀔 줄을 먼저 보이고, 고른 줄만 입힌다. */
+export function SourceSyncModal({
+  changes,
+  unmatched,
+  missing,
+  rowNo,
+  onApply,
+  onClose,
+}: {
+  changes: SyncChange[];
+  unmatched: number;
+  missing: number;
+  /** items 인덱스 → 화면의 No.(옵션 행을 뺀 번호). */
+  rowNo: (index: number) => number;
+  onApply: (picked: SyncChange[]) => void;
+  onClose: () => void;
+}) {
+  // 경고가 붙은 줄(다른 줄과 L번호가 겹침)은 기본으로 빼 둔다 — 합계가 바뀌는 변경이다.
+  const [on, setOn] = useState<Set<number>>(() => new Set(changes.filter((c) => !c.warn).map((c) => c.index)));
+  const flip = (i: number) =>
+    setOn((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(i)) next.add(i);
+      return next;
+    });
+  const picked = changes.filter((c) => on.has(c.index));
+  return (
+    <Modal title="⟳ Sync from vendor quotes" onClose={onClose} form maxWidth={860}>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Text fields edited in stage 3 since these lines were loaded. Prices, margins and quantities are not touched.
+      </p>
+      {changes.length === 0 ? (
+        <div className="state">Everything is already in line with the vendor quotes.</div>
+      ) : (
+        <div className="sync-list">
+          {changes.map((c) => (
+            <label key={c.index} className={`sync-row${on.has(c.index) ? " on" : ""}${c.warn ? " warn" : ""}`}>
+              <input type="checkbox" checked={on.has(c.index)} onChange={() => flip(c.index)} />
+              <div className="sync-body">
+                <div className="sync-head">
+                  <b>Row {rowNo(c.index)}</b>
+                  <span className="muted"> · <VendorName name={c.vendor} /> {c.vq_no}</span>
+                </div>
+                {c.fields.map((f) => (
+                  <div key={f.key} className="sync-field">
+                    <span className="sync-k">{SYNC_LABEL[f.key] || f.key}</span>
+                    <span className="sync-from">{f.from || "—"}</span>
+                    <span className="sync-arrow">→</span>
+                    <span className="sync-to">{f.to || "—"}</span>
+                  </div>
+                ))}
+                {c.warn ? <div className="sync-warn">⚠ {c.warn}</div> : null}
+              </div>
+            </label>
+          ))}
+        </div>
+      )}
+      {unmatched > 0 || missing > 0 ? (
+        <p className="muted" style={{ fontSize: 12 }}>
+          {unmatched > 0 ? `${unmatched} line(s) could not be matched to a vendor quote line (part no. and description both changed). ` : ""}
+          {missing > 0 ? `${missing} line(s) come from a vendor quote that no longer exists.` : ""}
+        </p>
+      ) : null}
+      <div className="form-actions">
+        <button className="btn primary" disabled={!picked.length} onClick={() => onApply(picked)}>
+          Apply {picked.length} row{picked.length === 1 ? "" : "s"}
+        </button>
+        <button className="btn" onClick={onClose}>Cancel</button>
+      </div>
+    </Modal>
   );
 }

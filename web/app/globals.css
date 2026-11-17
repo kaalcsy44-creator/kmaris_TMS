@@ -21814,3 +21814,26 @@ td.seq .seq-lid.seq-lids { white-space: normal; color: #0055a8; font-weight: 600
   .pl-modal--form .msw .msw-grid,
   .pl-modal--form .msw .msw-pgrid { grid-template-columns: 1fr; }
 }
+
+/* 4단계 Sync from vendor quotes 미리보기 */
+.sync-list { display: flex; flex-direction: column; gap: 6px; max-height: 60vh; overflow: auto; }
+.sync-row { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line, #dfe3ea); border-radius: 8px; cursor: pointer; opacity: .65; }
+.sync-row.on { opacity: 1; border-color: #8fb6e6; background: #f4f8fd; }
+.sync-row.warn { border-color: #e6b35c; }
+.sync-row input { margin-top: 3px; }
+.sync-body { flex: 1; min-width: 0; }
+.sync-head { font-size: 13px; margin-bottom: 4px; }
+.sync-field { display: grid; grid-template-columns: 86px minmax(0, 1fr) 18px minmax(0, 1fr); gap: 6px; font-size: 12.5px; align-items: baseline; }
+.sync-k { color: var(--muted); }
+.sync-from { color: var(--muted); text-decoration: line-through; overflow-wrap: anywhere; }
+.sync-to { font-weight: 600; overflow-wrap: anywhere; }
+.sync-arrow { color: var(--muted); text-align: center; }
+.sync-warn { margin-top: 4px; font-size: 12px; color: #9a5b00; }
+@media (max-width: 720px) {
+  .sync-field { grid-template-columns: 70px 1fr; }
+  .sync-arrow { display: none; }
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sync-row.on { background: rgba(80, 140, 220, .12); }
+}
+:root[data-theme="dark"] .sync-row.on { background: rgba(80, 140, 220, .12); }

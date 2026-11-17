@@ -285,3 +285,136 @@ export function costConvertible(from: string | undefined, to: string | undefined
   if (!f || !t || f === t) return true;
   return (f === "USD" && t === "KRW") || (f === "KRW" && t === "USD");
 }
+
+// ── 출처 다시 맞추기(Sync from vendor quote) ──────────────────────────────────
+// 4단계 줄은 불러올 때 벤더 견적 줄을 베껴 온 것이라, 그 뒤 3단계에서 L번호·품명·납기를
+// 고쳐도 여기엔 넘어오지 않는다. 다시 불러오면 원가·마진까지 갈려 버리므로, 출처 줄과
+// 다시 짝지어 **글자 칸만** 새로 가져온다. 값(원가·마진·단가·수량)은 건드리지 않는다.
+
+/** 다시 가져오는 칸 — 고객에게 나가는 글자들. */
+export const SYNC_FIELDS = ["lid", "lids", "description", "lead_time", "remark"] as const;
+export type SyncField = (typeof SYNC_FIELDS)[number];
+
+export type SyncChange = {
+  /** 품목표 안의 자리(items 인덱스). */
+  index: number;
+  vendor: string;
+  vq_no: string;
+  fields: { key: SyncField; from: string; to: string }[];
+  /** 새 L번호가 다른 줄과 겹친다 — 같은 L의 줄은 대안(합계엔 한 줄만)으로 묶인다. */
+  warn?: string;
+};
+
+type SrcLine = { lid?: string; lids?: string[]; part_no?: string; description?: string;
+                 lead_time?: string; remark?: string; row_kind?: string | null };
+
+const norm = (v: unknown) => String(v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+const lidsText = (it: { lid?: string; lids?: string[] | null }) =>
+  (it.lids && it.lids.length > 1 ? it.lids : [it.lid || ""]).filter(Boolean).join(", ");
+
+/** 출처 줄 짝짓기 점수 — 품번 3, 품명 2, L번호 2. 2점 미만이면 같은 줄로 보지 않는다. */
+function matchScore(it: CustomerQuoteItem, s: SrcLine): number {
+  let n = 0;
+  const p = norm(it.part_no).replace(/\s+/g, "");
+  if (p && p === norm(s.part_no).replace(/\s+/g, "")) n += 3;
+  const d = norm(it.description);
+  if (d && d === norm(s.description)) n += 2;
+  const l = String(it.lid || "").trim();
+  if (l && l === String(s.lid || "").trim()) n += 2;
+  return n;
+}
+
+/** 출처가 적힌 줄마다 그 벤더 견적의 줄을 다시 찾아, 글자 칸이 달라진 것만 모은다.
+ *  한 출처 줄은 한 번만 짝이 된다(같은 품목의 대안 줄이 한 줄에 몰리지 않게). */
+export function sourceChanges(
+  items: readonly CustomerQuoteItem[],
+  quotes: readonly { id: number; vendor: string; vendor_quote_no: string; items: readonly SrcLine[] }[]
+): { changes: SyncChange[]; unmatched: number; missing: number } {
+  const byId = new Map(quotes.map((q) => [Number(q.id), q]));
+  const pairs: { i: number; j: number; q: number; score: number }[] = [];
+  let missing = 0;
+  const linked = new Set<number>();
+  (items || []).forEach((it, i) => {
+    const qid = Number(it.src_vq_id || 0);
+    if (!qid || isOptionRow(it)) return;
+    linked.add(i);
+    const q = byId.get(qid);
+    if (!q) { missing += 1; return; }
+    (q.items || []).forEach((s, j) => {
+      if (isOptionRow(s)) return;
+      const score = matchScore(it, s);
+      if (score >= 2) pairs.push({ i, j, q: qid, score });
+    });
+  });
+  pairs.sort((a, b) => b.score - a.score || a.i - b.i || a.j - b.j);
+  const usedItem = new Set<number>();
+  const usedSrc = new Set<string>();
+  const hit = new Map<number, SrcLine>();
+  for (const p of pairs) {
+    const sk = `${p.q}:${p.j}`;
+    if (usedItem.has(p.i) || usedSrc.has(sk)) continue;
+    usedItem.add(p.i);
+    usedSrc.add(sk);
+    hit.set(p.i, byId.get(p.q)!.items[p.j]);
+  }
+  const changes: SyncChange[] = [];
+  hit.forEach((s, i) => {
+    const it = items[i];
+    const fields: SyncChange["fields"] = [];
+    const want = {
+      lid: String(s.lid || "").trim(),
+      lids: s.lids && s.lids.length > 1 ? lidsText(s) : "",
+      description: String(s.description || ""),
+      lead_time: String(s.lead_time || ""),
+      remark: String(s.remark || ""),
+    };
+    const have = {
+      lid: String(it.lid || "").trim(),
+      lids: it.lids && it.lids.length > 1 ? lidsText(it) : "",
+      description: String(it.description || ""),
+      lead_time: String(it.lead_time || ""),
+      remark: String(it.remark || ""),
+    };
+    for (const k of SYNC_FIELDS) {
+      // L번호는 출처가 비어 있으면 지우지 않는다 — 딜이 붙인 이름을 벤더 견적의 빈칸이 지우면 안 된다.
+      if (k === "lid" && !want.lid) continue;
+      if (k === "lids" && !want.lid) continue;
+      if (want[k].trim() !== have[k].trim()) fields.push({ key: k, from: have[k], to: want[k] });
+    }
+    if (!fields.length) return;
+    const q = byId.get(Number(it.src_vq_id))!;
+    let warn: string | undefined;
+    if (want.lid && want.lid !== have.lid) {
+      const other = items.findIndex((x, n) => n !== i && !isOptionRow(x) && String(x.lid || "").trim() === want.lid);
+      if (other >= 0)
+        warn = `${want.lid} is already on another row (${items[other].description || items[other].part_no || "—"}) — rows sharing a line are grouped as alternatives, so only one of them counts in the Total.`;
+    }
+    changes.push({ index: i, vendor: q.vendor || "", vq_no: q.vendor_quote_no || "", fields, warn });
+  });
+  changes.sort((a, b) => a.index - b.index);
+  return { changes, unmatched: linked.size - hit.size - missing, missing };
+}
+
+/** 고른 변경만 품목표에 입힌다(값 칸은 그대로). */
+export function applySourceChanges(
+  items: readonly CustomerQuoteItem[],
+  changes: readonly SyncChange[]
+): CustomerQuoteItem[] {
+  const out = [...(items || [])];
+  for (const c of changes) {
+    const next: CustomerQuoteItem = { ...out[c.index] };
+    for (const f of c.fields) {
+      if (f.key === "lids") {
+        const arr = f.to.split(",").map((x) => x.trim()).filter(Boolean);
+        if (arr.length > 1) next.lids = arr;
+        else delete next.lids;
+      } else {
+        next[f.key] = f.to;
+      }
+    }
+    // 대표 L번호만 바뀌고 lids 가 그대로면 대표가 어긋난다 — 단일 라인으로 돌아갔으면 lids 를 걷는다.
+    if (next.lids && next.lids[0] !== next.lid) delete next.lids;
+    out[c.index] = next;
+  }
+  return out;
+}

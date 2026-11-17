@@ -83,16 +83,18 @@ import { invalidateVendorLogos } from "@/lib/vendorLogos";
 import LineBoard from "./common/LineBoard";
 import type { VendorState } from "@/lib/deal";
 import VendorSelect from "./common/VendorSelect";
-import VendorQuoteMergeModal, { QuoteSourceBand } from "./common/VendorQuoteMerge";
+import VendorQuoteMergeModal, { QuoteSourceBand, SourceSyncModal } from "./common/VendorQuoteMerge";
 import type { MergeMode } from "./common/VendorQuoteMerge";
 import {
   appendItems,
+  applySourceChanges,
   attributeLegacySource,
   costConvertible,
   costSources,
   manualLines,
   mergeMessage,
   soleSourceId,
+  sourceChanges,
   withoutSource,
 } from "@/lib/quoteMerge";
 import VendorContactFields, {
@@ -2727,6 +2729,7 @@ function CustomerQuoteDetailModal({
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const sync = useSourceSync(items, vendorQuotes, setItems, setMsg, setErr);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [dlBusy, setDlBusy] = useState(false);
   const [dlErr, setDlErr] = useState<string | null>(null);
@@ -3204,8 +3207,10 @@ function CustomerQuoteDetailModal({
             costCurrency={costCurrency}
             onDrop={canWriteNow ? dropSource : undefined}
             onOpen={canWriteNow ? () => setMergeOpen(true) : undefined}
+            onSync={canWriteNow ? sync.open : undefined}
             disabled={!canWriteNow}
           />
+          {sync.modal}
           <div className="undo-root" data-undo-scope>
           <CustomerQuoteItemEditor
             rfqId={d?.rfq_id || 0}
@@ -5337,6 +5342,37 @@ function mergeTermsFromVendorQuote(
  * 통화는 줄에 그대로 남겨 둔다(src_cost·src_currency): 환율을 고치면 그 숫자에서 다시
  * 환산하고, "이 원가가 어디서 왔나"를 나중에도 되짚을 수 있다.
  */
+/** 4단계 "⟳ Sync from vendor quotes" — 3단계에서 고친 L번호·품명·납기·Remark 를 출처 줄에서
+ *  다시 가져온다(값은 그대로). 편집기 두 곳(신규·상세)이 같이 쓴다. */
+function useSourceSync(
+  items: CustomerQuoteItem[],
+  vendorQuotes: VendorQuoteForImport[],
+  setItems: (v: CustomerQuoteItem[]) => void,
+  setMsg: (v: string | null) => void,
+  setErr: (v: string | null) => void
+) {
+  const [state, setState] = useState<ReturnType<typeof sourceChanges> | null>(null);
+  const rowNo = (index: number) => items.slice(0, index + 1).filter((it) => !isOptionRow(it)).length;
+  return {
+    open: () => setState(sourceChanges(items, vendorQuotes)),
+    modal: state ? (
+      <SourceSyncModal
+        changes={state.changes}
+        unmatched={state.unmatched}
+        missing={state.missing}
+        rowNo={rowNo}
+        onClose={() => setState(null)}
+        onApply={(picked) => {
+          setItems(applySourceChanges(items, picked));
+          setState(null);
+          setErr(null);
+          setMsg(`Synced ${picked.length} row(s) from the vendor quotes — prices unchanged. Save to keep.`);
+        }}
+      />
+    ) : null,
+  };
+}
+
 function customerQuoteItemsFromVendorQuote(
   vq: VendorQuoteForImport,
   defaultMargin: number,
@@ -5664,6 +5700,7 @@ function CustomerQuoteAction({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const sync = useSourceSync(items, vendorQuotes, setItems, setMsg, setErr);
 
   // 자동채번 미리보기(다음 Quotation No.) 로드.
   useEffect(() => {
@@ -5997,7 +6034,9 @@ function CustomerQuoteAction({
         costCurrency={costCurrency}
         onDrop={dropSource}
         onOpen={() => setMergeOpen(true)}
+        onSync={sync.open}
       />
+      {sync.modal}
       <CustomerQuoteItemEditor
         rfqId={rfqId}
         items={items}

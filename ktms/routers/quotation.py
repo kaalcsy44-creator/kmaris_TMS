@@ -578,6 +578,18 @@ def _combined_quotation_payload(s, rfq_id: int, ids: str):
         got = [lid_key(l) for q in qids for l in (lids_of.get(q) or [])]
         return min(got) if got else (10 ** 7, 0)
 
+    # 라인 번호 없는 줄(운임·포장비 등)은 그 견적서에 딸린 줄이다 — 여러 장을 합치면 어느
+    # 품목들의 운임인지 흐려지므로, 그 견적이 실은 라인을 품명 뒤에 붙인다. 운임에 L번호를
+    # 직접 달면 같은 L의 품목과 대안/세트 묶음이 돼 합계·소싱보드가 틀어지므로 표기만 한다.
+    if len(qtns) > 1:
+        for k, it in keyed:
+            if is_option_row(it) or str(it.get("lid") or "").strip():
+                continue
+            lab = lids_label(src[k])
+            desc = str(it.get("description") or "").strip()
+            if lab and "[L" not in desc:
+                it["description"] = f"{desc} [{lab}]".strip()
+
     payload = _quotation_payload(s, base)
     payload["items"] = items
     nos = [x.qtn_no for x in qtns if x.qtn_no]
