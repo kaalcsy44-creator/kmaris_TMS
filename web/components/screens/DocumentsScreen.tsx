@@ -3735,6 +3735,14 @@ function ItemEditor({
   const measTotal = shown.reduce((s, it) => s + num(it.measurement), 0);
   // 합계행 Measurement 칸의 안내값 — 치수를 적었으면 그걸로 계산한 용적을 미리 보여준다.
   const dimMeasurement = packingTotals ? dimMeasurementText(packingTotals.values) : "";
+  /** 합계행 치수·케이스 수를 고치면 용적을 다시 계산해 칸에 넣는다 — 전에 저장된 용적이 칸을
+   *  차지하고 있으면 자동값(placeholder)이 가려져 치수를 바꿔도 옛 용적이 그대로 남았다.
+   *  세 변이 다 있을 때만 덮고, 그 뒤 용적 칸을 직접 고치면 그 값이 우선한다. */
+  const packDims = (patch: Partial<PackingTotals>) => {
+    if (!packingTotals) return;
+    const auto = dimMeasurementText({ ...packingTotals.values, ...patch });
+    packingTotals.onChange(auto ? { ...patch, measurement: auto } : patch);
+  };
   const fmtNum = (n: number) => (n ? n.toLocaleString(undefined, { maximumFractionDigits: 3 }) : "");
   const fmtM3 = (n: number) => (n ? n.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 }) : "");
   // 합계행 자동값(서버 packing_totals 와 같은 규칙) — 포장 종류: 품목이 모두 같은 종류면 그 이름,
@@ -4023,7 +4031,7 @@ function ItemEditor({
                       <input
                         className="num" value={packingTotals.values.cases}
                         placeholder={fmtNum(pkgTotal)} title="Total number of packages"
-                        onChange={(e) => packingTotals.onChange({ cases: e.target.value })}
+                        onChange={(e) => packDims({ cases: e.target.value })}
                       />
                     </td>
                     <td>{/* 9 pkg_kind */}
@@ -4050,13 +4058,13 @@ function ItemEditor({
                     <td>{/* 12 dimension — L × W × H (cm) */}
                       <span className="pack-dim">
                         <input value={packingTotals.values.dim_l} placeholder={autoDims[0] || "L"} title="Length (cm)"
-                          onChange={(e) => packingTotals.onChange({ dim_l: e.target.value })} />
+                          onChange={(e) => packDims({ dim_l: e.target.value })} />
                         <em>×</em>
                         <input value={packingTotals.values.dim_w} placeholder={autoDims[1] || "W"} title="Width (cm)"
-                          onChange={(e) => packingTotals.onChange({ dim_w: e.target.value })} />
+                          onChange={(e) => packDims({ dim_w: e.target.value })} />
                         <em>×</em>
                         <input value={packingTotals.values.dim_h} placeholder={autoDims[2] || "H"} title="Height (cm)"
-                          onChange={(e) => packingTotals.onChange({ dim_h: e.target.value })} />
+                          onChange={(e) => packDims({ dim_h: e.target.value })} />
                       </span>
                     </td>
                     <td>{/* 13 measurement */}
