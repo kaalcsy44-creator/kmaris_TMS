@@ -26,10 +26,11 @@ import {
   deleteFinancePayable,
   payFinancePayable,
   fetchVendors,
+  saveVendorBank,
 } from "@/lib/api";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import type { ApByOrderRow, ArRow, DocCharges, DocumentDetail, DocumentWorkItem, FinancePayable, PoWorkOptions, TaxInvoiceItem, VendorQuoteItem } from "@/lib/types";
+import type { ApByOrderRow, ArRow, BankAccount, VendorBillOcr, DocCharges, DocumentDetail, DocumentWorkItem, FinancePayable, PoWorkOptions, TaxInvoiceItem, VendorQuoteItem } from "@/lib/types";
 import { createPortal } from "react-dom";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import VendorSelect from "@/components/common/VendorSelect";
@@ -54,6 +55,14 @@ import { useItemGrid, ItemGridStyle, ItemTh, ItemColsButton, igSpan, grandFootSe
 import { useEditGate } from "@/lib/viewMode";
 import RecordStrip from "@/components/common/RecordStrip";
 import ClaimPanel from "@/components/screens/ClaimPanel";
+import {
+  BillCompare,
+  VendorBankFields,
+  VendorBillReadButton,
+  emptyBank,
+  sameBank,
+  type CompareBase,
+} from "@/components/screens/VendorBillTools";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -230,8 +239,9 @@ export function ArOverview({
   // AR = 이 오더의 청구서 전부가 (9) 세금계산서 발행 / (10) 수금 완료. AP 판정은 ApGate 와 같다.
   const arDone = orderArs.length > 0 && orderArs.every((r) => (stageTab === 9 ? r.tax_issued : r.paid_done));
   const apTotal = mainAr?.ap_total ?? 0;
+  // 9단계 매입측은 청구서 수취만 본다 — 벤더 세금계산서 수취는 선택사항(2026-11-18).
   const apDone = apTotal > 0 && (stageTab === 9
-    ? Math.min(mainAr?.ap_billed ?? 0, mainAr?.ap_tax ?? 0)
+    ? mainAr?.ap_billed ?? 0
     : mainAr?.ap_paid ?? 0) >= apTotal;
   // 9·10단계 모두 같은 대금청구서 편집기(ArAddForm)를 본문으로 쓴다 — P/O 간·단계 간 화면 일관성.
   // 레코드가 없으면 생성 폼, 있으면 편집 폼. 그 아래 9단계는 세금계산서 발행, 10단계는 수금
@@ -848,6 +858,92 @@ function ApAddForm({
   const [err, setErr] = useState("");
   const sel = useRowSelection(form.items.length);
 
+  // 입금 계좌 — 거래선 회사 단위 값(명부)이라 열 때 그 값을 보이고, 바뀌었을 때만 저장한다.
+  const [bankInit, setBankInit] = useState<BankAccount>(() => ({ ...emptyBank, ...(row.vendor_bank ?? {}) }));
+  const [bank, setBank] = useState<BankAccount>(bankInit);
+  const [bankFromBill, setBankFromBill] = useState(false);
+  // 거래명세서에서 읽어 온 결과 — 찍힌 합계를 폼 합계와 맞대어 보이는 데 쓴다.
+  const [printed, setPrinted] = useState<{ supply: number | null; total: number | null } | null>(null);
+  const [readNote, setReadNote] = useState("");
+  const [showCompare, setShowCompare] = useState(false);
+  const vendorName = isExtraRow
+    ? (workOpts?.vendors ?? []).find((v) => v.id === vendorId)?.name ?? ""
+    : row.vendor;
+
+  // 대조 기준 — 벤더 P/O 가 먼저, 그 다음 이 공급사의 견적(공급사를 모르면 딜의 견적 전부).
+  const compareBases = useMemo<CompareBase[]>(() => {
+    const out: CompareBase[] = [];
+    if (poItems.length) out.push({ key: "po", label: `Vendor P/O ${row.po_no || ""}`.trim(), currency: row.currency || "KRW", items: poItems });
+    const vid = isExtraRow ? vendorId : row.vendor_id;
+    const qs = vid ? dealVendorQuotes.filter((q) => q.vendor_id === vid) : dealVendorQuotes;
+    for (const q of qs.length ? qs : dealVendorQuotes) {
+      out.push({
+        key: `q${q.id}`,
+        label: `Quote ${q.vendor_quote_no || q.id} · ${q.vendor}`,
+        currency: q.currency || "KRW",
+        items: vendorQuoteItemsToTax(q.items),
+      });
+    }
+    return out;
+  }, [poItems, row.po_no, row.currency, row.vendor_id, isExtraRow, vendorId, dealVendorQuotes]);
+
+  /** 거래명세서 읽기 결과를 폼에 앉힌다 — 읽어 낸 칸만 덮고, 못 읽은 칸은 적어 둔 값 그대로. */
+  function applyBill(b: VendorBillOcr) {
+    const supply = b.supply_amount;
+    const vatAmt = b.vat_amount;
+    let vatRate: number | null = null;
+    if (supply && supply > 0 && vatAmt != null) {
+      const r = vatAmt / supply;
+      vatRate = vatAmt === 0 ? 0 : Math.abs(r - 0.1) < 0.005 ? 0.1 : Math.round(r * 1000) / 1000;
+    }
+    const chargeStr = (v: number | null, cur: string) => (v != null && v > 0 ? String(v) : cur);
+    setForm((f) => ({
+      ...f,
+      bill_no: b.bill_no || f.bill_no,
+      bill_date: b.bill_date || f.bill_date,
+      due_date: b.due_date || f.due_date,
+      currency: b.currency || f.currency,
+      vat_rate: vatRate ?? f.vat_rate,
+      items: b.items.length
+        ? b.items.map((it) => ({
+            description: it.description,
+            part_no: it.part_no,
+            qty: it.qty,
+            unit_price: it.unit_price,
+            amount: Math.round(it.qty * it.unit_price * 100) / 100,
+          }))
+        : f.items,
+      charges: {
+        freight: chargeStr(b.freight, f.charges.freight),
+        packing: chargeStr(b.packing, f.charges.packing),
+        insurance: chargeStr(b.insurance, f.charges.insurance),
+      },
+      notes: f.notes || b.notes || "",
+    }));
+    sel.clear();
+    if (b.bank && (b.bank.bank_account || b.bank.bank_name)) {
+      setBank({ ...emptyBank, ...b.bank });
+      setBankFromBill(true);
+    }
+    // 추가 매입은 공급사를 직접 고른다 — 명세서의 공급자 이름이 명부에 있으면 잡아 준다.
+    const key = (v: string) => v.replace(/\s+/g, " ").trim().toLowerCase();
+    if (isExtraRow && vendorId === "" && b.supplier) {
+      const hit = (workOpts?.vendors ?? []).find((v) => key(v.name) === key(b.supplier));
+      if (hit) setVendorId(hit.id);
+    }
+    setPrinted({ supply: b.supply_amount, total: b.total_amount });
+    setShowCompare(compareBases.length > 0);
+    const notes: string[] = [`Read ${b.items.length} line${b.items.length === 1 ? "" : "s"}`];
+    if (b.supplier && vendorName && key(b.supplier) !== key(vendorName)) {
+      notes.push(`supplier on the bill is “${b.supplier}”, not ${vendorName} — check it is the right bill`);
+    }
+    if (b.po_ref && row.po_no && !b.po_ref.replace(/\s/g, "").includes(row.po_no.replace(/\s/g, ""))) {
+      notes.push(`bill refers to P/O ${b.po_ref}`);
+    }
+    if (b.truncated) notes.push("the bill was long and may be cut off — check the last lines");
+    setReadNote(notes.join(" · ") + ". Review, then press Save.");
+  }
+
   // 합계 = 품목 소계 + 부대비용(Freight/Packing/Insurance) + VAT.
   // 소계는 "문서에서 제외"한 행을 뺀 값 — AR 청구서와 같은 규칙.
   const subtotal = taxSubtotal(form.items);
@@ -916,6 +1012,17 @@ function ApAddForm({
         await createApRecord(body);
         onCreated?.();
       }
+      // 계좌는 거래선 회사의 값 — 바뀐 경우에만 명부에 적는다(같은 이름의 담당자 줄 전부).
+      if (vendorName && !sameBank(bank, bankInit)) {
+        await saveVendorBank(vendorName, {
+          bank_name: bank.bank_name.trim(),
+          bank_account: bank.bank_account.trim(),
+          bank_holder: bank.bank_holder.trim(),
+          swift: bank.swift.trim(),
+        });
+        setBankInit(bank);
+        setBankFromBill(false);
+      }
       onChanged();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
@@ -960,6 +1067,8 @@ function ApAddForm({
           {readMode ? <>switch to <b>Edit</b> and </> : null}press <b>Save</b>.
         </div>
       ) : null}
+      {canWriteNow ? <VendorBillReadButton onRead={applyBill} /> : null}
+      {readNote ? <div className="vbill-note" role="status">{readNote}</div> : null}
       <div className="form-grid">
         {isExtraRow ? (
           <label className="form-field">
@@ -989,6 +1098,15 @@ function ApAddForm({
           <ExcludedCountNote items={form.items} />
           <div className="items-head-actions">
             <button type="button" className="btn sm" onClick={loadPo} disabled={poItems.length === 0}>Load P/O</button>
+            <button
+              type="button"
+              className={`btn sm${showCompare ? " on" : ""}`}
+              onClick={() => setShowCompare((v) => !v)}
+              disabled={!compareBases.length}
+              title={compareBases.length ? "Check the bill lines against the vendor P/O or a vendor quote" : "No vendor P/O or vendor quote to compare with"}
+            >
+              {showCompare ? "Hide compare" : "Compare P/O·quote"}
+            </button>
             {/* 청구 품목은 3단계에 받아 둔 공급사 견적에 그대로 있을 때가 많다 —
                 추가 매입은 P/O 자체가 없고, 본 매입도 발주서와 청구서가 어긋날 수 있다.
                 견적이 하나도 없어도 칸은 남기고 그렇게 적는다 — 칸째로 사라지면
@@ -1093,14 +1211,33 @@ function ApAddForm({
         </div>
       </div>
 
-      {/* 벤더 전자세금계산서 수취 — 9단계(청구·세금계산서). 청구서를 받는 자리와 같은 단계다. */}
+      {showCompare ? (
+        <BillCompare
+          items={form.items}
+          bases={compareBases}
+          billCurrency={form.currency}
+          printed={printed ? {
+            ...printed,
+            computedSupply: subtotal + extras,
+            computedTotal: total,
+          } : null}
+        />
+      ) : null}
+
+      <VendorBankFields value={bank} onChange={setBank} vendorName={vendorName} fromBill={bankFromBill} />
+
+      {/* 벤더 전자세금계산서 수취 — 9단계. 확인·기록은 하되 선택사항이다(2026-11-18): 받지
+          않아도 9단계 매입측은 청구서(거래명세서) 수취로 끝난다. */}
       {stage === 9 ? (
         <div className="ar-milestone">
-          <div className="form-section-title">e-Tax invoice received (from vendor)</div>
+          <div className="form-section-title">
+            e-Tax invoice received (from vendor) <span className="vcon-sub">— optional</span>
+          </div>
           <div className="milestone-row" style={{ marginBottom: 10 }}>
-            <span className={`ar-badge${form.tax_received ? "" : " overdue"}`}>
+            <span className={`ar-badge${form.tax_received ? "" : " muted"}`}>
               {form.tax_received ? `Received (${form.tax_received_date || "done"})` : "Not received"}
             </span>
+            <span className="hint-inline">Optional — stage 9 completes on the vendor bill alone.</span>
           </div>
           <label className="check-chip" style={{ cursor: "pointer" }}>
             <input type="checkbox" checked={form.tax_received} onChange={(e) => setForm({ ...form, tax_received: e.target.checked })} /> e-Tax invoice received
@@ -1179,11 +1316,9 @@ function ApAddForm({
 function ApGate({ row, stage }: { row: ArRow; stage: StageTab }) {
   const total = row.ap_total ?? 0;
   if (!total) return null;   // 벤더 P/O 가 없는 딜은 매입측이 없다.
-  const done = stage === 9
-    ? Math.min(row.ap_billed ?? 0, row.ap_tax ?? 0)
-    : row.ap_paid;
+  const done = stage === 9 ? row.ap_billed ?? 0 : row.ap_paid;
   const label = stage === 9
-    ? `vendor bill + tax invoice received (bills ${row.ap_billed ?? 0}/${total} · tax invoices ${row.ap_tax ?? 0}/${total})`
+    ? `vendor bill received (tax invoices ${row.ap_tax ?? 0}/${total}, optional)`
     : "vendor paid";
   if ((done ?? 0) >= total) {
     return <span className="hint-inline ap-gate ok" style={{ marginLeft: 10 }}>Vendor side (AP) complete — {total}/{total} {label}</span>;

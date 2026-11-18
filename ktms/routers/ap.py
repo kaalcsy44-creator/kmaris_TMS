@@ -17,8 +17,11 @@ from _core import (
     HTTPException,
     Order,
     PurchaseOrder,
+    File,
+    UploadFile,
     Vendor,
     _ap_record_rows,
+    _ocr_image_media_type,
     _ar_status_from_text,
     _enum_val,
     app,
@@ -26,6 +29,7 @@ from _core import (
     get_session,
     require_token,
 )
+from services.pdf_parser import parse_vendor_bill_image, parse_vendor_bill_pdf_document
 
 
 def _ap_out(r: APRecord, po_no: str = "", vendor: str = "") -> dict:
@@ -59,6 +63,98 @@ def _ap_out(r: APRecord, po_no: str = "", vendor: str = "") -> dict:
     }
 
 
+def _name_key(name: str | None) -> str:
+    return " ".join((name or "").split()).lower()
+
+
+def _vendor_banks(vendors) -> dict:
+    """거래선 회사(이름) → 계좌. 계좌는 회사 단위 값이라 담당자 줄 중 적힌 첫 줄을 쓴다
+    (Finance 지급 상세의 _vendor_company 와 같은 규칙)."""
+    out: dict[str, dict] = {}
+    for v in vendors:
+        key = _name_key(v.name)
+        if not key or key in out:
+            continue
+        acct = (getattr(v, "bank_account", None) or "").strip()
+        bank = (getattr(v, "bank_name", None) or "").strip()
+        if acct or bank:
+            out[key] = {"bank_name": bank, "bank_account": acct,
+                        "bank_holder": (getattr(v, "bank_holder", None) or "").strip(),
+                        "swift": (getattr(v, "bank_swift", None) or "").strip()}
+    return out
+
+
+@app.post("/api/admin/ap/ocr", dependencies=[Depends(require_token)])
+def ocr_vendor_bill(file: UploadFile = File(...)):
+    """공급사 거래명세서·청구서(PDF·이미지) → 청구서 번호·날짜·품목·합계·입금계좌.
+    저장은 하지 않는다 — 화면이 칸을 채우고 P/O·견적과 맞대어 보인 뒤 사람이 저장한다."""
+    fname = (file.filename or "").lower()
+    img_media = _ocr_image_media_type(file)
+    try:
+        file.file.seek(0)
+        if img_media:
+            data = parse_vendor_bill_image(file.file.read(), img_media)
+        elif fname.endswith(".pdf"):
+            data = parse_vendor_bill_pdf_document(file.file.read())
+        else:
+            raise HTTPException(status_code=400, detail="이미지(PNG·JPG·WEBP) 또는 PDF 파일만 업로드할 수 있습니다.")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"거래명세서 인식 실패: {exc}") from exc
+
+    def _text(key: str, n: int | None = None) -> str:
+        v = data.get(key)
+        t = str(v).strip() if v not in (None, "") else ""
+        return t[:n] if n else t
+
+    def _num(v) -> float | None:
+        try:
+            return round(float(v), 2) if v not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    items = []
+    for it in data.get("items") or []:
+        if not isinstance(it, dict):
+            continue
+        qty = _num(it.get("qty")) or 0.0
+        price = _num(it.get("unit_price")) or 0.0
+        amount = _num(it.get("amount"))
+        # 단가가 비어 있고 금액만 찍힌 줄 — 금액 ÷ 수량으로 단가를 되살린다.
+        if not price and amount and qty:
+            price = round(amount / qty, 2)
+        desc = str(it.get("description") or "").strip()
+        part = str(it.get("part_no") or "").strip()
+        if not (desc or part):
+            continue
+        items.append({"part_no": part, "description": desc, "qty": qty,
+                      "unit": str(it.get("unit") or "").strip(), "unit_price": price,
+                      "amount": amount if amount is not None else round(qty * price, 2)})
+    supply, vat, total = _num(data.get("supply_amount")), _num(data.get("vat_amount")), _num(data.get("total_amount"))
+    if total is None and supply is not None:
+        total = round(supply + (vat or 0), 2)
+    return {
+        "supplier": _text("supplier"),
+        "bill_no": _text("bill_no", 60),
+        "bill_date": _text("bill_date", 10),
+        "due_date": _text("due_date", 10),
+        "currency": (_text("currency") or "KRW").upper()[:3],
+        "po_ref": _text("po_ref"),
+        "items": items,
+        "freight": _num(data.get("freight")),
+        "packing": _num(data.get("packing")),
+        "insurance": _num(data.get("insurance")),
+        "supply_amount": supply,
+        "vat_amount": vat,
+        "total_amount": total,
+        "bank": {"bank_name": _text("bank_name"), "bank_account": _text("bank_account"),
+                 "bank_holder": _text("bank_holder"), "swift": _text("swift")},
+        "notes": _text("notes"),
+        "truncated": bool(data.get("truncated")),
+    }
+
+
 @app.get("/api/admin/ap/by-order/{order_id}", dependencies=[Depends(require_token)])
 def ap_by_order(order_id: int):
     """이 오더의 vendor P/O 목록 + 각 P/O 의 AP 레코드(없으면 null).
@@ -72,7 +168,9 @@ def ap_by_order(order_id: int):
     try:
         order = s.query(Order).filter_by(id=order_id).first()
         rfq = _rfq_for_order(s, order) if order else None
-        vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        all_vendors = s.query(Vendor).all()
+        vendor_names = {v.id: v.name for v in all_vendors}
+        banks = _vendor_banks(all_vendors)
         pos = (
             s.query(PurchaseOrder)
             .filter_by(order_id=order_id)
@@ -93,6 +191,7 @@ def ap_by_order(order_id: int):
                 "currency": po.currency or "KRW",
                 "date": po.date or "",
                 "items": po.items or [],
+                "vendor_bank": banks.get(_name_key(vendor)),
                 "ap": _ap_out(existing, po.po_no or "", vendor) if existing else None,
             })
         # 추가 매입 — 본 발주와 별개로 받은 청구(일정 지연에 따른 항공권 변경 같은 것).
@@ -111,6 +210,7 @@ def ap_by_order(order_id: int):
                 "currency": a.currency or "KRW",
                 "date": a.bill_date or "",
                 "items": a.items or [],
+                "vendor_bank": banks.get(_name_key(vendor)),
                 "ap": _ap_out(a, "", vendor),
             })
         return {"rows": rows, "rfq_id": rfq.id if rfq else 0}

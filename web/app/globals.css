@@ -22061,3 +22061,40 @@ td.seq .seq-lid.seq-lids { white-space: normal; color: #0055a8; font-weight: 600
 @media (max-width: 640px) {
   .pkg-split { overflow-x: auto; }
 }
+
+/* ── 9단계 AP: 거래명세서 읽기 · P/O·견적 대조 (VendorBillTools) ── */
+.ar-badge.muted { background: #eef1f5; color: #5b6b82; }
+.vbill-read {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 10px; padding: 8px 10px;
+  border: 1px dashed #c3d3ea; border-radius: 8px; background: #f7faff;
+}
+.vbill-read.over { border-color: var(--blue); background: #eaf2ff; }
+.vbill-note {
+  margin: -4px 0 10px; padding: 6px 10px; border-radius: 6px;
+  background: #fff8e6; color: #7a5600; font-size: 12px;
+}
+.vbill-cmp {
+  margin: 10px 0 4px; padding: 10px; border: 1px solid #dfe7f2; border-radius: 8px; background: #fbfcfe;
+}
+.vbill-cmp-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12.5px; }
+.vbill-cmp-head select { height: 28px; font-size: 12.5px; max-width: 100%; }
+.vbill-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.vbill-chip { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+.vbill-chip.same { background: #e7f6ec; color: #1e7b3c; }
+.vbill-chip.warn { background: #fdf0e3; color: #a3530b; }
+.vbill-only { margin-left: auto; font-size: 12px; color: #5b6b82; display: inline-flex; align-items: center; gap: 4px; }
+.vbill-warn { font-size: 12px; color: #a3530b; margin-bottom: 6px; }
+.vbill-cmp-table { width: 100%; }
+.vbill-cmp-table td.num.hl { background: #fff1d6; font-weight: 700; }
+.vbill-cmp-table td.num.up { color: #b42318; font-weight: 700; }
+.vbill-cmp-table td.num.down { color: #1e6fd9; font-weight: 700; }
+.vbill-row.extra td, .vbill-row.missing td { background: #fff8f0; }
+.vbill-desc { white-space: normal; }
+.vbill-part { font-size: 11px; color: #7c8aa0; }
+.vbill-tag { font-size: 11px; font-weight: 700; white-space: nowrap; padding: 1px 6px; border-radius: 8px; }
+.vbill-tag.same { color: #1e7b3c; background: #e7f6ec; }
+.vbill-tag.qty, .vbill-tag.price, .vbill-tag.both, .vbill-tag.extra, .vbill-tag.missing { color: #a3530b; background: #fdf0e3; }
+.vbill-printed { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; }
+.vbill-printed .ok { color: #1e7b3c; }
+.vbill-printed .bad { color: #b42318; font-weight: 700; }

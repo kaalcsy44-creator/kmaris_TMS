@@ -668,6 +668,13 @@ export function parsePayableBill(file: File): Promise<PayableBillOcr> {
   return postForm<PayableBillOcr>("/api/admin/finance/payables/ocr", fd);
 }
 
+/** 공급사 거래명세서·청구서(PDF·이미지) → 9단계 AP 폼 초안(저장 안 함). */
+export function parseVendorBill(file: File): Promise<import("./types").VendorBillOcr> {
+  const fd = new FormData();
+  fd.append("file", file);
+  return postForm("/api/admin/ap/ocr", fd);
+}
+
 export function parseOrderPdf(file: File): Promise<OrderOcrResult> {
   const fd = new FormData();
   fd.append("file", file);

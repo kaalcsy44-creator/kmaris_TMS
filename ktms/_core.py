@@ -985,14 +985,16 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
     tax_not_required = bool(order) and (getattr(order, "trade_type", "수출") or "수출") != "내수"
     # 고객 세금계산서 발행일은 stage_dates["tax"] — 단계 번호가 아니라 9단계 안의 표시다.
     tax_issued = bool(sd.get("tax")) or pi_covers_tax or tax_not_required
-    s9 = billed and tax_issued and ap_all_tax
+    # 벤더 전자세금계산서 수취(ap_all_tax)는 선택사항이다(2026-11-18) — 화면에서 확인·기록은
+    # 하되 9단계 완료를 막지 않는다. 매입측 9단계는 공급사 청구서(거래명세서) 수취로 끝난다.
+    s9 = billed and tax_issued
     # 10) 수금 — 매출(AR) 수금과 매입(AP) 지급이 모두 끝나야 완료다.
     s10 = (bool(sd.get("10")) or ar_paid) and ap_all_paid
     money_done = [n for n, ok in ((9, s9), (10, s10)) if ok]
     # 9·10 은 매출(AR)·매입(AP) 둘 다 끝나야 완료다 — 단계 카드가 한쪽만 끝난 것을 보이게
     # 쪽마다 따로 담는다. ap_na = 벤더 P/O 가 없어 매입측은 따질 것이 없다.
     money_split = {
-        "9": {"ar": bool(order) and ar_billed and tax_issued, "ap": bool(order) and ap_all_billed and ap_all_tax},
+        "9": {"ar": bool(order) and ar_billed and tax_issued, "ap": bool(order) and ap_all_billed},
         "10": {"ar": bool(sd.get("10")) or ar_paid, "ap": bool(order) and ap_all_paid},
         "ap_na": not pos,
     }

@@ -1517,7 +1517,29 @@ export type ApByOrderRow = {
   currency: string;
   date: string;
   items: DocumentWorkItem[];   // 원본 P/O 품목(Load P/O 로 청구 품목에 채움)
+  /** 이 거래선 회사의 입금 계좌(거래선 명부, 회사 단위 값). 없으면 null. */
+  vendor_bank?: BankAccount | null;
   ap: ApRow | null;
+};
+
+/** 공급사 거래명세서·청구서 자동 읽기 결과(/api/admin/ap/ocr) — 저장 전 초안. */
+export type VendorBillOcr = {
+  supplier: string;
+  bill_no: string;
+  bill_date: string;
+  due_date: string;
+  currency: string;
+  po_ref: string;
+  items: { part_no: string; description: string; qty: number; unit: string; unit_price: number; amount: number }[];
+  freight: number | null;
+  packing: number | null;
+  insurance: number | null;
+  supply_amount: number | null;
+  vat_amount: number | null;
+  total_amount: number | null;
+  bank: BankAccount;
+  notes: string;
+  truncated: boolean;
 };
 
 /** AP 저장 바디(부분 저장 허용). */

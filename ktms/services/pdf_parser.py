@@ -638,6 +638,67 @@ def parse_payable_bill_pdf_document(pdf_bytes: bytes) -> dict:
                        _BILL_SCHEMA)
 
 
+# ── 공급사 거래명세서·청구서(프로젝트 9단계 Payable · Vendor (AP) 자동 입력) ─────────
+# Finance 의 고지서 읽기와 달리 품목표까지 받는다 — 화면이 그 품목을 벤더 P/O·공급사
+# 견적과 줄마다 맞대어 보이기 때문이다. 계좌는 거래선 회사 계좌로 들어간다.
+_VENDOR_BILL_ITEM_FIELDS = {
+    "part_no": _TEXT, "description": _TEXT, "qty": _NUM, "unit": _TEXT,
+    "unit_price": _NUM, "amount": _NUM,
+}
+# 구조화 출력은 nullable(유니온) 칸을 16개까지만 받는다 — 글자 칸은 빈 문자열, 부대비용은
+# 0 을 "안 찍혀 있음"으로 쓰고, 합계 셋만 null 을 허용한다(0 원과 '없음'을 갈라야 해서).
+_VENDOR_BILL_HEAD = {
+    **{k: _TEXT for k in ("supplier", "bill_no", "bill_date", "due_date", "currency", "po_ref",
+                          "bank_name", "bank_account", "bank_holder", "swift", "notes")},
+    "supply_amount": {"type": ["number", "null"]},
+    "vat_amount": {"type": ["number", "null"]},
+    "total_amount": {"type": ["number", "null"]},
+    "freight": _NUM,
+    "packing": _NUM,
+    "insurance": _NUM,
+    "items": _item_schema(_VENDOR_BILL_ITEM_FIELDS),
+}
+_VENDOR_BILL_SCHEMA = {"type": "object", "properties": _VENDOR_BILL_HEAD,
+                       "required": list(_VENDOR_BILL_HEAD), "additionalProperties": False}
+
+_VENDOR_BILL_INSTRUCTIONS = (
+    "The attached file is a supplier's bill sent to us (K-MARIS / 케이마리스, the buyer): a Korean "
+    "statement of transaction (거래명세서·거래명세표), an invoice (청구서·Invoice) or a tax invoice "
+    "(세금계산서). Extract it.\n"
+    "supplier = the issuing company (공급자), never our own company. bill_no = the document number "
+    "printed on it (명세서 번호·Invoice No.·No.·문서번호); empty if none. bill_date = issue date "
+    "(작성일자·거래일자·Invoice date). due_date = payment due date (지급기일·결제일·Due date); empty "
+    "if not printed. Dates are YYYY-MM-DD. currency = ISO code (KRW when amounts are in 원). "
+    "po_ref = our purchase-order number if referenced (P/O No., 발주번호, e.g. KMS-ORD-…); empty otherwise.\n"
+    "items = every goods/service line in printed order: part_no (품번·Part No.; empty if none), "
+    "description (품명·규격), qty, unit (EA/PCS/SET …), unit_price (단가, supply price before VAT), "
+    "amount (공급가액 of the line, before VAT). Do NOT put freight, packing, insurance, VAT or "
+    "totals into items. Copy every row of every page; never summarize.\n"
+    "freight / packing / insurance = separately printed charges of that kind (운임·포장비·보험료), "
+    "before VAT; 0 if not printed.\n"
+    "supply_amount / vat_amount / total_amount = the printed totals (공급가액 합계 / 세액 / 합계금액). "
+    "Numbers only, no separators.\n"
+    "bank_name / bank_account / bank_holder / swift = the supplier's account to pay into (입금계좌·"
+    "결제계좌 with its bank, 예금주, SWIFT for foreign accounts); account number exactly as printed "
+    "with hyphens. Empty string if not printed.\n"
+    "notes = other useful printed remarks in one line (비고), empty string if none.\n"
+    "Text fields not printed = empty string; supply/vat/total not printed = null. "
+    "Do NOT invent values or infer them from outside knowledge."
+)
+
+
+def parse_vendor_bill_image(image_bytes: bytes, media_type: str) -> dict:
+    """공급사 거래명세서·청구서 사진/캡쳐에서 헤더·품목·계좌를 추출."""
+    return _parse_image(image_bytes, media_type, _VENDOR_BILL_INSTRUCTIONS, _VENDOR_BILL_SCHEMA)
+
+
+def parse_vendor_bill_pdf_document(pdf_bytes: bytes) -> dict:
+    """공급사 거래명세서·청구서 PDF(스캔본 포함)에서 헤더·품목·계좌를 추출."""
+    return _ask_claude([_pdf_document_block(pdf_bytes),
+                        {"type": "text", "text": _VENDOR_BILL_INSTRUCTIONS}],
+                       _VENDOR_BILL_SCHEMA)
+
+
 def parse_order_fields(text: str, customer_names: list[str] | None = None) -> dict:
     """고객 P/O 평문에서 필드를 추출. PDF 파일이 있으면 parse_order_pdf_document 를 먼저 쓴다."""
     prompt = f"""Extract Purchase Order (customer order) information from the document text below.{_customer_hint_line(customer_names)}
