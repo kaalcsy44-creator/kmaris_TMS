@@ -67,6 +67,7 @@ import {
   roundTo,
   useRowSelection,
   MoveRowsButtons,
+  moneyText,
 } from "@/components/common/itemTable";
 import {
   useItemGrid,
@@ -3616,7 +3617,8 @@ function invoiceFooterRows(p: {
     { label: "Discount (−)", plain: true, value: <AmountInput className="foot-charge-input" value={p.discount} onChange={(e) => p.setDiscount(String(Math.abs(parseAmountInput(e.target.value) ?? 0) || ""))} /> },
     { label: "Subtotal", strong: true, value: <DualCurrencyAmount value={net} currency={p.currency} /> },
     ...chargeRows,
-    { label: `VAT (${num(p.vatRate)}%)`, plain: true, value: <DualCurrencyAmount value={p.vatAmount} currency={p.currency} /> },
+    // VAT — Discount·Freight 줄처럼 통화 없이 숫자만(작은 줄 위계).
+    { label: `VAT (${num(p.vatRate)}%)`, plain: true, value: moneyText(p.vatAmount) },
     { label: "Total invoice value", grand: true, value: <><DualCurrencyAmount value={p.totalInvoiceValue} currency={p.currency} /><span className="fx-note">{fxRateText()}</span></> },
   ];
 }
