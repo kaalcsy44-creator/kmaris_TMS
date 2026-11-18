@@ -473,10 +473,10 @@ def _invoice_items_and_totals(form: "_FormSheet", data: Dict[str, Any], r: int, 
         """wide: TOTAL INVOICE VALUE 처럼 A~G 를 합친 넓은 줄(Items Total·Subtotal).
         나머지(Discount·Freight·…)는 F~G 의 작은 라벨 줄."""
         nonlocal r
-        if wide:   # 라벨 칸만 회색, 라벨·값 모두 굵게
+        if wide:   # 라벨·값 칸 모두 회색, 라벨·값 모두 굵게
             form.merge(r, 1, r, 7)
             form.put(r, 1, label, fill=form.gray, font=form.bold, align=form.center)
-            form.put(r, 8, value, font=form.bold, align=form.right, fmt=num_fmt)
+            form.put(r, 8, value, fill=form.gray, font=form.bold, align=form.right, fmt=num_fmt)
             form.bd(r, 1, r, form.ncol)
         else:      # 라벨은 채우기 없음·보통 굵기(품목 글자 크기), 오른쪽 정렬
             # label_from: 라벨이 긴 줄(CI 의 합친 부대비용)은 왼쪽 칸까지 넓혀 한 줄로 보이게.
