@@ -656,6 +656,7 @@ _VENDOR_BILL_HEAD = {
     "freight": _NUM,
     "packing": _NUM,
     "insurance": _NUM,
+    "other_charges": _item_schema({"label": _TEXT, "amount": _NUM}),
     "items": _item_schema(_VENDOR_BILL_ITEM_FIELDS),
 }
 _VENDOR_BILL_SCHEMA = {"type": "object", "properties": _VENDOR_BILL_HEAD,
@@ -668,16 +669,24 @@ _VENDOR_BILL_INSTRUCTIONS = (
     "supplier = the issuing company (공급자), never our own company. bill_no = the document number "
     "printed on it (명세서 번호·Invoice No.·No.·문서번호); empty if none. bill_date = issue date "
     "(작성일자·거래일자·Invoice date). due_date = payment due date (지급기일·결제일·Due date); empty "
-    "if not printed. Dates are YYYY-MM-DD. currency = ISO code (KRW when amounts are in 원). "
+    "if not printed. Dates are YYYY-MM-DD. currency = ISO code of the AMOUNTS, judged by the "
+    "currency symbol or unit printed next to the numbers (₩ / 원 / KRW → KRW, $ → USD, € → EUR). A "
+    "label such as 'GRAND TOTAL(USD)' on a ₩ amount is a template leftover — the symbol on the "
+    "amount wins. "
     "po_ref = our purchase-order number if referenced (P/O No., 발주번호, e.g. KMS-ORD-…); empty otherwise.\n"
     "items = every goods/service line in printed order: part_no (품번·Part No.; empty if none), "
     "description (품명·규격), qty, unit (EA/PCS/SET …), unit_price (단가, supply price before VAT), "
     "amount (공급가액 of the line, before VAT). Do NOT put freight, packing, insurance, VAT or "
     "totals into items. Copy every row of every page; never summarize.\n"
-    "freight / packing / insurance = separately printed charges of that kind (운임·포장비·보험료), "
-    "before VAT; 0 if not printed.\n"
-    "supply_amount / vat_amount / total_amount = the printed totals (공급가액 합계 / 세액 / 합계금액). "
-    "Numbers only, no separators.\n"
+    "Charges printed outside the item table (usually near the totals, before VAT) are NOT items: "
+    "freight = transport/delivery/courier (운임·운송비·택배비·Freight·Delivery charge); packing = "
+    "packing/crating/wooden case (포장비·우든포장비용·목재포장·Wooden packing·Crating); insurance = "
+    "insurance (보험료). If several lines fall into one of these, add them up. Every other extra "
+    "charge (검사비·인증서 발급비·핸들링·서류비·Handling·Inspection·Certificate fee·Bank charge …) goes "
+    "into other_charges as {label (as printed), amount}. 0 / [] if not printed.\n"
+    "supply_amount = the printed total before VAT exactly as printed (공급가액 합계·TOTAL AMOUNT — it "
+    "may or may not include the extra charges; copy it as printed). vat_amount = 세액·부가세·VAT. "
+    "total_amount = the final amount payable (합계금액·GRAND TOTAL). Numbers only, no separators.\n"
     "bank_name / bank_account / bank_holder / swift = the supplier's account to pay into (입금계좌·"
     "결제계좌 with its bank, 예금주, SWIFT for foreign accounts); account number exactly as printed "
     "with hyphens. Empty string if not printed.\n"

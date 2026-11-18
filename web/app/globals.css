@@ -22098,3 +22098,8 @@ td.seq .seq-lid.seq-lids { white-space: normal; color: #0055a8; font-weight: 600
 .vbill-printed { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; }
 .vbill-printed .ok { color: #1e7b3c; }
 .vbill-printed .bad { color: #b42318; font-weight: 700; }
+/* AP 기타 비용 줄 — 이름 칸(라벨 자리)도 입력이다. */
+table.mini tfoot .total-label .foot-charge-label {
+  width: 100%; max-width: 220px; text-align: right; font: inherit; font-weight: 600;
+  border: 1px solid var(--border, #d8dee6); border-radius: 4px; padding: 2px 6px; background: #fff;
+}

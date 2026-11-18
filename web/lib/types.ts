@@ -1315,6 +1315,9 @@ export type DocCharges = {
   freight?: number | string;
   packing?: number | string;
   insurance?: number | string;
+  /** 위 셋에 들지 않는 기타 비용(검사비·핸들링 등) — 공급사 청구서(AP)에서만 쓴다. */
+  other?: number | string;
+  other_label?: string;
 };
 
 /** 세금계산서(대금청구서) 청구 품목 1줄. */
@@ -1534,6 +1537,8 @@ export type VendorBillOcr = {
   freight: number | null;
   packing: number | null;
   insurance: number | null;
+  /** 운임·포장·보험에 들지 않는 기타 비용(검사비·핸들링 등). */
+  other_charges: { label: string; amount: number }[];
   supply_amount: number | null;
   vat_amount: number | null;
   total_amount: number | null;

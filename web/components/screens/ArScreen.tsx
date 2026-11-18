@@ -78,7 +78,8 @@ const nowLocal = () => {
 };
 
 /** 부대비용 입력값(문자열로 들고 있다가 저장 시 숫자로 변환) — PI/CI 품목표와 같은 방식. */
-type ChargeForm = { freight: string; packing: string; insurance: string };
+// other/other_label = 셋에 들지 않는 기타 비용 — AP(공급사 청구서) 표에만 칸이 선다. AR 은 늘 비어 있다.
+type ChargeForm = { freight: string; packing: string; insurance: string; other?: string; other_label?: string };
 const emptyCharges: ChargeForm = { freight: "", packing: "", insurance: "" };
 const CHARGE_KEYS: { key: keyof ChargeForm; label: string }[] = [
   { key: "freight", label: "Freight" },
@@ -88,15 +89,19 @@ const CHARGE_KEYS: { key: keyof ChargeForm; label: string }[] = [
 /** 저장된 charges(JSON) → 입력 폼 값. 0/빈값은 빈 칸으로 둔다. */
 function chargesToForm(c: DocCharges | null | undefined): ChargeForm {
   const one = (v: number | string | undefined) => (v === undefined || v === null || num(v) === 0 ? "" : String(v));
-  return { freight: one(c?.freight), packing: one(c?.packing), insurance: one(c?.insurance) };
+  return {
+    freight: one(c?.freight), packing: one(c?.packing), insurance: one(c?.insurance),
+    other: one(c?.other), other_label: c?.other_label || "",
+  };
 }
 /** 입력 폼 값 → 저장용 숫자 JSON. */
 const chargesToSave = (c: ChargeForm): DocCharges => ({
   freight: num(c.freight),
   packing: num(c.packing),
   insurance: num(c.insurance),
+  ...(num(c.other) ? { other: num(c.other), other_label: (c.other_label || "").trim() } : {}),
 });
-const chargesTotal = (c: ChargeForm) => num(c.freight) + num(c.packing) + num(c.insurance);
+const chargesTotal = (c: ChargeForm) => num(c.freight) + num(c.packing) + num(c.insurance) + num(c.other);
 
 type ArForm = {
   id: number;
@@ -897,6 +902,9 @@ function ApAddForm({
       vatRate = vatAmt === 0 ? 0 : Math.abs(r - 0.1) < 0.005 ? 0.1 : Math.round(r * 1000) / 1000;
     }
     const chargeStr = (v: number | null, cur: string) => (v != null && v > 0 ? String(v) : cur);
+    const others = (b.other_charges || []).filter((c) => c.amount > 0);
+    const otherSum = Math.round(others.reduce((t, c) => t + c.amount, 0) * 100) / 100;
+    const otherLabel = others.map((c) => c.label).filter(Boolean).join(", ");
     setForm((f) => ({
       ...f,
       bill_no: b.bill_no || f.bill_no,
@@ -917,6 +925,10 @@ function ApAddForm({
         freight: chargeStr(b.freight, f.charges.freight),
         packing: chargeStr(b.packing, f.charges.packing),
         insurance: chargeStr(b.insurance, f.charges.insurance),
+        // 셋에 들지 않는 비용은 합쳐 한 줄로 — 이름은 명세서에 찍힌 그대로 잇는다.
+        ...(otherSum > 0
+          ? { other: String(otherSum), other_label: otherLabel }
+          : { other: f.charges.other, other_label: f.charges.other_label }),
       },
       notes: f.notes || b.notes || "",
     }));
@@ -927,14 +939,24 @@ function ApAddForm({
     }
     // 추가 매입은 공급사를 직접 고른다 — 명세서의 공급자 이름이 명부에 있으면 잡아 준다.
     const key = (v: string) => v.replace(/\s+/g, " ").trim().toLowerCase();
+    // 회사 이름 비교 — 법인 꼬리표·구두점은 떼고 본다("TECHLOG CO., LTD." = "TECHLOG").
+    const corp = (v: string) =>
+      v.toLowerCase()
+        .replace(/\(주\)|㈜|주식회사|\b(co|corp|corporation|ltd|limited|inc|llc|pte|gmbh|company)\b/g, " ")
+        .replace(/[^0-9a-z가-힣]+/g, "");
+    const sameCorp = (a: string, b2: string) => {
+      const x = corp(a), y = corp(b2);
+      return !!x && !!y && (x === y || x.includes(y) || y.includes(x));
+    };
     if (isExtraRow && vendorId === "" && b.supplier) {
-      const hit = (workOpts?.vendors ?? []).find((v) => key(v.name) === key(b.supplier));
+      const hit = (workOpts?.vendors ?? []).find((v) => key(v.name) === key(b.supplier))
+        ?? (workOpts?.vendors ?? []).find((v) => sameCorp(v.name, b.supplier));
       if (hit) setVendorId(hit.id);
     }
     setPrinted({ supply: b.supply_amount, total: b.total_amount });
     setShowCompare(compareBases.length > 0);
     const notes: string[] = [`Read ${b.items.length} line${b.items.length === 1 ? "" : "s"}`];
-    if (b.supplier && vendorName && key(b.supplier) !== key(vendorName)) {
+    if (b.supplier && vendorName && !sameCorp(b.supplier, vendorName)) {
       notes.push(`supplier on the bill is “${b.supplier}”, not ${vendorName} — check it is the right bill`);
     }
     if (b.po_ref && row.po_no && !b.po_ref.replace(/\s/g, "").includes(row.po_no.replace(/\s/g, ""))) {
@@ -1188,6 +1210,25 @@ function ApAddForm({
                   </td>
                 </tr>
               ))}
+              {/* 기타 비용 — 셋에 들지 않는 청구(검사비·핸들링·서류비 등). 이름은 직접 적는다. */}
+              <tr>
+                <td /><td /><td /><td /><td />
+                <td className="total-label">
+                  <input
+                    className="foot-charge-label"
+                    placeholder="Other charge"
+                    value={form.charges.other_label || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, charges: { ...f.charges, other_label: e.target.value } }))}
+                  />
+                </td>
+                <td className="num total-value">
+                  <AmountInput
+                    className="foot-charge-input"
+                    value={form.charges.other || ""}
+                    onChange={(e) => setCharge("other", String(parseAmountInput(e.target.value) ?? ""))}
+                  />
+                </td>
+              </tr>
               <tr>
                 <td /><td /><td /><td /><td />
                 <td className="total-label">VAT ({Math.round(form.vat_rate * 100)}%)</td>
@@ -1218,6 +1259,7 @@ function ApAddForm({
           billCurrency={form.currency}
           printed={printed ? {
             ...printed,
+            computedItems: subtotal,
             computedSupply: subtotal + extras,
             computedTotal: total,
           } : null}

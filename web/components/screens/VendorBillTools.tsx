@@ -129,7 +129,7 @@ export function BillCompare({
   bases: CompareBase[];
   billCurrency: string;
   /** 명세서에 찍혀 있던 합계(읽어 온 경우) — 품목을 옮겨 적다 생긴 어긋남을 잡는다. */
-  printed?: { supply: number | null; total: number | null; computedSupply: number; computedTotal: number } | null;
+  printed?: Printed | null;
 }) {
   const [key, setKey] = useState(bases[0]?.key ?? "");
   const [onlyDiff, setOnlyDiff] = useState(false);
@@ -228,9 +228,20 @@ export function BillCompare({
 }
 
 /** 명세서에 찍힌 합계 vs 읽어 온 품목으로 다시 계산한 합계. */
-function PrintedCheck({ p }: { p: { supply: number | null; total: number | null; computedSupply: number; computedTotal: number } }) {
+type Printed = { supply: number | null; total: number | null; computedItems: number; computedSupply: number; computedTotal: number };
+
+/** 명세서에 찍힌 공급가액은 부대비용(우든포장비 등)을 넣은 것도, 뺀 것도 있다 — 둘 중
+ *  맞는 쪽과 견준다. 둘 다 안 맞으면 부대비용 포함 값과의 차이를 보인다. */
+function PrintedCheck({ p }: { p: Printed }) {
   const rows: { label: string; printed: number; computed: number }[] = [];
-  if (p.supply != null) rows.push({ label: "Supply amount", printed: p.supply, computed: p.computedSupply });
+  if (p.supply != null) {
+    const itemsOnly = Math.abs(p.supply - p.computedItems) <= 1 && Math.abs(p.supply - p.computedSupply) > 1;
+    rows.push({
+      label: itemsOnly ? "Items total" : "Supply amount",
+      printed: p.supply,
+      computed: itemsOnly ? p.computedItems : p.computedSupply,
+    });
+  }
   if (p.total != null) rows.push({ label: "Total (incl. VAT)", printed: p.total, computed: p.computedTotal });
   if (!rows.length) return null;
   return (

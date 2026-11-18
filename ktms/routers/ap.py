@@ -145,6 +145,11 @@ def ocr_vendor_bill(file: UploadFile = File(...)):
         "freight": _num(data.get("freight")),
         "packing": _num(data.get("packing")),
         "insurance": _num(data.get("insurance")),
+        "other_charges": [
+            {"label": str(c.get("label") or "").strip()[:60], "amount": _num(c.get("amount")) or 0.0}
+            for c in (data.get("other_charges") or [])
+            if isinstance(c, dict) and (_num(c.get("amount")) or 0) > 0
+        ],
         "supply_amount": supply,
         "vat_amount": vat,
         "total_amount": total,
