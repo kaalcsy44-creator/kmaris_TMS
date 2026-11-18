@@ -80,7 +80,12 @@ export function vendorContactEmails(vendors: VendorOption[], ids: number[]): str
 
 /** 저장된 벤더(대표 담당자) + 받는 사람 주소 → 그때 고른 담당자들. 저장 형식은 예나
  *  지금이나 "대표 1명 + 주소 한 줄"이라, 주소에 이름이 오른 같은 회사 담당자를 도로
- *  찾아 체크해 준다(옛 기록도 열면 그대로 보인다). */
+ *  찾아 체크해 준다(옛 기록도 열면 그대로 보인다).
+ *
+ *  주소 하나는 담당자 한 명으로만 되살린다 — 한 회사 담당자들이 대표 메일(sales@…)을
+ *  같이 쓰면, 그 주소만 보고는 누구를 골랐는지 알 수 없어 전부 체크되던 문제가 있었다.
+ *  그 주소가 대표 담당자(vendorId) 것이면 대표로 이미 채워진 것이고, 아니면 목록에서
+ *  먼저 나오는 한 명이다. 대표는 늘 맨 앞에 둔다(저장되는 vendor_id 가 바뀌지 않게). */
 export function contactIdsFromEmail(
   vendors: VendorOption[],
   vendorId: number | "",
@@ -91,12 +96,17 @@ export function contactIdsFromEmail(
     c.contacts.some((x) => x.id === vendorId)
   );
   if (!company) return [];
-  const addrs = new Set(
-    (email || "").split(/[,;]/).map((a) => a.trim().toLowerCase()).filter(Boolean)
-  );
-  return company.contacts
-    .filter((c) => c.id === vendorId || (c.email && addrs.has(c.email.trim().toLowerCase())))
-    .map((c) => c.id);
+  const key = (v?: string) => (v || "").trim().toLowerCase();
+  const rep = company.contacts.find((c) => c.id === vendorId)!;
+  const covered = new Set<string>([key(rep.email)].filter(Boolean));
+  const out = [rep.id];
+  for (const a of (email || "").split(/[,;]/).map(key).filter(Boolean)) {
+    if (covered.has(a)) continue;
+    covered.add(a);
+    const c = company.contacts.find((x) => x.id !== vendorId && key(x.email) === a);
+    if (c) out.push(c.id);
+  }
+  return out;
 }
 
 /** 발신 화면에서 바로 더한 담당자를 목록에 얹는다 — 부모가 들고 있는 명부를 다시 받아
