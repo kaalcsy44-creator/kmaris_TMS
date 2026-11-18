@@ -710,6 +710,11 @@ function ClaimsSection({
 }
 
 /** 활동의 정렬·시각표시용 일시 문자열(iso). 노트는 datetime, 자동이벤트는 at 우선. */
+/** 시스템이 남긴 딜 종결·재활성 줄인가. */
+function isDealEvent(a: Activity): boolean {
+  return a.kind === "note" && (a.note.system === "close" || a.note.system === "reopen");
+}
+
 function actAt(a: Activity): string {
   if (a.kind === "note") return a.note.datetime || a.note.at || a.date;
   if (a.kind === "auto") return a.at || a.date;
@@ -894,7 +899,12 @@ function StageTimeline({
                   const notes = notesOf.get(c.no) ?? [];
                   // 이 단계의 활동(자동이벤트 + 노트)을 시간순 한 목록으로. 날짜는 헤더가 아니라
                   // 각 행에 두고(열 정렬), 헤더에는 번호·제목만 남긴다.
-                  const rows: Activity[] = [...autos, ...notes];
+                  // 활동기록이 없는 옛 종결(2026-09 이전)은 지금 단계 칸에 같은 꼴로 끼운다.
+                  const rows: Activity[] = [
+                    ...autos,
+                    ...notes,
+                    ...(closeAct && c.no === row.stage ? [closeAct] : []),
+                  ];
                   rows.sort((x, y) => actAt(x).localeCompare(actAt(y)));
                   return (
                     <li key={c.no} className={`${state}${c.skip ? " skip" : ""}`}>
@@ -943,7 +953,9 @@ function StageTimeline({
                         // 접히는 줄은 토글 바로 아래에 통째로 붙는다 — 시간순 사이사이에 흩어 놓으면
                         // 펼칠 때 토글 위에 줄이 생겨 방금 누른 버튼이 아래로 밀린다.
                         // 감추기는 CSS 가 한다(DOM 에는 남긴다) — 인쇄물엔 접힌 것도 다 나와야 한다.
-                        const isLog = (a: Activity) => a.kind === "note" && !a.note.star;
+                        // 종결·재활성 줄은 접지 않는다 — "언제 닫았나"는 개요에서 가장 먼저 찾는 것이다.
+                        const isLog = (a: Activity) =>
+                          a.kind === "note" && !a.note.star && !isDealEvent(a);
                         const pinned = rows.filter((a) => !isLog(a));
                         const mainIdx = pinned.findIndex((r) => r.kind === "auto");
                         const notesOpen = openNotes.includes(c.no);
@@ -964,6 +976,30 @@ function StageTimeline({
                         // 활동 1줄 — 노트는 편집 가능한 행으로, 자동 이벤트는 단계/벤더 링크 행으로.
                         const renderRow = (a: Activity, key: string, isMain: boolean) => {
                           const dateEl = <OvWhen date={a.date} at={actAt(a)} />;
+                          // 딜 종결·재활성 — 시스템이 남긴 줄. 붉은/초록 사건 줄로 늘 보이게.
+                          if (a.kind === "close" || isDealEvent(a)) {
+                            const closed = a.kind === "close" || (a.kind === "note" && a.note.system === "close");
+                            const detail =
+                              a.kind === "close"
+                                ? a.reason
+                                : closed
+                                  ? a.note.text.replace(/^딜 종결\s*(—\s*)?/, "")
+                                  : "";
+                            const who = a.kind === "note" ? a.note.pic : "";
+                            return (
+                              <li key={key} className={`ov-tl-deal ${closed ? "closed" : "reopen"}`}>
+                                <div className="ov-tl-row">
+                                  {dateEl}
+                                  <b className="ov-tl-actlabel">{closed ? "⊘ Deal closed" : "↺ Reactivated"}</b>
+                                  {detail || who ? (
+                                    <span className="ov-tl-actmeta">
+                                      {[detail, who ? `by ${who}` : ""].filter(Boolean).join(" · ")}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </li>
+                            );
+                          }
                           // 사람이 쓴 노트 — ★·수정·삭제가 가능한 편집 행으로 렌더한다.
                           if (a.kind === "note") {
                             return (
@@ -1097,16 +1133,6 @@ function StageTimeline({
           </div>
         ))}
       </div>
-      {/* 종결은 특정 단계에 속하지 않으므로 4칸 아래 전체 폭으로. */}
-      {closeAct ? (
-        <div className="ov-tl-closed">
-          <span className="ov-tl-dot" aria-hidden>
-            ⊘
-          </span>
-          <ActivityDesc act={closeAct} />
-          <time className="ov-tl-at">{closeAct.date ? md(closeAct.date) : ""}</time>
-        </div>
-      ) : null}
     </section>
   );
 }

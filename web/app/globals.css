@@ -22125,3 +22125,10 @@ table.mini tfoot .total-label .foot-charge-label {
 }
 .vbill-read.compact { margin: 0; padding: 2px 6px; border-style: dashed; }
 .vbill-bank-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+
+/* 개요 단계 칸의 딜 종결·재활성 줄 — 접히지 않고, 색으로 바로 눈에 띈다. */
+.ov-tl-deal > .ov-tl-row { border-radius: 6px; margin: 2px 0; }
+.ov-tl-deal.closed > .ov-tl-row { background: #fdeeee; }
+.ov-tl-deal.closed .ov-tl-actlabel { color: #b42318; }
+.ov-tl-deal.reopen > .ov-tl-row { background: #e9f5ee; }
+.ov-tl-deal.reopen .ov-tl-actlabel { color: #1f7a43; }
