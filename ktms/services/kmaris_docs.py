@@ -1291,20 +1291,22 @@ def _invoice_totals_tables(form: _DocForm, item_w: List[float], money: Dict[str,
         rows += [("Freight", money["freight"], "charge"), ("Packing", money["packing"], "charge"),
                  ("Insurance", money["insurance"], "charge")]
     rows.append(("VAT", money["vat"], "charge"))
+    # 4칸 격자: [No.~Part No.] [HS Code~Qty] [Unit Price] [Amount] — Excel A~D / E~F / G / H.
+    # CI(merge_charges)는 작은 라벨 줄(Discount·부대비용·VAT)을 모두 E~G 폭으로 맞춘다.
     data_rows, style = [], [("LINEBEFORE", (0, 0), (0, -1), .35, MID_GRAY),
                             ("LINEAFTER", (0, 0), (0, -1), .35, MID_GRAY)]
     for i, (k, v, kind) in enumerate(rows):
-        if kind == "charge":
-            data_rows.append(["", form.p(k, form.right), form.p(amount(v), form.right)])
-            style += [("GRID", (1, i), (-1, i), .35, MID_GRAY)]
-        elif kind == "charge_wide":
-            data_rows.append([form.p(k, form.right), "", form.p(amount(v), form.right)])
-            style += [("SPAN", (0, i), (1, i)), ("GRID", (0, i), (-1, i), .35, MID_GRAY)]
+        if kind in ("charge", "charge_wide") and merge_charges:
+            data_rows.append(["", form.p(k, form.right), "", form.p(amount(v), form.right)])
+            style += [("SPAN", (1, i), (2, i)), ("GRID", (1, i), (-1, i), .35, MID_GRAY)]
+        elif kind == "charge":
+            data_rows.append(["", "", form.p(k, form.right), form.p(amount(v), form.right)])
+            style += [("SPAN", (0, i), (1, i)), ("GRID", (2, i), (-1, i), .35, MID_GRAY)]
         else:
-            data_rows.append([form.p(k, form.grand), "", form.p(amount(v), form.grand_right)])
-            style += [("SPAN", (0, i), (1, i)), ("GRID", (0, i), (-1, i), .35, MID_GRAY),
+            data_rows.append([form.p(k, form.grand), "", "", form.p(amount(v), form.grand_right)])
+            style += [("SPAN", (0, i), (2, i)), ("GRID", (0, i), (-1, i), .35, MID_GRAY),
                       ("BACKGROUND", (0, i), (-1, i), LIGHT_GRAY)]
-    totals = Table(data_rows, colWidths=[sum(item_w[:5]), item_w[5], item_w[6]])
+    totals = Table(data_rows, colWidths=[sum(item_w[:3]), sum(item_w[3:5]), item_w[5], item_w[6]])
     totals.setStyle(TableStyle(style + form.CELL))
     grand = Table([[form.p("TOTAL INVOICE VALUE", form.grand),
                     form.p(amount(money["total"]), form.grand_right)]],
