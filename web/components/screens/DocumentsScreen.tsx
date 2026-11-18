@@ -3512,7 +3512,7 @@ function cbmText(l: unknown, w: unknown, h: unknown, pkgs?: unknown): string {
   const [a, b, c] = [l, w, h].map((x) => num(x));
   if (!a || !b || !c) return "";
   const m3 = Math.round((a * b * c * (num(pkgs) || 1)) / 100) / 10000; // cm³ → m³
-  return m3 ? String(m3) : "";
+  return m3 ? m3.toFixed(4) : ""; // 관례대로 소수 넷째 자리까지(0.15 → 0.1500)
 }
 
 function autoPackingKind(rows: DocumentWorkItem[], fallback?: string): string {
@@ -3736,7 +3736,7 @@ function ItemEditor({
   // 합계행 Measurement 칸의 안내값 — 치수를 적었으면 그걸로 계산한 용적을 미리 보여준다.
   const dimMeasurement = packingTotals ? dimMeasurementText(packingTotals.values) : "";
   const fmtNum = (n: number) => (n ? n.toLocaleString(undefined, { maximumFractionDigits: 3 }) : "");
-  const fmtM3 = (n: number) => (n ? n.toLocaleString(undefined, { maximumFractionDigits: 4 }) : "");
+  const fmtM3 = (n: number) => (n ? n.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 }) : "");
   // 합계행 자동값(서버 packing_totals 와 같은 규칙) — 포장 종류: 품목이 모두 같은 종류면 그 이름,
   // 섞였으면 "Packages", 아무도 안 적었으면 Commercial Invoice 의 Packing.
   // 치수: 치수를 적은 품목이 모두 같은 치수면 그 치수(여럿이 다르면 하나로 합칠 수 없어 비운다).

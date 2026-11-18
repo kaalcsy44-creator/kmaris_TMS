@@ -771,6 +771,7 @@ def make_packing_list_xlsx(
     consignee, buyer = doc_parties(data)
     # 중량·치수·용적 — 정수는 "12." 처럼 점이 남지 않게 General, 수식 합계가 0 이면 빈 칸.
     num_fmt = 'General;-General;""'
+    m3_fmt = '0.0000;-0.0000;""'   # 용적(m³)은 관례대로 소수 넷째 자리까지, 0 은 빈 칸
 
     wb = Workbook()
     ws = wb.active
@@ -836,7 +837,7 @@ def make_packing_list_xlsx(
             n = _num(it.get("pkg_qty"))
             mult = f"*{_numcell(n)}" if n and n != 1 else ""
             meas = f"=ROUND(J{r}*K{r}*L{r}{mult}/1000000,4)"
-        form.put(r, 13, meas, font=form.item_font, align=form.right, fmt=num_fmt)
+        form.put(r, 13, meas, font=form.item_font, align=form.right, fmt=m3_fmt)
         form.bd(r, 1, r, form.ncol, None if it else form.alt)
         form.ws.row_dimensions[r].height = form.item_row_height(it["description"], 26) if it else 18
         r += 1
@@ -864,7 +865,7 @@ def make_packing_list_xlsx(
         mult = f"*{_numcell(n)}" if n and n != 1 else ""
         tot_meas = f"=ROUND(J{r}*K{r}*L{r}{mult}/1000000,4)"
     form.put(r, 13, tot_meas or f"=SUM(M{first}:M{last})", fill=form.lightblue, font=form.bold,
-             align=form.right, fmt=num_fmt)
+             align=form.right, fmt=m3_fmt)
     form.bd(r, 1, r, form.ncol)
     form.ws.row_dimensions[r].height = 20
     r += 1

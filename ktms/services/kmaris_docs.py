@@ -2194,6 +2194,14 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
         """0·빈값은 빈 칸 — 서식에 0 이 줄줄이 찍히지 않게."""
         return str(v).strip() if v not in (None, "", 0, 0.0) else ""
 
+    def m3(v: Any) -> str:
+        """용적(m³) — 관례대로 소수 넷째 자리까지(0.15 → 0.1500). 숫자가 아니면 적힌 그대로."""
+        t = num(v)
+        try:
+            return f"{float(t.replace(',', '')):.4f}" if t else ""
+        except ValueError:
+            return t
+
     story: List[Any] = []
     story += _letterhead(company, "PACKING LIST", s)
     # Packing List 는 자체 번호·발행일이 없다 — 딸려 나가는 송장의 번호·발행일을 싣는다.
@@ -2224,7 +2232,7 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
                      form.p(it["unit"], form.center), form.p(_pkg_text(it), form.center),
                      form.p(num(it.get("net_weight")), form.right), form.p(num(it.get("gross_weight")), form.right)]
                     + [form.p(d, form.center) for d in dims]
-                    + [form.p(num(it.get("measurement")), form.right)])
+                    + [form.p(m3(it.get("measurement")), form.right)])
     filler = max(0, PL_MIN_ITEM_ROWS - len(items))
     rows += [[""] * 12 for _ in range(filler)]
 
@@ -2236,7 +2244,7 @@ def _make_packing_list_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> byt
                  form.p(_g(sum(_num(it["qty"]) for it in items)), form.grand),
                  form.p(unit, form.grand), form.p(tot["packages"], form.grand_right),
                  form.p(tot["net_weight"], form.grand_right), form.p(tot["gross_weight"], form.grand_right)] \
-        + [form.p(d, form.grand) for d in dims] + [form.p(tot["measurement"], form.grand_right)]
+        + [form.p(d, form.grand) for d in dims] + [form.p(m3(tot["measurement"]), form.grand_right)]
     rows.append(total_row)
 
     last = len(rows) - 1
