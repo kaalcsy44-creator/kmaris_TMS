@@ -708,34 +708,61 @@ def update_rfq_cancel(rfq_id: int, body: RfqCancelUpdate,
         rfq = s.query(RFQ).filter_by(id=rfq_id).first()
         if not rfq:
             raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        # 사건 일시 — 사용자가 고른 시각(비우면 지금). 형식이 틀리면 거절한다: 잘못된 값이
+        # 로그 정렬 키가 되면 그 줄이 엉뚱한 자리로 간다.
+        at = (body.at or "").strip()[:16]
+        if at:
+            try:
+                datetime.strptime(at, "%Y-%m-%dT%H:%M")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="일시 형식이 잘못됐습니다(YYYY-MM-DDTHH:MM).")
+        at = at or _kst_iso(datetime.utcnow())
         was_cancelled = _enum_val(rfq.status) == RFQStatus.LOST.value
         rfq.status = RFQStatus.LOST if body.cancelled else RFQStatus.RECEIVED
         if body.cancelled:
             # 종결 사유 기록. reason 코드 + 기타 직접입력(note)은 other 일 때만 의미.
             rfq.close_reason = (body.reason or "").strip() or None
             rfq.close_reason_note = (body.reason_note or "").strip() or None
-            # 최초 종결 일시 보존(이미 있으면 유지).
-            rfq.closed_at = getattr(rfq, "closed_at", None) or _kst_iso(datetime.utcnow())
+            # 새로 닫을 때는 고른 일시로. 이미 닫힌 건의 사유만 고칠 때는 일시를 보낸 경우에만
+            # 바꾼다(안 보내면 처음 닫은 일시 유지).
+            if not was_cancelled or body.at or not getattr(rfq, "closed_at", None):
+                rfq.closed_at = at
         else:
             # 재활성 시 사유·종결일시를 비운다.
             rfq.close_reason = None
             rfq.close_reason_note = None
             rfq.closed_at = None
-        # 상태가 실제로 바뀐 때만 남긴다 — 사유만 고쳐 다시 저장하는 일에 같은 줄이 쌓이면
-        # 로그가 아니라 소음이 된다.
+        reason = (rfq.close_reason_note or "").strip() or _close_reason_short(rfq.close_reason)
+        close_text = "딜 종결" + (f" — {reason}" if reason else "")
+        # 상태가 실제로 바뀐 때만 새 줄을 남긴다 — 사유만 고쳐 다시 저장하는 일에 같은 줄이
+        # 쌓이면 로그가 아니라 소음이 된다.
         if bool(body.cancelled) != was_cancelled:
             if body.cancelled:
-                reason = (rfq.close_reason_note or "").strip() or _close_reason_short(
-                    rfq.close_reason)
-                log_stage_note(s, rfq_id, "딜 종결" + (f" — {reason}" if reason else ""),
-                               user.get("username", ""), system="close")
+                log_stage_note(s, rfq_id, close_text, user.get("username", ""),
+                               system="close", when=at)
             else:
                 log_stage_note(s, rfq_id, "딜 재활성 — 종결 해제",
-                               user.get("username", ""), system="reopen")
+                               user.get("username", ""), system="reopen", when=at)
+        elif body.cancelled:
+            # 사유·일시를 고친 경우 — 마지막 종결 줄을 같이 고쳐 로그와 상태가 어긋나지 않게.
+            notes = dict(getattr(rfq, "stage_notes", None) or {})
+            last = None
+            for key, lst in notes.items():
+                for i, n in enumerate(lst or []):
+                    if isinstance(n, dict) and n.get("system") == "close":
+                        if last is None or (n.get("at") or "") >= (notes[last[0]][last[1]].get("at") or ""):
+                            last = (key, i)
+            if last:
+                lst = [dict(n) if isinstance(n, dict) else n for n in notes[last[0]]]
+                lst[last[1]]["text"] = close_text
+                lst[last[1]]["datetime"] = rfq.closed_at or lst[last[1]].get("datetime")
+                notes[last[0]] = lst
+                rfq.stage_notes = notes
         s.commit()
         return {"ok": True, "cancelled": body.cancelled,
                 "close_reason": rfq.close_reason,
-                "close_reason_note": rfq.close_reason_note}
+                "close_reason_note": rfq.close_reason_note,
+                "closed_at": rfq.closed_at}
     finally:
         s.close()
 

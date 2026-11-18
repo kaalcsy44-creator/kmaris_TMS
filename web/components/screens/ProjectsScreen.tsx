@@ -1,7 +1,7 @@
 "use client";
 
 import { COL_MENU_W } from "@/components/common/tableHeadMenu";
-import CloseReasonDialog from "@/components/common/CloseReasonDialog";
+import CloseReasonDialog, { ReactivateDialog } from "@/components/common/CloseReasonDialog";
 
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -17,7 +17,6 @@ import {
   addRfqStageNote,
   updateRfqStageNote,
   deleteRfqStageNote,
-  setRfqCancelled,
   updateRfq,
   fetchAssignableUsers,
   CLOSE_REASONS,
@@ -1366,6 +1365,7 @@ function PipelineTable({
           mode="edit"
           initialCode={reasonEdit.close_reason}
           initialNote={reasonEdit.close_reason_note}
+          initialAt={reasonEdit.closed_at}
           onSaved={onChanged}
           onClose={() => setReasonEdit(null)}
         />
@@ -2549,23 +2549,14 @@ export function PipelineModal({
   const [newWorkType, setNewWorkType] = useState("부품공급");
   // 딜 종결(취소/실주) 토글 — 종결 시 보드 Cancelled 존으로, 재활성 시 진행 컬럼으로 복귀.
   const [cancelBusy, setCancelBusy] = useState(false);
-  // 종결 사유 고르기·고치기 모달(CloseReasonDialog). 재활성은 사유가 필요 없어 바로 처리.
+  // 종결 사유 고르기·고치기 모달(CloseReasonDialog), 재활성 일시 모달(ReactivateDialog).
+  // 둘 다 사건 일시를 받아 활동기록에 그 시각으로 남긴다.
   const [reasonOpen, setReasonOpen] = useState(false);
-  async function toggleCancelled() {
+  const [reactivateOpen, setReactivateOpen] = useState(false);
+  function toggleCancelled() {
     if (isNewProject || cancelBusy) return;
-    if (!r.cancelled) {
-      // 종결 → 사유 선택 모달을 연다(저장은 다이얼로그가 한다).
-      setReasonOpen(true);
-      return;
-    }
-    // 재활성 → 진행 컬럼으로 복귀(사유는 백엔드에서 비운다).
-    setCancelBusy(true);
-    try {
-      await setRfqCancelled(r.rfq_id, false);
-      await onChanged();
-    } finally {
-      setCancelBusy(false);
-    }
+    if (!r.cancelled) setReasonOpen(true);
+    else setReactivateOpen(true);
   }
   // 담당자(PIC) 재지정 — 우측 상단 PIC 칩에서 어느 단계에서도 변경(admin 전용).
   const canEditPic = !isNewProject && isAdmin();
@@ -3109,11 +3100,13 @@ export function PipelineModal({
                 <button
                   type="button"
                   className="pl-close-reason"
-                  title={`${text} · click to edit`}
+                  title={`${text}${r.closed_at ? ` · closed ${r.closed_at.replace("T", " ")}` : ""} · click to edit`}
                   onClick={() => setReasonOpen(true)}
                   disabled={cancelBusy}
                 >
-                  ⊘ {text} <span className="pl-close-reason-pen">✎</span>
+                  ⊘ {text}
+                  {r.closed_at ? ` · ${r.closed_at.slice(2, 16).replace("T", " ")}` : ""}{" "}
+                  <span className="pl-close-reason-pen">✎</span>
                 </button>
               );
             })() : null}
@@ -3146,8 +3139,17 @@ export function PipelineModal({
             mode={r.cancelled ? "edit" : "close"}
             initialCode={r.cancelled ? r.close_reason : ""}
             initialNote={r.cancelled ? r.close_reason_note : ""}
+            initialAt={r.cancelled ? r.closed_at : ""}
             onSaved={onChanged}
             onClose={() => setReasonOpen(false)}
+          />
+        ) : null}
+        {reactivateOpen && !isNewProject ? (
+          <ReactivateDialog
+            rfqId={r.rfq_id}
+            closedAt={r.closed_at}
+            onSaved={onChanged}
+            onClose={() => setReactivateOpen(false)}
           />
         ) : null}
 

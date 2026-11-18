@@ -10722,6 +10722,26 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   font: inherit;
   font-size: 13px;
 }
+/* 종결·재활성 일시 — 언제 닫았/되살렸는지 활동기록에 남는 시각. */
+.close-reason-when {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2b3a4d;
+}
+.close-reason-when > span { flex: none; min-width: 104px; }
+.close-reason-when input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 6px 9px;
+  font: inherit;
+  font-weight: 400;
+}
+.close-reason-warn { font-size: 12px; color: #b23b3b; }
 .close-reason-actions {
   display: flex;
   justify-content: flex-end;

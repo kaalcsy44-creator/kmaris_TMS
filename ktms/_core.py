@@ -1109,7 +1109,8 @@ def _kst_iso(dt) -> str:
 
 
 def log_stage_note(s, rfq_id: int, text: str, pic: str = "",
-                   stage: int | None = None, system: str = "") -> None:
+                   stage: int | None = None, system: str = "",
+                   when: str | None = None) -> None:
     """딜의 활동기록(stage_notes)에 시스템이 한 줄 남긴다.
 
     사람이 손으로 적는 기록과 같은 자리·같은 모양으로 남긴다 — 활동 로그를 읽는 사람은
@@ -1131,7 +1132,9 @@ def log_stage_note(s, rfq_id: int, text: str, pic: str = "",
         notes = dict(getattr(rfq, "stage_notes", None) or {})
         log = list(notes.get(key, []))
         now = _kst_iso(datetime.utcnow())
-        log.append({"text": text, "datetime": now, "party": "", "person": "",
+        # when = 사건 일시(사용자가 입력), at = 기록한 시각. 활동 로그는 datetime 으로 줄 세운다.
+        log.append({"text": text, "datetime": (when or "").strip() or now,
+                    "party": "", "person": "",
                     "channel": "", "direction": "", "star": False, "pic": pic,
                     "at": now, "system": system})
         notes[key] = log
@@ -5063,6 +5066,9 @@ class RfqCancelUpdate(BaseModel):
     # 여러 갈래면 쉼표로 이어 보낸다("price,direct_deal").
     reason: Optional[str] = None
     reason_note: Optional[str] = None
+    # 종결·재활성이 실제로 일어난 일시 "YYYY-MM-DDTHH:MM"(KST). 비우면 지금.
+    # 시스템에 늦게 반영하는 일이 잦아 저장 시각과 사건 시각을 따로 받는다.
+    at: Optional[str] = None
 
 
 class EmailTemplateSave(BaseModel):

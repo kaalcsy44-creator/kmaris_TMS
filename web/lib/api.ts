@@ -566,13 +566,23 @@ export function setRfqCancelled(
   rfqId: number,
   cancelled: boolean,
   reason?: string,
-  reasonNote?: string
-): Promise<{ ok: boolean; cancelled: boolean; close_reason?: string; close_reason_note?: string }> {
+  reasonNote?: string,
+  /** 종결·재활성이 실제로 일어난 일시 "YYYY-MM-DDTHH:MM"(KST). 비우면 서버가 지금으로. */
+  at?: string
+): Promise<{ ok: boolean; cancelled: boolean; close_reason?: string; close_reason_note?: string; closed_at?: string }> {
   return put(`/api/admin/rfq/${rfqId}/cancel`, {
     cancelled,
     reason: reason ?? null,
     reason_note: reasonNote ?? null,
+    at: at || null,
   });
+}
+
+/** 지금 시각을 datetime-local 입력값("YYYY-MM-DDTHH:MM", 브라우저 현지시각)으로. */
+export function nowLocalDateTime(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 // 딜 종결 사유 — Close deal 사유 선택·배지 표시 공용.
