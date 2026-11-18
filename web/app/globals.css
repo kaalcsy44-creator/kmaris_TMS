@@ -9952,7 +9952,13 @@ table.mini .num {
   .vcon-add-grid { grid-template-columns: minmax(0, 1fr); }
 }
 /* 회사 칸 목록 끝 "+ New vendor/maker" 와 그 약식 등록 창(칸 바로 아래에 뜬다). */
-.vsel-create { color: var(--blue); font-weight: 600; border-top: 1px solid #eaf0f7; margin-top: 4px; }
+.vsel-create {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  padding: 6px 8px; border: 0; border-radius: 6px; background: transparent;
+  font: inherit; font-size: 12.5px; color: var(--blue); font-weight: 600;
+}
+.vsel-search input + .vsel-create { margin-top: 4px; }
+.vsel-create:hover { background: #eef4ff; }
 .vnew-anchor { position: relative; }
 .vnew-pop {
   position: absolute; top: 100%; left: 0; z-index: 60; margin-top: 4px;

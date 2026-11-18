@@ -183,18 +183,35 @@ export default function VendorSelect({
       </button>
       {open ? (
         <ul className="vsel-list" role="listbox">
-          {searchable ? (
+          {/* 검색칸과 "+ New …" 는 맨 위에 붙어 있다 — 목록이 길어도 스크롤 없이 바로 누른다. */}
+          {searchable || onCreate ? (
             <li className="vsel-search" role="presentation">
-              <input
-                autoFocus
-                value={q}
-                placeholder="🔍 Search…"
-                onChange={(e) => {
-                  setQ(e.target.value);
-                  setActive(e.target.value.trim() ? 0 : -1);
-                }}
-                onKeyDown={onKeyDown}
-              />
+              {searchable ? (
+                <input
+                  autoFocus
+                  value={q}
+                  placeholder="🔍 Search…"
+                  onChange={(e) => {
+                    setQ(e.target.value);
+                    setActive(e.target.value.trim() ? 0 : -1);
+                  }}
+                  onKeyDown={onKeyDown}
+                />
+              ) : null}
+              {onCreate ? (
+                <button
+                  type="button"
+                  className="vsel-create"
+                  onClick={() => {
+                    const draft = q.trim();
+                    close();
+                    onCreate(draft);
+                  }}
+                >
+                  {createLabel}
+                  {searching ? <span className="vcon-sub"> “{q.trim()}”</span> : null}
+                </button>
+              ) : null}
             </li>
           ) : null}
           {searching ? null : (
@@ -231,21 +248,6 @@ export default function VendorSelect({
           ))}
           {searching && ordered.length === 0 ? (
             <li className="vsel-empty" role="presentation">No match for “{q.trim()}”.</li>
-          ) : null}
-          {onCreate ? (
-            <li
-              className="vsel-item vsel-create"
-              role="option"
-              aria-selected={false}
-              onClick={() => {
-                const draft = q.trim();
-                close();
-                onCreate(draft);
-              }}
-            >
-              {createLabel}
-              {searching ? <span className="vcon-sub"> “{q.trim()}”</span> : null}
-            </li>
           ) : null}
         </ul>
       ) : null}
