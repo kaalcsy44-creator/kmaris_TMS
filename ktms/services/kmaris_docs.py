@@ -1277,8 +1277,8 @@ def _invoice_totals_tables(form: _DocForm, item_w: List[float], money: Dict[str,
     # 할인이 있으면 Items Total(할인 전) → Discount → Subtotal(할인 후 물품가) 순으로 적는다.
     # 없으면 참조 양식 그대로 Subtotal 한 줄.
     # 위계(Excel 과 같다): Items Total·Subtotal 은 TOTAL INVOICE VALUE 처럼 A~G 를 합친 넓은 줄
-    # — 라벨 칸 회색, 라벨·값 굵게. Discount·Freight·Packing·Insurance·VAT 는 Unit Price 칸의
-    # 회색 라벨(보통 굵기, 오른쪽 정렬) 줄.
+    # — 라벨·값 칸 모두 회색, 굵게. Discount·Freight·Packing·Insurance·VAT 는 Unit Price 칸의
+    # 채우기 없는 라벨(보통 굵기, 오른쪽 정렬) 줄.
     rows = []   # (label, value, kind) — kind: "wide" | "charge"
     if money.get("discount"):
         rows += [("Items Total", money["subtotal"], "wide"), ("Discount", -money["discount"], "charge")]
@@ -1296,15 +1296,14 @@ def _invoice_totals_tables(form: _DocForm, item_w: List[float], money: Dict[str,
     for i, (k, v, kind) in enumerate(rows):
         if kind == "charge":
             data_rows.append(["", form.p(k, form.right), form.p(amount(v), form.right)])
-            style += [("GRID", (1, i), (-1, i), .35, MID_GRAY), ("BACKGROUND", (1, i), (1, i), LIGHT_GRAY)]
+            style += [("GRID", (1, i), (-1, i), .35, MID_GRAY)]
         elif kind == "charge_wide":
             data_rows.append([form.p(k, form.right), "", form.p(amount(v), form.right)])
-            style += [("SPAN", (0, i), (1, i)), ("GRID", (0, i), (-1, i), .35, MID_GRAY),
-                      ("BACKGROUND", (0, i), (1, i), LIGHT_GRAY)]
+            style += [("SPAN", (0, i), (1, i)), ("GRID", (0, i), (-1, i), .35, MID_GRAY)]
         else:
             data_rows.append([form.p(k, form.grand), "", form.p(amount(v), form.grand_right)])
             style += [("SPAN", (0, i), (1, i)), ("GRID", (0, i), (-1, i), .35, MID_GRAY),
-                      ("BACKGROUND", (0, i), (1, i), LIGHT_GRAY)]
+                      ("BACKGROUND", (0, i), (-1, i), LIGHT_GRAY)]
     totals = Table(data_rows, colWidths=[sum(item_w[:5]), item_w[5], item_w[6]])
     totals.setStyle(TableStyle(style + form.CELL))
     grand = Table([[form.p("TOTAL INVOICE VALUE", form.grand),
