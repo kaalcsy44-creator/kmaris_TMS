@@ -3477,8 +3477,10 @@ def _document_detail_payload(session, order: Order) -> dict:
     pls = {c.id: _latest_pl(session, c.id) for c in cis}
     pl = pls.get(ci.id) if ci else None
     ci_union = _split_doc_items([c.items or [] for c in cis])
+    # PL 을 아직 저장 안 한 포장도 센다 — PL 품목은 그 CI 를 따르므로 CI 품목이 곧 PL 품목이다.
+    # (빼면 2번 포장 CI 에만 간 품목이 1번 PL 화면에서 "0/9 누락"으로 잘못 뜬다.)
     pl_union = _split_doc_items([_sync_pl_items(c.items or [], pls[c.id].items or [])
-                                 for c in cis if pls.get(c.id)])
+                                 if pls.get(c.id) else (c.items or []) for c in cis])
     sa = _latest_sa(session, order.id)
     tax = _latest_tax(session, ci.id if ci else None)
     # PI Packing information ↔ PL 합계행: 한쪽만 적혀 있으면 빈 쪽에 보여 준다(services/packing_sync).
