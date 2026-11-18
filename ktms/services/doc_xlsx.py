@@ -478,10 +478,10 @@ def _invoice_items_and_totals(form: "_FormSheet", data: Dict[str, Any], r: int, 
             form.put(r, 1, label, fill=form.gray, font=form.bold, align=form.center)
             form.put(r, 8, value, font=form.bold, align=form.right, fmt=num_fmt)
             form.bd(r, 1, r, form.ncol)
-        else:      # 라벨은 회색 칸·보통 굵기(품목 글자 크기), 오른쪽 정렬
+        else:      # 라벨은 채우기 없음·보통 굵기(품목 글자 크기), 오른쪽 정렬
             # label_from: 라벨이 긴 줄(CI 의 합친 부대비용)은 왼쪽 칸까지 넓혀 한 줄로 보이게.
             form.merge(r, label_from, r, 7)
-            form.put(r, label_from, label, fill=form.gray, font=form.item_font, align=form.right)
+            form.put(r, label_from, label, font=form.item_font, align=form.right)
             form.put(r, 8, value, font=form.item_font, align=form.right, fmt=num_fmt)
             form.bd(r, label_from, r, form.ncol)
         form.ws.row_dimensions[r].height = 18
