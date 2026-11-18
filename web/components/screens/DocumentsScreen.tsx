@@ -3593,6 +3593,7 @@ function invoiceFooterRows(p: {
   const chargeRows = p.mergeCharges
     ? [{
         label: "Freight, Packing, Insurance, etc.",
+        plain: true,
         value: (
           <AmountInput
             className="foot-charge-input"
@@ -3606,16 +3607,16 @@ function invoiceFooterRows(p: {
         ),
       }]
     : [
-        { label: "Freight", value: <AmountInput className="foot-charge-input" value={p.freight} onChange={(e) => p.setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
-        { label: "Packing", value: <AmountInput className="foot-charge-input" value={p.packing} onChange={(e) => p.setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
-        { label: "Insurance", value: <AmountInput className="foot-charge-input" value={p.insurance} onChange={(e) => p.setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
+        { label: "Freight", plain: true, value: <AmountInput className="foot-charge-input" value={p.freight} onChange={(e) => p.setFreight(String(parseAmountInput(e.target.value) ?? ""))} /> },
+        { label: "Packing", plain: true, value: <AmountInput className="foot-charge-input" value={p.packing} onChange={(e) => p.setPacking(String(parseAmountInput(e.target.value) ?? ""))} /> },
+        { label: "Insurance", plain: true, value: <AmountInput className="foot-charge-input" value={p.insurance} onChange={(e) => p.setInsurance(String(parseAmountInput(e.target.value) ?? ""))} /> },
       ];
   return [
-    { label: <span className="foot-sub-label">Items total</span>, value: <DualCurrencyAmount value={p.subtotal} currency={p.currency} /> },
-    { label: "Discount (−)", value: <AmountInput className="foot-charge-input" value={p.discount} onChange={(e) => p.setDiscount(String(Math.abs(parseAmountInput(e.target.value) ?? 0) || ""))} /> },
+    { label: "Items total", strong: true, value: <DualCurrencyAmount value={p.subtotal} currency={p.currency} /> },
+    { label: "Discount (−)", plain: true, value: <AmountInput className="foot-charge-input" value={p.discount} onChange={(e) => p.setDiscount(String(Math.abs(parseAmountInput(e.target.value) ?? 0) || ""))} /> },
     { label: "Subtotal", strong: true, value: <DualCurrencyAmount value={net} currency={p.currency} /> },
     ...chargeRows,
-    { label: `VAT (${num(p.vatRate)}%)`, value: <DualCurrencyAmount value={p.vatAmount} currency={p.currency} /> },
+    { label: `VAT (${num(p.vatRate)}%)`, plain: true, value: <DualCurrencyAmount value={p.vatAmount} currency={p.currency} /> },
     { label: "Total invoice value", grand: true, value: <><DualCurrencyAmount value={p.totalInvoiceValue} currency={p.currency} /><span className="fx-note">{fxRateText()}</span></> },
   ];
 }
@@ -3655,7 +3656,8 @@ function ItemEditor({
   // 지정 시(금액 문서 전용) 기본 Total 합계행 대신 이 행들을 표 tfoot 에 렌더 —
   // Proforma Invoice 의 Subtotal/Freight/Packing/Insurance/VAT/Total invoice value 처럼
   // 품목 컬럼(Unit Price=라벨, Amount=값)에 정렬해 표 안에 넣는다.
-  footerRows?: { label: React.ReactNode; value: React.ReactNode; grand?: boolean; strong?: boolean }[];
+  /** plain: 채우기 없는 작은 줄(Discount·Freight·VAT) — 발행 PDF·Excel 과 같은 위계. */
+  footerRows?: { label: React.ReactNode; value: React.ReactNode; grand?: boolean; strong?: boolean; plain?: boolean }[];
   /** 주면(PI·CI) 줄별 HS Code 칸을 Maker 뒤에 둔다. 값은 문서 기본 HS Code — 빈 줄의 회색 안내값이자
    *  저장 시 빈 줄에 들어가는 값. 줄에 적은 코드가 우선한다. */
   hsDefault?: string;
@@ -3965,7 +3967,7 @@ function ItemEditor({
                       ))}
                     </tr>
                   ) : (
-                    <tr key={idx} className={r.strong ? "foot-strong" : undefined}>
+                    <tr key={idx} className={r.strong ? "foot-strong" : r.plain ? "foot-plain" : undefined}>
                       <td></td>{/* 1 sel */}
                       <td></td>{/* 2 No. */}
                       <td></td>{/* 3 part_no */}
