@@ -665,7 +665,9 @@ _VENDOR_BILL_SCHEMA = {"type": "object", "properties": _VENDOR_BILL_HEAD,
 _VENDOR_BILL_INSTRUCTIONS = (
     "The attached file is a supplier's bill sent to us (K-MARIS / 케이마리스, the buyer): a Korean "
     "statement of transaction (거래명세서·거래명세표), an invoice (청구서·Invoice) or a tax invoice "
-    "(세금계산서). Extract it.\n"
+    "(세금계산서). Extract it. The file may instead be only a copy of the supplier's bank book "
+    "(통장사본) or an account certificate (계좌개설확인서): then fill only supplier and the bank fields "
+    "(bank_holder = 예금주) and leave every amount null/0 and items empty.\n"
     "supplier = the issuing company (공급자), never our own company. bill_no = the document number "
     "printed on it (명세서 번호·Invoice No.·No.·문서번호); empty if none. bill_date = issue date "
     "(작성일자·거래일자·Invoice date). due_date = payment due date (지급기일·결제일·Due date); empty "

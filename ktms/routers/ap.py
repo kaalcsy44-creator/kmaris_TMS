@@ -139,7 +139,8 @@ def ocr_vendor_bill(file: UploadFile = File(...)):
         "bill_no": _text("bill_no", 60),
         "bill_date": _text("bill_date", 10),
         "due_date": _text("due_date", 10),
-        "currency": (_text("currency") or "KRW").upper()[:3],
+        # 못 읽었으면 비워 둔다 — 통장사본처럼 금액이 없는 문서가 화면의 통화를 KRW 로 덮지 않게.
+        "currency": (_text("currency") if (items or supply is not None or total is not None) else "").upper()[:3],
         "po_ref": _text("po_ref"),
         "items": items,
         "freight": _num(data.get("freight")),

@@ -19,9 +19,14 @@ const fmt = (v: number) => Math.round(v * 100) / 100 === Math.round(v) ? Math.ro
 export function VendorBillReadButton({
   onRead,
   disabled,
+  label = "📄 Read vendor bill (PDF·image)",
+  compact = false,
 }: {
   onRead: (b: VendorBillOcr) => void;
   disabled?: boolean;
+  label?: string;
+  /** 안내 문구 없이 버튼만 — 계좌 칸의 통장사본 읽기처럼 자리가 작은 곳. */
+  compact?: boolean;
 }) {
   const ref = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
@@ -44,19 +49,19 @@ export function VendorBillReadButton({
 
   return (
     <div
-      className={`vbill-read${over ? " over" : ""}`}
+      className={`vbill-read${compact ? " compact" : ""}${over ? " over" : ""}`}
       onDragOver={(e) => { e.preventDefault(); setOver(true); }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => { e.preventDefault(); setOver(false); void read(e.dataTransfer.files?.[0]); }}
     >
       <button type="button" className="btn sm" disabled={disabled || busy} onClick={() => ref.current?.click()}>
-        {busy ? "Reading…" : "📄 Read vendor bill (PDF·image)"}
+        {busy ? "Reading…" : label}
       </button>
-      <span className="hint-inline">
+      {compact ? null : <span className="hint-inline">
         {busy
           ? "Reading the statement — this takes a few seconds."
-          : "Drop the 거래명세서 / invoice here — fills Bill No., dates, items, totals and the bank account. Nothing is saved until you press Save."}
-      </span>
+          : "Drop the 거래명세서 / invoice here — fills Bill No., dates, items, totals and the bank account. A bank copy (통장사본) read here or below only fills the account. Nothing is saved until you press Save."}
+      </span>}
       {err ? <span className="action-err">{err}</span> : null}
       <input
         ref={ref}
@@ -268,17 +273,23 @@ export function VendorBankFields({
   onChange,
   vendorName,
   fromBill,
+  reader,
 }: {
   value: BankAccount;
   onChange: (b: BankAccount) => void;
   vendorName: string;
+  /** 제목 옆에 두는 통장사본 읽기 버튼(편집 중일 때만). */
+  reader?: React.ReactNode;
   /** 방금 명세서에서 읽어 와 바뀐 값인가 — 저장하면 거래선 계좌가 바뀐다는 것을 알린다. */
   fromBill?: boolean;
 }) {
   const set = (k: keyof BankAccount) => (e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, [k]: e.target.value });
   return (
     <div className="ar-milestone">
-      <div className="form-section-title">Payment account (vendor)</div>
+      <div className="vbill-bank-head">
+        <div className="form-section-title" style={{ margin: 0 }}>Payment account (vendor)</div>
+        {reader}
+      </div>
       <div className="form-grid">
         <label className="form-field"><span>Bank</span><input value={value.bank_name} onChange={set("bank_name")} /></label>
         <label className="form-field"><span>Account No.</span><input value={value.bank_account} onChange={set("bank_account")} /></label>

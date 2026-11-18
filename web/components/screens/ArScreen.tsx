@@ -893,18 +893,37 @@ function ApAddForm({
   }, [poItems, row.po_no, row.currency, row.vendor_id, isExtraRow, vendorId, dealVendorQuotes]);
 
   /** 거래명세서 읽기 결과를 폼에 앉힌다 — 읽어 낸 칸만 덮고, 못 읽은 칸은 적어 둔 값 그대로. */
-  function applyBill(b: VendorBillOcr) {
+  function applyBill(b: VendorBillOcr, opts: { bankOnly?: boolean } = {}) {
+    const gotBank = !!(b.bank && (b.bank.bank_account || b.bank.bank_name));
+    // 금액이 하나도 없는 문서(통장사본·계좌확인서)는 계좌만 받는다 — 명세서에서 먼저 읽어 둔
+    // 번호·통화·품목·합계 대조를 빈 값으로 덮지 않게. 계좌 칸의 버튼은 늘 계좌만 받는다.
+    const hasAmounts = b.items.length > 0 || b.supply_amount != null || b.total_amount != null;
+    if (opts.bankOnly || !hasAmounts) {
+      if (gotBank) {
+        setBank({ ...emptyBank, ...b.bank });
+        setBankFromBill(true);
+        setReadNote("Read the bank account only — the bill fields were left as they were. Review, then press Save.");
+      } else {
+        setReadNote("No bank account found in that file.");
+      }
+      return;
+    }
     const supply = b.supply_amount;
     const vatAmt = b.vat_amount;
-    let vatRate: number | null = null;
-    if (supply && supply > 0 && vatAmt != null) {
-      const r = vatAmt / supply;
-      vatRate = vatAmt === 0 ? 0 : Math.abs(r - 0.1) < 0.005 ? 0.1 : Math.round(r * 1000) / 1000;
-    }
     const chargeStr = (v: number | null, cur: string) => (v != null && v > 0 ? String(v) : cur);
     const others = (b.other_charges || []).filter((c) => c.amount > 0);
     const otherSum = Math.round(others.reduce((t, c) => t + c.amount, 0) * 100) / 100;
     const otherLabel = others.map((c) => c.label).filter(Boolean).join(", ");
+    const chargeSum = (b.freight || 0) + (b.packing || 0) + (b.insurance || 0) + otherSum;
+    let vatRate: number | null = null;
+    if (supply && supply > 0 && vatAmt != null) {
+      const r = vatAmt / supply;
+      vatRate = vatAmt === 0 ? 0 : Math.abs(r - 0.1) < 0.005 ? 0.1 : Math.round(r * 1000) / 1000;
+    } else if (supply && supply > 0 && b.total_amount != null) {
+      // 세액 줄이 없고 합계 = 공급가액(+부대비용)이면 부가세 없는 청구(영세율·면세)다.
+      const t = b.total_amount;
+      if (Math.abs(t - supply) <= 1 || Math.abs(t - supply - chargeSum) <= 1) vatRate = 0;
+    }
     setForm((f) => ({
       ...f,
       bill_no: b.bill_no || f.bill_no,
@@ -933,7 +952,7 @@ function ApAddForm({
       notes: f.notes || b.notes || "",
     }));
     sel.clear();
-    if (b.bank && (b.bank.bank_account || b.bank.bank_name)) {
+    if (gotBank) {
       setBank({ ...emptyBank, ...b.bank });
       setBankFromBill(true);
     }
@@ -962,6 +981,8 @@ function ApAddForm({
     if (b.po_ref && row.po_no && !b.po_ref.replace(/\s/g, "").includes(row.po_no.replace(/\s/g, ""))) {
       notes.push(`bill refers to P/O ${b.po_ref}`);
     }
+    if (vatRate === 0 && !vatAmt) notes.push("no VAT on the bill — VAT set to 0%");
+    if (!gotBank) notes.push("no bank account on the bill — read the bank copy from the Payment account section if you have one");
     if (b.truncated) notes.push("the bill was long and may be cut off — check the last lines");
     setReadNote(notes.join(" · ") + ". Review, then press Save.");
   }
@@ -1266,7 +1287,15 @@ function ApAddForm({
         />
       ) : null}
 
-      <VendorBankFields value={bank} onChange={setBank} vendorName={vendorName} fromBill={bankFromBill} />
+      <VendorBankFields
+        value={bank}
+        onChange={setBank}
+        vendorName={vendorName}
+        fromBill={bankFromBill}
+        reader={canWriteNow ? (
+          <VendorBillReadButton compact label="📄 Read bank copy" onRead={(b) => applyBill(b, { bankOnly: true })} />
+        ) : null}
+      />
 
       {/* 벤더 전자세금계산서 수취 — 9단계. 확인·기록은 하되 선택사항이다(2026-11-18): 받지
           않아도 9단계 매입측은 청구서(거래명세서) 수취로 끝난다. */}
