@@ -334,8 +334,48 @@ class _FormSheet:
             self.put(r, c1, text, font=self.boldsm, align=self.left_top)
             self.bd(r, c1, r + 2, c2)
             if image:
-                self.add_image(image, f"{get_column_letter(c1 + 1)}{r + 1}", w, h)
+                self._place_in_box(image, c1, c2, r, r + 2, w, h)
         return r + 3
+
+    def _place_in_box(self, path, c1, c2, r1, r2, w, h, margin=22):
+        """서명·직인 — 칸(c1~c2 × r1~r2) 오른쪽에 붙이고(여백 margin px) 세로 가운데.
+        왼쪽 위는 라벨 글자 자리라 비워 둔다. 열 폭 오차가 덜 쌓이게 오른쪽 끝 열부터 거꾸로 잰다."""
+        try:
+            from openpyxl.drawing.image import Image as XLImage
+            from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+            from openpyxl.drawing.xdr import XDRPositiveSize2D
+            from openpyxl.utils.units import pixels_to_EMU
+            img = XLImage(path)
+            try:
+                from PIL import Image as PILImage
+                with PILImage.open(path) as src:
+                    sw, sh = src.size
+                scale = min(w / sw, h / sh)
+                w, h = int(sw * scale), int(sh * scale)
+            except Exception:
+                pass
+            col_px = lambda c: int(self.widths[c - 1] * 7 + 5)
+            row_px = lambda rr: int((self.ws.row_dimensions[rr].height or 15) * 96 / 72)
+            # 가로: 오른쪽 끝에서 margin+w 만큼 왼쪽 → 그 점이 들어가는 열과 열 안 오프셋
+            col, x = c2, col_px(c2) - margin - w
+            while x < 0 and col > c1:
+                col -= 1
+                x += col_px(col)
+            x = max(x, 0)
+            # 세로: 칸 높이 가운데
+            row, y = r1, max((sum(row_px(rr) for rr in range(r1, r2 + 1)) - h) // 2, 0)
+            while row < r2 and y >= row_px(row):
+                y -= row_px(row)
+                row += 1
+            img.width, img.height = w, h
+            img.anchor = OneCellAnchor(
+                _from=AnchorMarker(col=col - 1, colOff=pixels_to_EMU(x), row=row - 1, rowOff=pixels_to_EMU(y)),
+                ext=XDRPositiveSize2D(pixels_to_EMU(w), pixels_to_EMU(h)),
+            )
+            self.ws.add_image(img)
+            return True
+        except Exception:
+            return False
 
     def page_setup(self, last_row, *, scale=None):
         ws = self.ws
