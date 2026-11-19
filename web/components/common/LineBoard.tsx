@@ -273,6 +273,31 @@ export default function LineBoard({
     () => (cmpCur ? [...new Set([cmpCur, ...quoteCurs])].filter((c) => c !== "KRW") : []),
     [cmpCur, quoteCurs]
   );
+  // 표 높이를 둘러싼 스크롤 창의 보이는 높이에 맞춘다 — CSS 의 고정 상한(69vh·645px)만으로는
+  // 100% 배율에서 표 바닥(가로 스크롤바)이 스테이지 창 아래로 잘려, 오른쪽 벤더 칸으로
+  // 넘어갈 길이 안 보였다. 창 안에서 표가 시작하는 자리부터 창 바닥까지를 상한으로 쓴다.
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [fitH, setFitH] = useState<number | null>(null);
+  useEffect(() => {
+    if (full) { setFitH(null); return; }
+    const el = boardRef.current;
+    if (!el) return;
+    let parent: HTMLElement | null = el.parentElement;
+    while (parent && !/(auto|scroll)/.test(getComputedStyle(parent).overflowY)) parent = parent.parentElement;
+    const measure = () => {
+      const box = parent ? parent.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+      const topInContent = el.getBoundingClientRect().top - box.top + (parent ? parent.scrollTop : 0);
+      const viewH = (parent ? parent.clientHeight : window.innerHeight);
+      const avail = Math.floor(viewH - topInContent - 12);
+      setFitH(avail >= 320 ? Math.min(avail, 645) : null);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (parent) ro.observe(parent);
+    window.addEventListener("resize", measure);
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, [full, !!data]);
+
   useEffect(() => {
     const date = today();
     for (const c of neededCurs) {
@@ -546,7 +571,12 @@ export default function LineBoard({
   const pickable = mode === "coverage" && !!onSendSelected;
 
   const board = (
-    <div className={"lb" + (full ? " lb-full" : "")} role={full ? "dialog" : undefined}>
+    <div
+      ref={boardRef}
+      className={"lb" + (full ? " lb-full" : "")}
+      role={full ? "dialog" : undefined}
+      style={!full && fitH ? { maxHeight: fitH } : undefined}
+    >
       <div className="lb-bar">
         <div className="lb-counts">
           <Badge n={s.not_sourced} label="not sourced" tone="warn" />
