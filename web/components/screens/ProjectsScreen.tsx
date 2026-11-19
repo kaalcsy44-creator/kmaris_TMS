@@ -2766,6 +2766,69 @@ export function PipelineModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [isNewProject, reasonOpen]);
+
+  const rSteps = resolveSteps(steps, r.work_type || "부품공급");
+  /** Shift+←/→ = 단계 이동(맨 ←/→ 는 이웃 프로젝트 전환이 쓴다), Ctrl+S = 이 단계 저장.
+   *  Ctrl+S 는 입력 중에도 받는다 — 칸에 커서를 둔 채 저장하는 것이 실제 동선이다.
+   *  저장은 단계 창 바닥 저장 줄의 주 단추(.form-actions .btn.primary)를 대신 눌러 준다 —
+   *  단계마다 저장 동작이 달라도 화면에 보이는 그 단추가 곧 "이 단계의 저장"이다. */
+  useEffect(() => {
+    if (isNewProject) return;
+    function onKey(e: KeyboardEvent) {
+      if (reasonOpen) return;
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (stageMode !== "edit") return;
+        const pane = stagePaneRef.current;
+        const btn = Array.from(pane?.querySelectorAll<HTMLButtonElement>(".form-actions .btn.primary") ?? [])
+          .find((b) => !b.disabled && b.offsetParent !== null);
+        btn?.click();
+        return;
+      }
+      if (!e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      e.preventDefault();
+      setSelectedStage((st) =>
+        e.key === "ArrowLeft" ? Math.max(st - 1, 1) : Math.min(st + 1, rSteps.length));
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isNewProject, reasonOpen, stageMode, rSteps.length]);
+
+  /** 단계별 스크롤 위치 기억 — 3단계 비교표 중간을 보다가 1단계를 확인하고 돌아오면
+   *  다시 맨 위부터 내려가야 했다. 프로젝트·단계별로 마지막 위치를 적어 두고 돌아오면 되돌린다.
+   *  단계 내용은 늦게(데이터를 받은 뒤) 그려지므로 높이가 찰 때까지 잠깐 다시 시도한다. */
+  const scrollMemo = useRef(new Map<string, number>());
+  const scrollKey = `${r.rfq_id}:${selectedStage}`;
+  const scrollKeyRef = useRef(scrollKey);
+  useEffect(() => {
+    const el = stagePaneRef.current;
+    if (!el) return;
+    scrollKeyRef.current = scrollKey;
+    const want = scrollMemo.current.get(scrollKey) ?? 0;
+    let tries = 0;
+    let timer = 0;
+    const restore = () => {
+      if (scrollKeyRef.current !== scrollKey) return;
+      if (el.scrollHeight - el.clientHeight >= want || tries >= 15) {
+        el.scrollTop = want;
+        return;
+      }
+      tries += 1;
+      timer = window.setTimeout(restore, 100);
+    };
+    restore();
+    const onScroll = () => {
+      if (scrollKeyRef.current === scrollKey) scrollMemo.current.set(scrollKey, el.scrollTop);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.clearTimeout(timer);
+      el.removeEventListener("scroll", onScroll);
+    };
+  }, [scrollKey]);
   // 모바일 전용: 프로젝트 정보/단계 상세를 동시에 띄우면 좁아, 탭으로 하나씩 전환.
   // (데스크톱은 좌우 2단으로 함께 보이므로 이 값은 CSS 상 무시된다.)
   const [mobilePane, setMobilePane] = useState<"info" | "stage">("stage");
@@ -2926,7 +2989,6 @@ export function PipelineModal({
 
   // 프로젝트 정보 편집·삭제는 우측 1단계(RFQ Received) 패널에서 처리한다.
   // 좌측 패널은 읽기전용 요약(+ 표시 항목 선택)만 담당한다.
-  const rSteps = resolveSteps(steps, r.work_type || "부품공급");
 
   const isService = (isNewProject ? newWorkType : r.work_type || "부품공급") === "서비스";
   const chain = buildStageChain(r, rSteps);
@@ -3253,7 +3315,7 @@ export function PipelineModal({
             onClick={() => setSelectedStage((s) => Math.max(s - 1, 1))}
             disabled={selectedStage <= 1}
             aria-label="Previous stage"
-            title={selectedStage > 1 ? `Prev: ${selectedStage - 1}. ${rSteps[selectedStage - 2] ?? ""}` : undefined}
+            title={selectedStage > 1 ? `Prev: ${selectedStage - 1}. ${rSteps[selectedStage - 2] ?? ""} (Shift+←)` : undefined}
           >
             ‹
           </button>
@@ -3307,7 +3369,7 @@ export function PipelineModal({
             onClick={() => setSelectedStage((s) => Math.min(s + 1, rSteps.length))}
             disabled={selectedStage >= rSteps.length}
             aria-label="Next stage"
-            title={selectedStage < rSteps.length ? `Next: ${selectedStage + 1}. ${rSteps[selectedStage] ?? ""}` : undefined}
+            title={selectedStage < rSteps.length ? `Next: ${selectedStage + 1}. ${rSteps[selectedStage] ?? ""} (Shift+→)` : undefined}
           >
             ›
           </button>
@@ -3492,7 +3554,7 @@ export function PipelineModal({
                     type="button"
                     className={`stage-mode-switch${stageMode === "edit" ? " editing" : ""}`}
                     onClick={() => setStageMode(stageMode === "read" ? "edit" : "read")}
-                    title={stageMode === "read" ? "Edit — change and save this stage (E)" : "Back to read view (R)"}
+                    title={stageMode === "read" ? "Edit — change and save this stage (E)" : "Back to read view (R) · Save with Ctrl+S"}
                   >
                     {stageMode === "read" ? "✎ Edit" : "👁 Read view"}
                   </button>
@@ -3558,6 +3620,26 @@ export function PipelineModal({
                 />
               </ViewModeProvider>
             )}
+            {/* 다음 단계로 — 단계 끝까지 읽고/채운 자리에서 바로 넘어간다(맨 위 스트립까지
+                올라가지 않게). 다음 단계 이름과 상대(to Vendor 등)를 함께 보여 준다. */}
+            {!isNewProject && selectedStage < rSteps.length ? (
+              <div className="stage-next-foot">
+                <button
+                  type="button"
+                  className="stage-next-btn"
+                  onClick={() => setSelectedStage((s) => Math.min(s + 1, rSteps.length))}
+                  title="Next stage (Shift+→)"
+                >
+                  <span className="stage-next-k">Next</span>
+                  <span className="stage-next-no">{selectedStage + 1}</span>
+                  <b>{rSteps[selectedStage] ?? ""}</b>
+                  {STAGE_TITLE_QUALIFIER[selectedStage + 1] ? (
+                    <span className="stage-next-q">({STAGE_TITLE_QUALIFIER[selectedStage + 1]})</span>
+                  ) : null}
+                  <span aria-hidden> →</span>
+                </button>
+              </div>
+            ) : null}
               </section>
             </div>
           </div>

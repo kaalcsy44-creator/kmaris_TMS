@@ -22391,3 +22391,60 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
 .project-info-pane {
   overscroll-behavior: contain;
 }
+
+/* ── 작업 팝업 4차 정리(2026-11-19): 단계 사이 연결 ─────────────────────────────── */
+
+/* D1 · 단계 끝 "다음 단계" 단추 — 끝까지 읽고/채운 자리에서 바로 넘어간다. */
+.stage-next-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin: 18px var(--item-list-gutter, 0px) 6px 0;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+.stage-next-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--blue);
+  background: #fff;
+  color: var(--blue);
+  border-radius: 999px;
+  padding: 7px 16px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.stage-next-btn:hover { background: var(--blue); color: #fff; }
+.stage-next-k { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.8; }
+.stage-next-no {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--blue); color: #fff; font-size: 11px; font-weight: 800;
+}
+.stage-next-btn:hover .stage-next-no { background: #fff; color: var(--blue); }
+.stage-next-q { font-size: 12px; opacity: 0.75; }
+.pl-modal.service .stage-next-btn { border-color: #16a05a; color: #16a05a; }
+.pl-modal.service .stage-next-btn:hover { background: #16a05a; color: #fff; }
+.pl-modal.service .stage-next-no { background: #16a05a; }
+.pl-modal.service .stage-next-btn:hover .stage-next-no { background: #fff; color: #16a05a; }
+
+/* D2 · 끝난 단계는 번호 원 오른쪽 위에 작은 ✓ — 색만으로는 "끝남"과 "보는 중"이 헷갈렸다. */
+.project-stage-tabs button.done:not(.skip) .st-no { position: relative; }
+.project-stage-tabs button.done:not(.skip) .st-no::after {
+  content: "✓";
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #1f9d55;
+  color: #fff;
+  font-size: 8px;
+  line-height: 12px;
+  text-align: center;
+  font-weight: 900;
+  box-shadow: 0 0 0 1.5px #fff;
+}
+@media print { .stage-next-foot { display: none !important; } }
