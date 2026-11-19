@@ -22423,13 +22423,22 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
    문서 탭 줄, 견적 칩 줄, 비교표 …)은 창 끝까지 뻗어 단계마다 끝선이 들쭉날쭉했다.
    이제 창 자체가 그만큼 안쪽 여백을 갖고, 안의 요소들은 들이지 않는다(변수를 0 으로).
    단계 머리(제목·Read/Edit)는 위 단계 줄처럼 창 폭 끝까지 둔다. */
+/* 여백은 "실제로 스크롤하는 상자"의 안쪽 여백으로 준다 — 그래야 스크롤바는 팝업 끝에 그대로
+   있고, 내용 끝선과 스크롤바 사이에만 틈이 생긴다. 단계마다 스크롤하는 상자가 다르다:
+   패널 자신(5~8단계) 또는 안쪽 편집창 .stage-fill(2~4·9~10단계). 패널에 여백을 주면
+   안쪽 편집창이 그만큼 좁아져 스크롤바까지 안으로 밀려 들어갔다. */
 .project-stage-pane {
   --pane-gutter: var(--item-list-gutter);
-  padding-right: var(--pane-gutter);
 }
 .project-stage-pane > * {
   --item-list-gutter: 0px;
 }
-.project-stage-pane > .stage-pane-head {
+.project-stage-pane:not(:has(> .stage-fill)) {
+  padding-right: var(--pane-gutter);
+}
+.project-stage-pane:not(:has(> .stage-fill)) > .stage-pane-head {
   margin-right: calc(-1 * var(--pane-gutter));
+}
+.project-stage-pane > .embedded-workspace.stage-fill {
+  padding-right: var(--pane-gutter);
 }
