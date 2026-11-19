@@ -4468,10 +4468,44 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.on {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.deal-parties-vendors {
-  flex-wrap: wrap;
-  gap: 4px 12px;
+/* 벤더는 한 줄 — 남은 폭을 다 쓰고, 넘치면 좌우 버튼으로 넘긴다(DealPartiesLine.VendorStrip). */
+.deal-parties { flex-wrap: nowrap; }
+.deal-parties-f { flex: none; }
+.deal-parties-f.deal-parties-vendf { flex: 1 1 auto; min-width: 0; }
+.deal-vstrip { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1 1 auto; }
+.deal-vstrip-track {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
 }
+.deal-vstrip-track::-webkit-scrollbar { display: none; }
+.deal-vstrip-track > div { flex: none; }
+.deal-vstrip-track.fade-r { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+.deal-vstrip-track.fade-l { mask-image: linear-gradient(to right, transparent, #000 28px); }
+.deal-vstrip-track.fade-l.fade-r {
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+.deal-vstrip-btn {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--navy);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.deal-vstrip-btn:hover:not(:disabled) { border-color: var(--blue); background: #f6f9ff; }
+.deal-vstrip-btn:disabled { opacity: 0.35; cursor: default; }
 .deal-parties-contact {
   font-size: 12px;
   color: var(--muted);
@@ -4483,6 +4517,11 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.on {
   }
   .deal-parties-f {
     flex: none;
+  }
+  /* 좁은 화면은 줄 전체가 스크롤되므로 벤더 칸은 화면 폭 안쪽으로 묶어 버튼이 보이게. */
+  .deal-parties-f.deal-parties-vendf {
+    flex: none;
+    max-width: 78vw;
   }
 }
 
