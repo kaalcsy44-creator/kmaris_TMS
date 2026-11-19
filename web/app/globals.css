@@ -22416,3 +22416,20 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
    머리(z 6)가 만든 쌓임 맥락 안에 갇혀 메뉴가 아래 고정 줄 밑으로 깔렸다. */
 .stage-pane-head:has(.stage-more-menu) { z-index: 60; }
 .stage-more-menu { background: #fff; }
+
+/* ── 단계 창 오른쪽 끝선 하나로(2026-11-19) ─────────────────────────────────────
+   창 스크롤바를 피하는 오른쪽 여백(--item-list-gutter, 48px)을 지금까지는 카드·품목표·
+   Pricing 밴드·Summary 줄이 저마다 margin-right 로 들였다. 목록에 빠진 줄(Cost sources,
+   문서 탭 줄, 견적 칩 줄, 비교표 …)은 창 끝까지 뻗어 단계마다 끝선이 들쭉날쭉했다.
+   이제 창 자체가 그만큼 안쪽 여백을 갖고, 안의 요소들은 들이지 않는다(변수를 0 으로).
+   단계 머리(제목·Read/Edit)는 위 단계 줄처럼 창 폭 끝까지 둔다. */
+.project-stage-pane {
+  --pane-gutter: var(--item-list-gutter);
+  padding-right: var(--pane-gutter);
+}
+.project-stage-pane > * {
+  --item-list-gutter: 0px;
+}
+.project-stage-pane > .stage-pane-head {
+  margin-right: calc(-1 * var(--pane-gutter));
+}
