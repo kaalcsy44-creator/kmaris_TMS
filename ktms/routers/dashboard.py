@@ -1183,6 +1183,9 @@ def statistics(months: int = 12):
         now_kst = datetime.now(timezone.utc) + timedelta(hours=9)
         month_labels: list[str] = [f"{now_kst.year:04d}-{m:02d}" for m in range(1, 13)]
         month_set = set(month_labels)
+        # 작년 같은 달 — 통계 화면의 "작년 같은 기간 대비" 비교용(금액 3종·RFQ 건수만).
+        prev_labels: list[str] = [f"{now_kst.year - 1:04d}-{m:02d}" for m in range(1, 13)]
+        prev_set = set(prev_labels)
         # KPI 스트립의 기준월 = 축의 마지막(12월)이 아니라 '이번 달'.
         cur_month = f"{now_kst.year:04d}-{now_kst.month:02d}"
         prev_month = f"{now_kst.year:04d}-{now_kst.month - 1:02d}" if now_kst.month > 1 else ""
@@ -1202,6 +1205,13 @@ def statistics(months: int = 12):
         order_series = _blank()
         cust_rev: dict[str, dict[str, float]] = {c: {} for c in CURS}
         item_rev: dict[str, dict[str, dict]] = {c: {} for c in CURS}
+
+        def _blank_prev():
+            return {cur: {mo: 0.0 for mo in prev_labels} for cur in CURS}
+        prev_rev, prev_quote, prev_order = _blank_prev(), _blank_prev(), _blank_prev()
+        # 고객·품목 매출을 달마다 — 화면이 고른 기간(월·분기·연)으로 순위를 다시 세운다.
+        cust_rev_m: dict[str, dict[str, dict[str, float]]] = {c: {} for c in CURS}
+        item_rev_m: dict[str, dict[str, dict]] = {c: {} for c in CURS}
 
         # Top 10 랭킹은 매출이 잡힌 곳이 한둘뿐이어도 항상 10줄을 채운다(요청).
         # 아래 집계 루프를 돌면서 기간 내 거래가 있었던 품목을 후보로 모아 두고,
@@ -1249,6 +1259,8 @@ def statistics(months: int = 12):
         for a in all_ars:
             o = order_map.get(a.order_id)
             mo = _issue_month(a)
+            if mo and mo in prev_set:
+                prev_rev[_cur2(a.currency)][mo] += float(a.invoice_amount or 0)
             if not mo or mo not in month_set:
                 continue
             cur = _cur2(a.currency)
@@ -1256,10 +1268,14 @@ def statistics(months: int = 12):
             rev_series[cur][mo] += amt
             cname = cust_names.get(o.customer_id, "—") if o else "—"
             cust_rev[cur][cname] = cust_rev[cur].get(cname, 0.0) + amt
+            _cm = cust_rev_m[cur].setdefault(cname, {})
+            _cm[mo] = _cm.get(mo, 0.0) + amt
 
         # ── 견적금액(발송월 기준) ───────────────────────────────────────────────
         for q in all_quotations:
             mo = _month_key(getattr(q, "sent_at", None) or q.sent_date or q.date or "")
+            if mo and mo in prev_set:
+                prev_quote[_cur2(q.currency)][mo] += _quotation_total(q.items or [], getattr(q, "discount_pct", 0) or 0)
             if not mo or mo not in month_set:
                 continue
             cur = _cur2(q.currency)
@@ -1269,7 +1285,7 @@ def statistics(months: int = 12):
         # ── 수주금액(오더 수주월 기준) ──────────────────────────────────────────
         for o in orders_all:
             mo = _month_key(o.date or (o.created_at.isoformat() if o.created_at else ""))
-            if not mo or mo not in month_set:
+            if not mo or (mo not in month_set and mo not in prev_set):
                 continue
             qtn = qtn_by_id.get(o.quotation_id) if o.quotation_id else None
             if qtn:
@@ -1280,6 +1296,9 @@ def statistics(months: int = 12):
                 # order.currency='KRW' 인 오더의 KRW 금액이 USD 버킷을 오염시켰다.)
                 cur = _cur2(getattr(o, "currency", None) or "USD")
                 amt = _order_total(o)
+            if mo in prev_set:
+                prev_order[cur][mo] += amt
+                continue
             order_series[cur][mo] += amt
             _pad_items(pad_ord_items, o.items)
 
@@ -1296,6 +1315,8 @@ def statistics(months: int = 12):
                     amt = float(it.get("unit_price", 0) or 0) * float(it.get("qty", 1) or 1)
                 rec = item_rev[cur].setdefault(pn, {"part_no": pn, "description": it.get("description") or "", "amount": 0.0})
                 rec["amount"] += float(amt or 0)
+                recm = item_rev_m[cur].setdefault(pn, {"part_no": pn, "description": it.get("description") or "", "m": {}})
+                recm["m"][mo] = recm["m"].get(mo, 0.0) + float(amt or 0)
 
         # ── KRW 환산 버킷 채우기 ────────────────────────────────────────────────
         # USD 버킷을 오늘자 매매기준율로 옮겨 KRW 버킷과 더한다. 매출이 두 통화로 갈려
@@ -1320,6 +1341,12 @@ def statistics(months: int = 12):
 
         def _series_list(series):
             return {cur: [round(series[cur][mo], 2) for mo in month_labels] for cur in CUR_KEYS}
+
+        for _series in (prev_rev, prev_quote, prev_order):
+            _series[KRWC] = {mo: _series["KRW"][mo] + _series["USD"][mo] * fx_rate for mo in prev_labels}
+
+        def _prev_list(series):
+            return {cur: [round(series[cur][mo], 2) for mo in prev_labels] for cur in CUR_KEYS}
 
         def _top(dmap, key_field, n=10, pad=()):
             """상위 n건. 매출이 잡힌 건이 n 보다 적으면 pad(기간 내 거래는 있었지만
@@ -1422,8 +1449,11 @@ def statistics(months: int = 12):
         rfq_count = {mo: 0 for mo in month_labels}
         rfq_detail: dict[str, list] = {mo: [] for mo in month_labels}
         period_rfqs = []
+        prev_rfq_count = {mo: 0 for mo in prev_labels}
         for r in rfq_map.values():
             mo = _rfq_recv_month(r)
+            if mo in prev_set:
+                prev_rfq_count[mo] += 1
             if mo in month_set:
                 period_rfqs.append(r)
                 rfq_count[mo] += 1
@@ -1644,6 +1674,20 @@ def statistics(months: int = 12):
             "fx": {"rate": round(fx_rate, 4), "date": fx_date,
                    "source": "exim" if fx_date else "fixed"},
             "customer_top": _top(cust_rev, "customer", pad=cust_pad),
+            # 달별 고객·품목 매출(원통화 USD·KRW, months 순서) — 화면이 고른 기간으로 순위를 낸다.
+            "customer_month": {cur: {nm: [round(m.get(mo, 0.0), 2) for mo in month_labels]
+                                     for nm, m in cust_rev_m[cur].items()} for cur in CURS},
+            "item_month": {cur: [{"part_no": r["part_no"], "description": r["description"],
+                                  "m": [round(r["m"].get(mo, 0.0), 2) for mo in month_labels]}
+                                 for r in item_rev_m[cur].values()] for cur in CURS},
+            "customer_pad": [c["name"] for c in cust_pad[:30]],
+            # 작년 같은 달 — "작년 같은 기간 대비" 비교용.
+            "prev_year": {
+                "months": prev_labels,
+                "series": {"revenue": _prev_list(prev_rev), "quote": _prev_list(prev_quote),
+                           "order": _prev_list(prev_order)},
+                "rfq_count": [prev_rfq_count[mo] for mo in prev_labels],
+            },
             "item_top": _top(item_rev, "item", pad=item_pad),
             "kpi": _kpi(),
             "delivery_delays": delivery_delays,

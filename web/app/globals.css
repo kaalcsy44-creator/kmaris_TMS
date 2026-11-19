@@ -22624,3 +22624,43 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
   flex: 1 0 auto;
   min-height: auto;
 }
+
+/* ── 통계 1차 정리(2026-11-19): 숫자 띠 두 줄 — 실적(고른 기간) / 지금 상태 ───────── */
+.stat-strip-label {
+  margin: 0 0 4px 2px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--navy);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.stat-strip-label span {
+  margin-left: 6px;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.stat-strip.perf,
+.stat-strip.now { margin-bottom: 12px; }
+.stat-strip.perf { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.stat-strip.now { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.stat-strip.perf .stat-cell,
+.stat-strip.now .stat-cell {
+  position: relative;
+  border-bottom: none;
+  border-right: 1px solid #eef1f5;
+  background: #fff;
+}
+.stat-strip.perf .stat-cell { background: #fafcfe; }
+.stat-strip.perf .stat-cell:last-child,
+.stat-strip.now .stat-cell:last-child { border-right: none; }
+.stat-sub { font-size: 11px; font-weight: 600; color: var(--muted); }
+.stat-spark { position: absolute; top: 8px; right: 10px; opacity: 0.9; }
+@media (max-width: 720px) {
+  .stat-strip.perf,
+  .stat-strip.now { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-strip.perf .stat-cell,
+  .stat-strip.now .stat-cell { border-bottom: 1px solid #eef1f5; }
+  .stat-spark { display: none; }
+}

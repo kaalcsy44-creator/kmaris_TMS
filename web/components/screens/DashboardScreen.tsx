@@ -444,15 +444,23 @@ function fmtMoney(cur: StatCurKey, n: number): string {
 }
 
 /* 전월 대비 증감 꼬리표. prev=0 이면 표시 안 함. */
-function DeltaChip({ cur, prev }: { cur: number; prev: number }) {
+function DeltaChip({ cur, prev, label = "vs previous month" }: { cur: number; prev: number; label?: string }) {
   if (!prev) return null;
   const pct = ((cur - prev) / Math.abs(prev)) * 100;
   const up = pct >= 0;
   return (
-    <span className={`stat-delta ${up ? "up" : "down"}`} title="vs previous month">
+    <span className={`stat-delta ${up ? "up" : "down"}`} title={label}>
       {up ? "▲" : "▼"}{Math.abs(Math.round(pct))}%
     </span>
   );
+}
+
+type PeriodType = "M" | "Q" | "Y";
+/** a..b(포함) 정수 목록. */
+function range(a: number, b: number): number[] {
+  const out: number[] = [];
+  for (let i = a; i <= b; i++) out.push(i);
+  return out;
 }
 
 const MG_TABS = ["won", "quoted", "lost"] as const;
@@ -488,6 +496,12 @@ function StatisticsTab() {
   const [rfqListOpen, setRfqListOpen] = useState(false);
   // 프로젝트 마진 표 탭.
   const [mgTab, setMgTab] = useState<MgTab>("won");
+  // 기간 단위(월·분기·올해) · 비교 기준(직전 기간 / 작년 같은 기간). 화면 전체가 이 기간을 따른다.
+  const [ptype, setPtype] = useState<PeriodType>(() => {
+    try { const v = localStorage.getItem("ktms:stat-period"); return v === "Q" || v === "Y" ? v : "M"; } catch { return "M"; }
+  });
+  const [cmpMode, setCmpMode] = useState<"prev" | "yoy">("prev");
+  useEffect(() => { try { localStorage.setItem("ktms:stat-period", ptype); } catch { /* 저장 못 해도 화면은 동작 */ } }, [ptype]);
   const router = useRouter();
 
   if (error && !data) {
@@ -497,7 +511,7 @@ function StatisticsTab() {
     return <div className="state">Loading…</div>;
   }
 
-  const { ops, perf } = data;
+  const { ops } = data;
   // 선택 월 인덱스(기본 이번 달) — 금액 KPI 3종은 월별 시계열에서 직접 뽑는다.
   // 그래프 축은 1~12월이라 마지막 칸이 12월(미래)이다. KPI 는 아직 오지 않은 달로
   // 넘어가지 않게 '이번 달'을 오른쪽 끝으로 삼는다.
@@ -506,11 +520,36 @@ function StatisticsTab() {
   const idx = monthIdx == null ? lastIdx : Math.min(Math.max(monthIdx, 0), lastIdx);
   const selMonth = stat.months[idx];
   const isCurMonth = idx === lastIdx;
-  const mVal = (metric: "revenue" | "quote" | "order", i: number) =>
-    stat.series[metric][cur][i] ?? 0;
-  const mRevenue = mVal("revenue", idx), mRevenuePrev = idx > 0 ? mVal("revenue", idx - 1) : 0;
-  const mOrder = mVal("order", idx), mOrderPrev = idx > 0 ? mVal("order", idx - 1) : 0;
-  const mQuote = mVal("quote", idx), mQuotePrev = idx > 0 ? mVal("quote", idx - 1) : 0;
+  // ── 기간 — 선택 월(idx)이 끝나는 달. 분기는 그 달이 속한 분기의 시작~idx, 올해는 1월~idx.
+  const qStart = Math.floor(idx / 3) * 3;
+  const pIdx: number[] = ptype === "M" ? [idx]
+    : ptype === "Q" ? range(qStart, idx)
+    : range(0, idx);
+  // 비교 기간 — 직전 기간(같은 길이로 바로 앞) 또는 작년 같은 달들.
+  const cmpYoy = cmpMode === "yoy" || ptype === "Y";
+  const cIdx: number[] = cmpYoy ? pIdx
+    : ptype === "M" ? (idx > 0 ? [idx - 1] : [])
+    : (qStart >= 3 ? range(qStart - 3, qStart - 3 + (idx - qStart)) : []);
+  const prevY = stat.prev_year;
+  const hasPrevYear = !!prevY && [prevY.series.revenue.USD, prevY.series.revenue.KRW, prevY.series.order.USD, prevY.series.order.KRW, prevY.rfq_count]
+    .some((arr) => arr.some((v) => v));
+  const mm = (i: number) => stat.months[i]?.slice(5) ?? "";
+  const periodLabel = ptype === "M" ? selMonth
+    : ptype === "Q" ? `${selMonth.slice(0, 4)} Q${Math.floor(idx / 3) + 1}${idx - qStart < 2 ? ` (${mm(qStart)}–${mm(idx)})` : ""}`
+    : `${selMonth.slice(0, 4)} YTD (01–${mm(idx)})`;
+  const cmpLabel = cmpYoy ? "vs same period last year" : ptype === "M" ? "vs previous month" : "vs previous quarter (same length)";
+  const sumOf = (arr: number[] | undefined, ix: number[]) => ix.reduce((t, i) => t + (arr?.[i] ?? 0), 0);
+  const sparkOf = (arr: number[]) => arr.slice(0, lastIdx + 1);
+  const pSum = (metric: "revenue" | "quote" | "order") => sumOf(stat.series[metric][cur], pIdx);
+  const cSum = (metric: "revenue" | "quote" | "order") =>
+    cmpYoy ? (hasPrevYear ? sumOf(prevY?.series[metric][cur], cIdx) : 0) : sumOf(stat.series[metric][cur], cIdx);
+  const mRevenue = pSum("revenue"), mRevenuePrev = cSum("revenue");
+  const mOrder = pSum("order"), mOrderPrev = cSum("order");
+  const mQuote = pSum("quote"), mQuotePrev = cSum("quote");
+  const pMonths = new Set(pIdx.map((i) => stat.months[i]));
+  const cMonths = new Set(cmpYoy ? [] : cIdx.map((i) => stat.months[i]));
+  const inP = (d: string) => pMonths.has((d || "").slice(0, 7));
+  const inC = (d: string) => cMonths.has((d || "").slice(0, 7));
 
   // 차트 데이터 변환 ---------------------------------------------------------
   const monthLabel = (m: string) => m.slice(2); // "2026-07" → "26-07"
@@ -526,17 +565,44 @@ function StatisticsTab() {
   }));
   // 선택 월을 추이 차트에 띠로 칠해 위 숫자와 같은 달을 가리킨다. 칸을 누르면 그 달로 이동.
   const selLabel = monthLabel(selMonth);
+  const selFrom = monthLabel(stat.months[pIdx[0]]);
   const pickMonth = (s: { activeTooltipIndex?: number | string | null } | null | undefined) => {
     const i = Number(s?.activeTooltipIndex);
     if (s?.activeTooltipIndex != null && Number.isFinite(i) && i >= 0 && i <= lastIdx) setMonthIdx(i);
   };
-  const mRfq = stat.rfq_count[idx] || 0, mRfqPrev = idx > 0 ? stat.rfq_count[idx - 1] || 0 : 0;
+  const mRfq = sumOf(stat.rfq_count, pIdx);
+  const mRfqPrev = cmpYoy ? (hasPrevYear ? sumOf(prevY?.rfq_count, cIdx) : 0) : sumOf(stat.rfq_count, cIdx);
   const arOut = data.kpi.ar_outstanding?.[cur] ?? (cur === "USD" ? data.kpi.ar_outstanding_usd : 0);
-  const custTop = stat.customer_top[cur].map((r) => ({ name: r.name, amount: r.amount }));
-  const itemTop = stat.item_top[cur].map((r) => ({
-    name: r.part_no + (r.description ? ` · ${r.description.slice(0, 20)}` : ""),
-    amount: r.amount,
-  }));
+  // 고객·품목 순위 — 고른 기간의 달만 더해 다시 센다(옛 서버는 연간 합계만 준다 → 그대로 씀).
+  const fxConv = stat.fx?.rate || stat.usd_krw_rate;
+  const inCur = (usd: number, krw: number) => (cur === "USD" ? usd : cur === "KRW" ? krw : krw + usd * fxConv);
+  const custTop = (() => {
+    const cm = stat.customer_month;
+    if (!cm) return stat.customer_top[cur].map((r) => ({ name: r.name, amount: r.amount }));
+    const names = new Set([...Object.keys(cm.USD || {}), ...Object.keys(cm.KRW || {})]);
+    const rows = [...names].map((n) => ({ name: n, amount: inCur(sumOf(cm.USD?.[n], pIdx), sumOf(cm.KRW?.[n], pIdx)) }))
+      .filter((r) => r.amount > 0).sort((x, y) => y.amount - x.amount);
+    for (const n of stat.customer_pad ?? []) {
+      if (rows.length >= 10) break;
+      if (!rows.some((r) => r.name === n)) rows.push({ name: n, amount: 0 });
+    }
+    return rows.slice(0, 10);
+  })();
+  const itemTop = (() => {
+    const im = stat.item_month;
+    const label = (pn: string, d: string) => pn + (d ? ` · ${d.slice(0, 20)}` : "");
+    if (!im) return stat.item_top[cur].map((r) => ({ name: label(r.part_no, r.description), amount: r.amount }));
+    const acc = new Map<string, { name: string; usd: number; krw: number }>();
+    for (const c of ["USD", "KRW"] as const) {
+      for (const r of im[c] || []) {
+        const e = acc.get(r.part_no) ?? { name: label(r.part_no, r.description), usd: 0, krw: 0 };
+        if (c === "USD") e.usd += sumOf(r.m, pIdx); else e.krw += sumOf(r.m, pIdx);
+        acc.set(r.part_no, e);
+      }
+    }
+    return [...acc.values()].map((e) => ({ name: e.name, amount: inCur(e.usd, e.krw) }))
+      .filter((r) => r.amount > 0).sort((x, y) => y.amount - x.amount).slice(0, 10);
+  })();
 
   const compact = (n: number) => {
     if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -566,16 +632,38 @@ function StatisticsTab() {
   // 월간 RFQ 수신 그래프 — 축은 months(올해 1~12월). 수신 없는 달은 0으로 비운다.
   const rfqData = stat.months.map((m, i) => ({
     month: monthLabel(m), count: stat.rfq_count[i] || 0, detail: stat.rfq_detail[i] || [],
+    quote: future(i) ? null : stat.series.quote[cur][i],
   }));
-  const selRfqs = stat.rfq_detail[idx] || [];
+  const selRfqs = pIdx.flatMap((i) => stat.rfq_detail[i] || []).sort((x, y) => (x.date < y.date ? 1 : -1));
   // 프로젝트 마진은 USD 로 정규화돼 오므로 화면 통화로 되돌린다. 'KRW 환산'은 서버가
   // 실제로 쓴 매매기준율(stat.fx)을 그대로 써야 KPI·랭킹과 같은 환율 위에 선다.
   const fxRate = cur === "KRWC" ? (stat.fx?.rate || stat.usd_krw_rate) : stat.usd_krw_rate;
   const toCur = (usd: number) => (cur === "USD" ? usd : usd * fxRate);
   // 프로젝트 마진 표 — 탭별 줄. 매입 미확정(발주 전) 건은 합계에서 뺀다.
   const mgRowsOf = (k: MgTab) =>
-    k === "won" ? stat.won_margin
-      : stat.quoted_margin.rows.filter((r) => (k === "lost" ? r.status === "Lost" : r.status === "Open"));
+    (k === "won" ? stat.won_margin
+      : stat.quoted_margin.rows.filter((r) => (k === "lost" ? r.status === "Lost" : r.status === "Open")))
+      .filter((r) => inP(r.date));
+  // 매출총이익(수주 건, 발주 확정분) — 고른 기간·비교 기간.
+  const gp = (rows: typeof stat.won_margin) => {
+    const done = rows.filter((w) => w.margin_usd != null);
+    const sales = done.reduce((t, w) => t + w.sales_usd, 0);
+    const margin = done.reduce((t, w) => t + (w.margin_usd ?? 0), 0);
+    return { sales, margin, pct: sales ? Math.round((margin / sales) * 1000) / 10 : null, n: done.length };
+  };
+  const gpNow = gp(stat.won_margin.filter((w) => inP(w.date)));
+  const gpPrev = cmpYoy ? null : gp(stat.won_margin.filter((w) => inC(w.date)));
+  // 고른 기간의 퍼널 — 그 기간에 받은 RFQ 가 어디까지 갔나(rfq_detail 의 진행 상태).
+  const pRfqRows = pIdx.flatMap((i) => stat.rfq_detail[i] || []);
+  const fRfq = pRfqRows.length;
+  const fQuote = pRfqRows.filter((d) => d.status !== "Open").length;
+  const fPo = pRfqRows.filter((d) => d.status === "PO" || d.status === "Invoiced").length;
+  const fRev = pRfqRows.filter((d) => d.status === "Invoiced").length;
+  const pct1 = (a: number, b: number) => (b ? Math.round((a / b) * 1000) / 10 : 0);
+  const winRate = fQuote ? pct1(fPo, fQuote) : null;
+  // 진행 중 견적(Open) — 지금 기준 전체(기간 무관).
+  const openQuotes = stat.quoted_margin.rows.filter((r) => r.status === "Open");
+  const openPipeline = openQuotes.reduce((t, r) => t + r.sales_usd, 0);
   const mgRows = mgRowsOf(mgTab);
   const mgDone = mgRows.filter((w) => w.margin_usd != null);
   const mgSales = mgDone.reduce((s, w) => s + w.sales_usd, 0);
@@ -583,10 +671,10 @@ function StatisticsTab() {
   const mgPct = mgSales ? Math.round((mgMarginSum / mgSales) * 1000) / 10 : null;
   const mgPctMax = Math.max(1, ...mgDone.map((w) => Math.abs(w.margin_pct ?? 0)));
   const funnelData = [
-    { stage: "RFQ", count: stat.funnel.rfq, rate: 100, label: "" },
-    { stage: "Quote", count: stat.funnel.quote, rate: stat.funnel.quote_rate, label: "Quote / RFQ" },
-    { stage: "PO", count: stat.funnel.order, rate: stat.funnel.order_rate, label: "PO / Quote" },
-    { stage: "Revenue", count: stat.funnel.revenue, rate: stat.funnel.revenue_rate, label: "Revenue / PO" },
+    { stage: "RFQ", count: fRfq, rate: 100, label: "" },
+    { stage: "Quote", count: fQuote, rate: pct1(fQuote, fRfq), label: "Quote / RFQ" },
+    { stage: "PO", count: fPo, rate: pct1(fPo, fQuote), label: "PO / Quote" },
+    { stage: "Revenue", count: fRev, rate: pct1(fRev, fPo), label: "Revenue / PO" },
   ].map((d) => ({ ...d, tag: d.label ? `${d.count} · ${d.rate}%` : String(d.count) }));
   // 파이프라인 10단계 분포 — 색은 5개 중분류(phase).
   const stageRows = data.stage_distribution.map((count, i) => ({
@@ -601,6 +689,7 @@ function StatisticsTab() {
   function RfqTip({ active, payload }: { active?: boolean; payload?: { payload: typeof rfqData[number] }[] }) {
     if (!active || !payload?.length) return null;
     const p = payload[0].payload;
+    if (!p.detail) return null;
     const byCust = new Map<string, number>();
     p.detail.forEach((d) => byCust.set(d.customer, (byCust.get(d.customer) ?? 0) + 1));
     const ranked = [...byCust.entries()].sort((a, b) => b[1] - a[1]);
@@ -642,21 +731,38 @@ function StatisticsTab() {
     <>
       {/* ① 머리줄 — 월 이동 · (관리자)감사 · 통화 전환 ------------------------- */}
       <div className="stat-head">
+        {/* 기간 단위 — 화면의 모든 숫자·순위·퍼널·마진이 이 기간을 따른다(Deals by Stage·상태 줄 제외). */}
+        <div className="stat-cur-toggle sm" role="group" aria-label="Period">
+          {(["M", "Q", "Y"] as const).map((k) => (
+            <button key={k} className={ptype === k ? "on" : ""} onClick={() => setPtype(k)}>
+              {k === "M" ? "Month" : k === "Q" ? "Quarter" : "Year to date"}
+            </button>
+          ))}
+        </div>
         <span className="stat-monthnav">
           <button
             type="button" className="stat-mnav-btn"
-            onClick={() => setMonthIdx(idx - 1)} disabled={idx <= 0}
-            aria-label="Previous month" title="Previous month"
+            onClick={() => setMonthIdx(ptype === "Q" ? Math.max(qStart - 1, 0) : idx - 1)}
+            disabled={ptype === "Y" || (ptype === "Q" ? qStart <= 0 : idx <= 0)}
+            aria-label="Previous period" title="Previous period"
           >‹</button>
           <span className="stat-mnav-label">
-            {selMonth}{isCurMonth ? " · This month" : ""}
+            {periodLabel}{isCurMonth && ptype !== "Y" ? " · current" : ""}
           </span>
           <button
             type="button" className="stat-mnav-btn"
-            onClick={() => setMonthIdx(idx + 1)} disabled={idx >= lastIdx}
-            aria-label="Next month" title="Next month"
+            onClick={() => setMonthIdx(ptype === "Q" ? Math.min(qStart + 5, lastIdx) : idx + 1)}
+            disabled={ptype === "Y" || idx >= lastIdx}
+            aria-label="Next period" title="Next period"
           >›</button>
         </span>
+        {ptype !== "Y" ? (
+          <div className="stat-cur-toggle sm" role="group" aria-label="Compare with">
+            <button className={cmpMode === "prev" ? "on" : ""} onClick={() => setCmpMode("prev")}>vs prev.</button>
+            <button className={cmpMode === "yoy" ? "on" : ""} onClick={() => setCmpMode("yoy")}
+              title={hasPrevYear ? "Same period last year" : "No data for last year yet"}>vs last year</button>
+          </div>
+        ) : null}
         {/* 관리자 전용 감사 — 한 줄을 차지하던 토글을 아이콘으로 줄였다. */}
         {showAudit ? (
           <button type="button" className={`stat-audit-icon${auditOpen ? " on" : ""}`} onClick={loadAudit}
@@ -681,20 +787,37 @@ function StatisticsTab() {
         </div>
       </div>
 
-      {/* ② 숫자 띠 — 윗줄은 선택 월 실적, 아랫줄은 지금 상태(월 이동과 무관). ---- */}
-      <div className="stat-strip">
+      {/* ② 숫자 띠 두 줄 — [실적: 고른 기간] / [지금 상태: 기간 무관]. 성격이 다른 숫자를 한 줄에
+          섞으면 "이번 달 얘기인지 지금 얘기인지"를 칸마다 따져야 했다. ---------------- */}
+      <div className="stat-strip-label">Performance · {periodLabel} <span>{cmpLabel}</span></div>
+      <div className="stat-strip perf">
         <StatCell label="Revenue" value={fmtMoney(cur, mRevenue)} tip="Tax-invoice month (domestic) or AR invoice date (export · PI)"
-          extra={<DeltaChip cur={mRevenue} prev={mRevenuePrev} />} />
-        <StatCell label="Orders Won" value={fmtMoney(cur, mOrder)} tip="Order value in the selected month"
-          extra={<DeltaChip cur={mOrder} prev={mOrderPrev} />} />
-        <StatCell label="Quoted" value={fmtMoney(cur, mQuote)} tip="Quote value in the selected month"
-          extra={<DeltaChip cur={mQuote} prev={mQuotePrev} />} />
-        <StatCell label="RFQs" value={mRfq} tip="RFQs received in the selected month"
-          extra={<DeltaChip cur={mRfq} prev={mRfqPrev} />} />
-        <StatCell label="Gross Margin" value={`${perf.gross_margin_pct}%`} tip="Current gross margin %" />
+          extra={<DeltaChip cur={mRevenue} prev={mRevenuePrev} label={cmpLabel} />}
+          spark={sparkOf(stat.series.revenue[cur])} />
+        <StatCell label="Orders Won" value={fmtMoney(cur, mOrder)} tip="Order value in the period"
+          extra={<DeltaChip cur={mOrder} prev={mOrderPrev} label={cmpLabel} />}
+          spark={sparkOf(stat.series.order[cur])} />
+        <StatCell label="Gross Profit" value={`${curUnit(cur)} ${num(Math.round(toCur(gpNow.margin)))}`}
+          tip={`Won deals with a vendor P/O (${gpNow.n}) — order value minus purchase`}
+          extra={<>
+            {gpNow.pct != null ? <span className="stat-sub">GM {gpNow.pct}%</span> : null}
+            {gpPrev ? <DeltaChip cur={gpNow.margin} prev={gpPrev.margin} label={cmpLabel} /> : null}
+          </>} />
+        <StatCell label="Win Rate" value={winRate == null ? "—" : `${winRate}%`}
+          tip="RFQs received in the period: reached P/O ÷ quoted"
+          extra={<span className="stat-sub">{fPo}/{fQuote} quoted{mQuote ? ` · value ${pct1(mOrder, mQuote)}%` : ""}</span>} />
+        <StatCell label="RFQs" value={mRfq} tip="RFQs received in the period"
+          extra={<DeltaChip cur={mRfq} prev={mRfqPrev} label={cmpLabel} />}
+          spark={sparkOf(stat.rfq_count)} />
+      </div>
+      <div className="stat-strip-label">Now</div>
+      <div className="stat-strip now">
         <StatCell label="AR Outstanding" value={`${curUnit(cur)} ${num(Math.round(arOut))}`}
           tip={`Outstanding receivables (${curLabel(cur)})`}
           extra={ops.overdue ? <span className="stat-flag red">Overdue {ops.overdue}</span> : null} />
+        <StatCell label="Open Pipeline" value={`${curUnit(cur)} ${num(Math.round(toCur(openPipeline)))}`}
+          tip="Quotes sent and still open (not won, lost or expired)"
+          extra={<span className="stat-sub">{openQuotes.length} quotes</span>} />
         <StatCell label="Delivery Delays" value={stat.delivery_delays} tip="Past promised date"
           tone={stat.delivery_delays ? "red" : undefined} />
         <StatCell label="Urgent" value={ops.urgent} tip="Level A · expiring"
@@ -788,26 +911,25 @@ function StatisticsTab() {
       <div className="stat-charts">
         {/* 금액 추이 — Quoted·Won 막대 + Revenue 선. 따로 있던 두 차트를 합쳤다. */}
         <div className="stat-chart">
-          <SubHead title="Quoted · Won · Revenue" sub={curLabel(cur)} />
+          <SubHead title="Won · Revenue" sub={`${curLabel(cur)} · monthly`} />
           <ResponsiveContainer width="100%" height={210}>
             <ComposedChart data={moneyTrend} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}
               onClick={pickMonth} style={{ cursor: "pointer" }}>
               <CartesianGrid vertical={false} stroke={GRID} />
-              <ReferenceArea x1={selLabel} x2={selLabel} fill="#0055a8" fillOpacity={0.07} />
+              <ReferenceArea x1={selFrom} x2={selLabel} fill="#0055a8" fillOpacity={0.07} />
               <XAxis dataKey="month" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: GRID }} />
               <YAxis tickFormatter={compact} tick={AXIS_TICK} width={40} tickLine={false} axisLine={false} />
               <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} />
               <Legend wrapperStyle={{ fontSize: 11 }} iconSize={9} />
-              <Bar dataKey="quote" fill="#e8830c" name="Quoted" radius={[2, 2, 0, 0]} />
               <Bar dataKey="order" fill="#2e8b57" name="Won" radius={[2, 2, 0, 0]} />
-              <Line type="monotone" dataKey="revenue" stroke="#0055a8" strokeWidth={2} dot={{ r: 2 }} name="Revenue" />
+              <Bar dataKey="revenue" fill="#0055a8" name="Revenue" radius={[2, 2, 0, 0]} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
 
         {/* 전환 퍼널 — 막대 옆에 건수와 앞 단계 대비 전환율을 함께 적는다(Hit Rate 카드 대체). */}
         <div className="stat-chart">
-          <SubHead title="Conversion" sub="RFQ → Quote → PO → Revenue" />
+          <SubHead title="Conversion" sub={`RFQs received in ${periodLabel}`} />
           <ResponsiveContainer width="100%" height={210}>
             <BarChart data={funnelData} layout="vertical" margin={{ top: 4, right: 70, bottom: 0, left: 0 }}>
               <XAxis type="number" hide />
@@ -823,9 +945,9 @@ function StatisticsTab() {
 
         {/* 월간 RFQ 수신 건수 — 호버 시 해당 월 RFQ 목록 표시 */}
         <div className="stat-chart">
-          <SubHead title="RFQs Received" />
+          <SubHead title="RFQs · Quoted" sub={`RFQ count · quoted value (${curLabel(cur)})`} />
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={rfqData} margin={{ top: 14, right: 8, bottom: 0, left: 0 }}
+            <ComposedChart data={rfqData} margin={{ top: 14, right: 0, bottom: 0, left: 0 }}
               onClick={(st) => {
                 const i = Number(st?.activeTooltipIndex);
                 if (st?.activeTooltipIndex == null || !Number.isFinite(i) || i > lastIdx) return;
@@ -834,12 +956,15 @@ function StatisticsTab() {
                 setMonthIdx(i);
               }}
               style={{ cursor: "pointer" }}>
-              <CartesianGrid vertical={false} stroke={GRID} />
-              <ReferenceArea x1={selLabel} x2={selLabel} fill="#0055a8" fillOpacity={0.07} />
+              <CartesianGrid yAxisId="n" vertical={false} stroke={GRID} />
+              <ReferenceArea yAxisId="n" x1={selFrom} x2={selLabel} fill="#0055a8" fillOpacity={0.07} />
               <XAxis dataKey="month" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: GRID }} />
-              <YAxis allowDecimals={false} tick={AXIS_TICK} width={28} tickLine={false} axisLine={false} />
+              <YAxis yAxisId="n" allowDecimals={false} tick={AXIS_TICK} width={28} tickLine={false} axisLine={false} />
+              <YAxis yAxisId="v" orientation="right" tickFormatter={compact} tick={AXIS_TICK} width={40} tickLine={false} axisLine={false} />
               <Tooltip content={<RfqTip />} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
-              <Bar dataKey="count" fill="#0055a8" name="RFQ" radius={[2, 2, 0, 0]}>
+              <Legend wrapperStyle={{ fontSize: 11 }} iconSize={9} />
+              <Line yAxisId="v" type="monotone" dataKey="quote" stroke="#e8830c" strokeWidth={2} dot={{ r: 2 }} name="Quoted" />
+              <Bar yAxisId="n" dataKey="count" fill="#86b6ef" name="RFQs" radius={[2, 2, 0, 0]}>
                 {/* 축이 1~12월 고정이라 수신 없는 달이 여럿 생긴다 — 0 은 라벨을 지워
                     바닥에 0 이 줄줄이 찍히지 않게 한다(툴팁에는 "수신 없음"으로 안내). */}
                 <LabelList
@@ -849,12 +974,12 @@ function StatisticsTab() {
                   formatter={(v) => (Number(v) > 0 ? String(v) : "")}
                 />
               </Bar>
-            </BarChart>
+            </ComposedChart>
           </ResponsiveContainer>
           {/* 선택 월 RFQ 목록 — 접힌 채로는 한 줄. 줄을 누르면 프로젝트 팝업. */}
           <button type="button" className="stat-rfq-toggle" onClick={() => setRfqListOpen(!rfqListOpen)}
             disabled={!selRfqs.length}>
-            {rfqListOpen ? "▾" : "▸"} {selMonth} RFQs ({selRfqs.length})
+            {rfqListOpen ? "▾" : "▸"} {periodLabel} RFQs ({selRfqs.length})
           </button>
           {rfqListOpen && selRfqs.length ? (
             <div className="stat-rfq-list">
@@ -875,7 +1000,7 @@ function StatisticsTab() {
             최신순, 줄 클릭 → 프로젝트. 견적 건 예상 = 최신 고객 견적 vs 채택(없으면 최저) 벤더 단가. */}
         <div className="stat-chart">
           <div className="stat-mg-head">
-            <SubHead title="Project Margin" sub={`${curLabel(cur)} · latest first`} />
+            <SubHead title="Project Margin" sub={`${curLabel(cur)} · ${periodLabel}`} />
             <div className="stat-cur-toggle sm">
               {MG_TABS.map((k) => (
                 <button key={k} className={mgTab === k ? "on" : ""} onClick={() => setMgTab(k)}>
@@ -923,7 +1048,7 @@ function StatisticsTab() {
         </div>
 
         <div className="stat-chart">
-          <SubHead title="Top 10 Customers" sub="by revenue" />
+          <SubHead title="Top 10 Customers" sub={`by revenue · ${periodLabel}`} />
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={custTop} layout="vertical" margin={{ top: 0, right: 48, bottom: 0, left: 0 }} barCategoryGap={3}>
               <XAxis type="number" hide />
@@ -939,7 +1064,7 @@ function StatisticsTab() {
 
         {/* 파이프라인 10단계 분포 — 지금 각 단계에 머문 딜 수. 색은 5개 중분류(phase). */}
         <div className="stat-chart">
-          <SubHead title="Deals by Stage" sub="current" />
+          <SubHead title="Deals by Stage" sub="now" />
           <ResponsiveContainer width="100%" height={stageRows.length * 22 + 8}>
             <BarChart data={stageRows} layout="vertical" margin={{ top: 0, right: 32, bottom: 0, left: 0 }} barCategoryGap={3}>
               <XAxis type="number" hide allowDecimals={false} />
@@ -964,7 +1089,7 @@ function StatisticsTab() {
           </ResponsiveContainer>
         </div>
         <div className="stat-chart stat-chart--wide">
-          <SubHead title="Top 10 Items" sub="by invoiced amount" />
+          <SubHead title="Top 10 Items" sub={`by invoiced amount · ${periodLabel}`} />
           <ResponsiveContainer width="100%" height={230}>
             <BarChart data={itemTop} layout="vertical" margin={{ top: 0, right: 48, bottom: 0, left: 0 }} barCategoryGap={3}>
               <XAxis type="number" hide />
@@ -990,20 +1115,39 @@ function StatCell({
   tip,
   tone,
   extra,
+  spark,
 }: {
   label: string;
   value: string | number;
   tip?: string;
   tone?: "red" | "amber";
   extra?: React.ReactNode;
+  /** 12개월 추세(작은 선) — 값 칸 오른쪽 위. */
+  spark?: number[];
 }) {
   return (
     <div className={`stat-cell${tone ? ` ${tone}` : ""}`} title={tip}>
+      {spark && spark.some((v) => v) ? <Sparkline values={spark} /> : null}
       <div className="stat-cell-l">{label}</div>
       <div className="stat-cell-v">
         <span>{value}</span>
         {extra}
       </div>
     </div>
+  );
+}
+
+/* 숫자 칸의 12개월 추세선 — 축·눈금 없이 모양만. 마지막 점(이번 달)만 찍는다. */
+function Sparkline({ values }: { values: number[] }) {
+  const w = 64, h = 18;
+  const max = Math.max(...values, 1);
+  const step = values.length > 1 ? w / (values.length - 1) : w;
+  const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(h - 2 - (v / max) * (h - 4)).toFixed(1)}`);
+  const last = pts[pts.length - 1]?.split(",") ?? ["0", "0"];
+  return (
+    <svg className="stat-spark" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden>
+      <polyline points={pts.join(" ")} fill="none" stroke="#7aa7dc" strokeWidth={1.4} strokeLinejoin="round" />
+      <circle cx={last[0]} cy={last[1]} r={2} fill="#0055a8" />
+    </svg>
   );
 }
