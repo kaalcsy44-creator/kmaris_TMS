@@ -225,6 +225,60 @@ function widenLongFields(root: HTMLElement | null, on: boolean, reset = false) {
   }
 }
 
+/** 읽기모드에서 모든 줄이 비어 있는 표 칸(열)을 감춘다 — Grade·Category 처럼 한 번도 안 쓴
+ *  칸이 "—" 만 늘어놓은 채 폭을 차지하면 정작 읽을 칸(설명·수량)이 좁아진다.
+ *  표시는 th·td 에 data-vm-emptycol 로 남기고 감추기는 CSS 가 한다(편집모드에선 지운다).
+ *
+ *  colspan 이 섞인 표(그룹 머리줄·합계줄)는 건드리지 않는다 — 칸을 감추면 가로지르는 칸의
+ *  폭이 어긋나는데, 그 colspan 은 React 가 쥐고 있어 여기서 고칠 수 없다. */
+const BLANK_CELL_TEXT = new Set(["", "—", "-", "–"]);
+function cellBlank(td: Element): boolean {
+  for (const c of Array.from(td.querySelectorAll("input, select, textarea"))) {
+    const blank = isBlankControl(c);
+    if (blank === null || !blank) return false;
+  }
+  if (td.querySelector("img, svg")) return false;
+  let text = "";
+  const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const host = n.parentElement;
+    // 자리표시 글자·숨긴 원본 단추의 글자는 값이 아니다.
+    if (host?.closest(".vm-text--ph, [data-vm-mirror], option")) continue;
+    text += n.textContent || "";
+  }
+  return BLANK_CELL_TEXT.has(text.trim());
+}
+function markEmptyColumns(root: HTMLElement | null, on: boolean) {
+  if (!root) return;
+  const marked = root.querySelectorAll("[data-vm-emptycol]");
+  if (!on) {
+    marked.forEach((n) => n.removeAttribute("data-vm-emptycol"));
+    return;
+  }
+  const next = new Set<Element>();
+  for (const table of Array.from(root.querySelectorAll<HTMLTableElement>("table"))) {
+    const head = table.tHead?.rows;
+    const body = Array.from(table.tBodies).flatMap((b) => Array.from(b.rows));
+    if (!head || head.length !== 1 || body.length === 0) continue;
+    const all = [...Array.from(head), ...body, ...(table.tFoot ? Array.from(table.tFoot.rows) : [])];
+    if (all.some((row) => Array.from(row.cells).some((c) => c.colSpan > 1))) continue;
+    const ths = Array.from(head[0].cells);
+    // 칸 폭을 <col> 로 잡은 표는 칸을 감춰도 <col> 폭이 남는다 — 같은 수일 때만 함께 표시한다.
+    const cols = Array.from(table.querySelectorAll(":scope > colgroup > col"));
+    const colsMatch = cols.length === ths.length && cols.every((c) => (c as HTMLTableColElement).span === 1);
+    if (cols.length && !colsMatch) continue;
+    ths.forEach((th, i) => {
+      // 이름 없는 칸(선택 체크·순번·도구)은 판단하지 않는다.
+      if (!(th.textContent || "").trim() || th.querySelector("input, button")) return;
+      if (!body.every((row) => !row.cells[i] || cellBlank(row.cells[i]))) return;
+      for (const row of all) if (row.cells[i]) next.add(row.cells[i]);
+      if (colsMatch) next.add(cols[i]);
+    });
+  }
+  marked.forEach((n) => { if (!next.has(n)) n.removeAttribute("data-vm-emptycol"); });
+  next.forEach((n) => n.setAttribute("data-vm-emptycol", ""));
+}
+
 /** 편집기 한 곳에서 쓰는 헬퍼.
  *  canEdit(권한)와 표시 모드를 합쳐 "지금 이 폼을 만질 수 있나(editing)"를 낸다.
  *  readMode 는 '권한은 있는데 읽기모드라서 잠긴' 상태 — 권한 부족 안내문과 구분해야 해서 따로 준다.
@@ -244,6 +298,7 @@ export function useEditGate(canEdit: boolean) {
     markEmptyFields(ref.current, readMode);
     syncReadMirrors(ref.current, readMode);
     widenLongFields(ref.current, readMode);
+    markEmptyColumns(ref.current, readMode);
     marked.current = readMode;
   });
 
@@ -254,6 +309,7 @@ export function useEditGate(canEdit: boolean) {
     const t = window.setInterval(() => {
       syncReadMirrors(ref.current, true);
       widenLongFields(ref.current, true);
+      markEmptyColumns(ref.current, true);
     }, 800);
     // 창 폭이 바뀌면 접히는 칸이 달라진다 — 넓힌 표시를 지우고 처음부터 다시 잰다.
     const onResize = () => widenLongFields(ref.current, true, true);

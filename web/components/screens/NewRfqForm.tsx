@@ -972,10 +972,12 @@ export default function NewRfqForm({
       ) : null}
 
       {ocrFiles.length > 0 ? (
-        <div className="ocr-files">
-          <div className="ocr-files-head">
+        // 평소엔 한 줄로 접어 둔다 — 펼친 목록이 머리 오른쪽을 통째로 차지해 기본 정보가
+        // 좁은 3열로 눌렸다. 필요할 때 눌러 펼친다.
+        <details className="ocr-files">
+          <summary className="ocr-files-head">
             📎 Auto-fill source files ({ocrFiles.length})
-          </div>
+          </summary>
           <ul className="ocr-files-list">
             {ocrFiles.map((f, i) => (
               <li key={`${f.name}-${i}`} className="ocr-file">
@@ -1001,7 +1003,7 @@ export default function NewRfqForm({
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       ) : null}
 
       {driveOn && (showDrive || intake.files.length > 0 || intakeRes || intakeErr) ? (
