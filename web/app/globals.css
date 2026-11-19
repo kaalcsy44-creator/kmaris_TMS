@@ -22230,20 +22230,6 @@ table.mini tfoot .total-label .foot-charge-label {
 .pl-modal.service .stage-strip-move:hover:not(:disabled) { background: #16a05a; color: #fff; }
 .pl-modal.service .stage-strip-move:disabled { border-color: var(--line); color: var(--muted); }
 
-/* 납작 모드: 이름은 보고 있는 단계·진행 중 단계만, 나머지는 번호 원(이름은 툴팁). */
-.project-stage-tabs-row.collapsed .project-stage-tabs button:not(.lbl) {
-  flex: 0 0 auto;
-  padding: 4px 6px;
-}
-.project-stage-tabs-row.collapsed .project-stage-tabs button:not(.lbl) .st-label { display: none; }
-.project-stage-tabs-row.collapsed .project-stage-tabs button.lbl { flex: 1 1 0; }
-.project-stage-tabs-row.collapsed .project-stage-tabs button.lbl .st-label {
-  font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* 단계 머리 — 읽기/편집 한 단추 + ⋯ 메뉴. */
 .stage-mode-switch {
   border: 1px solid #16324f;

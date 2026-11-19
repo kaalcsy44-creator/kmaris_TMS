@@ -3270,9 +3270,6 @@ export function PipelineModal({
               half ? `half ${half}` : "",
               no === r.stage ? "current" : "",
               c.skip ? "skip" : "",
-              // 납작 모드에서 이름을 보이는 칸 — 보고 있는 단계와 진행 중인 단계만. 나머지는
-              // 번호 원만 남겨(이름은 툴팁) 열 칸 이름이 다 잘리던 것을 없앤다.
-              selectedStage === no || no === r.stage ? "lbl" : "",
             ]
               .filter(Boolean)
               .join(" ");
