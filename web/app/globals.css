@@ -22411,3 +22411,8 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
   font-weight: 900;
   box-shadow: 0 0 0 1.5px #fff;
 }
+
+/* ⋯ 메뉴가 열려 있는 동안엔 단계 머리를 본문 고정 줄(문서번호 줄·탭 줄, sticky)보다 위로 —
+   머리(z 6)가 만든 쌓임 맥락 안에 갇혀 메뉴가 아래 고정 줄 밑으로 깔렸다. */
+.stage-pane-head:has(.stage-more-menu) { z-index: 60; }
+.stage-more-menu { background: #fff; }
