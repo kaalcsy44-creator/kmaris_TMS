@@ -5870,6 +5870,8 @@ export function CategoriesTab({ onOpenItems }: {
           title="Auto-assign categories"
           onClose={() => setAutoOpen(false)}
           form
+          // 표가 다섯 칸(품명·분류 경로·근거+딜 문맥)이라 폼 기본폭(560)에선 옆으로 밀렸다.
+          maxWidth={1280}
         >
           <p className="hint-inline" style={{ display: "block", marginBottom: 10 }}>
             {autoScoped ? <b>{autoScoped} ticked item(s) only. </b> : null}
