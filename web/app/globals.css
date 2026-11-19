@@ -22705,3 +22705,87 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
   display: inline-block; height: 8px; margin-right: 6px; vertical-align: middle;
   background: #2e8b57; border-radius: 2px; max-width: 50px;
 }
+
+/* ── 통계 3차(2026-11-19): 표 개편 · 근거 목록 · 색 통일 ─────────────────────────────
+   색 규칙(C15): Quoted=주황 #e8830c · Won=초록 #2e8b57 · Revenue=파랑 #0055a8 · Lost=붉은 #b23b3b. */
+.stat-cell.clk { cursor: pointer; }
+.stat-cell.clk:hover { background: #f1f6fd !important; }
+.stat-cw tr.clk { cursor: pointer; }
+.stat-cw tr.clk:hover td { background: #f6f9fd; }
+.stat-cw td.muted { color: var(--muted); }
+/* Top 10 고객 — 매출 칸 안 작은 막대(Revenue 색) */
+.stat-ct td.rev { white-space: nowrap; font-weight: 700; color: var(--navy); }
+.stat-ct td.rev i {
+  display: inline-block; height: 8px; margin-right: 6px; vertical-align: middle;
+  background: #0055a8; opacity: 0.75; border-radius: 2px;
+}
+.stat-ct td.gm { font-weight: 700; color: #1a7a4a; }
+/* 단계별 딜 */
+.stat-st td.n { max-width: 220px; }
+.stat-st .stn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; margin-right: 6px; border-radius: 50%;
+  color: #fff; font-size: 10px; font-weight: 800; vertical-align: middle;
+}
+.stat-st td.cnt { white-space: nowrap; font-weight: 700; color: var(--navy); }
+.stat-st td.cnt i { display: inline-block; height: 8px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+/* 근거 목록 */
+.stat-drill {
+  margin: 0 0 12px;
+  border: 1px solid #c9dcf6;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.stat-drill-h {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 7px 12px; background: #eaf2fd; border-bottom: 1px solid #c9dcf6;
+  font-size: 12.5px; color: var(--navy);
+}
+.stat-drill-h span { font-size: 11px; color: var(--muted); }
+.stat-drill-x {
+  margin-left: auto; border: 0; background: none; font-size: 16px; line-height: 1;
+  color: #55627a; cursor: pointer;
+}
+.stat-drill-body { max-height: 260px; overflow-y: auto; }
+.stat-drill-row {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1.4fr) 88px 110px minmax(0, 1fr);
+  gap: 10px;
+  padding: 5px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid #f1f4f8;
+  cursor: pointer;
+}
+.stat-drill-row:hover { background: #f6f9fd; }
+.stat-drill-row .no { font-weight: 700; color: var(--navy); }
+.stat-drill-row .c { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-drill-row .d { color: var(--muted); }
+.stat-drill-row .v { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-drill-row .x { color: #45526a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 대분류별 매출 / 품목 */
+.stat-cat { display: flex; flex-direction: column; gap: 4px; padding: 2px 0 6px; }
+.stat-cat-row {
+  display: grid;
+  grid-template-columns: minmax(0, 260px) minmax(0, 1fr) 56px 38px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  padding: 2px 0;
+}
+.stat-cat-row[role="button"] { cursor: pointer; }
+.stat-cat-row .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #25344a; }
+.stat-cat-row .bar { height: 10px; background: #f1f4f8; border-radius: 3px; overflow: hidden; }
+.stat-cat-row .bar i { display: block; height: 100%; background: #0055a8; opacity: 0.75; border-radius: 3px; }
+.stat-cat-row.un .bar i { background: #9aa6b8; }
+.stat-cat-row.un .t { color: var(--muted); }
+.stat-cat-row b { text-align: right; color: var(--navy); font-variant-numeric: tabular-nums; }
+.stat-cat-row .pct { text-align: right; color: var(--muted); font-size: 11px; }
+.stat-cat-items { margin: 2px 0 6px 18px; padding-left: 10px; border-left: 2px solid #e3e9f2; }
+.stat-cat-item { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; color: #45526a; padding: 1px 0; }
+.stat-cat-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-cat-note { margin-top: 4px; font-size: 11px; color: var(--muted); }
+@media (max-width: 720px) {
+  .stat-drill-row { grid-template-columns: 1fr 1fr; }
+  .stat-cat-row { grid-template-columns: minmax(0, 1fr) 80px 50px 34px; }
+}

@@ -462,6 +462,12 @@ function DeltaChip({ cur, prev, label = "vs previous month", invert = false }: {
 }
 
 type PeriodType = "M" | "Q" | "Y";
+/** 근거 목록 — 숫자를 만든 딜들. */
+type Drill = {
+  key: string;
+  title: string;
+  rows: { rfq_id: number; no: string; customer: string; date: string; value: string; note: string }[];
+};
 /* 속도 지표 — 두 단계 완료 일시 사이 걸린 날(중앙값). */
 const SPEEDS = [
   { key: "quote", label: "Quote Turnaround", from: 1, to: 4, tip: "RFQ received → quotation sent to the customer" },
@@ -516,6 +522,12 @@ function StatisticsTab() {
     try { const v = localStorage.getItem("ktms:stat-period"); return v === "Q" || v === "Y" ? v : "M"; } catch { return "M"; }
   });
   const [cmpMode, setCmpMode] = useState<"prev" | "yoy">("prev");
+  // 숫자를 누르면 그 숫자를 만든 딜 목록(근거)을 연다 — 같은 칸을 다시 누르면 닫힌다.
+  const [drill, setDrill] = useState<Drill | null>(null);
+  const toggleDrill = (d: Drill) => setDrill((cur) => (cur?.key === d.key ? null : d));
+  // Top Items 보기 — 대분류별 / 품목별. 펼친 대분류.
+  const [itemView, setItemView] = useState<"cat" | "item">("cat");
+  const [openCat, setOpenCat] = useState<string | null>(null);
   useEffect(() => { try { localStorage.setItem("ktms:stat-period", ptype); } catch { /* 저장 못 해도 화면은 동작 */ } }, [ptype]);
   const router = useRouter();
 
@@ -618,10 +630,39 @@ function StatisticsTab() {
     return [...acc.values()].map((e) => ({ name: e.name, amount: inCur(e.usd, e.krw) }))
       .filter((r) => r.amount > 0).sort((x, y) => y.amount - x.amount).slice(0, 10);
   })();
+  // 대분류별 매출 — 품목 마스터의 분류(대분류). 분류가 없는 품번은 Unclassified 로 묶는다.
+  const catTop = (() => {
+    const im = stat.item_month;
+    if (!im) return [];
+    const acc = new Map<string, { usd: number; krw: number; items: Map<string, { name: string; usd: number; krw: number }> }>();
+    for (const c of ["USD", "KRW"] as const) {
+      for (const r of im[c] || []) {
+        const v = sumOf(r.m, pIdx);
+        if (!v) continue;
+        const cat = r.category || "Unclassified";
+        const e = acc.get(cat) ?? { usd: 0, krw: 0, items: new Map() };
+        const it = e.items.get(r.part_no) ?? { name: r.part_no + (r.description ? ` · ${r.description.slice(0, 30)}` : ""), usd: 0, krw: 0 };
+        if (c === "USD") { e.usd += v; it.usd += v; } else { e.krw += v; it.krw += v; }
+        e.items.set(r.part_no, it);
+        acc.set(cat, e);
+      }
+    }
+    return [...acc.entries()].map(([cat, e]) => ({
+      cat, amount: inCur(e.usd, e.krw),
+      items: [...e.items.values()].map((it) => ({ name: it.name, amount: inCur(it.usd, it.krw) })).sort((x, y) => y.amount - x.amount),
+    })).sort((x, y) => (x.cat === "Unclassified" ? 1 : y.cat === "Unclassified" ? -1 : y.amount - x.amount));
+  })();
+  const catTotal = catTop.reduce((t, c) => t + c.amount, 0);
+  const catMax = Math.max(1, ...catTop.map((c) => c.amount));
+  const itemMax = Math.max(1, ...itemTop.map((c) => c.amount));
 
+  // 축약 표기 한 가지 — 1천 미만 정수, 1만 미만 K 소수 1자리, 1백만 미만 K 정수, 그 위 M 소수 1자리.
+  // ("950" 옆에 "8K" 가 서면 자릿수가 달라 보여 비교가 안 됐다.) 정확한 금액은 마우스를 올려 본다.
   const compact = (n: number) => {
-    if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (Math.abs(n) >= 1_000) return `${Math.round(n / 1_000)}K`;
+    const a = Math.abs(n);
+    if (a >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (a >= 10_000) return `${Math.round(n / 1_000)}K`;
+    if (a >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
     return String(Math.round(n));
   };
 
@@ -695,13 +736,14 @@ function StatisticsTab() {
   };
   const speedOf = (from: number, to: number, keep: (d: string) => boolean) => {
     const xs: number[] = [];
+    const rows: { r: (typeof prow)[number]; d: number; end: string }[] = [];
     for (const r of prow) {
       const a = stageDateOf(r, from), b = stageDateOf(r, to);
       if (!a || !b || !keep(b)) continue;
       const d = daysBetween(a, b);
-      if (Number.isFinite(d) && d >= 0) xs.push(d);
+      if (Number.isFinite(d) && d >= 0) { xs.push(d); rows.push({ r, d, end: b }); }
     }
-    return { med: median(xs), n: xs.length };
+    return { med: median(xs), n: xs.length, rows: rows.sort((x, y) => y.d - x.d) };
   };
   const speeds = SPEEDS.map((sp) => ({
     ...sp,
@@ -749,6 +791,50 @@ function StatisticsTab() {
     return [...m.entries()].map(([name, e]) => ({ name, ...e, rate: e.quoted ? pct1(e.won, e.quoted) : null }))
       .sort((x, y) => y.rfq - x.rfq || y.won - x.won).slice(0, 10);
   })();
+  // Top 10 고객 표 — 매출(기간) · 비중 · 누적 · 수주 건 마진(기간에 수주한 건).
+  const wonInP = stat.won_margin.filter((w) => inP(w.date));
+  const revTotal = (() => {
+    const cm = stat.customer_month;
+    if (!cm) return custTop.reduce((t, r) => t + r.amount, 0);
+    const names = new Set([...Object.keys(cm.USD || {}), ...Object.keys(cm.KRW || {})]);
+    return [...names].reduce((t, n) => t + inCur(sumOf(cm.USD?.[n], pIdx), sumOf(cm.KRW?.[n], pIdx)), 0);
+  })();
+  let cum = 0;
+  const custRows = custTop.map((c) => {
+    const won = wonInP.filter((w) => w.customer === c.name);
+    const g = gp(won);
+    cum += c.amount;
+    return {
+      ...c,
+      share: revTotal ? Math.round((c.amount / revTotal) * 1000) / 10 : 0,
+      cum: revTotal ? Math.round((cum / revTotal) * 1000) / 10 : 0,
+      deals: won.length, margin: g.margin, gm: g.pct, won,
+    };
+  });
+  const custMax = Math.max(1, ...custRows.map((c) => c.amount));
+  // 단계별 딜 — 지금 각 단계에 머문 딜 수 · 금액 · 그 단계에 머문 날(중앙값) · 30일 넘은 딜.
+  // 금액: 견적 단계(1~4)는 진행 중 견적, 그 뒤는 수주 금액(USD 기준 → 화면 통화).
+  const openQ = new Map(openQuotes.map((r) => [r.rfq_id, r.sales_usd]));
+  const wonV = new Map(stat.won_margin.map((r) => [r.rfq_id, r.sales_usd]));
+  const nowMs = Date.now();
+  const stageTable = (data.steps || []).map((label, i) => {
+    const no = i + 1;
+    const deals = prow.filter((r) => !r.cancelled && r.stage === no).map((r) => {
+      const since = stageDateOf(r, no);
+      const t = since ? Date.parse(since.length > 10 ? since : `${since}T00:00`) : NaN;
+      const days = Number.isFinite(t) ? Math.max(0, Math.floor((nowMs - t) / 86_400_000)) : null;
+      const usd = (no <= 4 ? openQ.get(r.rfq_id) : wonV.get(r.rfq_id)) ?? 0;
+      return { r, days, usd };
+    });
+    const ds = deals.map((d) => d.days).filter((d): d is number => d != null);
+    return {
+      no, label, phase: phaseOfStage(no), deals,
+      usd: deals.reduce((t, d) => t + d.usd, 0),
+      med: no === (data.steps || []).length ? null : median(ds),
+      stale: no === (data.steps || []).length ? 0 : ds.filter((d) => d > 30).length,
+    };
+  });
+  const stageMax = Math.max(1, ...stageTable.map((r) => r.deals.length));
   const mgRows = mgRowsOf(mgTab);
   const mgDone = mgRows.filter((w) => w.margin_usd != null);
   const mgSales = mgDone.reduce((s, w) => s + w.sales_usd, 0);
@@ -761,12 +847,23 @@ function StatisticsTab() {
     { stage: "PO", count: fPo, rate: pct1(fPo, fQuote), label: "PO / Quote" },
     { stage: "Revenue", count: fRev, rate: pct1(fRev, fPo), label: "Revenue / PO" },
   ].map((d) => ({ ...d, tag: d.label ? `${d.count} · ${d.rate}%` : String(d.count) }));
-  // 파이프라인 10단계 분포 — 색은 5개 중분류(phase).
-  const stageRows = data.stage_distribution.map((count, i) => ({
-    name: `${i + 1}. ${data.steps[i] ?? ""}`,
-    count,
-    phase: phaseOfStage(i + 1),
-  }));
+
+  // 근거 목록 만들기 ------------------------------------------------------------
+  const money0 = (usd: number) => fmtMoney(cur, toCur(usd));
+  const drillWon = (key: string, title: string, rows: typeof stat.won_margin): Drill => ({
+    key, title, rows: rows.map((w) => ({
+      rfq_id: w.rfq_id, no: w.project_no, customer: w.customer, date: w.date,
+      value: money0(w.sales_usd), note: w.margin_pct == null ? "No vendor P/O yet" : `GM ${w.margin_pct}%`,
+    })),
+  });
+  const drillRfq = (key: string, title: string, rows: typeof pRfqRows): Drill => ({
+    key, title, rows: rows.map((d) => ({ rfq_id: d.rfq_id, no: d.rfq_no, customer: d.customer, date: d.date, value: "", note: d.status })),
+  });
+  const drillPipe = (key: string, title: string, rows: { r: (typeof prow)[number]; v: string; note: string; date: string }[]): Drill => ({
+    key, title, rows: rows.map(({ r, v, note, date }) => ({
+      rfq_id: r.rfq_id, no: r.project_no || r.kmaris_rfq_no, customer: r.customer, date, value: v, note,
+    })),
+  });
 
   // 커스텀 호버 툴팁(상세내역) --------------------------------------------
   // RFQ 툴팁 — 번호 나열 대신 고객사별 건수 상위 3 + 기타, 그리고 견적·발주 전환.
@@ -879,19 +976,23 @@ function StatisticsTab() {
         <StatCell label="Revenue" value={fmtMoney(cur, mRevenue)} tip="Tax-invoice month (domestic) or AR invoice date (export · PI)"
           extra={<DeltaChip cur={mRevenue} prev={mRevenuePrev} label={cmpLabel} />}
           spark={sparkOf(stat.series.revenue[cur])} />
-        <StatCell label="Orders Won" value={fmtMoney(cur, mOrder)} tip="Order value in the period"
+        <StatCell label="Orders Won" value={fmtMoney(cur, mOrder)} tip="Order value in the period · click for deals"
+          onClick={() => toggleDrill(drillWon("won", `Orders won · ${periodLabel}`, wonInP))}
           extra={<DeltaChip cur={mOrder} prev={mOrderPrev} label={cmpLabel} />}
           spark={sparkOf(stat.series.order[cur])} />
         <StatCell label="Gross Profit" value={`${curUnit(cur)} ${num(Math.round(toCur(gpNow.margin)))}`}
+          onClick={() => toggleDrill(drillWon("gp", `Gross profit — won deals · ${periodLabel}`, wonInP.filter((w) => w.margin_usd != null)))}
           tip={`Won deals with a vendor P/O (${gpNow.n}) — order value minus purchase`}
           extra={<>
             {gpNow.pct != null ? <span className="stat-sub">GM {gpNow.pct}%</span> : null}
             {gpPrev ? <DeltaChip cur={gpNow.margin} prev={gpPrev.margin} label={cmpLabel} /> : null}
           </>} />
         <StatCell label="Win Rate" value={winRate == null ? "—" : `${winRate}%`}
+          onClick={() => toggleDrill(drillRfq("win", `Quoted RFQs · ${periodLabel}`, pRfqRows.filter((d) => d.status !== "Open")))}
           tip="RFQs received in the period: reached P/O ÷ quoted"
           extra={<span className="stat-sub">{fPo}/{fQuote} quoted{mQuote ? ` · value ${pct1(mOrder, mQuote)}%` : ""}</span>} />
-        <StatCell label="RFQs" value={mRfq} tip="RFQs received in the period"
+        <StatCell label="RFQs" value={mRfq} tip="RFQs received in the period · click for the list"
+          onClick={() => toggleDrill(drillRfq("rfq", `RFQs received · ${periodLabel}`, pRfqRows))}
           extra={<DeltaChip cur={mRfq} prev={mRfqPrev} label={cmpLabel} />}
           spark={sparkOf(stat.rfq_count)} />
       </div>
@@ -901,6 +1002,11 @@ function StatisticsTab() {
           tip={`Outstanding receivables (${curLabel(cur)})`}
           extra={ops.overdue ? <span className="stat-flag red">Overdue {ops.overdue}</span> : null} />
         <StatCell label="Open Pipeline" value={`${curUnit(cur)} ${num(Math.round(toCur(openPipeline)))}`}
+          onClick={() => toggleDrill({
+            key: "open", title: "Open quotes (now)",
+            rows: openQuotes.map((q) => ({ rfq_id: q.rfq_id, no: q.project_no, customer: q.customer, date: q.date,
+              value: money0(q.sales_usd), note: q.margin_pct == null ? "" : `est. GM ${q.margin_pct}%` })),
+          })}
           tip="Quotes sent and still open (not won, lost or expired)"
           extra={<span className="stat-sub">{openQuotes.length} quotes</span>} />
         <StatCell label="Delivery Delays" value={stat.delivery_delays} tip="Past promised date"
@@ -909,10 +1015,32 @@ function StatisticsTab() {
           tone={ops.urgent ? "amber" : undefined}
           extra={ops.expiring ? <span className="stat-flag amber">Expiring {ops.expiring}</span> : null} />
       </div>
+      {drill ? (
+        <div className="stat-drill">
+          <div className="stat-drill-h">
+            <b>{drill.title}</b><span>{drill.rows.length} deals · click a row to open</span>
+            <button type="button" className="stat-drill-x" onClick={() => setDrill(null)} aria-label="Close">×</button>
+          </div>
+          <div className="stat-drill-body">
+            {drill.rows.length === 0 ? <div className="state">Nothing here.</div> : drill.rows.map((d, i) => (
+              <div key={`${d.rfq_id}-${i}`} className="stat-drill-row" role="button"
+                onClick={() => router.push(`/project?rfq=${d.rfq_id}`)}>
+                <span className="no">{d.no}</span>
+                <span className="c" title={d.customer}>{d.customer}</span>
+                <span className="d">{d.date}</span>
+                <span className="v">{d.value}</span>
+                <span className="x">{d.note}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="stat-strip-label">Speed · {periodLabel} <span>median days · deals that reached the end step in the period</span></div>
       <div className="stat-strip now">
         {speeds.map((sp) => (
           <StatCell key={sp.key} label={sp.label}
+            onClick={() => toggleDrill(drillPipe(`sp-${sp.key}`, `${sp.label} · ${periodLabel}`,
+              sp.now.rows.map((x) => ({ r: x.r, v: `${Math.round(x.d * 10) / 10} d`, note: sp.tip, date: x.end.slice(0, 10) }))))}
             value={sp.now.med == null ? "—" : `${sp.now.med} d`}
             tip={`${sp.tip} · ${sp.now.n} deals`}
             extra={<>
@@ -1123,7 +1251,10 @@ function StatisticsTab() {
                 const b = r.code === "(none)" ? { text: "No reason", tone: "other" } : closeReasonBadge(r.code);
                 const top = [...r.cust.entries()].sort((x, y) => y[1] - x[1]).slice(0, 3);
                 return (
-                  <div key={r.code} className="stat-lost-row"
+                  <div key={r.code} className="stat-lost-row" role="button"
+                    onClick={() => toggleDrill(drillPipe(`lost-${r.code}`, `Lost — ${b.text} · ${periodLabel}`,
+                      lostDeals.filter((x) => (closeReasonCodes(x.close_reason).length ? closeReasonCodes(x.close_reason) : ["(none)"]).includes(r.code))
+                        .map((x) => ({ r: x, v: lostValue.get(x.rfq_id) ? money0(lostValue.get(x.rfq_id) ?? 0) : "", note: x.close_reason_note || "", date: (x.closed_at || "").slice(0, 10) }))))}
                     title={`${CLOSE_REASONS.find((c) => c.code === r.code)?.label ?? b.text}\n${top.map(([c, n]) => `${c} ${n}`).join(" · ")}`}>
                     <span className={`close-badge tone-${b.tone}`}>{b.text}</span>
                     <span className="bar"><i className={`tone-${b.tone}`} style={{ width: `${(r.n / lostMax) * 100}%` }} /></span>
@@ -1218,58 +1349,101 @@ function StatisticsTab() {
 
         <div className="stat-chart">
           <SubHead title="Top 10 Customers" sub={`by revenue · ${periodLabel}`} />
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={custTop} layout="vertical" margin={{ top: 0, right: 48, bottom: 0, left: 0 }} barCategoryGap={3}>
-              <XAxis type="number" hide />
-              <YAxis type="category" dataKey="name" width={140} interval={0} tick={AXIS_TICK} tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
-              <Bar dataKey="amount" name="Revenue" fill="#0055a8" radius={[0, 2, 2, 0]}>
-                <LabelList dataKey="amount" position="right" formatter={(v) => compact(Number(v) || 0)}
-                  style={{ fontSize: 10, fill: "#45526a" }} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <table className="stat-cw stat-ct">
+            <thead>
+              <tr><th>Customer</th><th>Revenue</th><th>Share</th><th>Cum.</th><th title="Deals won in the period">Won</th><th title="Won deals in the period: order − purchase">Margin</th><th>GM%</th></tr>
+            </thead>
+            <tbody>
+              {custRows.map((c) => (
+                <tr key={c.name} role="button" className="clk"
+                  onClick={() => toggleDrill(drillWon(`cust-${c.name}`, `${c.name} — won deals · ${periodLabel}`, c.won))}>
+                  <td className="n" title={c.name}>{c.name}</td>
+                  <td className="rev" title={fmtMoney(cur, c.amount)}>
+                    <i style={{ width: Math.round((c.amount / custMax) * 46) }} />{c.amount ? compact(c.amount) : "—"}
+                  </td>
+                  <td>{c.amount ? `${c.share}%` : ""}</td>
+                  <td className="muted">{c.amount ? `${c.cum}%` : ""}</td>
+                  <td>{c.deals || ""}</td>
+                  <td title={c.deals ? fmtMoney(cur, toCur(c.margin)) : ""}>{c.gm != null ? compact(toCur(c.margin)) : ""}</td>
+                  <td className="gm">{c.gm != null ? `${c.gm}%` : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         {/* 파이프라인 10단계 분포 — 지금 각 단계에 머문 딜 수. 색은 5개 중분류(phase). */}
         <div className="stat-chart">
-          <SubHead title="Deals by Stage" sub="now" />
-          <ResponsiveContainer width="100%" height={stageRows.length * 22 + 8}>
-            <BarChart data={stageRows} layout="vertical" margin={{ top: 0, right: 32, bottom: 0, left: 0 }} barCategoryGap={3}>
-              <XAxis type="number" hide allowDecimals={false} />
-              <YAxis type="category" dataKey="name" width={150} interval={0} tick={AXIS_TICK} tickLine={false} axisLine={false} />
-              <Tooltip
-                cursor={{ fill: "rgba(42,120,214,0.06)" }}
-                formatter={(v) => [`${Number(v) || 0} deals`, "Count"]}
-              />
-              <Bar dataKey="count" radius={[0, 2, 2, 0]} background={{ fill: "#f4f7fb" }}>
-                {stageRows.map((d, i) => <Cell key={i} fill={PHASE_RAMP[d.phase]} />)}
-                <LabelList
-                  dataKey="count"
-                  position="right"
-                  formatter={(v) => {
-                    const n = Number(v) || 0;
-                    return n ? String(n) : "";
-                  }}
-                  style={{ fontSize: 10, fontWeight: 700, fill: "#111827" }}
-                />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <SubHead title="Deals by Stage" sub="now · open deals" />
+          <table className="stat-cw stat-st">
+            <thead>
+              <tr><th>Stage</th><th>Deals</th><th title="Stages 1–4: open quote value · 5+: order value">Value</th><th title="Median days since the deal reached this stage">Days</th><th title="Deals sitting here more than 30 days">&gt;30d</th></tr>
+            </thead>
+            <tbody>
+              {stageTable.map((st) => (
+                <tr key={st.no} role="button" className={st.deals.length ? "clk" : ""}
+                  onClick={() => st.deals.length && toggleDrill(drillPipe(`stage-${st.no}`, `${st.no}. ${st.label} — now`,
+                    [...st.deals].sort((x, y) => (y.days ?? -1) - (x.days ?? -1))
+                      .map((d) => ({ r: d.r, v: d.usd ? money0(d.usd) : "", note: d.days == null ? "" : `${d.days} days here`, date: stageDateOf(d.r, st.no).slice(0, 10) }))))}>
+                  <td className="n"><span className="stn" style={{ background: PHASE_RAMP[st.phase] }}>{st.no}</span>{st.label}</td>
+                  <td className="cnt"><i style={{ width: Math.round((st.deals.length / stageMax) * 40), background: PHASE_RAMP[st.phase] }} />{st.deals.length || ""}</td>
+                  <td title={st.usd ? fmtMoney(cur, toCur(st.usd)) : ""}>{st.usd ? compact(toCur(st.usd)) : ""}</td>
+                  <td>{st.med == null ? "" : `${st.med}d`}</td>
+                  <td className={st.stale ? "lost" : ""}>{st.stale || ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
         <div className="stat-chart stat-chart--wide">
-          <SubHead title="Top 10 Items" sub={`by invoiced amount · ${periodLabel}`} />
-          <ResponsiveContainer width="100%" height={230}>
-            <BarChart data={itemTop} layout="vertical" margin={{ top: 0, right: 48, bottom: 0, left: 0 }} barCategoryGap={3}>
-              <XAxis type="number" hide />
-              <YAxis type="category" dataKey="name" width={260} interval={0} tick={{ ...AXIS_TICK, fontSize: 10 }} tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v) => fmtMoney(cur, Number(v) || 0)} cursor={{ fill: "rgba(0,85,168,0.05)" }} />
-              <Bar dataKey="amount" name="Revenue" fill="#2e8b57" radius={[0, 2, 2, 0]}>
-                <LabelList dataKey="amount" position="right" formatter={(v) => compact(Number(v) || 0)}
-                  style={{ fontSize: 10, fill: "#45526a" }} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="stat-mg-head">
+            <SubHead title={itemView === "cat" ? "Revenue by Category" : "Top 10 Items"} sub={`by invoiced amount · ${periodLabel}`} />
+            <div className="stat-cur-toggle sm">
+              <button className={itemView === "cat" ? "on" : ""} onClick={() => setItemView("cat")}>By category</button>
+              <button className={itemView === "item" ? "on" : ""} onClick={() => setItemView("item")}>By item</button>
+            </div>
+          </div>
+          {itemView === "cat" && stat.item_month ? (
+            catTop.length === 0 ? <div className="state">No invoiced items in this period.</div> : (
+              <div className="stat-cat">
+                {catTop.map((c) => (
+                  <div key={c.cat}>
+                    <div className={`stat-cat-row${c.cat === "Unclassified" ? " un" : ""}`} role="button"
+                      onClick={() => setOpenCat(openCat === c.cat ? null : c.cat)}
+                      title={`${fmtMoney(cur, c.amount)} · ${c.items.length} items — click to list`}>
+                      <span className="t">{openCat === c.cat ? "▾" : "▸"} {c.cat}</span>
+                      <span className="bar"><i style={{ width: `${(c.amount / catMax) * 100}%` }} /></span>
+                      <b>{compact(c.amount)}</b>
+                      <span className="pct">{catTotal ? Math.round((c.amount / catTotal) * 100) : 0}%</span>
+                    </div>
+                    {openCat === c.cat ? (
+                      <div className="stat-cat-items">
+                        {c.items.map((it) => (
+                          <div key={it.name} className="stat-cat-item" title={fmtMoney(cur, it.amount)}>
+                            <span>{it.name}</span><b>{compact(it.amount)}</b>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+                {catTop.some((c) => c.cat === "Unclassified") ? (
+                  <div className="stat-cat-note">Unclassified = part numbers not in the item master with a category (Data › Items).</div>
+                ) : null}
+              </div>
+            )
+          ) : (
+            <div className="stat-cat">
+              {itemTop.length === 0 ? <div className="state">No invoiced items in this period.</div> : itemTop.map((it) => (
+                <div key={it.name} className="stat-cat-row" title={fmtMoney(cur, it.amount)}>
+                  <span className="t">{it.name}</span>
+                  <span className="bar"><i style={{ width: `${(it.amount / itemMax) * 100}%` }} /></span>
+                  <b>{compact(it.amount)}</b>
+                  <span className="pct" />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
       </div>
@@ -1285,6 +1459,7 @@ function StatCell({
   tone,
   extra,
   spark,
+  onClick,
 }: {
   label: string;
   value: string | number;
@@ -1293,9 +1468,12 @@ function StatCell({
   extra?: React.ReactNode;
   /** 12개월 추세(작은 선) — 값 칸 오른쪽 위. */
   spark?: number[];
+  /** 누르면 근거 목록을 연다. */
+  onClick?: () => void;
 }) {
   return (
-    <div className={`stat-cell${tone ? ` ${tone}` : ""}`} title={tip}>
+    <div className={`stat-cell${tone ? ` ${tone}` : ""}${onClick ? " clk" : ""}`} title={tip}
+      role={onClick ? "button" : undefined} onClick={onClick}>
       {spark && spark.some((v) => v) ? <Sparkline values={spark} /> : null}
       <div className="stat-cell-l">{label}</div>
       <div className="stat-cell-v">

@@ -2799,7 +2799,7 @@ export type StatisticsData = {
   item_top: StatItemTop;
   // 달별 고객·품목 매출(원통화 USD·KRW, months 순서) — 화면이 고른 기간으로 순위를 낸다.
   customer_month?: Record<CurrencyKey, Record<string, number[]>>;
-  item_month?: Record<CurrencyKey, { part_no: string; description: string; m: number[] }[]>;
+  item_month?: Record<CurrencyKey, { part_no: string; description: string; category?: string; m: number[] }[]>;
   customer_pad?: string[];
   // 작년 같은 달(1~12월) — "작년 같은 기간 대비" 비교용.
   prev_year?: {

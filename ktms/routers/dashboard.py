@@ -4,6 +4,8 @@ from __future__ import annotations
 from sqlalchemy.orm import defer
 
 from _core import (
+    ItemMaster,
+    ItemCategory,
     ARRecord,
     ARStatus,
     CommercialInvoice,
@@ -1654,6 +1656,20 @@ def statistics(months: int = 12):
         item_pad = pad_ord_items + [it for it in pad_qtn_items
                                     if it["part_no"] not in {x["part_no"] for x in pad_ord_items}]
 
+        # 품목 → 대분류 이름(품목 마스터의 분류가 2단이면 부모). 품번이 마스터에 없거나 분류가
+        # 비어 있으면 "" — 화면이 Unclassified 로 묶는다.
+        _cats = {c.id: c for c in s.query(ItemCategory).all()}
+        _pn_cat: dict[str, str] = {}
+        for _im in s.query(ItemMaster.part_no, ItemMaster.category_id).filter(ItemMaster.category_id.isnot(None)).all():
+            _c = _cats.get(_im.category_id)
+            while _c is not None and _c.parent_id and (_c.level or 1) > 1:
+                _c = _cats.get(_c.parent_id)
+            if _c is not None:
+                _pn_cat.setdefault((_im.part_no or "").strip().upper(), _c.name or "")
+
+        def _item_cat(pn: str) -> str:
+            return _pn_cat.get((pn or "").strip().upper(), "")
+
         return {
             "months": month_labels,
             # 축은 12월까지 있으므로, KPI 스트립이 기본으로 설 달을 따로 알려준다.
@@ -1678,6 +1694,7 @@ def statistics(months: int = 12):
             "customer_month": {cur: {nm: [round(m.get(mo, 0.0), 2) for mo in month_labels]
                                      for nm, m in cust_rev_m[cur].items()} for cur in CURS},
             "item_month": {cur: [{"part_no": r["part_no"], "description": r["description"],
+                                  "category": _item_cat(r["part_no"]),
                                   "m": [round(r["m"].get(mo, 0.0), 2) for mo in month_labels]}
                                  for r in item_rev_m[cur].values()] for cur in CURS},
             "customer_pad": [c["name"] for c in cust_pad[:30]],
