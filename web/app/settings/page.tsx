@@ -5100,6 +5100,14 @@ export function CategoriesTab({ onOpenItems }: {
   const [autoRows, setAutoRows] = useState<AutoCategoryProposal[] | null>(null);
   // 체크한 품목만으로 제안을 냈을 때 그 수(0 = 미분류 전체).
   const [autoScoped, setAutoScoped] = useState(0);
+  // 미리보기 줄 고치기 — 펼친 줄 · 힌트 낱말 · 직접 고른 분류 · 진행/안내.
+  const [fixIdx, setFixIdx] = useState<number | null>(null);
+  const [fixHint, setFixHint] = useState("");
+  const [fixCat, setFixCat] = useState<number | null>(null);
+  const [fixBusy, setFixBusy] = useState(false);
+  const [fixMsg, setFixMsg] = useState("");
+  const [autoCats, setAutoCats] = useState<ItemCategory[]>([]);
+  const [autoEdited, setAutoEdited] = useState<Set<number>>(() => new Set());
   const [autoPending, setAutoPending] = useState(0);
   const [autoSkip, setAutoSkip] = useState<Set<number>>(() => new Set());
   const [autoBusy, setAutoBusy] = useState(false);
@@ -5346,6 +5354,9 @@ export function CategoriesTab({ onOpenItems }: {
   async function openAuto() {
     setAutoOpen(true);
     setAutoRows(null);
+    setFixIdx(null);
+    setAutoEdited(new Set());
+    if (!autoCats.length) fetchItemCategories().then(setAutoCats).catch(() => setAutoCats([]));
     setAutoSkip(new Set());
     setErr("");
     setNote("");
@@ -5390,6 +5401,53 @@ export function CategoriesTab({ onOpenItems }: {
     } finally {
       setAutoBusy(false);
     }
+  }
+
+  function openFix(i: number) {
+    if (fixIdx === i) { setFixIdx(null); return; }
+    setFixIdx(i);
+    setFixHint("");
+    setFixCat(autoRows?.[i]?.category_id ?? null);
+    setFixMsg("");
+  }
+  function markEdited(i: number) {
+    setAutoEdited((prev) => new Set(prev).add(i));
+    setAutoSkip((prev) => { const n = new Set(prev); n.delete(i); return n; });
+  }
+  // 힌트 낱말로 그 줄만 다시 찾는다 — 분류 이름에 그 낱말이 든 곳 중에서 품명과도 맞는 쪽.
+  async function retryWithHint(i: number) {
+    const row = autoRows?.[i];
+    const hint = fixHint.trim();
+    if (!row || !hint) return;
+    setFixBusy(true);
+    setFixMsg("");
+    try {
+      const r = await previewAutoClassifyFor([{
+        item_id: row.item_id ?? null, part_no: row.part_no, description: row.description, maker: row.maker, hint,
+      }]);
+      const hit = r.proposals[0];
+      if (hit && hit.reason.startsWith("hint")) {
+        setAutoRows((prev) => (prev ? prev.map((p, j) => (j === i ? { ...hit, context: hit.context ?? p.context } : p)) : prev));
+        setFixCat(hit.category_id);
+        markEdited(i);
+        setFixMsg(`→ ${hit.category_path}`);
+      } else {
+        setFixMsg(`No category name contains “${hint}”. Try another word (e.g. crane, pump, valve) or pick it below.`);
+      }
+    } catch (e) {
+      setFixMsg(e instanceof Error ? e.message : "Retry failed");
+    } finally {
+      setFixBusy(false);
+    }
+  }
+  // 직접 고른 분류로 그 줄을 바꾼다.
+  function useFixCat(i: number) {
+    if (fixCat == null) return;
+    const c = autoCats.find((x) => x.id === fixCat);
+    setAutoRows((prev) => (prev ? prev.map((p, j) => (j === i
+      ? { ...p, category_id: fixCat, category_path: c?.path || p.category_path, reason: "chosen by hand" } : p)) : prev));
+    markEdited(i);
+    setFixIdx(null);
   }
 
   function openBulk() {
@@ -5922,8 +5980,8 @@ export function CategoriesTab({ onOpenItems }: {
                   </thead>
                   <tbody>
                     {autoRows.map((p, i) => (
-                      <tr key={`${p.item_id ?? "u"}-${p.part_no}-${p.description}`}
-                          className={autoSkip.has(i) ? "auto-cat-off" : ""}>
+                      <Fragment key={`${p.item_id ?? "u"}-${p.part_no}-${p.description}-${i}`}>
+                      <tr className={`${autoSkip.has(i) ? "auto-cat-off" : ""}${fixIdx === i ? " auto-cat-fixing" : ""}`}>
                         <td className="row-tools">
                           <input
                             type="checkbox"
@@ -5947,6 +6005,13 @@ export function CategoriesTab({ onOpenItems }: {
                         <td className="auto-cat-path">
                           {p.category_path}
                           {p.item_id == null ? <span className="auto-cat-new">new item</span> : null}
+                          {autoEdited.has(i) ? <span className="auto-cat-new auto-cat-edited">edited</span> : null}
+                          <div className="auto-cat-acts">
+                            <button type="button" className={`link-btn${fixIdx === i ? " on" : ""}`} onClick={() => openFix(i)}
+                              title="Wrong? Re-try with a keyword, or pick the category yourself">
+                              {fixIdx === i ? "▴ Close" : "✎ Fix"}
+                            </button>
+                          </div>
                         </td>
                         <td className="auto-cat-why">
                           <div className="auto-cat-reason">{p.reason}</div>
@@ -5963,6 +6028,43 @@ export function CategoriesTab({ onOpenItems }: {
                           )}
                         </td>
                       </tr>
+                      {fixIdx === i ? (
+                        <tr className="auto-cat-fixrow">
+                          <td />
+                          <td colSpan={4}>
+                            <div className="auto-cat-fix">
+                              <div className="auto-cat-fix-col">
+                                <div className="auto-cat-fix-h">Re-try with a keyword</div>
+                                <div className="auto-cat-fix-line">
+                                  <input
+                                    value={fixHint}
+                                    onChange={(e) => setFixHint(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); retryWithHint(i); } }}
+                                    placeholder="e.g. crane hydraulic · wire rope · generator"
+                                    autoFocus
+                                  />
+                                  <button type="button" className="btn sm" disabled={fixBusy || !fixHint.trim()} onClick={() => retryWithHint(i)}>
+                                    {fixBusy ? "…" : "↻ Retry"}
+                                  </button>
+                                </div>
+                                {fixMsg ? <div className="auto-cat-fix-msg">{fixMsg}</div> : (
+                                  <div className="auto-cat-fix-msg muted">The keyword is matched against category names first, then together with the description.</div>
+                                )}
+                              </div>
+                              <div className="auto-cat-fix-col">
+                                <div className="auto-cat-fix-h">Or pick it yourself</div>
+                                <CategoryPicker value={fixCat} onChange={setFixCat} />
+                                <div className="auto-cat-fix-line" style={{ justifyContent: "flex-end" }}>
+                                  <button type="button" className="btn sm primary" disabled={fixCat == null} onClick={() => useFixCat(i)}>
+                                    Use this category
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>

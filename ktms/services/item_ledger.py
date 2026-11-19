@@ -1209,8 +1209,30 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
         is_service = (r.get("item_type") or guess_item_type(pn, desc)) == "service"
         cid: int | None = None
         reason = ""
+        # 0) 사람이 준 힌트 낱말 — 제안이 틀렸을 때 미리보기 창에서 "crane", "sling" 처럼 한 낱말을
+        #    더 넣어 다시 찾는다. 다른 어떤 근거보다 앞선다(틀렸다고 판단한 사람이 준 말이다).
+        #    분류 이름에 힌트 낱말이 하나라도 들어간 것만, 품명 낱말이 함께 맞으면 그쪽이 먼저.
+        hint = (r.get("hint") or "").strip()
+        if hint:
+            hw, dw0 = _desc_words(hint), _desc_words(desc)
+            # 힌트 낱말이 든 분류만 후보로, 힌트를 많이 맞힌 것 → 품명도 맞힌 것 → 깊은 것 순.
+            # (일반 순위표에 섞으면 'crane' 과 품명의 'valve' 가 한 묶음이 돼 계통이 갈리고 버려졌다.)
+            scored: dict[tuple, list[int]] = {}
+            for cid_, words in cat_words.items():
+                hh = words & hw
+                if not hh:
+                    continue
+                key = (len(hh), len(words & dw0), cats[cid_].level or 0)
+                scored.setdefault(key, []).append(cid_)
+            for key in sorted(scored, reverse=True):
+                cids_ = scored[key]
+                best = cids_[0] if len(cids_) == 1 else _pick(cats, cids_)[0]
+                if best is not None:
+                    hit = sorted((cat_words[best] if best in cat_words else set()) & (hw | dw0)) or sorted(hw)
+                    cid, reason = best, f"hint “{hint}” — matched “{', '.join(hit)}”"
+                    break
         # 1) 같은 품명이 이미 분류돼 있다.
-        c, why = _pick(cats, fenced(by_desc.get(_norm(desc)) or [], is_service))
+        c, why = _pick(cats, fenced(by_desc.get(_norm(desc)) or [], is_service)) if cid is None else (None, "")
         if c:
             cid, reason = c, f"same description — {why}"
         # 2) 같은 품번 계열이 한 분류(또는 한 상위)로 모여 있다.

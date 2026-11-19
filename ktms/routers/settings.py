@@ -2946,6 +2946,7 @@ class ItemLedgerAssign(BaseModel):
     part_no: str | None = None       # 미연결 품목 배정 시(마스터 신규 생성/연결 키)
     description: str | None = ""
     maker: str | None = ""
+    hint: str | None = None          # 자동 분류 미리보기에서 다시 찾을 때 사람이 준 낱말(배정엔 안 씀)
 
 
 def _assign_one_category(s, target: "ItemLedgerAssign") -> tuple[int, int]:
@@ -3104,6 +3105,7 @@ def preview_auto_classify_scoped(body: ItemLedgerAutoScope):
                 "description": (m.description if m else t.description) or "",
                 "maker": (m.maker if m else t.maker) or "",
                 "item_type": (m.item_type if m else "") or "",
+                "hint": (t.hint or "").strip(),
             })
         out = suggest_categories(s, rows=rows)
         for r in out:

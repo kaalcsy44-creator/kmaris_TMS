@@ -2291,7 +2291,7 @@ export function previewAutoClassify(): Promise<{
 }
 /** 목록에서 체크한 품목만 분류 제안(미적용). */
 export function previewAutoClassifyFor(targets: {
-  item_id?: number | null; part_no?: string; description?: string; maker?: string;
+  item_id?: number | null; part_no?: string; description?: string; maker?: string; hint?: string;
 }[]): Promise<{ proposals: AutoCategoryProposal[]; pending: number }> {
   return post("/api/admin/settings/item-ledger/auto-classify/preview", { targets });
 }

@@ -22832,3 +22832,29 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
   font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; color: #8a94a6;
 }
 .auto-cat-ctx.none { font-style: italic; }
+
+/* 자동 분류 미리보기 — 줄 고치기(✎ Fix): 키워드로 다시 찾기 / 직접 고르기 */
+.auto-cat-acts { margin-top: 3px; }
+.auto-cat-acts .link-btn { font-size: 11.5px; font-weight: 600; }
+.auto-cat-acts .link-btn.on { color: var(--navy); }
+.auto-cat-edited { background: #e9f5ee; color: #1f7a43; }
+.auto-cat-table tr.auto-cat-fixing td { background: #f6f9fd; border-bottom-color: transparent; }
+.auto-cat-table tr.auto-cat-fixrow td { background: #f6f9fd; padding-top: 2px; padding-bottom: 12px; }
+.auto-cat-fix {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 18px;
+  padding: 10px 12px;
+  border: 1px solid #c9dcf6;
+  border-radius: 8px;
+  background: #fff;
+}
+.auto-cat-fix-h { font-size: 12px; font-weight: 800; color: var(--navy); margin-bottom: 6px; }
+.auto-cat-fix-line { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+.auto-cat-fix-line input {
+  flex: 1; min-width: 0; border: 1px solid var(--line-strong); border-radius: 6px;
+  padding: 5px 8px; font: inherit; font-size: 12.5px;
+}
+.auto-cat-fix-msg { margin-top: 6px; font-size: 11.5px; color: #1f7a43; }
+.auto-cat-fix-msg.muted { color: var(--muted); }
+@media (max-width: 760px) { .auto-cat-fix { grid-template-columns: 1fr; } }
