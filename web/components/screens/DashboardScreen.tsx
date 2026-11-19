@@ -14,7 +14,11 @@ import {
   fetchSettingsVessels,
   fetchStatistics,
   fetchStatisticsDebug,
+  closeReasonCodes,
+  closeReasonBadge,
+  CLOSE_REASONS,
 } from "@/lib/api";
+import { stageDateOf } from "@/lib/deal";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import { can, getToken, isAdmin } from "@/lib/auth";
 import type {
@@ -24,7 +28,7 @@ import type {
 import { PipelineModal, byProjectNo } from "@/components/screens/ProjectsScreen";
 import BriefingTab from "@/components/screens/BriefingTab";
 import {
-  ResponsiveContainer, ComposedChart, Line, BarChart, Bar,
+  ResponsiveContainer, ComposedChart, Line, LineChart, BarChart, Bar,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend, Cell, LabelList, ReferenceArea,
 } from "recharts";
 import { tr } from "@/lib/labels";
@@ -444,18 +448,27 @@ function fmtMoney(cur: StatCurKey, n: number): string {
 }
 
 /* 전월 대비 증감 꼬리표. prev=0 이면 표시 안 함. */
-function DeltaChip({ cur, prev, label = "vs previous month" }: { cur: number; prev: number; label?: string }) {
+function DeltaChip({ cur, prev, label = "vs previous month", invert = false }: { cur: number; prev: number; label?: string; invert?: boolean }) {
   if (!prev) return null;
   const pct = ((cur - prev) / Math.abs(prev)) * 100;
   const up = pct >= 0;
+  // invert: 작을수록 좋은 값(걸린 날) — 줄면 초록.
+  const good = invert ? !up : up;
   return (
-    <span className={`stat-delta ${up ? "up" : "down"}`} title={label}>
+    <span className={`stat-delta ${good ? "up" : "down"}`} title={label}>
       {up ? "▲" : "▼"}{Math.abs(Math.round(pct))}%
     </span>
   );
 }
 
 type PeriodType = "M" | "Q" | "Y";
+/* 속도 지표 — 두 단계 완료 일시 사이 걸린 날(중앙값). */
+const SPEEDS = [
+  { key: "quote", label: "Quote Turnaround", from: 1, to: 4, tip: "RFQ received → quotation sent to the customer" },
+  { key: "vendor", label: "Vendor Reply", from: 2, to: 3, tip: "RFQ sent to vendors → first vendor quote received" },
+  { key: "cycle", label: "Sales Cycle", from: 1, to: 5, tip: "RFQ received → customer P/O" },
+  { key: "collect", label: "Collection", from: 9, to: 10, tip: "Billed → payment completed" },
+] as const;
 /** a..b(포함) 정수 목록. */
 function range(a: number, b: number): number[] {
   const out: number[] = [];
@@ -484,6 +497,8 @@ function phaseOfStage(stage: number): number {
 function StatisticsTab() {
   const { data, error } = useCachedData("dashboard", fetchDashboard);
   const { data: stat } = useCachedData("statistics", () => fetchStatistics(12));
+  // 단계별 완료 일시·종결 사유는 파이프라인 목록에 이미 있다(같은 캐시를 Projects 화면과 나눠 쓴다).
+  const { data: pipe } = useCachedData("pipeline", () => fetchPipeline());
   const [cur, setCur] = useState<StatCurKey>("USD");
   // 금액 KPI 월 이동 — null 이면 최신(이번 달). 절대 인덱스로 저장하고 로드 후 clamp.
   const [monthIdx, setMonthIdx] = useState<number | null>(null);
@@ -664,6 +679,76 @@ function StatisticsTab() {
   // 진행 중 견적(Open) — 지금 기준 전체(기간 무관).
   const openQuotes = stat.quoted_margin.rows.filter((r) => r.status === "Open");
   const openPipeline = openQuotes.reduce((t, r) => t + r.sales_usd, 0);
+
+  // ── 2차: 속도 · 실주 사유 · 수주율 ───────────────────────────────────────────
+  const prow = pipe?.rows ?? [];
+  // 단계 사이 걸린 날(소수 1자리). 끝 단계가 고른 기간 안에 있는 딜만 센다.
+  const daysBetween = (a: string, b: string) => {
+    const t1 = Date.parse(a.length > 10 ? a : `${a}T00:00`), t2 = Date.parse(b.length > 10 ? b : `${b}T00:00`);
+    return Number.isFinite(t1) && Number.isFinite(t2) ? (t2 - t1) / 86_400_000 : NaN;
+  };
+  const median = (xs: number[]) => {
+    if (!xs.length) return null;
+    const v = [...xs].sort((x, y) => x - y);
+    const m = Math.floor(v.length / 2);
+    return Math.round((v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2) * 10) / 10;
+  };
+  const speedOf = (from: number, to: number, keep: (d: string) => boolean) => {
+    const xs: number[] = [];
+    for (const r of prow) {
+      const a = stageDateOf(r, from), b = stageDateOf(r, to);
+      if (!a || !b || !keep(b)) continue;
+      const d = daysBetween(a, b);
+      if (Number.isFinite(d) && d >= 0) xs.push(d);
+    }
+    return { med: median(xs), n: xs.length };
+  };
+  const speeds = SPEEDS.map((sp) => ({
+    ...sp,
+    now: speedOf(sp.from, sp.to, inP),
+    prev: cmpYoy ? null : speedOf(sp.from, sp.to, inC),
+  }));
+  // 실주 사유 — 고른 기간에 닫은 딜. 한 딜이 여러 갈래면 갈래마다 센다(합계는 딜 수).
+  const lostValue = new Map(stat.quoted_margin.rows.filter((r) => r.status === "Lost").map((r) => [r.rfq_id, r.sales_usd]));
+  const lostDeals = prow.filter((r) => r.cancelled && r.closed_at && inP(r.closed_at));
+  const lostByCode = new Map<string, { n: number; usd: number; cust: Map<string, number> }>();
+  for (const r of lostDeals) {
+    const codes = closeReasonCodes(r.close_reason);
+    for (const c of codes.length ? codes : ["(none)"]) {
+      const e = lostByCode.get(c) ?? { n: 0, usd: 0, cust: new Map() };
+      e.n += 1;
+      e.usd += lostValue.get(r.rfq_id) ?? 0;
+      e.cust.set(r.customer || "—", (e.cust.get(r.customer || "—") ?? 0) + 1);
+      lostByCode.set(c, e);
+    }
+  }
+  const lostRows = [...lostByCode.entries()].map(([code, e]) => ({ code, ...e })).sort((x, y) => y.n - x.n || y.usd - x.usd);
+  const lostMax = Math.max(1, ...lostRows.map((r) => r.n));
+  const lostUsd = lostDeals.reduce((t, r) => t + (lostValue.get(r.rfq_id) ?? 0), 0);
+  // 월별 수주율 — 건수(그 달에 받은 RFQ 중 견적 낸 것 → P/O) · 금액(그 달 수주 ÷ 그 달 견적).
+  const winTrend = stat.months.map((m, i) => {
+    if (future(i)) return { month: monthLabel(m), cnt: null, val: null };
+    const rows = stat.rfq_detail[i] || [];
+    const q = rows.filter((d) => d.status !== "Open").length;
+    const w = rows.filter((d) => d.status === "PO" || d.status === "Invoiced").length;
+    const qv = stat.series.quote[cur][i], ov = stat.series.order[cur][i];
+    return { month: monthLabel(m), cnt: q ? pct1(w, q) : null, val: qv ? pct1(ov, qv) : null };
+  });
+  // 고객별 수주율 — 고른 기간에 RFQ 를 준 고객, RFQ 수 순.
+  const cancelledIds = new Set(prow.filter((r) => r.cancelled).map((r) => r.rfq_id));
+  const custWin = (() => {
+    const m = new Map<string, { rfq: number; quoted: number; won: number; lost: number }>();
+    for (const d of pRfqRows) {
+      const e = m.get(d.customer) ?? { rfq: 0, quoted: 0, won: 0, lost: 0 };
+      e.rfq += 1;
+      if (d.status !== "Open") e.quoted += 1;
+      if (d.status === "PO" || d.status === "Invoiced") e.won += 1;
+      else if (cancelledIds.has(d.rfq_id)) e.lost += 1;
+      m.set(d.customer, e);
+    }
+    return [...m.entries()].map(([name, e]) => ({ name, ...e, rate: e.quoted ? pct1(e.won, e.quoted) : null }))
+      .sort((x, y) => y.rfq - x.rfq || y.won - x.won).slice(0, 10);
+  })();
   const mgRows = mgRowsOf(mgTab);
   const mgDone = mgRows.filter((w) => w.margin_usd != null);
   const mgSales = mgDone.reduce((s, w) => s + w.sales_usd, 0);
@@ -823,6 +908,19 @@ function StatisticsTab() {
         <StatCell label="Urgent" value={ops.urgent} tip="Level A · expiring"
           tone={ops.urgent ? "amber" : undefined}
           extra={ops.expiring ? <span className="stat-flag amber">Expiring {ops.expiring}</span> : null} />
+      </div>
+      <div className="stat-strip-label">Speed · {periodLabel} <span>median days · deals that reached the end step in the period</span></div>
+      <div className="stat-strip now">
+        {speeds.map((sp) => (
+          <StatCell key={sp.key} label={sp.label}
+            value={sp.now.med == null ? "—" : `${sp.now.med} d`}
+            tip={`${sp.tip} · ${sp.now.n} deals`}
+            extra={<>
+              <span className="stat-sub">n={sp.now.n}</span>
+              {sp.prev?.med != null && sp.now.med != null
+                ? <DeltaChip cur={sp.now.med} prev={sp.prev.med} label={cmpLabel} invert /> : null}
+            </>} />
+        ))}
       </div>
 
       {/* 관리자 전용 감사 패널 — 금액 KPI 가 어떤 오더·견적·AR 에서 왔는지 행 단위로 확인.
@@ -994,6 +1092,77 @@ function StatisticsTab() {
               ))}
             </div>
           ) : null}
+        </div>
+
+        {/* 월별 수주율 — 건수(그 달 RFQ 중 견적 → P/O) · 금액(그 달 수주 ÷ 견적). */}
+        <div className="stat-chart">
+          <SubHead title="Win Rate" sub="monthly · by count and by value" />
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={winTrend} margin={{ top: 10, right: 12, bottom: 0, left: 0 }}
+              onClick={pickMonth} style={{ cursor: "pointer" }}>
+              <CartesianGrid vertical={false} stroke={GRID} />
+              <ReferenceArea x1={selFrom} x2={selLabel} fill="#0055a8" fillOpacity={0.07} />
+              <XAxis dataKey="month" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: GRID }} />
+              <YAxis tickFormatter={(v) => `${v}%`} tick={AXIS_TICK} width={40} tickLine={false} axisLine={false} />
+              <Tooltip formatter={(v, n) => [v == null ? "—" : `${v}%`, n]} />
+              <Legend wrapperStyle={{ fontSize: 11 }} iconSize={9} />
+              <Line type="monotone" dataKey="cnt" name="By count (P/O ÷ quoted RFQs)" stroke="#2e8b57" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              <Line type="monotone" dataKey="val" name="By value (won ÷ quoted)" stroke="#86b6ef" strokeWidth={2} strokeDasharray="4 3" dot={{ r: 2 }} connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* 실주 사유 — 고른 기간에 닫은 딜. 갈래마다 딜 수 · 놓친 견적 금액. */}
+        <div className="stat-chart">
+          <SubHead title="Lost Reasons" sub={`${periodLabel} · ${lostDeals.length} deals · ${fmtMoney(cur, toCur(lostUsd))} quoted`} />
+          {lostRows.length === 0 ? (
+            <div className="state">No deals closed in this period.</div>
+          ) : (
+            <div className="stat-lost">
+              {lostRows.map((r) => {
+                const b = r.code === "(none)" ? { text: "No reason", tone: "other" } : closeReasonBadge(r.code);
+                const top = [...r.cust.entries()].sort((x, y) => y[1] - x[1]).slice(0, 3);
+                return (
+                  <div key={r.code} className="stat-lost-row"
+                    title={`${CLOSE_REASONS.find((c) => c.code === r.code)?.label ?? b.text}\n${top.map(([c, n]) => `${c} ${n}`).join(" · ")}`}>
+                    <span className={`close-badge tone-${b.tone}`}>{b.text}</span>
+                    <span className="bar"><i className={`tone-${b.tone}`} style={{ width: `${(r.n / lostMax) * 100}%` }} /></span>
+                    <b>{r.n}</b>
+                    <span className="pct">{Math.round((r.n / lostDeals.length) * 100)}%</span>
+                    <span className="amt">{r.usd ? compact(toCur(r.usd)) : "—"}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* 고객별 수주율 — 고른 기간에 RFQ 를 준 고객. */}
+        <div className="stat-chart">
+          <SubHead title="Win Rate by Customer" sub={`${periodLabel} · RFQs received`} />
+          {custWin.length === 0 ? (
+            <div className="state">No RFQs in this period.</div>
+          ) : (
+            <table className="stat-cw">
+              <thead>
+                <tr><th>Customer</th><th>RFQs</th><th>Quoted</th><th>Won</th><th>Lost</th><th>Win rate</th></tr>
+              </thead>
+              <tbody>
+                {custWin.map((c) => (
+                  <tr key={c.name}>
+                    <td className="n" title={c.name}>{c.name}</td>
+                    <td>{c.rfq}</td><td>{c.quoted}</td><td className="won">{c.won || ""}</td>
+                    <td className="lost">{c.lost || ""}</td>
+                    <td className="rate">
+                      {c.rate == null ? <span className="muted">—</span> : (
+                        <><i style={{ width: Math.round(c.rate * 0.5) }} />{c.rate}%</>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
 
         {/* 프로젝트 마진 — Won(실적: 오더 vs 발주) / Quoted(진행 중 견적 예상) / Lost(실주·만료).

@@ -22664,3 +22664,44 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
   .stat-strip.now .stat-cell { border-bottom: 1px solid #eef1f5; }
   .stat-spark { display: none; }
 }
+
+/* ── 통계 2차(2026-11-19): 실주 사유 · 고객별 수주율 ─────────────────────────────── */
+.stat-lost { display: flex; flex-direction: column; gap: 5px; padding: 4px 2px 6px; }
+.stat-lost-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 28px 38px 52px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.stat-lost-row .close-badge { justify-self: start; }
+.stat-lost-row .bar { height: 10px; background: #f1f4f8; border-radius: 3px; overflow: hidden; }
+.stat-lost-row .bar i { display: block; height: 100%; border-radius: 3px; background: #9aa6b8; }
+/* 막대 색은 사유 배지의 글자색과 같은 갈래 */
+.stat-lost-row .bar i.tone-price  { background: #e0a33a; }
+.stat-lost-row .bar i.tone-resp   { background: #8f72e6; }
+.stat-lost-row .bar i.tone-noq    { background: #8a94a6; }
+.stat-lost-row .bar i.tone-lead   { background: #de8550; }
+.stat-lost-row .bar i.tone-direct { background: #3aa391; }
+.stat-lost-row .bar i.tone-hold   { background: #5b93d3; }
+.stat-lost-row .bar i.tone-reiss  { background: #5cb46c; }
+.stat-lost-row .bar i.tone-other  { background: #d36a6a; }
+.stat-lost-row b { text-align: right; color: var(--navy); }
+.stat-lost-row .pct { text-align: right; color: var(--muted); font-size: 11px; }
+.stat-lost-row .amt { text-align: right; color: #45526a; font-variant-numeric: tabular-nums; }
+
+.stat-cw { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.stat-cw th {
+  text-align: right; font-size: 11px; font-weight: 700; color: #6b778a;
+  padding: 4px 6px; border-bottom: 1px solid #e3e9f2;
+}
+.stat-cw th:first-child, .stat-cw td.n { text-align: left; }
+.stat-cw td { text-align: right; padding: 4px 6px; border-bottom: 1px solid #f1f4f8; }
+.stat-cw td.n { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #25344a; }
+.stat-cw td.won { color: #1a7a4a; font-weight: 700; }
+.stat-cw td.lost { color: #b23b3b; }
+.stat-cw td.rate { white-space: nowrap; font-weight: 700; color: var(--navy); }
+.stat-cw td.rate i {
+  display: inline-block; height: 8px; margin-right: 6px; vertical-align: middle;
+  background: #2e8b57; border-radius: 2px; max-width: 50px;
+}
