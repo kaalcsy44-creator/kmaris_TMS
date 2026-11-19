@@ -5088,6 +5088,8 @@ export function CategoriesTab({ onOpenItems }: {
   const [rebuilding, setRebuilding] = useState(false);
   const [purging, setPurging] = useState(false);
   const [assignRow, setAssignRow] = useState<ItemLedgerRow | null>(null);
+  // 개별 배정 창의 참고 정보 — 그 품목이 실린 딜(비고·프로젝트·메이커)과 자동 제안.
+  const [assignInfo, setAssignInfo] = useState<AutoCategoryProposal | null | "loading">(null);
   const [assignCat, setAssignCat] = useState<number | null>(null);
   const [assignBusy, setAssignBusy] = useState(false);
   // 다중 선택 → 한 분류로 일괄 배정. 키는 ledgerRowKey(행 순서가 바뀌어도 유지된다).
@@ -5296,6 +5298,10 @@ export function CategoriesTab({ onOpenItems }: {
     setAssignRow(row);
     setAssignCat(row.category_id ?? null);
     setErr("");
+    setAssignInfo("loading");
+    previewAutoClassifyFor([{ item_id: row.item_id ?? null, part_no: row.part_no, description: row.description, maker: row.maker }], true)
+      .then((r) => setAssignInfo(r.proposals[0] ?? null))
+      .catch(() => setAssignInfo(null));
   }
   function closeAssign() {
     setAssignRow(null);
@@ -6124,12 +6130,65 @@ export function CategoriesTab({ onOpenItems }: {
           title={`Assign category — ${assignRow.part_no || assignRow.description || "item"}`}
           onClose={closeAssign}
           form
+          maxWidth={780}
         >
           <p className="hint-inline" style={{ display: "block", marginBottom: 10 }}>
             {assignRow.item_id != null
               ? "Change this item's classification."
               : "This item is not yet in Item Master. Assigning a category registers it and links its price history."}
           </p>
+          {/* 고를 때 볼 것 — 품목 자체 · 거래 상대 · 최근 가격 · 이 품목이 실린 딜 · 자동 제안. */}
+          <dl className="assign-info">
+            <dt>Part No.</dt><dd>{assignRow.part_no || <span className="muted">—</span>}</dd>
+            <dt>Description</dt><dd className="pre">{assignRow.description || <span className="muted">—</span>}</dd>
+            <dt>Maker</dt><dd>{assignRow.maker || <span className="muted">—</span>}</dd>
+            {assignRow.customer || assignRow.vendor ? (
+              <>
+                <dt>Traded with</dt>
+                <dd>
+                  {assignRow.customer ? <span>Customer <b>{assignRow.customer}</b></span> : null}
+                  {assignRow.customer && assignRow.vendor ? " · " : null}
+                  {assignRow.vendor ? <span>Vendor <b>{assignRow.vendor}</b></span> : null}
+                </dd>
+              </>
+            ) : null}
+            {assignRow.buy || assignRow.sell ? (
+              <>
+                <dt>Last price</dt>
+                <dd>
+                  {assignRow.buy ? <span>Buy {assignRow.buy.currency} {assignRow.buy.unit_price.toLocaleString()}{assignRow.buy.date ? ` (${assignRow.buy.date})` : ""}</span> : null}
+                  {assignRow.buy && assignRow.sell ? " · " : null}
+                  {assignRow.sell ? <span>Sell {assignRow.sell.currency} {assignRow.sell.unit_price.toLocaleString()}{assignRow.sell.date ? ` (${assignRow.sell.date})` : ""}</span> : null}
+                </dd>
+              </>
+            ) : null}
+            <dt>From the deal</dt>
+            <dd>
+              {assignInfo === "loading" ? <span className="muted">Reading the deals…</span>
+                : assignInfo?.context?.length ? (
+                  <div className="auto-cat-ctx">
+                    {assignInfo.context.map((c, j) => (
+                      <span key={j} title={c.text}>
+                        <i>{c.src === "remark" ? "Remark" : c.src === "project" ? "Project" : "Maker"}</i>{c.text}
+                      </span>
+                    ))}
+                  </div>
+                ) : <span className="muted">No deal found for this item</span>}
+            </dd>
+            <dt>Suggested</dt>
+            <dd>
+              {assignInfo === "loading" ? <span className="muted">…</span>
+                : assignInfo && assignInfo.category_id ? (
+                  <span className="assign-sugg">
+                    <b>{assignInfo.category_path}</b>
+                    <span className="muted"> — {assignInfo.reason}</span>
+                    {assignCat !== assignInfo.category_id ? (
+                      <button type="button" className="btn sm" onClick={() => setAssignCat(assignInfo.category_id)}>Use</button>
+                    ) : <span className="assign-sugg-on">✓ selected</span>}
+                  </span>
+                ) : <span className="muted">No clear match — pick it below.</span>}
+            </dd>
+          </dl>
           <CategoryPicker value={assignCat} onChange={setAssignCat} />
           <div className="form-actions">
             <button className="btn primary" disabled={assignBusy} onClick={saveAssign}>

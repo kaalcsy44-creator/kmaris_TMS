@@ -989,7 +989,7 @@ _NON_ITEM_RE = re.compile(r"(discount|cert(ificate|ification)?s?|freight|surcha
                           r"courier|insurance|bank|commission|rounding)", re.I)
 
 
-def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]:
+def suggest_categories(session, *, rows: list[dict] | None = None, keep_all: bool = False) -> list[dict]:
     """미분류 품목별 분류 제안 목록.
 
     대상 = (1) 마스터에 있으나 분류가 빈 품목, (2) 마스터에 없는 미연결 품목.
@@ -1318,7 +1318,7 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
                 if c:
                     cid, reason = c, f"maker {text} — {why}"
                     break
-        if cid is None:
+        if cid is None and not keep_all:
             continue
         out.append({
             "item_id": r.get("item_id"),

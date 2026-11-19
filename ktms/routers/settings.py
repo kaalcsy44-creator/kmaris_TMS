@@ -3086,6 +3086,8 @@ def preview_auto_classify():
 class ItemLedgerAutoScope(BaseModel):
     """자동 분류 제안을 낼 품목(목록에서 체크한 것)."""
     targets: list[ItemLedgerAssign] = []
+    # True 면 제안을 못 찾은 품목도 돌려준다(category_id None) — 개별 배정 창이 딜 문맥을 보여 줄 때.
+    keep_all: bool = False
 
 
 @app.post("/api/admin/settings/item-ledger/auto-classify/preview", dependencies=[Depends(require_token)])
@@ -3107,9 +3109,9 @@ def preview_auto_classify_scoped(body: ItemLedgerAutoScope):
                 "item_type": (m.item_type if m else "") or "",
                 "hint": (t.hint or "").strip(),
             })
-        out = suggest_categories(s, rows=rows)
+        out = suggest_categories(s, rows=rows, keep_all=body.keep_all)
         for r in out:
-            r["category_path"] = _category_path(cat_by_id, r["category_id"])
+            r["category_path"] = _category_path(cat_by_id, r["category_id"]) if r["category_id"] else ""
         return {"proposals": out, "pending": len(rows)}
     finally:
         s.close()
