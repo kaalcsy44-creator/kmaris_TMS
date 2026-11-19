@@ -867,6 +867,8 @@ _ABBREV: tuple[tuple[str, str], ...] = (
     (r"\bHYD\b\.?", " HYDRAULIC "),
     (r"\bCOMP\b\.?", " COMPRESSOR "),
     (r"\bT\s*/\s*G\b\.?", " TURBINE GENERATOR "),
+    # 같은 물건의 다른 이름 — 분류 이름은 Generator 로 적혀 있다(Generator Bearing 등).
+    (r"\bALTERNATORS?\b", " GENERATOR ALTERNATOR "),
 )
 
 
@@ -1238,13 +1240,35 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
             if c:
                 ctx_cid, ctx_src, ctx_text, ctx_hit = c, src, text, hit
                 break
+        g_cid, g_hit = by_name(desc, None, is_service) if cid is None else (None, "")
+        g_n = len(g_hit.split(", ")) if g_hit else 0
+        # 3.4) 품명 + 문맥 낱말을 함께 — 'SLEEVE BEARING ASSEMBLY' 만으로는 Bearing 이 다섯 계통에
+        #      있어 못 고르지만, 제목의 'Alternator'(=Generator)가 더해지면 'Generator Bearing'
+        #      하나가 두 낱말로 맞는다. 품명 낱말이 하나 이상 들어간 분류만, 그리고 문맥이 실제로
+        #      낱말을 보탠(두 낱말 이상 맞은) 경우만 — 문맥 낱말만으로 맞은 분류는 여기서 받지 않는다.
+        if cid is None and ctx:
+            dw = _desc_words(desc)
+            cw: set[str] = set()
+            for src, text in ctx:
+                if src != "maker":
+                    cw |= _desc_words(text)
+            if dw and cw - dw:
+                for cids_, hit in ranked(dw | cw, None, is_service):
+                    # 품명만으로 맞힌 답보다 낱말이 더 많이 맞을 때만 — 'CRANKPIN BEARING' 은 품명만으로
+                    # Crankpin Bearing 에 두 낱말이 맞으므로, 제목의 'MAIN' 을 더한 Main Bearing 이 못 이긴다.
+                    if not (hit & dw) or not (hit - dw) or len(hit) < 2 or len(hit) <= g_n:
+                        continue
+                    best = cids_[0] if len(cids_) == 1 else _pick(cats, cids_)[0]
+                    if best is not None:
+                        cid = best
+                        reason = (f"name “{', '.join(sorted(hit & dw))}” + deal “{', '.join(sorted(hit - dw))}”")
+                    break
         # 3.5) 문맥 계통 안에서 품명으로 한 단계 더 — 'Bearings' + 제목 'Main engine spares'
         #      → Engines 안의 Bearing. 계통 밖의 같은 낱말(Shell & Tube Cooler)로 새지 않는다.
         # 문맥 안의 답은 품명만으로 찾은 답보다 "덜 맞지 않을 때"만 쓴다 — 맞은 낱말 수·가장 긴
         # 낱말 길이로 견준다. 'Cam Lock Washer' 는 엔진 제목 아래서 'cam' 한 낱말로 Camshaft
         # 를 맞히지만, 품명만으로 'washer' 가 더 길게 맞는다 → Washer. 문맥이 계통(대분류)까지만
         # 짚고 그 아래를 못 고르면 그것도 버린다(품명이 고른 구체 분류가 낫다).
-        g_cid, g_hit = by_name(desc, None, is_service) if cid is None else (None, "")
         if cid is None and ctx_cid is not None:
             top = ctx_cid
             while cats[top].parent_id and (cats[top].level or 1) > 1:
