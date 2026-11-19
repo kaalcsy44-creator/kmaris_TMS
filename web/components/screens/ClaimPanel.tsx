@@ -491,7 +491,7 @@ function ClaimForm({
           ))}
         </p>
       </fieldset>
-      <div className="form-actions">
+      <div className="form-actions stage-actions">
         {!canWriteNow ? (
           readMode ? null : <span className="hint-inline">{editBlockReason("ar", assigneeId)}</span>
         ) : (
@@ -1207,7 +1207,7 @@ function CreditNoteForm({
           "Pick the invoice this credit note is offset against."
         )}
       </p>
-      <div className="form-actions">
+      <div className="form-actions stage-actions">
         <button className="btn primary" disabled={busy || !arId || applied <= 0} onClick={issue}>
           {busy ? "Saving…" : existing ? "Save credit note" : "Issue credit note"}
         </button>

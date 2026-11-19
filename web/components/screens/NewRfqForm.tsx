@@ -1350,7 +1350,7 @@ export default function NewRfqForm({
       </div>
       </fieldset>
 
-      <div className="form-actions">
+      <div className="form-actions stage-actions">
         {onCancel ? (
           <button className="btn" onClick={onCancel}>
             Cancel
@@ -1455,7 +1455,7 @@ export default function NewRfqForm({
             </span>
           </label>
 
-          <div className="form-actions">
+          <div className="form-actions stage-actions">
             <button
               className="btn primary"
               onClick={runCopy}
@@ -1555,7 +1555,7 @@ function QuickCustomerCreate({
           <input value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
       </div>
-      <div className="form-actions">
+      <div className="form-actions stage-actions">
         <button className="btn primary" onClick={submit} disabled={busy || !name.trim()}>
           {busy ? "Saving…" : "Create Customer"}
         </button>
@@ -1707,7 +1707,7 @@ function QuickVesselCreate({
           </select>
         </Field>
       </div>
-      <div className="form-actions">
+      <div className="form-actions stage-actions">
         <button className="btn primary" onClick={submit} disabled={busy || !name.trim()}>
           {busy ? "Saving…" : "Create Vessel"}
         </button>

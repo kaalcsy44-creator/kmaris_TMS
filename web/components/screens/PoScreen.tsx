@@ -719,7 +719,7 @@ function OrderDetailModal({
           />
           <TermsEditor terms={terms} onChange={setTerms} />
           </fieldset>
-          <div className="form-actions">
+          <div className="form-actions stage-actions">
             <StageTotal
               label={discountPct ? "Final" : "Total"}
               value={orderFinal(items, discountPct)}
@@ -1446,7 +1446,7 @@ function VendorPoDetailModal({
           </fieldset>
           {/* 하단 고정바 — 좌(Preview) / 중앙(총액) / 우(Delete·Cancel·Save) 3구역.
               7단계 문서 편집기(.doc-actions)와 동일한 규약. */}
-          <div className="form-actions doc-actions">
+          <div className="form-actions stage-actions doc-actions">
             <div className="doc-actions-left">
               <VendorPoPdfPreviewButton
                 poId={id}
@@ -1852,7 +1852,7 @@ function CustomerPoNewForm({
 
       <TermsEditor terms={terms} onChange={setTerms} />
 
-      <div className="form-actions">
+      <div className="form-actions stage-actions">
         <StageTotal
           label={discountPct ? "Final" : "Total"}
           value={orderFinal(items, discountPct)}
@@ -2096,7 +2096,7 @@ function VendorPoCreate({
       {/* Payment Terms·Place 는 위 1·2번 칸에서 이미 물었으므로 여기선 뺀다. */}
       <TermsEditor terms={terms} onChange={setTerms} omit={["payment_terms", "delivery_place"]} />
 
-      <div className="form-actions">
+      <div className="form-actions stage-actions">
         <StageTotal
           label="Total"
           value={includedRows(items).reduce((s, it) => s + Number(it.amount || 0), 0)}
@@ -2280,7 +2280,7 @@ function VendorPoSend({
               SMTP not configured: without SMTP_USER / SMTP_PASSWORD, real sending is unavailable.
             </div>
           ) : null}
-          <div className="form-actions">
+          <div className="form-actions stage-actions">
             <button className="btn" onClick={downloadPdf} disabled={poId === ""}>
               Download PO PDF
             </button>

@@ -687,7 +687,7 @@ export default function DocSendPanel({
             SMTP not configured — set SMTP_USER / SMTP_PASSWORD to enable sending.
           </div>
         ) : null}
-        <div className="form-actions">
+        <div className="form-actions stage-actions">
           <button
             className="btn primary"
             onClick={send}

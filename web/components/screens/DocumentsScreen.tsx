@@ -631,7 +631,7 @@ function ServiceStageForm({
       ) : null}
       </fieldset>
 
-      <div className="form-actions" style={{ marginTop: 14 }}>
+      <div className="form-actions stage-actions" style={{ marginTop: 14 }}>
         {!editable ? (
           readMode ? null : <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
         ) : (
@@ -751,7 +751,7 @@ function ServiceBillingForm({ data, onChanged, onClose }: { data: DocumentDetail
         <Field label="Other cost" value={String(other)} onChange={setOther} type="number" />
       </div>
       </fieldset>
-      <div className="form-actions" style={{ marginTop: 14 }}>
+      <div className="form-actions stage-actions" style={{ marginTop: 14 }}>
         {!editable ? (
           readMode ? null : <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
         ) : (
@@ -1403,7 +1403,7 @@ function PodTab({
         </p>
       </div>
 
-      <div className="form-actions" style={{ marginTop: 14 }}>
+      <div className="form-actions stage-actions" style={{ marginTop: 14 }}>
         {!editable ? (
           readMode ? null : <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
         ) : (
@@ -1719,7 +1719,7 @@ function ProformaInvoiceTab({
       <PiOptionalSections terms={terms} setTerms={setTerms} />
       <BankInfoSection currency={currency} />
       </fieldset>
-      <div className="form-actions doc-actions">
+      <div className="form-actions stage-actions doc-actions">
         <div className="doc-actions-left">
           <DocPreviewButton target={target} kind="pi/pdf" filename="Proforma Invoice.pdf" disabled={!data.pi} xlsxKind="pi/xlsx" />
         </div>
@@ -2074,7 +2074,7 @@ function ServiceProformaInvoiceTab({
       <PiOptionalSections terms={terms} setTerms={setTerms} />
       <BankInfoSection currency={currency} />
       </fieldset>
-      <div className="form-actions doc-actions">
+      <div className="form-actions stage-actions doc-actions">
         <div className="doc-actions-left">
           <DocPreviewButton target={target} kind="pi/pdf" filename="Proforma Invoice.pdf" disabled={!data.pi} xlsxKind="pi/xlsx" />
         </div>
@@ -2322,7 +2322,7 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
       ) : null}
       <MissingWarning missing={data.ci?.missing || []} />
       </fieldset>
-      <div className="form-actions doc-actions">
+      <div className="form-actions stage-actions doc-actions">
         <div className="doc-actions-left">
           <DocPreviewButton target={{ orderId: data.order.id, ciId: pkg.ciId }} kind="ci/pdf" filename="Commercial Invoice.pdf" disabled={!data.ci} xlsxKind="ci/xlsx" />
         </div>
@@ -2398,7 +2398,7 @@ function ShippingMarksTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg:
       <fieldset {...fieldsetProps}>
         <ShippingMarksSection shipping={shipping} setShipping={setShipping} />
       </fieldset>
-      <div className="form-actions doc-actions">
+      <div className="form-actions stage-actions doc-actions">
         <div className="doc-actions-left">
           <DocPreviewButton target={{ orderId: data.order.id, ciId: pkg.ciId }} kind="sm/pdf" filename="Shipping Mark.pdf" disabled={!data.ci} xlsxKind="sm/xlsx" />
         </div>
@@ -2592,7 +2592,7 @@ function PackingListTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: P
       </label>
       <MissingWarning missing={data.pl?.missing || []} />
       </fieldset>
-      <div className="form-actions doc-actions">
+      <div className="form-actions stage-actions doc-actions">
         <div className="doc-actions-left">
           <DocPreviewButton target={{ orderId: data.order.id, ciId: pkg.ciId }} kind="pl/pdf" filename="Packing List.pdf" disabled={!data.pl} xlsxKind="pl/xlsx" />
         </div>
@@ -2682,7 +2682,7 @@ function TaxInvoiceTab({ data, onChanged }: { data: DocumentDetail; onChanged: (
         }
       />
       </fieldset>
-      <div className="form-actions">
+      <div className="form-actions stage-actions">
         {editable ? (
           <button className="btn primary" disabled={busy} onClick={save}>
             Create Tax Invoice Data + register AR

@@ -729,7 +729,7 @@ function DirectPaymentForm({
           {vat ? ` (VAT ${vat.toLocaleString()} included)` : ""}
         </span>
       </div>
-      <div className="form-actions">
+      <div className="form-actions stage-actions">
         {err ? <span className="action-err">{err}</span> : null}
         <button className="btn primary" disabled={busy} onClick={save}>{busy ? "Working…" : "Save"}</button>
         <button className="btn" disabled={busy} onClick={onCancel}>Cancel</button>
@@ -1358,7 +1358,7 @@ function ApAddForm({
         <textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
       </label>
 
-      <div className="form-actions doc-actions">
+      <div className="form-actions stage-actions doc-actions">
         <div className="doc-actions-left" />
         <div className="doc-actions-center">
           {err ? <span className="action-err">{err}</span> : null}
@@ -1551,7 +1551,7 @@ function MilestoneBar({ row, stage, onChanged }: { row: ArRow; stage: StageTab; 
           </p>
         ) : null}
       </fieldset>
-      <div className="form-actions">
+      <div className="form-actions stage-actions">
         {!canWriteNow ? (
           readMode ? null : <span className="hint-inline">{editBlockReason("ar", row.assignee_id)}</span>
         ) : (
@@ -2105,7 +2105,7 @@ function ArAddForm({
         <textarea rows={2} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
       </label>
 
-      <div className="form-actions doc-actions">
+      <div className="form-actions stage-actions doc-actions">
         <div className="doc-actions-left">
           {exportDeal ? null : (
             <TaxPreviewButton orderId={form.order_id === "" ? null : form.order_id} form={form} />

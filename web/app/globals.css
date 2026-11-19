@@ -11321,7 +11321,7 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 .project-stage-pane:has(> .stage-fill) {
   padding-bottom: var(--modal-foot-gap);
 }
-.project-stage-pane:not(:has(.form-actions .btn.primary)) {
+.project-stage-pane:not(:has(.form-actions .btn.primary)):not(:has(.form-actions.stage-actions)) {
   padding-bottom: var(--modal-foot-gap);
 }
 .project-info-pane {
@@ -11968,7 +11968,9 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 }
 /* 주 저장 바(.btn.primary 포함)만 우측 스크롤 컨테이너(.project-stage-pane) 바닥에 고정. */
 .embedded-workspace .form-actions:has(.btn.primary),
-.embedded-detail .form-actions:has(.btn.primary) {
+.embedded-detail .form-actions:has(.btn.primary),
+.embedded-workspace .form-actions.stage-actions,
+.embedded-detail .form-actions.stage-actions {
   position: sticky;
   bottom: 0;
   z-index: 5;
@@ -12006,7 +12008,8 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   display: flex;
   flex-direction: column;
 }
-.stage-fill .embedded-detail > .form-actions:has(.btn.primary) {
+.stage-fill .embedded-detail > .form-actions:has(.btn.primary),
+.stage-fill .form-actions.stage-actions {
   margin-top: auto;
 }
 /* 멀티레코드 단계(2단계 RFQ Sent 등)는 .action-tabs.embedded 아래에 .embedded-record-wrap
@@ -22597,3 +22600,13 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
 .project-stage-pane .form-fieldset.vm-read .form-field .vm-text { font-size: 12.5px; }
 .project-stage-pane .terms-sec > .terms-sec-h { margin: 0 !important; }
 .project-stage-pane .stage-card > .clause-picker { padding: 0; }
+
+/* 주 버튼 줄(.stage-actions — Save·Cancel·Preview·합계)은 읽기 화면에서도 창 바닥에 붙는다.
+   예전엔 "저장 단추가 들어 있는 줄"로 알아봤는데, 읽기 화면에선 저장 단추가 빠져 고정이 풀리고
+   Cancel·Preview 가 내용 바로 밑에 떠 있었다. 편집기가 한 겹 더 감싼 경우(1단계 RFQ 폼)도
+   그 겹을 세로 flex 로 이어 줄을 바닥까지 내린다. */
+.stage-fill .embedded-detail > div:has(> .form-actions.stage-actions) {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+}

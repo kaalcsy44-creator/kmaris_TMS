@@ -852,7 +852,7 @@ function NoQuoteDialog({
           Saved in the stage 3 activity log — saving here edits that entry instead of adding a new one.
         </span>
       ) : null}
-      <div className="form-actions">
+      <div className="form-actions stage-actions">
         <button type="button" className="btn primary" disabled={busy || loading} onClick={confirm}>
           {busy ? "…" : marked ? "Save" : "Mark no quote"}
         </button>
@@ -1772,7 +1772,7 @@ function VendorRfqDetailModal({
 
           {/* stage 4·6 견적 편집기와 동일한 푸터 규약: Preview=좌측끝, Delete/Cancel/Save=우측 그룹.
               quote-editor-actions 로 표준 danger-좌측 규약을 무효화한다. */}
-          <div className="form-actions quote-editor-actions">
+          <div className="form-actions stage-actions quote-editor-actions">
             <button className="btn" onClick={openPreview} disabled={busy || dlBusy}>
               {dlBusy && !previewUrl ? "Opening…" : "Preview"}
             </button>
@@ -2513,7 +2513,7 @@ function VendorQuoteDetailModal({
             <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
           </fieldset>
-          <div className="form-actions">
+          <div className="form-actions stage-actions">
             <StageTotal
               label="Total"
               value={countedItems(items).reduce((s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1), 0)}
@@ -3263,7 +3263,7 @@ function CustomerQuoteDetailModal({
           </div>
           <TermsEditor terms={terms} onChange={setTerms} clauses suggest={vendorTermSuggest(vendorQuotes)} clauseContext={{ validUntil, quoteDate: sentAt }} />
           </fieldset>
-          <div className="form-actions quote-editor-actions">
+          <div className="form-actions stage-actions quote-editor-actions">
             <button className="btn" onClick={openPreview} disabled={busy || dlBusy}>
               {dlBusy && !previewUrl ? "Opening…" : "Preview"}
             </button>
@@ -4015,7 +4015,7 @@ function VendorRfqAction({
       </div>
 
       {/* Create RFQ(선택) · 발신 완료(필수). 이메일 초안은 Email 탭에서 생성. */}
-      <div className="form-actions">
+      <div className="form-actions stage-actions">
         <button className="btn" onClick={generateRfqNo} disabled={busy || !unassigned}>
           Create RFQ
         </button>
@@ -4042,7 +4042,7 @@ function VendorRfqAction({
           </select>
         </div>
       </div>
-      <div className="form-actions">
+      <div className="form-actions stage-actions">
         <button className="btn primary" onClick={makePreview} disabled={busy || !hasRecipient}>
           Generate email
         </button>
@@ -4426,7 +4426,7 @@ function VendorQuoteAction({
             <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
 
-          <div className="form-actions">
+          <div className="form-actions stage-actions">
             <StageTotal
               label="Total"
               value={countedItems(items).reduce((s, it) => s + Number(it.cost_price || 0) * Number(it.qty || 1), 0)}
@@ -5008,7 +5008,7 @@ function LineMultiPicker({
           ) : null))}
           {!shown.length ? <div className="hint-inline">No line matches.</div> : null}
         </div>
-        <div className="form-actions">
+        <div className="form-actions stage-actions">
           <span className="lmp-count">
             {picked.length} line(s){picked.length ? ` · price on ${picked.includes(selected[0]) ? selected[0] : picked[0]}` : ""}
           </span>
@@ -6088,7 +6088,7 @@ function CustomerQuoteAction({
 
       <TermsEditor terms={terms} onChange={setTerms} clauses suggest={vendorTermSuggest(vendorQuotes)} clauseContext={{ validUntil, quoteDate: sentAt }} />
 
-      <div className="form-actions">
+      <div className="form-actions stage-actions">
         <StageTotal label="Final" value={finalTotal} currency={currency} rate={effRate} />
         <button
           className="btn danger"
@@ -6123,7 +6123,7 @@ function CustomerQuoteAction({
               </select>
             </div>
           </div>
-          <div className="form-actions">
+          <div className="form-actions stage-actions">
             <button className="btn" onClick={downloadPdf}>Download PDF</button>
             <button className="btn" onClick={makeEmailPreview} disabled={busy}>Preview email</button>
           </div>
