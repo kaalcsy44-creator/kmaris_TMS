@@ -22230,23 +22230,7 @@ table.mini tfoot .total-label .foot-charge-label {
 .pl-modal.service .stage-strip-move:hover:not(:disabled) { background: #16a05a; color: #fff; }
 .pl-modal.service .stage-strip-move:disabled { border-color: var(--line); color: var(--muted); }
 
-/* 단계 머리 — 읽기/편집 한 단추 + ⋯ 메뉴. */
-.stage-mode-switch {
-  border: 1px solid #16324f;
-  background: #fff;
-  color: #16324f;
-  border-radius: 8px;
-  padding: 5px 12px;
-  font-size: 12.5px;
-  font-weight: 700;
-  font-family: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-  min-height: 29px;
-}
-.stage-mode-switch:hover { background: #16324f; color: #fff; }
-.stage-mode-switch.editing { background: #16324f; color: #fff; }
-.stage-mode-switch.editing:hover { background: #24476e; }
+/* 단계 머리 — ⋯ 메뉴(Copy·Print). */
 .stage-more { position: relative; }
 .stage-more > .stage-read-act { min-width: 34px; min-height: 29px; }
 .stage-more-menu {
@@ -22312,20 +22296,35 @@ table.mini tfoot .total-label .foot-charge-label {
   display: none;
 }
 
-/* C3 · 단계 화면의 섹션 제목 한 가지 모양 — 굵은 남색 글자 + 왼쪽 강조선.
-   (문서 섹션과 1:1 로 맞물리는 견적서 Terms 편집기만 문서와 같은 남색 띠를 쓴다.) */
-.project-stage-pane :is(.sub-h, .form-section-title) {
-  font-size: 13.5px;
-  font-weight: 800;
+/* C3 · 단계 화면의 섹션 제목은 한 가지 모양 — 카드 머리띠(.stage-card > 제목, 품목표 카드의
+   .items-head)와 같은 옅은 회청색 띠. 카드로 감싸지 않은 섹션(1단계 Basic info·Item list,
+   3단계 Basic Info 등)은 제목만 덩그러니 글자로 있어 카드 섹션과 다른 위계로 읽혔다 —
+   같은 띠를 깔아 맞춘다. 견적서 Terms 의 세 섹션(Remark·T&C·Payment)도 같은 띠. */
+.project-stage-pane .form-fieldset > :is(.sub-h, .form-section-title),
+.project-stage-pane .form-fieldset > .items-head,
+.project-stage-pane .terms-sec-h {
+  margin: 14px 0 10px;
+  padding: 8px 14px;
+  background: #f3f6fb;
+  border: 1px solid #e3e9f2;
+  border-radius: 9px;
   color: var(--navy);
-  line-height: 1.25;
-  padding: 1px 0 1px 9px;
-  border-left: 3px solid var(--blue);
-  letter-spacing: 0.1px;
+  font-size: 13px;
+  font-weight: 800;
 }
-.pl-modal.service .project-stage-pane :is(.sub-h, .form-section-title) {
-  border-left-color: #16a05a;
+.project-stage-pane .form-fieldset > :is(.sub-h, .form-section-title):first-child {
+  margin-top: 0;
 }
+.project-stage-pane .form-fieldset > .items-head { padding: 6px 12px; }
+.project-stage-pane .form-fieldset > .items-head > :is(.sub-h, .form-section-title) {
+  margin: 0;
+  font-size: 13px;
+}
+.project-stage-pane .stage-card > :is(.sub-h, .form-section-title),
+.project-stage-pane .stage-card--items > .items-head > :is(.sub-h, .form-section-title) {
+  font-size: 13px;
+}
+.project-stage-pane .terms-sec-h { margin: 0; }
 
 /* C4 · 읽기모드에서 모든 줄이 빈 표 칸은 감춘다(viewMode.markEmptyColumns). */
 .form-fieldset.vm-read [data-vm-emptycol] {
@@ -22394,41 +22393,6 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
 
 /* ── 작업 팝업 4차 정리(2026-11-19): 단계 사이 연결 ─────────────────────────────── */
 
-/* D1 · 단계 끝 "다음 단계" 단추 — 끝까지 읽고/채운 자리에서 바로 넘어간다. */
-.stage-next-foot {
-  display: flex;
-  justify-content: flex-end;
-  margin: 18px var(--item-list-gutter, 0px) 6px 0;
-  padding-top: 12px;
-  border-top: 1px dashed var(--line);
-}
-.stage-next-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid var(--blue);
-  background: #fff;
-  color: var(--blue);
-  border-radius: 999px;
-  padding: 7px 16px;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-.stage-next-btn:hover { background: var(--blue); color: #fff; }
-.stage-next-k { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.8; }
-.stage-next-no {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; border-radius: 50%;
-  background: var(--blue); color: #fff; font-size: 11px; font-weight: 800;
-}
-.stage-next-btn:hover .stage-next-no { background: #fff; color: var(--blue); }
-.stage-next-q { font-size: 12px; opacity: 0.75; }
-.pl-modal.service .stage-next-btn { border-color: #16a05a; color: #16a05a; }
-.pl-modal.service .stage-next-btn:hover { background: #16a05a; color: #fff; }
-.pl-modal.service .stage-next-no { background: #16a05a; }
-.pl-modal.service .stage-next-btn:hover .stage-next-no { background: #fff; color: #16a05a; }
-
 /* D2 · 끝난 단계는 번호 원 오른쪽 위에 작은 ✓ — 색만으로는 "끝남"과 "보는 중"이 헷갈렸다. */
 .project-stage-tabs button.done:not(.skip) .st-no { position: relative; }
 .project-stage-tabs button.done:not(.skip) .st-no::after {
@@ -22447,4 +22411,3 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
   font-weight: 900;
   box-shadow: 0 0 0 1.5px #fff;
 }
-@media print { .stage-next-foot { display: none !important; } }

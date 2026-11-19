@@ -3548,16 +3548,27 @@ export function PipelineModal({
               </h3>
               {!isNewProject ? (
                 <div className="stage-pane-nav">
-                  {/* 읽기 ↔ 편집 한 단추 — 지금 아닌 쪽으로 가는 이름을 단다. 같은 화면을 껍데기만
-                      바꿔 보여주므로 입력 중이던 값은 유지된다. */}
-                  <button
-                    type="button"
-                    className={`stage-mode-switch${stageMode === "edit" ? " editing" : ""}`}
-                    onClick={() => setStageMode(stageMode === "read" ? "edit" : "read")}
-                    title={stageMode === "read" ? "Edit — change and save this stage (E)" : "Back to read view (R) · Save with Ctrl+S"}
-                  >
-                    {stageMode === "read" ? "✎ Edit" : "👁 Read view"}
-                  </button>
+                  {/* 읽기 ↔ 편집. 같은 화면을 껍데기만 바꿔 보여주므로 입력 중이던 값은 유지된다. */}
+                  <div className="stage-mode-toggle" role="group" aria-label="View mode">
+                    <button
+                      type="button"
+                      className={stageMode === "read" ? "on" : ""}
+                      aria-pressed={stageMode === "read"}
+                      onClick={() => setStageMode("read")}
+                      title="Read — see what was entered, without editing (R)"
+                    >
+                      <span aria-hidden>👁 </span>Read
+                    </button>
+                    <button
+                      type="button"
+                      className={stageMode === "edit" ? "on" : ""}
+                      aria-pressed={stageMode === "edit"}
+                      onClick={() => setStageMode("edit")}
+                      title="Edit — change and save this stage (E) · Save with Ctrl+S"
+                    >
+                      <span aria-hidden>✎ </span>Edit
+                    </button>
+                  </div>
                   {stageMode === "read" ? (
                     <div className="stage-more" ref={moreRef}>
                       <button
@@ -3620,26 +3631,6 @@ export function PipelineModal({
                 />
               </ViewModeProvider>
             )}
-            {/* 다음 단계로 — 단계 끝까지 읽고/채운 자리에서 바로 넘어간다(맨 위 스트립까지
-                올라가지 않게). 다음 단계 이름과 상대(to Vendor 등)를 함께 보여 준다. */}
-            {!isNewProject && selectedStage < rSteps.length ? (
-              <div className="stage-next-foot">
-                <button
-                  type="button"
-                  className="stage-next-btn"
-                  onClick={() => setSelectedStage((s) => Math.min(s + 1, rSteps.length))}
-                  title="Next stage (Shift+→)"
-                >
-                  <span className="stage-next-k">Next</span>
-                  <span className="stage-next-no">{selectedStage + 1}</span>
-                  <b>{rSteps[selectedStage] ?? ""}</b>
-                  {STAGE_TITLE_QUALIFIER[selectedStage + 1] ? (
-                    <span className="stage-next-q">({STAGE_TITLE_QUALIFIER[selectedStage + 1]})</span>
-                  ) : null}
-                  <span aria-hidden> →</span>
-                </button>
-              </div>
-            ) : null}
               </section>
             </div>
           </div>
