@@ -1229,7 +1229,7 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
             if c:
                 cid, reason = c, f"like {why}"
         # 문맥(비고·제목)이 가리키는 계통 — 메이커는 이름 짐작에 쓰지 않는다(회사 이름이다).
-        ctx = context_of(r) if cid is None else []
+        ctx = context_of(r)
         ctx_cid, ctx_src, ctx_text, ctx_hit = None, "", "", ""
         for src, text in ctx:
             if src == "maker":
@@ -1281,6 +1281,8 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
             "maker": r.get("maker") or "",
             "category_id": cid,
             "reason": reason,
+            # 읽은 딜 문맥 — 화면이 "무엇을 보고 골랐나"를 함께 보여 준다.
+            "context": [{"src": src, "text": text[:80]} for src, text in ctx[:4]],
         })
     out.sort(key=lambda r: (r["part_no"], r["description"]))
     return out

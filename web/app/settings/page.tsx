@@ -5890,7 +5890,15 @@ export function CategoriesTab({ onOpenItems }: {
           ) : (
             <>
               <div className="table-wrap auto-cat-wrap">
-                <table className="mini wide">
+                <table className="mini wide auto-cat-table">
+                  {/* 칸 폭은 읽을 양대로 — Why 는 근거 문장이 길어 좁으면 한 낱말씩 접힌다. */}
+                  <colgroup>
+                    <col style={{ width: 34 }} />
+                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "30%" }} />
+                    <col style={{ width: "24%" }} />
+                    <col />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th className="row-tools">
@@ -5907,7 +5915,7 @@ export function CategoriesTab({ onOpenItems }: {
                       <th>Part No.</th>
                       <th>Description</th>
                       <th>Category</th>
-                      <th>Why</th>
+                      <th>Why · from the deal</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -5938,7 +5946,20 @@ export function CategoriesTab({ onOpenItems }: {
                           {p.category_path}
                           {p.item_id == null ? <span className="auto-cat-new">new item</span> : null}
                         </td>
-                        <td className="auto-cat-why">{p.reason}</td>
+                        <td className="auto-cat-why">
+                          <div className="auto-cat-reason">{p.reason}</div>
+                          {p.context?.length ? (
+                            <div className="auto-cat-ctx">
+                              {p.context.map((c, j) => (
+                                <span key={j} className={`ctx-${c.src}`} title={c.text}>
+                                  <i>{c.src === "remark" ? "Remark" : c.src === "project" ? "Project" : "Maker"}</i>{c.text}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="auto-cat-ctx none">No deal found for this item</div>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

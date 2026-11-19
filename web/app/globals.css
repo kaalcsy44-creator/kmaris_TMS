@@ -22818,3 +22818,17 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
 }
 .stat-mix-split .new { background: #2e8b57; }
 .stat-mix-split .old { background: #0055a8; }
+
+/* 자동 분류 미리보기 표 — 칸 폭 고정 배분(체크 · Part 11% · 품명 30% · 분류 24% · Why 나머지).
+   자동 폭이면 품명·분류가 넓게 먹고 Why 가 한 낱말 폭으로 눌려 세로로 길게 접혔다. */
+.auto-cat-table { table-layout: fixed; width: 100%; min-width: 760px; }
+.auto-cat-table td { vertical-align: top; overflow-wrap: anywhere; }
+.auto-cat-table .auto-cat-desc { max-width: none; }
+.auto-cat-reason { color: #45526a; font-size: 12px; line-height: 1.4; }
+.auto-cat-ctx { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; font-size: 11px; color: var(--muted); }
+.auto-cat-ctx span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auto-cat-ctx i {
+  display: inline-block; min-width: 46px; margin-right: 5px; font-style: normal; font-weight: 700;
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; color: #8a94a6;
+}
+.auto-cat-ctx.none { font-style: italic; }

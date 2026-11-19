@@ -311,6 +311,8 @@ export type AutoCategoryProposal = {
   category_id: number;
   category_path: string;         // "대 > 중 > 소"
   reason: string;                // 왜 이 분류인지(같은 품명 / 품번 계열 / 품명 낱말)
+  // 읽은 딜 문맥 — 줄 비고·프로젝트 제목·메이커(옛 서버면 없다).
+  context?: { src: "remark" | "project" | "maker"; text: string }[];
 };
 /* 선박 도면 보기(Item > Ship View) — 분류 트리 한 장에 품목과 그 품목이 나온 딜을 얹는다.
    목록(ItemLedgerRow)과 달리 품목마다 프로젝트가 딸려 온다: 이 화면의 물음이
