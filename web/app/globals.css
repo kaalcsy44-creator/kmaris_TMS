@@ -22363,3 +22363,31 @@ details.ocr-files[open] > summary.ocr-files-head::after { content: " ▾"; }
   align-self: flex-start;
   max-width: 100%;
 }
+
+/* ── 작업 팝업 3차 정리(2026-11-19): 스크롤 한 겹 ───────────────────────────────── */
+
+/* B2·B3 · 따라다니는 가로 스크롤바(FloatingHScroll) — 넓은 표의 제 스크롤바가 화면 밖일 때
+   단계 창 바닥(저장 줄이 있으면 그 바로 위)에 뜬다. 표 폭과 같은 자리·같은 폭. */
+.hscroll-float {
+  position: fixed;
+  z-index: 150;
+  height: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: rgba(255, 255, 255, 0.92);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -2px 6px rgba(15, 23, 42, 0.06);
+  scrollbar-width: thin;
+}
+.hscroll-float-inner { height: 1px; }
+
+/* B4 · 팝업이 열려 있는 동안 뒤 페이지는 구르지 않는다 — 창 안 스크롤이 끝에 닿으면 휠이
+   뒤 페이지로 넘어가 보드가 같이 움직였고, 보드의 가로 스크롤바가 팝업 아래로 비쳤다. */
+html:has(.pl-modal-backdrop) { overflow: hidden; }
+body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
+/* 창 끝에 닿은 휠이 뒤로 새지 않게(비교표 .lb-scroll 은 제외 — 표 끝에서 멈추면 창을 마저
+   내리려고 마우스를 표 밖으로 옮겨야 한다). */
+.project-stage-pane,
+.project-info-pane {
+  overscroll-behavior: contain;
+}

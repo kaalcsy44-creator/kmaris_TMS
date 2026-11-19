@@ -71,6 +71,7 @@ import { ArOverview } from "@/components/screens/ArScreen";
 import ProjectOverviewScreen from "@/components/screens/ProjectOverviewScreen";
 import DriveFolderChip from "@/components/common/DriveFolderChip";
 import DealPartiesLine from "@/components/common/DealPartiesLine";
+import FloatingHScroll from "@/components/common/FloatingHScroll";
 import { tr } from "@/lib/labels";
 import { getUser, can, isOwnScoped, isAdmin } from "@/lib/auth";
 
@@ -3459,6 +3460,8 @@ export function PipelineModal({
               </div>
 
               <section className="project-stage-pane" ref={stagePaneRef}>
+            {/* 넓은 표의 가로 스크롤바가 화면 아래에 숨어 있을 때 창 바닥에 대역 스크롤바를 띄운다. */}
+            <FloatingHScroll paneRef={stagePaneRef} />
             {/* 단계 상세 공통 헤더 — 모든 단계에서 동일한 위치·서체의 제목(좌) +
                 다음 단계로 이동하는 → 버튼(우상단). 11개 단계 UI 일관성의 기준. */}
             <div className="stage-pane-head">
