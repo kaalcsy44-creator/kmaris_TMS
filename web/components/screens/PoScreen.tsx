@@ -632,7 +632,6 @@ function OrderDetailModal({
           {/* 좌측: 입력 필드(세로 1열, 성격별 그룹 스택). */}
           <div className="received-fields">
             <div className="basic-col">
-              <div className="basic-col-title">Customer &amp; vessel</div>
               <div className="form-field">
                 <label>Customer</label>
                 <select
@@ -674,7 +673,6 @@ function OrderDetailModal({
               </div>
             </div>
             <div className="basic-col">
-              <div className="basic-col-title">Order details</div>
               <div className="form-field">
                 <label>Customer PO No.</label>
                 <input value={poNo} onChange={(e) => setPoNo(e.target.value)} />
@@ -1742,7 +1740,6 @@ function CustomerPoNewForm({
       {/* 좌측: 입력 필드(세로 1열, 성격별 그룹 스택). */}
       <div className="received-fields">
         <div className="basic-col">
-          <div className="basic-col-title">Customer &amp; vessel</div>
           <div className="form-field">
             <label>Customer *</label>
             <select
@@ -1788,7 +1785,6 @@ function CustomerPoNewForm({
           </div>
         </div>
         <div className="basic-col">
-          <div className="basic-col-title">Order details</div>
           <div className="form-field">
             <label>Customer PO No.</label>
             <input value={poNo} onChange={(e) => setPoNo(e.target.value)} />
