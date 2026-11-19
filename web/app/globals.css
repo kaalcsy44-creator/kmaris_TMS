@@ -22610,3 +22610,17 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
   display: flex;
   flex-direction: column;
 }
+
+/* 편집창(.stage-fill) 안 flex 사슬은 줄어들지 않게(flex-shrink 0, min-height auto) —
+   줄어들 수 있으면 사슬의 상자(.embedded-record-wrap 등)가 편집창 높이로 잘린 채 내용만
+   밖으로 넘친다. 고정 줄(sticky)은 제 부모 상자 안에서만 붙어 있으므로, 그 상자 끝을
+   지나면 견적 번호 줄(.pane-row)이 위로 밀려 사라지고 그 빈자리로 표가 비쳐 보였다
+   (탭 줄은 더 안쪽 상자에 있어 계속 붙어 있으니 중간에 떠 보였다). 내용이 짧을 때 버튼 줄을
+   바닥으로 내리는 일은 flex-grow 로 그대로 된다. */
+.stage-fill > .action-tabs.embedded,
+.stage-fill .action-tabs.embedded > .embedded-detail,
+.stage-fill .action-tabs.embedded > .embedded-record-wrap,
+.stage-fill .embedded-record-wrap > .embedded-detail {
+  flex: 1 0 auto;
+  min-height: auto;
+}
