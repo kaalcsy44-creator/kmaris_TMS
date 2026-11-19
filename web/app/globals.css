@@ -22442,3 +22442,14 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
 .project-stage-pane > .embedded-workspace.stage-fill {
   padding-right: var(--pane-gutter);
 }
+
+/* 비교표 합계줄(Quote total·Other charges)의 머리 칸도 왼쪽 고정 — 품목 칸(#·Part No.·
+   Description·Qty)은 붙박이인데 합계줄 머리만 함께 밀려 나가, 벤더 합계가 다른 벤더 칸
+   밑에 와 있는 것처럼 어긋나 보였다. 머리 칸은 고정 네 칸을 colspan 으로 덮는다. */
+.lb-table tfoot .lb-foot-lead {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #f8fafc;
+  box-shadow: 1px 0 0 var(--line);
+}

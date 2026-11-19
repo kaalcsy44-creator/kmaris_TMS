@@ -765,7 +765,7 @@ export default function LineBoard({
             <tfoot>
               {hasCharges ? (
                 <tr className="lb-vtotal">
-                  <td className="lb-foot" colSpan={4 + (pickable ? 1 : 0)}>
+                  <td className="lb-foot lb-foot-lead" colSpan={4 + (pickable ? 1 : 0)}>
                     Other charges (not on a line)
                   </td>
                   {vendors.map((v) => (
@@ -779,7 +779,7 @@ export default function LineBoard({
               ) : null}
               {hasVendorTotals ? (
                 <tr className="lb-vtotal">
-                  <td className="lb-foot" colSpan={4 + (pickable ? 1 : 0)}>
+                  <td className="lb-foot lb-foot-lead" colSpan={4 + (pickable ? 1 : 0)}>
                     Quote total
                   </td>
                   {vendors.map((v) => {
