@@ -1213,6 +1213,10 @@ def statistics(months: int = 12):
         prev_rev, prev_quote, prev_order = _blank_prev(), _blank_prev(), _blank_prev()
         # 고객·품목 매출을 달마다 — 화면이 고른 기간(월·분기·연)으로 순위를 다시 세운다.
         cust_rev_m: dict[str, dict[str, dict[str, float]]] = {c: {} for c in CURS}
+        # 선박의 등록 선주·ISM 관리사별 매출(달별) — 같은 선주가 고객사 여럿을 거쳐 사는 경우를 묶어 본다.
+        _ves = {v.id: v for v in s.query(Vessel).all()}
+        owner_rev_m: dict[str, dict[str, dict[str, float]]] = {c: {} for c in CURS}
+        mgr_rev_m: dict[str, dict[str, dict[str, float]]] = {c: {} for c in CURS}
         item_rev_m: dict[str, dict[str, dict]] = {c: {} for c in CURS}
 
         # Top 10 랭킹은 매출이 잡힌 곳이 한둘뿐이어도 항상 10줄을 채운다(요청).
@@ -1272,6 +1276,12 @@ def statistics(months: int = 12):
             cust_rev[cur][cname] = cust_rev[cur].get(cname, 0.0) + amt
             _cm = cust_rev_m[cur].setdefault(cname, {})
             _cm[mo] = _cm.get(mo, 0.0) + amt
+            _v = _ves.get(getattr(o, "vessel_id", None)) if o else None
+            for _dst, _nm in ((owner_rev_m, getattr(_v, "registered_owner", None)),
+                              (mgr_rev_m, getattr(_v, "ism_manager", None))):
+                _nm = (_nm or "").strip() or "(unknown)"
+                _om = _dst[cur].setdefault(_nm, {})
+                _om[mo] = _om.get(mo, 0.0) + amt
 
         # ── 견적금액(발송월 기준) ───────────────────────────────────────────────
         for q in all_quotations:
@@ -1670,6 +1680,30 @@ def statistics(months: int = 12):
         def _item_cat(pn: str) -> str:
             return _pn_cat.get((pn or "").strip().upper(), "")
 
+        # 미수 청구서(지금) — 화면이 만기 경과일로 구간(aging)을 나누고 DSO 를 낸다.
+        ar_open = []
+        for a in all_ars:
+            if a.status not in {ARStatus.OUTSTANDING, ARStatus.PARTIAL, ARStatus.OVERDUE}:
+                continue
+            _out = _ar_outstanding(a)
+            if _out <= 0.01:
+                continue
+            o = order_map.get(a.order_id)
+            rr = _rfq_of(o) if o else None
+            ar_open.append({
+                "rfq_id": rr.id if rr else None,
+                "project_no": (proj_no_map.get(rr.id, "") if rr else "") or (a.ci_no or ""),
+                "customer": _cust_of(o),
+                "invoice_date": str(a.invoice_date or "")[:10],
+                "due_date": str(a.due_date or "")[:10],
+                "currency": _cur2(a.currency),
+                "outstanding": round(_out, 2),
+            })
+
+        def _month_map(dmap):
+            return {cur: {nm: [round(m.get(mo, 0.0), 2) for mo in month_labels] for nm, m in dmap[cur].items()}
+                    for cur in CURS}
+
         return {
             "months": month_labels,
             # 축은 12월까지 있으므로, KPI 스트립이 기본으로 설 달을 따로 알려준다.
@@ -1698,6 +1732,9 @@ def statistics(months: int = 12):
                                   "m": [round(r["m"].get(mo, 0.0), 2) for mo in month_labels]}
                                  for r in item_rev_m[cur].values()] for cur in CURS},
             "customer_pad": [c["name"] for c in cust_pad[:30]],
+            "owner_month": _month_map(owner_rev_m),
+            "manager_month": _month_map(mgr_rev_m),
+            "ar_open": ar_open,
             # 작년 같은 달 — "작년 같은 기간 대비" 비교용.
             "prev_year": {
                 "months": prev_labels,

@@ -528,6 +528,8 @@ function StatisticsTab() {
   // Top Items 보기 — 대분류별 / 품목별. 펼친 대분류.
   const [itemView, setItemView] = useState<"cat" | "item">("cat");
   const [openCat, setOpenCat] = useState<string | null>(null);
+  // 고객 구성 카드 — 선주 / ISM 관리사.
+  const [mixBy, setMixBy] = useState<"owner" | "manager">("owner");
   useEffect(() => { try { localStorage.setItem("ktms:stat-period", ptype); } catch { /* 저장 못 해도 화면은 동작 */ } }, [ptype]);
   const router = useRouter();
 
@@ -835,6 +837,121 @@ function StatisticsTab() {
     };
   });
   const stageMax = Math.max(1, ...stageTable.map((r) => r.deals.length));
+
+  // ── 4차: 미수금 구간 · 담당자 · 벤더 · 고객 구성 ─────────────────────────────────
+  // 미수금 구간 — 만기 경과일(오늘 기준). 금액은 화면 통화로(KRW 환산은 USD×환율).
+  const arAmt = (a: { currency: string; outstanding: number }) =>
+    cur === "USD" ? (a.currency === "USD" ? a.outstanding : 0)
+      : cur === "KRW" ? (a.currency === "KRW" ? a.outstanding : 0)
+        : (a.currency === "KRW" ? a.outstanding : a.outstanding * fxConv);
+  const todayMs = Date.now();
+  const arRows = (stat.ar_open ?? []).map((a) => {
+    const t = a.due_date ? Date.parse(`${a.due_date}T00:00`) : NaN;
+    const over = Number.isFinite(t) ? Math.floor((todayMs - t) / 86_400_000) : null;
+    return { ...a, over, amt: arAmt(a) };
+  }).filter((a) => a.amt > 0);
+  const AR_BUCKETS = [
+    { key: "nd", label: "Not due", hit: (o: number | null) => o == null || o <= 0 },
+    { key: "30", label: "1–30 days", hit: (o: number | null) => o != null && o >= 1 && o <= 30 },
+    { key: "60", label: "31–60 days", hit: (o: number | null) => o != null && o >= 31 && o <= 60 },
+    { key: "90", label: "61–90 days", hit: (o: number | null) => o != null && o >= 61 && o <= 90 },
+    { key: "90p", label: "Over 90 days", hit: (o: number | null) => o != null && o > 90 },
+  ];
+  const arBuckets = AR_BUCKETS.map((b) => {
+    const rows = arRows.filter((a) => b.hit(a.over));
+    return { ...b, rows, amt: rows.reduce((t, a) => t + a.amt, 0) };
+  });
+  const arTotal = arBuckets.reduce((t, b) => t + b.amt, 0);
+  const arMaxB = Math.max(1, ...arBuckets.map((b) => b.amt));
+  // DSO — 지금 미수금 ÷ 최근 3개월 매출 × 90일(이번 달 포함).
+  const rev90 = sumOf(stat.series.revenue[cur], range(Math.max(0, lastIdx - 2), lastIdx));
+  const dso = rev90 > 0 ? Math.round((arOut / rev90) * 90) : null;
+
+  // 담당자(PIC)별 — 고른 기간에 받은 RFQ 기준.
+  const rowById = new Map(prow.map((r) => [r.rfq_id, r]));
+  const picPerf = (() => {
+    const m = new Map<string, { rfq: number; quoted: number; won: number; wonUsd: number; tat: number[] }>();
+    const get = (k: string) => {
+      const e = m.get(k) ?? { rfq: 0, quoted: 0, won: 0, wonUsd: 0, tat: [] };
+      m.set(k, e);
+      return e;
+    };
+    for (const d of pRfqRows) {
+      const e = get(rowById.get(d.rfq_id)?.assignee || "—");
+      e.rfq += 1;
+      if (d.status !== "Open") e.quoted += 1;
+      if (d.status === "PO" || d.status === "Invoiced") e.won += 1;
+    }
+    for (const w of wonInP) get(rowById.get(w.rfq_id)?.assignee || "—").wonUsd += w.sales_usd;
+    for (const x of speeds[0].now.rows) get(x.r.assignee || "—").tat.push(x.d);
+    return [...m.entries()].map(([pic, e]) => ({ pic, ...e, rate: e.quoted ? pct1(e.won, e.quoted) : null, tatMed: median(e.tat) }))
+      .sort((x, y) => y.rfq - x.rfq || y.wonUsd - x.wonUsd);
+  })();
+
+  // 벤더별 — 고른 기간에 RFQ 를 보낸 건. 회신 = 그 발송 이후 같은 벤더의 견적 수신.
+  const vendPerf = (() => {
+    const m = new Map<string, { sent: number; replied: number; days: number[]; awarded: number; deals: Set<number> }>();
+    for (const r of prow) {
+      const awarded = (r.vendor || "").split(/[\n,]/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+      for (const snd of r.rfq_sends ?? []) {
+        if (!snd.sent_at || !inP(snd.sent_at)) continue;
+        const key = (snd.vendor || "—").trim();
+        const e = m.get(key) ?? { sent: 0, replied: 0, days: [], awarded: 0, deals: new Set<number>() };
+        e.sent += 1;
+        const rec = (r.quote_receipts ?? [])
+          .filter((q) => q.vendor.trim().toUpperCase() === key.toUpperCase() && q.received_at >= snd.sent_at)
+          .sort((x, y) => (x.received_at < y.received_at ? -1 : 1))[0];
+        if (rec) {
+          e.replied += 1;
+          const d = daysBetween(snd.sent_at, rec.received_at);
+          if (Number.isFinite(d) && d >= 0) e.days.push(d);
+        }
+        if (!e.deals.has(r.rfq_id) && awarded.includes(key.toUpperCase())) e.awarded += 1;
+        e.deals.add(r.rfq_id);
+        m.set(key, e);
+      }
+    }
+    return [...m.entries()].map(([vendor, e]) => ({
+      vendor, sent: e.sent, replied: e.replied, awarded: e.awarded,
+      rate: e.sent ? pct1(e.replied, e.sent) : null, med: median(e.days),
+    })).sort((x, y) => y.sent - x.sent || y.replied - x.replied).slice(0, 12);
+  })();
+
+  // 고객 구성 — 신규(그 기간에 첫 매출) vs 기존, 선주·관리사별 매출.
+  const custMix = (() => {
+    const cm = stat.customer_month;
+    if (!cm) return null;
+    const names = new Set([...Object.keys(cm.USD || {}), ...Object.keys(cm.KRW || {})]);
+    let nNew = 0, nOld = 0, vNew = 0, vOld = 0;
+    const p0 = pIdx[0];
+    for (const n of names) {
+      const v = inCur(sumOf(cm.USD?.[n], pIdx), sumOf(cm.KRW?.[n], pIdx));
+      if (!v) continue;
+      const first = stat.months.findIndex((_, i) => (cm.USD?.[n]?.[i] ?? 0) + (cm.KRW?.[n]?.[i] ?? 0) > 0);
+      if (first >= p0) { nNew += 1; vNew += v; } else { nOld += 1; vOld += v; }
+    }
+    return { nNew, nOld, vNew, vOld };
+  })();
+  const mixRows = (() => {
+    const mm2 = mixBy === "owner" ? stat.owner_month : stat.manager_month;
+    if (!mm2) return [];
+    // 같은 회사가 대소문자만 달리 적힌 경우(MSC Shipmanagement Ltd / MSC SHIPMANAGEMENT LTD)는 하나로.
+    const acc = new Map<string, { name: string; usd: number; krw: number }>();
+    for (const c of ["USD", "KRW"] as const) {
+      for (const [n, arr] of Object.entries(mm2[c] || {})) {
+        const k = n.trim().toUpperCase().replace(/[.,]/g, "");
+        const e = acc.get(k) ?? { name: n, usd: 0, krw: 0 };
+        if (c === "USD") e.usd += sumOf(arr, pIdx); else e.krw += sumOf(arr, pIdx);
+        acc.set(k, e);
+      }
+    }
+    return [...acc.values()].map((e) => ({ name: e.name, amount: inCur(e.usd, e.krw) }))
+      .filter((r) => r.amount > 0)
+      .sort((x, y) => (x.name === "(unknown)" ? 1 : y.name === "(unknown)" ? -1 : y.amount - x.amount))
+      .slice(0, 8);
+  })();
+  const mixMax = Math.max(1, ...mixRows.map((r) => r.amount));
+  const mixTotal = mixRows.reduce((t, r) => t + r.amount, 0);
   const mgRows = mgRowsOf(mgTab);
   const mgDone = mgRows.filter((w) => w.margin_usd != null);
   const mgSales = mgDone.reduce((s, w) => s + w.sales_usd, 0);
@@ -1024,7 +1141,7 @@ function StatisticsTab() {
           <div className="stat-drill-body">
             {drill.rows.length === 0 ? <div className="state">Nothing here.</div> : drill.rows.map((d, i) => (
               <div key={`${d.rfq_id}-${i}`} className="stat-drill-row" role="button"
-                onClick={() => router.push(`/project?rfq=${d.rfq_id}`)}>
+                onClick={() => { if (d.rfq_id) router.push(`/project?rfq=${d.rfq_id}`); }}>
                 <span className="no">{d.no}</span>
                 <span className="c" title={d.customer}>{d.customer}</span>
                 <span className="d">{d.date}</span>
@@ -1440,6 +1557,111 @@ function StatisticsTab() {
                   <span className="bar"><i style={{ width: `${(it.amount / itemMax) * 100}%` }} /></span>
                   <b>{compact(it.amount)}</b>
                   <span className="pct" />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 미수금 구간 — 만기 경과일(지금). DSO = 미수금 ÷ 최근 3개월 매출 × 90. */}
+        <div className="stat-chart">
+          <SubHead title="Receivables Aging" sub={`now · ${fmtMoney(cur, arTotal)} · DSO ${dso == null ? "—" : `${dso} d`}`} />
+          {arRows.length === 0 ? (
+            <div className="state">No outstanding receivables.</div>
+          ) : (
+            <div className="stat-cat">
+              {arBuckets.map((b) => (
+                <div key={b.key} className={`stat-cat-row ar-${b.key}`} role={b.rows.length ? "button" : undefined}
+                  title={fmtMoney(cur, b.amt)}
+                  onClick={() => b.rows.length && toggleDrill({
+                    key: `ar-${b.key}`, title: `Receivables — ${b.label}`,
+                    rows: b.rows.sort((x, y) => (y.over ?? -999) - (x.over ?? -999)).map((a) => ({
+                      rfq_id: a.rfq_id ?? 0, no: a.project_no, customer: a.customer, date: a.due_date ? `due ${a.due_date}` : "",
+                      value: fmtMoney(cur, a.amt), note: a.over != null && a.over > 0 ? `${a.over} days overdue` : "not due",
+                    })),
+                  })}>
+                  <span className="t">{b.label} <i className="muted">({b.rows.length})</i></span>
+                  <span className="bar"><i style={{ width: `${(b.amt / arMaxB) * 100}%` }} /></span>
+                  <b>{b.amt ? compact(b.amt) : ""}</b>
+                  <span className="pct">{arTotal && b.amt ? `${Math.round((b.amt / arTotal) * 100)}%` : ""}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 담당자별 실적 — 고른 기간에 받은 RFQ. */}
+        <div className="stat-chart">
+          <SubHead title="By PIC" sub={`${periodLabel} · RFQs received`} />
+          {picPerf.length === 0 ? <div className="state">No RFQs in this period.</div> : (
+            <table className="stat-cw">
+              <thead>
+                <tr><th>PIC</th><th>RFQs</th><th>Quoted</th><th>Won</th><th>Win rate</th><th title="Orders won in the period">Won value</th><th title="Median days RFQ → quote sent">Quote TAT</th></tr>
+              </thead>
+              <tbody>
+                {picPerf.map((p) => (
+                  <tr key={p.pic}>
+                    <td className="n">{p.pic}</td><td>{p.rfq}</td><td>{p.quoted}</td>
+                    <td className="won">{p.won || ""}</td>
+                    <td className="rate">{p.rate == null ? <span className="muted">—</span> : `${p.rate}%`}</td>
+                    <td title={p.wonUsd ? fmtMoney(cur, toCur(p.wonUsd)) : ""}>{p.wonUsd ? compact(toCur(p.wonUsd)) : ""}</td>
+                    <td>{p.tatMed == null ? "" : `${p.tatMed} d`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* 벤더 성과 — 고른 기간에 RFQ 를 보낸 곳. */}
+        <div className="stat-chart">
+          <SubHead title="Vendor Performance" sub={`${periodLabel} · RFQs sent`} />
+          {vendPerf.length === 0 ? <div className="state">No vendor RFQs sent in this period.</div> : (
+            <table className="stat-cw">
+              <thead>
+                <tr><th>Vendor</th><th>Sent</th><th>Replied</th><th>Reply rate</th><th title="Median days from RFQ sent to quote received">Reply time</th><th title="Deals where this vendor got our P/O">Awarded</th></tr>
+              </thead>
+              <tbody>
+                {vendPerf.map((v) => (
+                  <tr key={v.vendor}>
+                    <td className="n" title={v.vendor}>{v.vendor}</td><td>{v.sent}</td><td>{v.replied}</td>
+                    <td className="rate">{v.rate == null ? "" : <><i style={{ width: Math.round(v.rate * 0.5) }} />{v.rate}%</>}</td>
+                    <td>{v.med == null ? "" : `${v.med} d`}</td>
+                    <td className="won">{v.awarded || ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* 고객 구성 — 신규 vs 기존 · 선주 / ISM 관리사별 매출. */}
+        <div className="stat-chart">
+          <div className="stat-mg-head">
+            <SubHead title="Customer Mix" sub={`by revenue · ${periodLabel}`} />
+            <div className="stat-cur-toggle sm">
+              <button className={mixBy === "owner" ? "on" : ""} onClick={() => setMixBy("owner")}>Owner</button>
+              <button className={mixBy === "manager" ? "on" : ""} onClick={() => setMixBy("manager")}>ISM manager</button>
+            </div>
+          </div>
+          {custMix ? (
+            <div className="stat-mix-split" title="New = first revenue falls in this period">
+              <span className="new" style={{ flexGrow: custMix.vNew || 0.0001 }}>
+                New {custMix.nNew} · {compact(custMix.vNew)}
+              </span>
+              <span className="old" style={{ flexGrow: custMix.vOld || 0.0001 }}>
+                Returning {custMix.nOld} · {compact(custMix.vOld)}
+              </span>
+            </div>
+          ) : null}
+          {mixRows.length === 0 ? <div className="state">No revenue in this period.</div> : (
+            <div className="stat-cat">
+              {mixRows.map((r) => (
+                <div key={r.name} className={`stat-cat-row${r.name === "(unknown)" ? " un" : ""}`} title={fmtMoney(cur, r.amount)}>
+                  <span className="t">{r.name === "(unknown)" ? "Unknown (vessel not looked up)" : r.name}</span>
+                  <span className="bar"><i style={{ width: `${(r.amount / mixMax) * 100}%` }} /></span>
+                  <b>{compact(r.amount)}</b>
+                  <span className="pct">{mixTotal ? `${Math.round((r.amount / mixTotal) * 100)}%` : ""}</span>
                 </div>
               ))}
             </div>

@@ -22789,3 +22789,32 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
   .stat-drill-row { grid-template-columns: 1fr 1fr; }
   .stat-cat-row { grid-template-columns: minmax(0, 1fr) 80px 50px 34px; }
 }
+
+/* ── 통계 4차(2026-11-19): 미수금 구간 · 고객 구성 ─────────────────────────────────── */
+.stat-cat-row .t i.muted { font-style: normal; color: var(--muted); font-size: 11px; }
+.stat-cat-row.ar-nd .bar i  { background: #86b6ef; }
+.stat-cat-row.ar-30 .bar i  { background: #e8b04a; }
+.stat-cat-row.ar-60 .bar i  { background: #e08a3c; }
+.stat-cat-row.ar-90 .bar i  { background: #d0613a; }
+.stat-cat-row.ar-90p .bar i { background: #b23b3b; }
+.stat-mix-split {
+  display: flex;
+  height: 22px;
+  margin: 2px 0 10px;
+  border-radius: 6px;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+}
+.stat-mix-split span {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-mix-split .new { background: #2e8b57; }
+.stat-mix-split .old { background: #0055a8; }

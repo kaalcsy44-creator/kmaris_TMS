@@ -2801,6 +2801,14 @@ export type StatisticsData = {
   customer_month?: Record<CurrencyKey, Record<string, number[]>>;
   item_month?: Record<CurrencyKey, { part_no: string; description: string; category?: string; m: number[] }[]>;
   customer_pad?: string[];
+  // 선박 등록 선주 · ISM 관리사별 매출(달별, 원통화). 선박 조회 전이면 "(unknown)".
+  owner_month?: Record<CurrencyKey, Record<string, number[]>>;
+  manager_month?: Record<CurrencyKey, Record<string, number[]>>;
+  // 지금 미수 청구서 — 만기 경과 구간·DSO 용.
+  ar_open?: {
+    rfq_id: number | null; project_no: string; customer: string;
+    invoice_date: string; due_date: string; currency: CurrencyKey; outstanding: number;
+  }[];
   // 작년 같은 달(1~12월) — "작년 같은 기간 대비" 비교용.
   prev_year?: {
     months: string[];
