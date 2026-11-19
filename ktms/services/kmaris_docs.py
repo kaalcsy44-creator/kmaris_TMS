@@ -415,6 +415,7 @@ def _p(text: Any, style: ParagraphStyle) -> Paragraph:
     )
     # Allow only minimal internal markup used by this template.
     safe = safe.replace("&lt;b&gt;", "<b>").replace("&lt;/b&gt;", "</b>")
+    safe = safe.replace("&lt;i&gt;", "<i>").replace("&lt;/i&gt;", "</i>")
     return Paragraph(safe, style)
 
 
@@ -2593,29 +2594,27 @@ def _make_quotation_costing_pdf(data: Dict[str, Any], company: Dict[str, Any]) -
     # ── Remark ────────────────────────────────────────────────────────
     # 4단계에서 입력한 견적 전체 비고. 품목표 바로 아래(=T&C 위)에 T&C 와 같은 형식으로
     # 둔다 — 이 견적에만 해당하는 이야기를 표준 약관보다 먼저 읽히게 하기 위함.
+    # 섹션 제목 띠는 첫 줄과 붙여 둔다 — 제목만 앞 페이지 끝에 남고 본문이 다음 장으로
+    # 넘어가면 빈 섹션처럼 읽힌다.
+    def bullets(title, lines):
+        paras = [_p(f"• {line}", s["small"]) for line in lines]
+        story.append(KeepTogether([section(title), Spacer(1, 2 * mm)] + paras[:1]))
+        for para in paras[1:]:
+            story.append(Spacer(1, 1 * mm))
+            story.append(para)
+        story.append(Spacer(1, 4 * mm))
+
     remark_lines = quotation_remark_lines(terms)
     if remark_lines:
-        story.append(section("Remark"))
-        story.append(Spacer(1, 2 * mm))
-        for line in remark_lines:
-            story.append(_p(f"• {line}", s["small"]))
-            story.append(Spacer(1, 1 * mm))
-        story.append(Spacer(1, 3 * mm))
+        bullets("Remark", remark_lines)
 
     # ── Terms & Conditions ────────────────────────────────────────────
-    story.append(section("Terms & Conditions"))
-    story.append(Spacer(1, 2 * mm))
-    for line in quotation_standard_terms(terms, valid_until=data.get("valid_until", "") or "",
-                                         quote_date=data.get("date", "") or ""):
-        story.append(_p(f"• {line}", s["small"]))
-        story.append(Spacer(1, 1 * mm))
-    story.append(Spacer(1, 3 * mm))
+    bullets("Terms & Conditions",
+            quotation_standard_terms(terms, valid_until=data.get("valid_until", "") or "",
+                                     quote_date=data.get("date", "") or ""))
 
     # ── Payment ───────────────────────────────────────────────────────
-    story.append(section("Payment"))
-    story.append(Spacer(1, 2 * mm))
-    story.append(_p(f"• {terms.get('payment_terms') or 'T/T in advance'}", s["small"]))
-    story.append(Spacer(1, 3 * mm))
+    bullets("Payment", [terms.get("payment_terms") or "T/T in advance"])
     story.append(_p("We hope this quotation meets your requirement and to receive your order confirmation "
                     "at your earliest convenience.", s["base"]))
     story.append(Spacer(1, 6 * mm))
