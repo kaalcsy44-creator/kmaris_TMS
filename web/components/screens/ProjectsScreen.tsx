@@ -2648,6 +2648,31 @@ export function PipelineModal({
   // 읽기 화면을 텍스트로 복사할 때의 원본 — 값이 <input> 안이라 마우스 선택으로는 안 잡힌다.
   const stagePaneRef = useRef<HTMLElement>(null);
   const [copied, setCopied] = useState(false);
+  // 단계 머리 "⋯" 메뉴(Copy·Print) 열림.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const close = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [moreOpen]);
+  // 거래 상대 줄은 단계 본문을 내리면 접는다 — 맨 위로 돌아오면 다시 편다. 접고 펴는
+  // 문턱을 벌려 둔다(60↓/2↑): 줄이 접히면 본문 창이 그만큼 길어져 스크롤 위치가 당겨지는데,
+  // 문턱이 하나면 그 당김으로 다시 펴지고 또 접히며 떨린다.
+  const [partiesHidden, setPartiesHidden] = useState(false);
+  useEffect(() => {
+    const el = stagePaneRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const y = el.scrollTop;
+      setPartiesHidden((h) => (h ? y > 2 : y > 60));
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  });
   const copyStageText = useCallback(async () => {
     const text = stagePaneText(stagePaneRef.current);
     if (!text) return;
@@ -3173,7 +3198,11 @@ export function PipelineModal({
             주요 결과물(번호·Vendor·금액 등)과 완료 일시를 카드에 함께 노출한다.
             우측 토글로 납작한(번호+작은 제목) 바로 접어 세로 공간을 아낀다. */}
         {/* 거래 상대(고객·벤더·거래구분) — 개요 머리의 그 줄을 작업 화면에도 고정해 둔다. */}
-        {modalView === "work" && !isNewProject ? <DealPartiesLine row={r} /> : null}
+        {modalView === "work" && !isNewProject ? (
+          <div className={`deal-parties-wrap${partiesHidden ? " hidden" : ""}`}>
+            <DealPartiesLine row={r} />
+          </div>
+        ) : null}
         {modalView === "work" ? (
         <div className={`project-stage-tabs-row${stagesCollapsed ? " collapsed" : ""}`}>
           {/* 폰 전용 요약 스트립 — 카드 10장 대신 중분류 5묶음 + 칸 10개. 단계명은 바로 아래 전환 탭에 있다. */}
@@ -3216,6 +3245,17 @@ export function PipelineModal({
               })}
             </div>
           </div>
+          {/* 단계 이동 ‹ › — 단계 머리의 Prev/Next 를 스트립 양 끝으로 옮겼다(같은 일을 두 곳에서 하지 않게). */}
+          <button
+            type="button"
+            className="stage-strip-move"
+            onClick={() => setSelectedStage((s) => Math.max(s - 1, 1))}
+            disabled={selectedStage <= 1}
+            aria-label="Previous stage"
+            title={selectedStage > 1 ? `Prev: ${selectedStage - 1}. ${rSteps[selectedStage - 2] ?? ""}` : undefined}
+          >
+            ‹
+          </button>
           <div className="project-stage-tabs" role="tablist" aria-label="Project stages" ref={stageStripRef}>
           {chain.map((c) => {
             const no = c.no;
@@ -3230,6 +3270,9 @@ export function PipelineModal({
               half ? `half ${half}` : "",
               no === r.stage ? "current" : "",
               c.skip ? "skip" : "",
+              // 납작 모드에서 이름을 보이는 칸 — 보고 있는 단계와 진행 중인 단계만. 나머지는
+              // 번호 원만 남겨(이름은 툴팁) 열 칸 이름이 다 잘리던 것을 없앤다.
+              selectedStage === no || no === r.stage ? "lbl" : "",
             ]
               .filter(Boolean)
               .join(" ");
@@ -3260,6 +3303,16 @@ export function PipelineModal({
             );
           })}
           </div>
+          <button
+            type="button"
+            className="stage-strip-move"
+            onClick={() => setSelectedStage((s) => Math.min(s + 1, rSteps.length))}
+            disabled={selectedStage >= rSteps.length}
+            aria-label="Next stage"
+            title={selectedStage < rSteps.length ? `Next: ${selectedStage + 1}. ${rSteps[selectedStage] ?? ""}` : undefined}
+          >
+            ›
+          </button>
           <button
             type="button"
             className="stage-tabs-toggle"
@@ -3306,7 +3359,7 @@ export function PipelineModal({
               ref={layoutRef}
               style={{
                 gridTemplateColumns: infoCollapsed
-                  ? "0 26px minmax(0, 1fr)"
+                  ? "0 0 minmax(0, 1fr)"
                   : `${infoWidth}px 14px minmax(0, 1fr)`,
               }}
             >
@@ -3413,6 +3466,18 @@ export function PipelineModal({
                 다음 단계로 이동하는 → 버튼(우상단). 11개 단계 UI 일관성의 기준. */}
             <div className="stage-pane-head">
               <h3 className="stage-pane-title">
+                {/* 왼쪽 정보 칸을 접어 두면 펼치는 단추가 제목 앞에 선다 — 접힌 칸이 50px 기둥으로 남지 않게. */}
+                {infoCollapsed && !isNewProject ? (
+                  <button
+                    type="button"
+                    className="stage-info-open"
+                    onClick={() => setInfoCollapsed(false)}
+                    title="Show project info"
+                    aria-label="Show project info"
+                  >
+                    ☰
+                  </button>
+                ) : null}
                 <span className="stage-pane-no">{selectedStage}</span>
                 <span>{rSteps[selectedStage - 1] ?? ""}</span>
                 {STAGE_TITLE_QUALIFIER[selectedStage] ? (
@@ -3421,48 +3486,49 @@ export function PipelineModal({
               </h3>
               {!isNewProject ? (
                 <div className="stage-pane-nav">
-                  {/* 읽기 ↔ 편집. 같은 화면을 껍데기만 바꿔 보여주므로 입력 중이던 값은 유지된다. */}
-                  <div className="stage-mode-toggle" role="group" aria-label="View mode">
-                    <button
-                      type="button"
-                      className={stageMode === "read" ? "on" : ""}
-                      aria-pressed={stageMode === "read"}
-                      onClick={() => setStageMode("read")}
-                      title="Read — see what was entered, without editing (R)"
-                    >
-                      <span aria-hidden>👁 </span>Read
-                    </button>
-                    <button
-                      type="button"
-                      className={stageMode === "edit" ? "on" : ""}
-                      aria-pressed={stageMode === "edit"}
-                      onClick={() => setStageMode("edit")}
-                      title="Edit — change and save this stage (E)"
-                    >
-                      <span aria-hidden>✎ </span>Edit
-                    </button>
-                  </div>
+                  {/* 읽기 ↔ 편집 한 단추 — 지금 아닌 쪽으로 가는 이름을 단다. 같은 화면을 껍데기만
+                      바꿔 보여주므로 입력 중이던 값은 유지된다. */}
+                  <button
+                    type="button"
+                    className={`stage-mode-switch${stageMode === "edit" ? " editing" : ""}`}
+                    onClick={() => setStageMode(stageMode === "read" ? "edit" : "read")}
+                    title={stageMode === "read" ? "Edit — change and save this stage (E)" : "Back to read view (R)"}
+                  >
+                    {stageMode === "read" ? "✎ Edit" : "👁 Read view"}
+                  </button>
                   {stageMode === "read" ? (
-                    <>
+                    <div className="stage-more" ref={moreRef}>
                       <button
                         type="button"
                         className="stage-read-act"
-                        onClick={copyStageText}
-                        title="Copy this stage as text — values sit inside input boxes, so dragging over them copies nothing"
+                        onClick={() => setMoreOpen((v) => !v)}
+                        aria-haspopup="menu"
+                        aria-expanded={moreOpen}
+                        title="More — copy or print this stage"
                       >
-                        {copied ? "Copied" : "Copy"}
+                        {copied ? "Copied" : "⋯"}
                       </button>
-                      <button
-                        type="button"
-                        className="stage-read-act"
-                        onClick={() => window.print()}
-                        title="Print this stage"
-                      >
-                        Print
-                      </button>
-                    </>
+                      {moreOpen ? (
+                        <div className="stage-more-menu" role="menu">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => { setMoreOpen(false); copyStageText(); }}
+                            title="Values sit inside input boxes, so dragging over them copies nothing"
+                          >
+                            Copy as text
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => { setMoreOpen(false); window.print(); }}
+                          >
+                            Print this screen
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
-                  {stageMove}
                 </div>
               ) : null}
             </div>

@@ -26,7 +26,6 @@ import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import Modal from "@/components/common/Modal";
 import { imageFromClipboard } from "@/lib/imagePaste";
 import { useEditGate } from "@/lib/viewMode";
-import CustomerName from "@/components/common/CustomerName";
 import CustomerSelect from "@/components/common/CustomerSelect";
 import ContactMultiSelect from "@/components/common/ContactMultiSelect";
 import VesselOwnerRow from "@/components/common/VesselOwnerRow";
@@ -895,8 +894,8 @@ export default function NewRfqForm({
     <div className={embedded ? undefined : "panel form-panel"} onPaste={handlePaste}>
       {embedded && editId ? (
         <div className="embedded-record-bar pane-row">
+          {/* 고객명은 팝업 머리(Customer 줄)와 아래 Basic info 에 이미 있다 — 여기선 문서번호만. */}
           <span className="embedded-record-current">
-            <CustomerName name={customerName} />
             <b className="rec-doc-no">{loadedRfqNo}</b>
           </span>
           {/* Read 모드에서는 품목표 도구 묶음이 숨으므로 문서번호 줄에 둔다. */}

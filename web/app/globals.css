@@ -12474,7 +12474,9 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
   /* 상단 단계 스트립 — 카드 10장을 가로로 밀어 보는 대신 요약 스트립(.stage-mini)으로 바꾼다.
      접기 토글은 요약에 접을 것이 없어 함께 감춘다. */
   .project-stage-tabs-row > .project-stage-tabs,
-  .project-stage-tabs-row > .stage-tabs-toggle {
+  .project-stage-tabs-row > .stage-tabs-toggle,
+  .project-stage-tabs-row > .stage-strip-move,
+  .stage-info-open {
     display: none;
   }
   .stage-mini {
@@ -22187,3 +22189,120 @@ table.mini tfoot .total-label .foot-charge-label {
 }
 .terms-sec > .form-field,
 .terms-sec > .form-grid { margin: 0; }
+
+/* ── 작업 팝업 1차 정리(2026-11-19): 위쪽 고정 영역 줄이기 ─────────────────────────
+   내용 영역이 화면의 60%에 못 미쳤다. 같은 일을 하는 단추를 한 곳으로 모으고,
+   항상 필요하지 않은 줄은 접는다. */
+
+/* 거래 상대 줄 — 단계 본문을 내리면 접힌다(맨 위로 오면 다시 펼침). */
+.deal-parties-wrap {
+  flex: none;
+  max-height: 40px;
+  overflow: hidden;
+  transition: max-height 0.18s ease, opacity 0.18s ease;
+}
+.deal-parties-wrap.hidden { max-height: 0; opacity: 0; }
+.deal-parties-wrap .deal-parties { margin: -6px 0 0; font-size: 13px; }
+
+/* 단계 스트립 양 끝 ‹ › — 단계 머리의 Prev/Next 를 대신한다. */
+.stage-strip-move {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  margin-bottom: 9px;
+  border: 1px solid var(--blue);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--blue);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.project-stage-tabs-row.collapsed .stage-strip-move { margin-bottom: 0; }
+.stage-strip-move:hover:not(:disabled) { background: var(--blue); color: #fff; }
+.stage-strip-move:disabled { border-color: var(--line); color: var(--muted); opacity: 0.5; cursor: default; }
+.pl-modal.service .stage-strip-move { border-color: #16a05a; color: #16a05a; }
+.pl-modal.service .stage-strip-move:hover:not(:disabled) { background: #16a05a; color: #fff; }
+.pl-modal.service .stage-strip-move:disabled { border-color: var(--line); color: var(--muted); }
+
+/* 납작 모드: 이름은 보고 있는 단계·진행 중 단계만, 나머지는 번호 원(이름은 툴팁). */
+.project-stage-tabs-row.collapsed .project-stage-tabs button:not(.lbl) {
+  flex: 0 0 auto;
+  padding: 4px 6px;
+}
+.project-stage-tabs-row.collapsed .project-stage-tabs button:not(.lbl) .st-label { display: none; }
+.project-stage-tabs-row.collapsed .project-stage-tabs button.lbl { flex: 1 1 0; }
+.project-stage-tabs-row.collapsed .project-stage-tabs button.lbl .st-label {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 단계 머리 — 읽기/편집 한 단추 + ⋯ 메뉴. */
+.stage-mode-switch {
+  border: 1px solid #16324f;
+  background: #fff;
+  color: #16324f;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 29px;
+}
+.stage-mode-switch:hover { background: #16324f; color: #fff; }
+.stage-mode-switch.editing { background: #16324f; color: #fff; }
+.stage-mode-switch.editing:hover { background: #24476e; }
+.stage-more { position: relative; }
+.stage-more > .stage-read-act { min-width: 34px; min-height: 29px; }
+.stage-more-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 170px;
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(11, 29, 58, 0.16);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.stage-more-menu button {
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  color: #25344a;
+  cursor: pointer;
+}
+.stage-more-menu button:hover { background: #f1f5fb; }
+
+/* 정보 칸을 접었을 때 — 구분선 기둥 대신 제목 앞 ☰ 단추. */
+.project-workspace-layout.info-collapsed .ws-divider { display: none; }
+.project-workspace-layout.info-collapsed .project-stage-pane { padding-left: 0; }
+.stage-info-open {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #fff;
+  color: #55627a;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.stage-info-open:hover { border-color: var(--blue); color: var(--blue); }
