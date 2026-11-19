@@ -3082,6 +3082,37 @@ def preview_auto_classify():
         s.close()
 
 
+class ItemLedgerAutoScope(BaseModel):
+    """자동 분류 제안을 낼 품목(목록에서 체크한 것)."""
+    targets: list[ItemLedgerAssign] = []
+
+
+@app.post("/api/admin/settings/item-ledger/auto-classify/preview", dependencies=[Depends(require_token)])
+def preview_auto_classify_scoped(body: ItemLedgerAutoScope):
+    """고른 품목만 분류 제안(미적용). 마스터 품목은 물품/용역 구분을 마스터에서 읽는다."""
+    s = get_session()
+    try:
+        cat_by_id = {c.id: c for c in s.query(ItemCategory).all()}
+        ids = [t.item_id for t in body.targets if t.item_id]
+        masters = {m.id: m for m in s.query(ItemMaster).filter(ItemMaster.id.in_(ids)).all()} if ids else {}
+        rows = []
+        for t in body.targets:
+            m = masters.get(t.item_id) if t.item_id else None
+            rows.append({
+                "item_id": m.id if m else None,
+                "part_no": (m.part_no if m else t.part_no) or "",
+                "description": (m.description if m else t.description) or "",
+                "maker": (m.maker if m else t.maker) or "",
+                "item_type": (m.item_type if m else "") or "",
+            })
+        out = suggest_categories(s, rows=rows)
+        for r in out:
+            r["category_path"] = _category_path(cat_by_id, r["category_id"])
+        return {"proposals": out, "pending": len(rows)}
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/settings/item-ledger/auto-classify", dependencies=[Depends(require_token)])
 def apply_auto_classify(body: ItemLedgerAutoApply):
     """고른 제안을 그대로 반영한다 — 행마다 제 분류로. 마스터에 없던 품목은 등록된다.

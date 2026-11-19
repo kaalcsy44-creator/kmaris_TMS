@@ -2289,6 +2289,12 @@ export function previewAutoClassify(): Promise<{
 }> {
   return get("/api/admin/settings/item-ledger/auto-classify");
 }
+/** 목록에서 체크한 품목만 분류 제안(미적용). */
+export function previewAutoClassifyFor(targets: {
+  item_id?: number | null; part_no?: string; description?: string; maker?: string;
+}[]): Promise<{ proposals: AutoCategoryProposal[]; pending: number }> {
+  return post("/api/admin/settings/item-ledger/auto-classify/preview", { targets });
+}
 /** 고른 제안을 반영한다 — 행마다 제 분류로(일괄 배정과 달리 하나의 분류가 아니다). */
 export function applyAutoClassify(body: {
   targets: {

@@ -982,6 +982,11 @@ def _like(a: set[str], b: set[str]) -> float:
 _LIKE_MIN = 0.6
 
 
+# 물건이 아닌 줄(할인·인증·운임·서류) — 문맥만으로 계통에 넣지 않는다.
+_NON_ITEM_RE = re.compile(r"(discount|cert(ificate|ification)?s?|freight|surcharge|handling|document(s|ation)?|"
+                          r"courier|insurance|bank|commission|rounding)", re.I)
+
+
 def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]:
     """미분류 품목별 분류 제안 목록.
 
@@ -995,6 +1000,7 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
     # 이미 분류된 품목에서 배운다.
     by_desc: dict[str, list[int]] = {}
     by_family: dict[str, list[int]] = {}
+    by_maker: dict[str, list[int]] = {}   # 같은 메이커 품목이 모인 분류 — 약한 근거(마지막 갈래)
     learned: list[tuple[set[str], int, str]] = []   # (품명 낱말, 분류, 품명) — 닮은꼴 찾기용
     for m in masters:
         if not m.category_id or m.category_id not in cats:
@@ -1008,14 +1014,22 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
         fam = part_family(m.part_no)
         if fam:
             by_family.setdefault(fam, []).append(m.category_id)
+        mk = _norm(m.maker)
+        if mk:
+            by_maker.setdefault(mk, []).append(m.category_id)
 
     # 분류 이름 낱말 색인(잎 분류 우선 — 깊을수록 구체적이다).
     cat_words = {cid: _cat_words(c.name) for cid, c in cats.items() if c.active is not False}
 
     # 용역 가지 — 물건과 용역은 서로의 자리에 갈 수 없다. 이 울타리가 없으면
     # "Service Charge" 가 낱말 하나로 'Fuel Oil System > Service Tank' 에 꽂힌다.
-    service_root = next((cid for cid, c in cats.items()
-                         if (c.level or 1) == 1 and _norm(c.name) == "SERVICE"), None)
+    # 2026-09 분류 전환 뒤로 용역은 "Service" 한 뿌리가 아니라 tree_type=service 인 대분류들
+    # (Technical service coordination · Trading & delivery support)에 얹힌다. 옛 이름 하나만
+    # 찾으면 울타리가 아예 서지 않아 'Labor Charge' 가 'Charge Air Cooler' 로 갔다.
+    service_roots = {cid for cid, c in cats.items()
+                     if (c.level or 1) == 1 and (_norm(c.name) == "SERVICE"
+                                                 or (getattr(c, "tree_type", None) or "") == "service")}
+    service_root = next(iter(service_roots), None)   # "용역 가지가 있나" 표식으로만 쓴다
 
     def ancestors(cid: int | None) -> set[int]:
         out, cur, guard = set(), cats.get(cid) if cid else None, 0
@@ -1026,7 +1040,7 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
         return out
 
     def in_service_branch(cid: int) -> bool:
-        return service_root is not None and service_root in ancestors(cid)
+        return bool(service_roots & ancestors(cid))
 
     def fenced(cids: list[int], want_service: bool) -> list[int]:
         """후보에서 반대편 가지를 걷어낸다 — 물건과 용역은 서로의 자리에 갈 수 없다.
@@ -1134,6 +1148,58 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
         } for m in masters if not m.category_id]
         rows += ledger_rows(session)["unmatched"]
 
+    # ── 문맥: 이 품목이 오간 딜의 제목 · 그 줄의 비고 · 메이커 ─────────────────────────
+    # 품명만으로는 'BEARING SHELL'(엔진 베어링)이 'Shell & Tube Cooler' 로 가고, 'Bearings'
+    # 만 적힌 줄은 어느 계통인지 알 길이 없다. 같은 줄이 실린 RFQ 의 제목("DMC PROVISION
+    # CRANE SPARES")과 그 줄의 비고("No.4 Auxiliary Engine Control System")가 계통을 말해 준다.
+    from db.models import RFQ as _RFQ   # 지연 import — 모듈 로드 순서를 건드리지 않는다
+    hist = session.query(ItemPriceHistory.item_id, ItemPriceHistory.part_no,
+                         ItemPriceHistory.description, ItemPriceHistory.rfq_id) \
+        .filter(ItemPriceHistory.rfq_id.isnot(None)).all()
+    rfqs_by_item: dict[int, set[int]] = {}
+    rfqs_by_key: dict[str, set[int]] = {}
+    for h in hist:
+        if h.item_id:
+            rfqs_by_item.setdefault(h.item_id, set()).add(h.rfq_id)
+        k = match_key(h.part_no, h.description)
+        if k:
+            rfqs_by_key.setdefault(k, set()).add(h.rfq_id)
+    _need = set().union(*rfqs_by_item.values(), *rfqs_by_key.values()) if (rfqs_by_item or rfqs_by_key) else set()
+    rfq_ctx = {x.id: (x.project_title or "", x.items or [])
+               for x in session.query(_RFQ.id, _RFQ.project_title, _RFQ.items).filter(_RFQ.id.in_(_need)).all()} if _need else {}
+
+    def context_of(r: dict) -> list[tuple[str, str]]:
+        """[(출처, 글)] — 비고(가장 구체적) → 프로젝트 제목 → 메이커 순."""
+        ids = set(rfqs_by_item.get(r.get("item_id") or -1, set())) | rfqs_by_key.get(
+            match_key(r.get("part_no"), r.get("description")) or "", set())
+        npn, ndesc = _norm(r.get("part_no")), _norm(r.get("description"))
+        remarks: list[str] = []
+        titles: list[str] = []
+        makers: list[str] = [r.get("maker") or ""]
+        for rid in ids:
+            title, items = rfq_ctx.get(rid, ("", []))
+            if title:
+                titles.append(title)
+            for it in items:
+                if not isinstance(it, dict):
+                    continue
+                same = (npn and _norm(it.get("part_no")) == npn) or (ndesc and _norm(it.get("description")) == ndesc)
+                if not same:
+                    continue
+                if (it.get("remark") or "").strip():
+                    remarks.append(str(it.get("remark")).strip())
+                if (it.get("maker") or "").strip():
+                    makers.append(str(it.get("maker")).strip())
+        seen: set[str] = set()
+        out_ctx: list[tuple[str, str]] = []
+        for src, vals in (("remark", remarks), ("project", titles), ("maker", makers)):
+            for v in vals:
+                key = src + "|" + _norm(v)
+                if v and key not in seen:
+                    seen.add(key)
+                    out_ctx.append((src, v))
+        return out_ctx
+
     out: list[dict] = []
     for r in rows:
         desc, pn = r.get("description") or "", r.get("part_no") or ""
@@ -1162,11 +1228,50 @@ def suggest_categories(session, *, rows: list[dict] | None = None) -> list[dict]
             c, why = like_desc(_desc_words(desc), is_service)
             if c:
                 cid, reason = c, f"like {why}"
-        # 4) 품명이 분류 이름을 품는다.
-        if cid is None:
-            c, hit = by_name(desc, None, is_service)
+        # 문맥(비고·제목)이 가리키는 계통 — 메이커는 이름 짐작에 쓰지 않는다(회사 이름이다).
+        ctx = context_of(r) if cid is None else []
+        ctx_cid, ctx_src, ctx_text, ctx_hit = None, "", "", ""
+        for src, text in ctx:
+            if src == "maker":
+                continue
+            c, hit = by_name(text, None, is_service)
             if c:
-                cid, reason = c, f"name contains “{hit}”"
+                ctx_cid, ctx_src, ctx_text, ctx_hit = c, src, text, hit
+                break
+        # 3.5) 문맥 계통 안에서 품명으로 한 단계 더 — 'Bearings' + 제목 'Main engine spares'
+        #      → Engines 안의 Bearing. 계통 밖의 같은 낱말(Shell & Tube Cooler)로 새지 않는다.
+        # 문맥 안의 답은 품명만으로 찾은 답보다 "덜 맞지 않을 때"만 쓴다 — 맞은 낱말 수·가장 긴
+        # 낱말 길이로 견준다. 'Cam Lock Washer' 는 엔진 제목 아래서 'cam' 한 낱말로 Camshaft
+        # 를 맞히지만, 품명만으로 'washer' 가 더 길게 맞는다 → Washer. 문맥이 계통(대분류)까지만
+        # 짚고 그 아래를 못 고르면 그것도 버린다(품명이 고른 구체 분류가 낫다).
+        g_cid, g_hit = by_name(desc, None, is_service) if cid is None else (None, "")
+        if cid is None and ctx_cid is not None:
+            top = ctx_cid
+            while cats[top].parent_id and (cats[top].level or 1) > 1:
+                top = cats[top].parent_id
+            c, hit = by_name(desc, top, is_service)
+            strength = lambda h: (len(h.split(", ")) if h else 0, max((len(w) for w in h.split(", ")), default=0))
+            if c and c != top and (g_cid is None or strength(hit) >= strength(g_hit)):
+                cid, reason = c, f"name “{hit}” within {ctx_src} “{ctx_text[:40]}”"
+        # 4) 품명이 분류 이름을 품는다.
+        if cid is None and g_cid is not None:
+            cid, reason = g_cid, f"name contains “{g_hit}”"
+        # 5) 품명으로는 못 찾았지만 비고·제목이 계통을 말한다 — 문맥만으로는 계통(대분류)까지만.
+        #    할인·인증·운임 같은 줄은 물건이 아니라 어느 계통에도 넣지 않는다.
+        if cid is None and ctx_cid is not None and not _NON_ITEM_RE.search(desc):
+            top = ctx_cid
+            while cats[top].parent_id and (cats[top].level or 1) > 1:
+                top = cats[top].parent_id
+            cid, reason = top, f"{ctx_src} “{ctx_text[:40]}” mentions “{ctx_hit}” (system only — check)"
+        # 6) 같은 메이커 품목이 한 분류(또는 한 상위)에 모여 있다 — 가장 약한 근거.
+        if cid is None:
+            for src, text in ctx:
+                if src != "maker":
+                    continue
+                c, why = _pick(cats, fenced(by_maker.get(_norm(text)) or [], is_service))
+                if c:
+                    cid, reason = c, f"maker {text} — {why}"
+                    break
         if cid is None:
             continue
         out.append({

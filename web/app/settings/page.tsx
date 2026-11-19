@@ -61,6 +61,7 @@ import {
   assignItemLedgerCategory,
   assignItemLedgerCategoryBulk,
   previewAutoClassify,
+  previewAutoClassifyFor,
   applyAutoClassify,
   fetchEmailTemplates,
   saveEmailTemplate,
@@ -5097,6 +5098,8 @@ export function CategoriesTab({ onOpenItems }: {
   // 자동 분류 — 제안을 먼저 보여 주고, 고른 것만 반영한다(바로 쓰지 않는다).
   const [autoOpen, setAutoOpen] = useState(false);
   const [autoRows, setAutoRows] = useState<AutoCategoryProposal[] | null>(null);
+  // 체크한 품목만으로 제안을 냈을 때 그 수(0 = 미분류 전체).
+  const [autoScoped, setAutoScoped] = useState(0);
   const [autoPending, setAutoPending] = useState(0);
   const [autoSkip, setAutoSkip] = useState<Set<number>>(() => new Set());
   const [autoBusy, setAutoBusy] = useState(false);
@@ -5347,7 +5350,13 @@ export function CategoriesTab({ onOpenItems }: {
     setErr("");
     setNote("");
     try {
-      const r = await previewAutoClassify();
+      // 목록에서 체크한 품목이 있으면 그것만, 없으면 미분류 전체를 대상으로 제안한다.
+      const r = pickedRows.length
+        ? await previewAutoClassifyFor(pickedRows.map((it) => ({
+            item_id: it.item_id ?? null, part_no: it.part_no, description: it.description, maker: it.maker,
+          })))
+        : await previewAutoClassify();
+      setAutoScoped(pickedRows.length);
       setAutoRows(r.proposals);
       setAutoPending(r.pending);
     } catch (e) {
@@ -5371,6 +5380,7 @@ export function CategoriesTab({ onOpenItems }: {
         })),
       });
       setAutoOpen(false);
+      if (autoScoped) setPicked(new Set());   // 체크해서 돌린 묶음은 끝났다 — 다음 묶음을 고르게 비운다
       invalidateMasterCategories();
       refresh();
       loadLedger();
@@ -5688,8 +5698,11 @@ export function CategoriesTab({ onOpenItems }: {
                 </button>
               ) : null}
               {canEdit ? (
-                <button className="btn tiny" onClick={openAuto} title="Suggest categories for items that have none">
-                  ✦ Auto-assign
+                <button className="btn tiny" onClick={openAuto}
+                  title={pickedRows.length
+                    ? "Suggest categories for the ticked items only"
+                    : "Suggest categories for items that have none — tick items first to limit it to them"}>
+                  ✦ Auto-assign{pickedRows.length ? ` (${pickedRows.length})` : ""}
                 </button>
               ) : null}
               {onOpenItems && pickedCat ? (
@@ -5859,12 +5872,14 @@ export function CategoriesTab({ onOpenItems }: {
           form
         >
           <p className="hint-inline" style={{ display: "block", marginBottom: 10 }}>
+            {autoScoped ? <b>{autoScoped} ticked item(s) only. </b> : null}
             Categories are guessed from what is already classified — an identical description,
             a shared part-number family, a description that is nearly the same as a classified
             one, or a category name the description contains (shipyard shorthand is read too:
-            V/V is a valve, L.O. is lubricating oil). Each line says which. Untick anything that
-            looks wrong; items with no clear match are left alone rather than filed somewhere
-            plausible.
+            V/V is a valve, L.O. is lubricating oil). The deal the item came in is read too —
+            the line&apos;s remark, the project title and the maker — so “Bearings” on a main-engine
+            RFQ lands under the engine. Each line says which. Untick anything that looks wrong;
+            items with no clear match are left alone rather than filed somewhere plausible.
           </p>
           {autoRows === null ? (
             <div className="state">Reading items…</div>
