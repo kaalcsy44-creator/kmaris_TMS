@@ -17,7 +17,7 @@ from services.kmaris_docs import (
     pi_optional_sections,
     bank_name_address, origin_mark, incoterms_text,
     normalize_items, calc_totals, _num, DOC_TITLES, doc_parties,
-    packing_totals, consignee_mark_lines, sm_hidden, master_mark_line, _dim_parts, cbm, _invoice_shipping_rows,
+    packing_totals, consignee_mark_lines, sm_hidden, master_mark_line, multi_case, _dim_parts, cbm, _invoice_shipping_rows,
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
     pi_decimals, doc_decimals, print_decimals, pi_charges, pi_doc_date, is_service_doc, service_info_rows,
     SERVICE_PI_DECIMALS, cn_view, cn_contact_line, CN_MIN_ITEM_ROWS,
@@ -96,10 +96,10 @@ def _compose_marks(sh: Dict[str, Any]) -> str:
         push(sh.get("sm_type"))
     for line in consignee_mark_lines(sh):
         push(line)
-    if sh.get("sm_po_no"): push(f"P.O. NO.: {sh['sm_po_no']}")
-    if sh.get("sm_ref_no"): push(f"REF. NO.: {sh['sm_ref_no']}")
+    if sh.get("sm_po_no"): push(f"PO NO.: {sh['sm_po_no']}")
+    if sh.get("sm_ref_no") and not sm_hidden(sh, "sm_hide_refno"): push(f"REF. NO.: {sh['sm_ref_no']}")
     push(sh.get("sm_desc"))
-    if sh.get("sm_case_no"): push(f"CASE NO.: {sh['sm_case_no']}")
+    if sh.get("sm_case_no") and multi_case(sh): push(f"CASE NO.: {sh['sm_case_no']}")
     if sh.get("sm_total_cases"): push(f"TOTAL: {sh['sm_total_cases']} CASE(S)")
     if sh.get("sm_net_weight"): push(f"N.W.: {sh['sm_net_weight']} KG")
     if sh.get("sm_gross_weight"): push(f"G.W.: {sh['sm_gross_weight']} KG")
@@ -980,7 +980,7 @@ def make_shipping_mark_xlsx(
     if show_ref:
         for c, (label, value) in enumerate([
             ("REF. NO.", shipping.get("sm_ref_no", "")),
-            ("P.O. NO.", shipping.get("sm_po_no", "")),
+            ("PO NO.", shipping.get("sm_po_no", "")),
             ("DATE", data.get("date", "")),
         ]):
             lc = c * 2 + 1
@@ -998,14 +998,14 @@ def make_shipping_mark_xlsx(
         lines.append(str(shipping["sm_type"]).upper())
     lines += consignee_mark_lines(shipping)
     if shipping.get("sm_po_no"):
-        lines.append(f"P.O. NO. : {shipping['sm_po_no']}")
-    if shipping.get("sm_ref_no"):
+        lines.append(f"PO NO. : {shipping['sm_po_no']}")
+    if shipping.get("sm_ref_no") and not sm_hidden(shipping, "sm_hide_refno"):
         lines.append(f"REF. NO. : {shipping['sm_ref_no']}")
     if shipping.get("sm_desc"):
         lines.append(str(shipping["sm_desc"]).upper())
     if shipping.get("sm_final_dest"):
         lines.append(f"FINAL DESTINATION : {str(shipping['sm_final_dest']).upper()}")
-    if shipping.get("sm_case_no"):
+    if shipping.get("sm_case_no") and multi_case(shipping):
         lines.append(f"CASE NO. : {shipping['sm_case_no']}")
     if not lines:
         lines.append("(NO SHIPPING MARK DATA)")

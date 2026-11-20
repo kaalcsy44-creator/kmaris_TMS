@@ -3097,9 +3097,9 @@ function ShippingFields({
 // 문자열(shipping.shipping_marks)을 만들어 PDF 에 출력한다.
 // Shipping Mark 출력물에서 켜고 끄는 부분 — 값 "1" = 숨김(기본은 모두 표시). 백엔드 kmaris_docs·doc_xlsx 와 같은 키.
 const SM_PRINT_TOGGLES = [
-  { key: "sm_hide_company", label: "K-MARIS company info (header / footer)" },
+  { key: "sm_hide_company", label: "K-MARIS company header" },
   { key: "sm_hide_title", label: "SHIPPING MARK title" },
-  { key: "sm_hide_ref", label: "REF. NO. / P.O. NO. / DATE strip" },
+  { key: "sm_hide_ref", label: "REF. NO. / PO NO. / DATE strip" },
   { key: "sm_hide_metrics", label: "N.W. / G.W. / Dimension / Total cases table" },
 ];
 
@@ -3180,11 +3180,19 @@ function ShippingMarksSection({
           ? <ReadonlyField label="ATTN (Contact name)" value={shipping.consignee_contact || attnHint || ""} />
           : <Field label="ATTN (Contact name)" value={shipping.consignee_contact ?? ""} onChange={set("consignee_contact")} placeholder={attnHint} />}
         {ro("sm_po_no")
-          ? <ReadonlyField label="P.O. No." value={shipping.sm_po_no ?? ""} />
-          : <Field label="P.O. No." value={shipping.sm_po_no ?? ""} onChange={set("sm_po_no")} />}
+          ? <ReadonlyField label="PO No." value={shipping.sm_po_no ?? ""} />
+          : <Field label="PO No." value={shipping.sm_po_no ?? ""} onChange={set("sm_po_no")} />}
         {ro("sm_ref_no")
           ? <ReadonlyField label="Reference No." value={shipping.sm_ref_no ?? ""} />
-          : <Field label="Reference No." value={shipping.sm_ref_no ?? ""} onChange={set("sm_ref_no")} />}
+          : (
+            <div className="form-field">
+              <span className="sm-label-with-check">
+                Reference No.
+                <ShowOnMark k="sm_hide_refno" shipping={shipping} setShipping={setShipping} />
+              </span>
+              <input value={shipping.sm_ref_no ?? ""} onChange={(e) => set("sm_ref_no")(e.target.value)} />
+            </div>
+          )}
         {ro("sm_desc")
           ? <ReadonlyField label="Description of Goods" value={shipping.sm_desc ?? ""} />
           : <Field label="Description of Goods" value={shipping.sm_desc ?? ""} onChange={set("sm_desc")} />}
@@ -3476,10 +3484,11 @@ function composeShippingMarks(s: Record<string, string>): string {
     if (s.sm_hide_address !== "1") (s.consignee_address || "").split("\n").forEach((line) => push(line));
     if (s.consignee_contact) push(`ATTN: ${s.consignee_contact}`);
   }
-  if (s.sm_po_no) push(`P.O. NO.: ${s.sm_po_no}`);
-  if (s.sm_ref_no) push(`REF. NO.: ${s.sm_ref_no}`);
+  if (s.sm_po_no) push(`PO NO.: ${s.sm_po_no}`);
+  if (s.sm_ref_no && s.sm_hide_refno !== "1") push(`REF. NO.: ${s.sm_ref_no}`);
   push(s.sm_desc);
-  if (s.sm_case_no) push(`CASE NO.: ${s.sm_case_no}`);
+  // CASE NO. 는 케이스가 2개 이상일 때만(백엔드 multi_case 와 같은 규칙).
+  if (s.sm_case_no && Number(s.sm_total_cases || 0) > 1) push(`CASE NO.: ${s.sm_case_no}`);
   if (s.sm_total_cases) push(`TOTAL: ${s.sm_total_cases} CASE(S)`);
   if (s.sm_net_weight) push(`N.W.: ${s.sm_net_weight} KG`);
   if (s.sm_gross_weight) push(`G.W.: ${s.sm_gross_weight} KG`);

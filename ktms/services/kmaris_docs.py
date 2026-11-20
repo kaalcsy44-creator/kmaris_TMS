@@ -899,10 +899,10 @@ def _commercial_shipping_block(data: Dict[str, Any]):
             shipping.get("sm_type"),
             f"C/O {shipping.get('sm_consignee')}" if shipping.get("sm_consignee") else "",
             f"M/V {shipping.get('sm_vessel')}" if shipping.get("sm_vessel") else "",
-            f"P.O. NO.: {shipping.get('sm_po_no')}" if shipping.get("sm_po_no") else "",
+            f"PO NO.: {shipping.get('sm_po_no')}" if shipping.get("sm_po_no") else "",
             f"REF. NO.: {shipping.get('sm_ref_no')}" if shipping.get("sm_ref_no") else "",
             shipping.get("sm_desc"),
-            f"CASE NO.: {shipping.get('sm_case_no')}" if shipping.get("sm_case_no") else "",
+            f"CASE NO.: {shipping.get('sm_case_no')}" if shipping.get("sm_case_no") and multi_case(shipping) else "",
         ):
             if value:
                 mark_lines.append(str(value))
@@ -1951,6 +1951,14 @@ def master_mark_line(sh: Dict[str, Any], vessel_name: str = "") -> str:
     return f"TO MASTER OF {name.upper()}" if name else ""
 
 
+def multi_case(sh: Dict[str, Any]) -> bool:
+    """CASE NO. 줄은 케이스가 2개 이상일 때만 찍는다(Total Number of Cases > 1)."""
+    try:
+        return float(str(sh.get("sm_total_cases") or "0").strip() or 0) > 1
+    except ValueError:
+        return False
+
+
 def sm_hidden(sh: Dict[str, Any], key: str) -> bool:
     """Shipping Mark 출력 토글(sm_hide_company·sm_hide_ref·sm_hide_metrics) — "1" 이면 그 부분을 숨긴다."""
     return str(sh.get(key) or "").strip().lower() in ("1", "true", "yes")
@@ -1980,10 +1988,10 @@ def compose_shipping_marks(sh: Dict[str, Any]) -> str:
         push(sh.get("sm_type"))
     for line in consignee_mark_lines(sh):
         push(line)
-    if sh.get("sm_po_no"): push(f"P.O. NO.: {sh['sm_po_no']}")
-    if sh.get("sm_ref_no"): push(f"REF. NO.: {sh['sm_ref_no']}")
+    if sh.get("sm_po_no"): push(f"PO NO.: {sh['sm_po_no']}")
+    if sh.get("sm_ref_no") and not sm_hidden(sh, "sm_hide_refno"): push(f"REF. NO.: {sh['sm_ref_no']}")
     push(sh.get("sm_desc"))
-    if sh.get("sm_case_no"): push(f"CASE NO.: {sh['sm_case_no']}")
+    if sh.get("sm_case_no") and multi_case(sh): push(f"CASE NO.: {sh['sm_case_no']}")
     if sh.get("sm_total_cases"): push(f"TOTAL: {sh['sm_total_cases']} CASE(S)")
     if sh.get("sm_net_weight"): push(f"N.W.: {sh['sm_net_weight']} KG")
     if sh.get("sm_gross_weight"): push(f"G.W.: {sh['sm_gross_weight']} KG")
@@ -2032,7 +2040,7 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
         return Paragraph(text.replace("\n", "<br/>"), s[style])
 
     story = []
-    # 회사 정보(상단 레터헤드·하단 푸터) 표시 여부 — 화물에 붙일 때 공급사가 드러나지 않게 끌 수 있다.
+    # 회사 정보(상단 레터헤드) 표시 여부 — 화물에 붙일 때 공급사가 드러나지 않게 끌 수 있다.
     show_company = not sm_hidden(shipping, "sm_hide_company")
     show_ref = not sm_hidden(shipping, "sm_hide_ref")
     show_metrics = not sm_hidden(shipping, "sm_hide_metrics")
@@ -2048,7 +2056,7 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
 
     # ── 참조 정보 스트립 ─────────────────────────────────────────────────
     ref_rows = [[p("REF. NO.", "section"), p(shipping.get("sm_ref_no", "")),
-                 p("P.O. NO.", "section"), p(shipping.get("sm_po_no", "")),
+                 p("PO NO.", "section"), p(shipping.get("sm_po_no", "")),
                  p("DATE", "section"), p(data.get("date", ""))]]
     ref = Table(ref_rows, colWidths=[page_width * w for w in (.13, .27, .12, .22, .10, .16)])
     ref.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), .35, MID_GRAY), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -2080,8 +2088,8 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
         flow.append(mline(line))
     flow.append(Spacer(1, 2 * mm))
     if shipping.get("sm_po_no"):
-        flow.append(mline(f"P.O. NO. : {shipping['sm_po_no']}"))
-    if shipping.get("sm_ref_no"):
+        flow.append(mline(f"PO NO. : {shipping['sm_po_no']}"))
+    if shipping.get("sm_ref_no") and not sm_hidden(shipping, "sm_hide_refno"):
         flow.append(mline(f"REF. NO. : {shipping['sm_ref_no']}"))
     if shipping.get("sm_desc"):
         flow += [Spacer(1, 2 * mm), mline(str(shipping["sm_desc"]).upper(), desc_style)]
@@ -2090,7 +2098,7 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
     if shipping.get("sm_final_dest"):
         flow.append(mline(f"FINAL DESTINATION : {str(shipping['sm_final_dest']).upper()}"))
     flow.append(Spacer(1, 2 * mm))
-    if shipping.get("sm_case_no"):
+    if shipping.get("sm_case_no") and multi_case(shipping):
         flow.append(mline(f"CASE NO. : {shipping['sm_case_no']}"))
     if not flow:
         flow.append(mline("(NO SHIPPING MARK DATA)"))
@@ -2135,12 +2143,8 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
                                    ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
         story += [Spacer(1, 2 * mm), h_tbl]
 
-    if show_company:
-        story.append(Spacer(1, 2 * mm))
-        story.append(_footer_center(s))
-        doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
-    else:
-        doc.build(story)
+    # 하단 회사 푸터는 찍지 않는다(2026-11-20) — 회사 정보는 상단 헤더만, 그것도 선택.
+    doc.build(story)
     return buffer.getvalue()
 
 
