@@ -2014,8 +2014,15 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
         return Paragraph(text.replace("\n", "<br/>"), s[style])
 
     story = []
+    # 회사 정보(상단 레터헤드·하단 푸터) 표시 여부 — 화물에 붙일 때 공급사가 드러나지 않게 끌 수 있다.
+    show_company = str(shipping.get("sm_hide_company") or "").strip() not in ("1", "true", "yes")
     # ── 헤더: 공통 레터헤드 + 중앙 타이틀 ────────────────────────────────
-    story += _letterhead(company, "SHIPPING MARK", s)
+    if show_company:
+        story += _letterhead(company, "SHIPPING MARK", s)
+    else:
+        story += [Paragraph("SHIPPING MARK", ParagraphStyle(
+            "KMSMTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT, fontSize=17, leading=20,
+            alignment=TA_CENTER, textColor=NAVY)), Spacer(1, 4 * mm)]
 
     # ── 참조 정보 스트립 ─────────────────────────────────────────────────
     ref_rows = [[p("REF. NO.", "section"), p(shipping.get("sm_ref_no", "")),
@@ -2106,9 +2113,12 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
                                    ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
         story += [Spacer(1, 2 * mm), h_tbl]
 
-    story.append(Spacer(1, 2 * mm))
-    story.append(_footer_center(s))
-    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    if show_company:
+        story.append(Spacer(1, 2 * mm))
+        story.append(_footer_center(s))
+        doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    else:
+        doc.build(story)
     return buffer.getvalue()
 
 

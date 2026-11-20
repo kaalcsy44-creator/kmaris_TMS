@@ -86,6 +86,31 @@ from pydantic import BaseModel
 from services import packing_sync
 from services import hs_suggest as _hs
 
+_CONSIGNEE_KEYS = ("sm_consignee", "consignee_contact", "consignee_email", "consignee_address")
+
+
+def _ci_doc_shipping(s, order, ci) -> dict:
+    """CI·Shipping Mark 출력용 shipping — 저장값의 빈 칸을 딜 정보로 채운다(화면 fillMarkBlanks 와 같은 규칙).
+    · 선박·P/O No.: 비어 있으면 딜의 선박(1단계)·고객 P/O 번호(5단계).
+    · 수하인(C/O): 2번째 포장부터, 수하인이 비었거나 고객사 기본값 그대로면 대표(1번) CI 의 수하인을 잇는다."""
+    sh = dict(ci.shipping or {})
+    if not str(sh.get("sm_vessel") or "").strip():
+        v = _vessel_for_order(s, order)
+        if v and v.name:
+            sh["sm_vessel"] = v.name
+    if not str(sh.get("sm_po_no") or "").strip() and order.po_no:
+        sh["sm_po_no"] = order.po_no
+    cis = _order_cis(s, order.id)
+    rep = cis[0] if cis else None
+    if rep is not None and rep.id != ci.id:
+        rsh = rep.shipping or {}
+        cust = _customer_for_order(s, order)
+        own = str(sh.get("sm_consignee") or "").strip()
+        if rsh.get("sm_consignee") and (not own or own == ((cust.name or "") if cust else "")):
+            for k in _CONSIGNEE_KEYS:
+                sh[k] = rsh.get(k, "")
+    return sh
+
 
 
 @app.get("/api/admin/documents-overview", dependencies=[Depends(require_token)])
@@ -687,7 +712,7 @@ def commercial_invoice_pdf(order_id: int, ci_id: int = 0):
             vessel=_vessel_for_order(s, order),
             items=ci.items or [], terms=ci.terms or {},
             currency=ci.currency or "USD", vat_rate=ci.vat_rate or 0.0,
-            shipping=ci.shipping or {}, po_no=order.po_no or "",
+            shipping=_ci_doc_shipping(s, order, ci), po_no=order.po_no or "",
             export_ref=_project_no_for_order(s, order),
         )
         pdf = generate_pdf("commercial_invoice", payload)
@@ -713,7 +738,7 @@ def shipping_mark_pdf(order_id: int, ci_id: int = 0):
             vessel=_vessel_for_order(s, order),
             items=ci.items or [], terms=ci.terms or {},
             currency=ci.currency or "USD", vat_rate=ci.vat_rate or 0.0,
-            shipping=ci.shipping or {}, po_no=order.po_no or "",
+            shipping=_ci_doc_shipping(s, order, ci), po_no=order.po_no or "",
             export_ref=_project_no_for_order(s, order),
         )
         pdf = generate_pdf("shipping_mark", payload)
@@ -738,7 +763,7 @@ def shipping_mark_xlsx(order_id: int, ci_id: int = 0):
             vessel=_vessel_for_order(s, order),
             items=ci.items or [], terms=ci.terms or {},
             currency=ci.currency or "USD", vat_rate=ci.vat_rate or 0.0,
-            shipping=ci.shipping or {}, po_no=order.po_no or "",
+            shipping=_ci_doc_shipping(s, order, ci), po_no=order.po_no or "",
             export_ref=_project_no_for_order(s, order),
         )
         xlsx = make_document_xlsx("shipping_mark", payload)
@@ -766,7 +791,7 @@ def commercial_invoice_xlsx(order_id: int, ci_id: int = 0):
             vessel=_vessel_for_order(s, order),
             items=ci.items or [], terms=ci.terms or {},
             currency=ci.currency or "USD", vat_rate=ci.vat_rate or 0.0,
-            shipping=ci.shipping or {}, po_no=order.po_no or "",
+            shipping=_ci_doc_shipping(s, order, ci), po_no=order.po_no or "",
             export_ref=_project_no_for_order(s, order),
         )
         # Quotation Ref. — 오더에 연결된 고객 견적번호(있으면).

@@ -1579,7 +1579,7 @@ function ProformaInvoiceTab({
     return docDefaultTerms(data.order, data.pi?.terms);
   }
   function initialShipping(): Record<string, string> {
-    return fillVessel({
+    return fillMarkBlanks({
       hs_code: firstHs,
       ...defaultMarkFields(data.order),
       ...docDefaultShipping(data.order, initialTerms().incoterms || "", data.pi?.shipping),
@@ -1941,7 +1941,7 @@ function ServiceProformaInvoiceTab({
   // 서비스 정보의 빈 칸은 7단계 Service Readiness 에 이미 적어 둔 값으로 채운다 —
   // 같은 내용을 두 번 입력하지 않도록. 저장된 PI 값이 있으면 언제나 그 값이 이긴다.
   function initialShipping(): Record<string, string> {
-    return fillVessel({
+    return fillMarkBlanks({
       ...defaultMarkFields(data.order),
       ...serviceInfoDefaults(data.order),
       ...(data.pi?.shipping || {}),
@@ -2156,12 +2156,12 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
     return docDefaultTerms(data.order, data.ci?.terms ?? tt);
   }
   function initialShipping(): Record<string, string> {
-    return fillVessel({
+    return fillMarkBlanks({
       hs_code: firstHs,
       ...defaultMarkFields(data.order),
       // 저장값 우선 + 빈 운송·장소 칸은 상위 단계 값(없으면 기존 기본값)으로 채운다.
       ...docDefaultShipping(data.order, initialTerms().incoterms || "", data.ci?.shipping ?? tplShipping),
-    }, data.order);
+    }, data.order, pkg.template, data.ci?.id);
   }
   const [shipping, setShipping] = useState<Record<string, string>>(initialShipping());
   const [terms, setTerms] = useState<Record<string, string>>(initialTerms());
@@ -2356,10 +2356,10 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
 // Shipping Mark 전용 탭 — 케이스 마킹(sm_*) 입력. 값은 CI 레코드의 shipping 에 저장되며
 // 저장은 기존 CI 엔드포인트를 재사용(다른 CI 필드는 그대로 보존하고 sm_* 만 갱신).
 function ShippingMarksTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: PkgSel; onChanged: () => void }) {
-  const [shipping, setShipping] = useState<Record<string, string>>(fillVessel({
+  const [shipping, setShipping] = useState<Record<string, string>>(fillMarkBlanks({
     ...defaultMarkFields(data.order),
     ...(data.ci?.shipping || {}),
-  }, data.order));
+  }, data.order, pkg.template, data.ci?.id));
   const [busy, setBusy] = useState(false);
   // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
   const { editing: editable, readMode, fieldsetProps } = useEditGate(canEditDoc(data));
@@ -2386,7 +2386,7 @@ function ShippingMarksTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg:
   }
 
   function cancel() {
-    setShipping(fillVessel({ ...defaultMarkFields(data.order), ...(data.ci?.shipping || {}) }, data.order));
+    setShipping(fillMarkBlanks({ ...defaultMarkFields(data.order), ...(data.ci?.shipping || {}) }, data.order, pkg.template, data.ci?.id));
   }
 
   if (!data.ci) {
@@ -2459,7 +2459,7 @@ function PackingListTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: P
       ...(data.ci?.shipping || {}), // CI 상속
       ...(data.pl?.shipping || {}), // PL 자체 저장값 우선
     };
-    return fillVessel(base, data.order);
+    return fillMarkBlanks(base, data.order, pkg.template, data.ci?.id);
   }
   const [shipping, setShipping] = useState<Record<string, string>>(initialShipping);
   const [busy, setBusy] = useState(false);
@@ -3160,6 +3160,23 @@ function ShippingMarksSection({
             ))}
           </div>
         </div>
+        {/* 출력물(PDF·Excel) 상단 레터헤드·하단 푸터의 K-MARIS 회사 정보 — 화물에 붙일 때 끌 수 있다.
+            Packing List 화면(readonlyKeys)에선 이 마크 PDF 와 무관하므로 숨긴다. */}
+        {readonlyKeys ? null : (
+          <div className="form-field sm-handling">
+            <span>Print</span>
+            <div className="sm-handling-opts">
+              <label className="sm-check">
+                <input
+                  type="checkbox"
+                  checked={shipping.sm_hide_company !== "1"}
+                  onChange={(e) => setShipping({ ...shipping, sm_hide_company: e.target.checked ? "" : "1" })}
+                />
+                <span>Show K-MARIS company info (header / footer)</span>
+              </label>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3349,9 +3366,25 @@ function DocDefaultsHint({ order }: { order: DocumentDetail["order"] }) {
   );
 }
 
-// 저장값의 선박 칸이 비어 있으면 딜의 선박(1단계)으로 채운다 — 선박을 나중에 넣은 딜도 이어지도록.
-function fillVessel(s: Record<string, string>, order: { vessel?: string }): Record<string, string> {
-  return String(s.sm_vessel || "").trim() || !order.vessel ? s : { ...s, sm_vessel: order.vessel };
+// 저장값의 빈 칸을 딜 정보로 채운다(백엔드 _ci_doc_shipping 과 같은 규칙) —
+// 선박(1단계)·P/O No.(5단계)를 나중에 넣은 딜도, 비운 채 저장한 서류도 이어지도록.
+// 수하인(C/O): 2번째 포장부터, 수하인이 비었거나 고객사 기본값 그대로면 대표(1번) CI 의 수하인을 잇는다.
+const CONSIGNEE_KEYS = ["sm_consignee", "consignee_contact", "consignee_email", "consignee_address"];
+function fillMarkBlanks(
+  s: Record<string, string>,
+  order: { vessel?: string; po_no?: string; customer?: string },
+  rep?: { id?: number; shipping?: Record<string, string> | null } | null,
+  selfId?: number,
+): Record<string, string> {
+  const out = { ...s };
+  if (!String(out.sm_vessel || "").trim() && order.vessel) out.sm_vessel = order.vessel;
+  if (!String(out.sm_po_no || "").trim() && order.po_no) out.sm_po_no = order.po_no;
+  const rsh = rep?.shipping;
+  const own = String(out.sm_consignee || "").trim();
+  if (rep && rep.id !== selfId && rsh?.sm_consignee && (!own || own === (order.customer || ""))) {
+    for (const k of CONSIGNEE_KEYS) out[k] = rsh[k] || "";
+  }
+  return out;
 }
 
 // Shipping Mark 구조화 필드 기본값(오더 정보로 프리필). 저장값이 있으면 덮어쓴다.

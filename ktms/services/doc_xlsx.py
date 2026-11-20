@@ -946,7 +946,9 @@ def make_shipping_mark_xlsx(
         return x
 
     r = 1
-    logo = _find_asset("logo_K-maris.png", "logo.png", "logo.jpg", "logo.jpeg")
+    # 회사 정보(로고·배너) 표시 여부 — PDF 와 같은 sm_hide_company 칸을 따른다.
+    show_company = str(shipping.get("sm_hide_company") or "").strip() not in ("1", "true", "yes")
+    logo = _find_asset("logo_K-maris.png", "logo.png", "logo.jpg", "logo.jpeg") if show_company else None
     if logo:
         try:
             from openpyxl.drawing.image import Image as XLImage
@@ -958,12 +960,15 @@ def make_shipping_mark_xlsx(
     merge(r, 1, r, NCOL); put(r, 1, "SHIPPING MARK", font=title_font, align=center)
     bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 53.6; r += 1
 
-    banner = "   |   ".join(x for x in [
-        company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
-        company.get("sales_email", ""), company.get("website", ""),
-    ] if x)
-    merge(r, 1, r, NCOL); put(r, 1, banner, fill=blue, font=white_sm, align=center)
-    bd(r, 1, r, NCOL, blue); ws.row_dimensions[r].height = 16; r += 2
+    if show_company:
+        banner = "   |   ".join(x for x in [
+            company.get("company_name_en", "K-MARIS Energy & Solutions Co., Ltd."),
+            company.get("sales_email", ""), company.get("website", ""),
+        ] if x)
+        merge(r, 1, r, NCOL); put(r, 1, banner, fill=blue, font=white_sm, align=center)
+        bd(r, 1, r, NCOL, blue); ws.row_dimensions[r].height = 16; r += 2
+    else:
+        r += 1
 
     # ── 참조 스트립 ──────────────────────────────────────────────────────
     for c, (label, value) in enumerate([
