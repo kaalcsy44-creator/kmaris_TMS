@@ -2069,9 +2069,9 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
 
     # ── 주 마크 박스 — 스텐실 스타일(왼쪽 정렬, 볼드) ────────────────────
     mark_style = ParagraphStyle("KMMark", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
-                                fontSize=13, leading=20, alignment=TA_LEFT, textColor=colors.black)
-    head_style = ParagraphStyle("KMMarkHead", parent=mark_style, fontSize=15, leading=22)
-    desc_style = ParagraphStyle("KMMarkDesc", parent=mark_style, fontSize=13, leading=20)
+                                fontSize=15, leading=22, alignment=TA_LEFT, textColor=colors.black)
+    head_style = ParagraphStyle("KMMarkHead", parent=mark_style, fontSize=17, leading=24)
+    desc_style = ParagraphStyle("KMMarkDesc", parent=mark_style, fontSize=15, leading=22)
 
     def mline(text, style=mark_style):
         safe = str(text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")

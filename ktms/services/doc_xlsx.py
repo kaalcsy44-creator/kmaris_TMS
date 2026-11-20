@@ -914,7 +914,7 @@ def make_shipping_mark_xlsx(
     white_sm = Font(name="Noto Sans KR", color="FFFFFF", size=9)
     white_lbl = Font(name="Noto Sans KR", color="FFFFFF", bold=True, size=9)
     normal = Font(name="Noto Sans KR", size=9)
-    mark_font = Font(name="Noto Sans KR", bold=True, size=13)
+    mark_font = Font(name="Noto Sans KR", bold=True, size=15)
 
     thin = Side(style="thin", color="C8D2E0")
     bdr = Border(top=thin, bottom=thin, left=thin, right=thin)
@@ -1021,7 +1021,7 @@ def make_shipping_mark_xlsx(
     bd(box_top, 1, box_bottom, NCOL,
        border=Border(top=thick, bottom=thick, left=thick, right=thick))
     for rr in range(box_top, box_bottom + 1):
-        ws.row_dimensions[rr].height = 18
+        ws.row_dimensions[rr].height = 20
     r = box_bottom + 2
 
     # ── 실측(중량·치수·케이스) ────────────────────────────────────────────
