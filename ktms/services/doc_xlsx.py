@@ -17,7 +17,7 @@ from services.kmaris_docs import (
     pi_optional_sections,
     bank_name_address, origin_mark, incoterms_text,
     normalize_items, calc_totals, _num, DOC_TITLES, doc_parties,
-    packing_totals, consignee_mark_lines, sm_hidden, _dim_parts, cbm, _invoice_shipping_rows,
+    packing_totals, consignee_mark_lines, sm_hidden, master_mark_line, _dim_parts, cbm, _invoice_shipping_rows,
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
     pi_decimals, doc_decimals, print_decimals, pi_charges, pi_doc_date, is_service_doc, service_info_rows,
     SERVICE_PI_DECIMALS, cn_view, cn_contact_line, CN_MIN_ITEM_ROWS,
@@ -91,11 +91,11 @@ def _compose_marks(sh: Dict[str, Any]) -> str:
     def push(v):
         if v and str(v).strip():
             lines.append(str(v).strip())
+    push(master_mark_line(sh))
     if not sm_hidden(sh, "sm_hide_type"):
         push(sh.get("sm_type"))
     for line in consignee_mark_lines(sh):
         push(line)
-    if sh.get("sm_vessel"): push(f"M/V {str(sh['sm_vessel']).upper()}")
     if sh.get("sm_po_no"): push(f"P.O. NO.: {sh['sm_po_no']}")
     if sh.get("sm_ref_no"): push(f"REF. NO.: {sh['sm_ref_no']}")
     push(sh.get("sm_desc"))
@@ -991,13 +991,12 @@ def make_shipping_mark_xlsx(
     # ── 주 마크 박스 — PDF 와 같은 줄 구성. 한 셀에 줄바꿈으로 넣어야 스텐실용으로
     #    그대로 복사된다(줄마다 행을 쓰면 붙여넣을 때 셀이 쪼개진다).
     lines = []
+    master = master_mark_line(shipping, vessel.get("name", ""))
+    if master:
+        lines.append(master)
     if shipping.get("sm_type") and not sm_hidden(shipping, "sm_hide_type"):
         lines.append(str(shipping["sm_type"]).upper())
     lines += consignee_mark_lines(shipping)
-    if shipping.get("sm_vessel"):
-        lines.append(f"M/V {str(shipping['sm_vessel']).upper()}")
-    elif vessel.get("name"):
-        lines.append(f"M/V {str(vessel['name']).upper()}")
     if shipping.get("sm_po_no"):
         lines.append(f"P.O. NO. : {shipping['sm_po_no']}")
     if shipping.get("sm_ref_no"):
@@ -1016,7 +1015,9 @@ def make_shipping_mark_xlsx(
     # 자동으로 커지지 않아 고정해 두면 긴 마크가 테두리 안에서 잘린다.
     box_bottom = r + max(15, len(lines) + 1)
     merge(box_top, 1, box_bottom, NCOL)
-    put(box_top, 1, "\n".join(lines), font=mark_font, align=center)
+    # 마크 글은 왼쪽 정렬(들여쓰기 2) — 세로는 가운데.
+    put(box_top, 1, "\n".join(lines), font=mark_font,
+        align=Alignment(horizontal="left", vertical="center", wrap_text=True, indent=2))
     bd(box_top, 1, box_bottom, NCOL,
        border=Border(top=thick, bottom=thick, left=thick, right=thick))
     for rr in range(box_top, box_bottom + 1):

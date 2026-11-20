@@ -1945,6 +1945,12 @@ def consignee_mark_lines(sh: Dict[str, Any]) -> List[str]:
     return lines
 
 
+def master_mark_line(sh: Dict[str, Any], vessel_name: str = "") -> str:
+    """마크 맨 윗줄 — "TO MASTER OF <선박명>"(선박 앞 수취 관례). 선박이 없으면 ''."""
+    name = str(sh.get("sm_vessel") or vessel_name or "").strip()
+    return f"TO MASTER OF {name.upper()}" if name else ""
+
+
 def sm_hidden(sh: Dict[str, Any], key: str) -> bool:
     """Shipping Mark 출력 토글(sm_hide_company·sm_hide_ref·sm_hide_metrics) — "1" 이면 그 부분을 숨긴다."""
     return str(sh.get(key) or "").strip().lower() in ("1", "true", "yes")
@@ -1969,11 +1975,11 @@ def compose_shipping_marks(sh: Dict[str, Any]) -> str:
         if v and str(v).strip():
             lines.append(str(v).strip())
 
+    push(master_mark_line(sh))
     if not sm_hidden(sh, "sm_hide_type"):
         push(sh.get("sm_type"))
     for line in consignee_mark_lines(sh):
         push(line)
-    if sh.get("sm_vessel"): push(f"M/V {str(sh['sm_vessel']).upper()}")
     if sh.get("sm_po_no"): push(f"P.O. NO.: {sh['sm_po_no']}")
     if sh.get("sm_ref_no"): push(f"REF. NO.: {sh['sm_ref_no']}")
     push(sh.get("sm_desc"))
@@ -2053,9 +2059,9 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
     if show_ref:
         story += [ref, Spacer(1, 5 * mm)]
 
-    # ── 주 마크 박스 — 스텐실 스타일(가운데 정렬, 볼드) ────────────────────
+    # ── 주 마크 박스 — 스텐실 스타일(왼쪽 정렬, 볼드) ────────────────────
     mark_style = ParagraphStyle("KMMark", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
-                                fontSize=13, leading=20, alignment=TA_CENTER, textColor=colors.black)
+                                fontSize=13, leading=20, alignment=TA_LEFT, textColor=colors.black)
     head_style = ParagraphStyle("KMMarkHead", parent=mark_style, fontSize=15, leading=22)
     desc_style = ParagraphStyle("KMMarkDesc", parent=mark_style, fontSize=13, leading=20)
 
@@ -2064,14 +2070,14 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
         return Paragraph(safe, style)
 
     flow = []
+    # 맨 윗줄 = TO MASTER OF <선박명>(선박 앞 화물 관례 — 별도 M/V 줄은 두지 않는다).
+    master = master_mark_line(shipping, vessel.get("name", ""))
+    if master:
+        flow += [mline(master, head_style), Spacer(1, 2 * mm)]
     if shipping.get("sm_type") and not sm_hidden(shipping, "sm_hide_type"):
         flow += [mline(str(shipping["sm_type"]).upper(), head_style), Spacer(1, 3 * mm)]
     for line in consignee_mark_lines(shipping):
         flow.append(mline(line))
-    if shipping.get("sm_vessel"):
-        flow.append(mline(f"M/V {str(shipping['sm_vessel']).upper()}"))
-    elif vessel.get("name"):
-        flow.append(mline(f"M/V {str(vessel['name']).upper()}"))
     flow.append(Spacer(1, 2 * mm))
     if shipping.get("sm_po_no"):
         flow.append(mline(f"P.O. NO. : {shipping['sm_po_no']}"))
@@ -2092,8 +2098,8 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
     # 마크 박스는 92mm 를 기본 높이로 두되, 줄이 많으면(수하인 주소 등) 내용에 맞춰 늘린다.
     # 높이를 92mm 로 고정하면 긴 마크의 첫 줄·끝 줄이 테두리 밖으로 잘려 나간다.
     box_style = TableStyle([("BOX", (0, 0), (-1, -1), 1.4, colors.black),
-                            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                            ("LEFTPADDING", (0, 0), (-1, -1), 10), ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                            ("LEFTPADDING", (0, 0), (-1, -1), 14 * mm), ("RIGHTPADDING", (0, 0), (-1, -1), 10),
                             ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)])
     mark_box = Table([[flow]], colWidths=[page_width])
     mark_box.setStyle(box_style)

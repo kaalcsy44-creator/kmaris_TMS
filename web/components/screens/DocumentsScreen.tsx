@@ -3467,6 +3467,8 @@ function defaultMarkFields(order: { vessel?: string; po_no?: string; customer?: 
 function composeShippingMarks(s: Record<string, string>): string {
   const lines: string[] = [];
   const push = (v?: string) => { if (v && v.trim()) lines.push(v.trim()); };
+  // 맨 윗줄 = TO MASTER OF <선박명> — 백엔드 master_mark_line 과 같은 규칙(별도 M/V 줄 없음).
+  if (s.sm_vessel) push(`TO MASTER OF ${s.sm_vessel.toUpperCase()}`);
   if (s.sm_hide_type !== "1") push(s.sm_type);
   // 수하인 — 회사명 다음에 주소를 줄마다 이어 붙인다(현장에서 인도처를 알 수 있어야 한다).
   if (s.sm_consignee) {
@@ -3474,7 +3476,6 @@ function composeShippingMarks(s: Record<string, string>): string {
     if (s.sm_hide_address !== "1") (s.consignee_address || "").split("\n").forEach((line) => push(line));
     if (s.consignee_contact) push(`ATTN: ${s.consignee_contact}`);
   }
-  if (s.sm_vessel) push(`M/V ${s.sm_vessel.toUpperCase()}`);
   if (s.sm_po_no) push(`P.O. NO.: ${s.sm_po_no}`);
   if (s.sm_ref_no) push(`REF. NO.: ${s.sm_ref_no}`);
   push(s.sm_desc);
