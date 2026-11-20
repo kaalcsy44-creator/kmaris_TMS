@@ -1939,6 +1939,11 @@ def consignee_mark_lines(sh: Dict[str, Any]) -> List[str]:
     return lines
 
 
+def sm_hidden(sh: Dict[str, Any], key: str) -> bool:
+    """Shipping Mark 출력 토글(sm_hide_company·sm_hide_ref·sm_hide_metrics) — "1" 이면 그 부분을 숨긴다."""
+    return str(sh.get(key) or "").strip().lower() in ("1", "true", "yes")
+
+
 def origin_mark(v: Any) -> str:
     """원산지 칸 → 마크 한 줄. 값은 국가명(Republic of Korea)으로 받고, 마크에는
     관례대로 "MADE IN ..." 으로 찍는다. 예전 값("Made in Korea")은 그대로 둔다."""
@@ -2015,7 +2020,9 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
 
     story = []
     # 회사 정보(상단 레터헤드·하단 푸터) 표시 여부 — 화물에 붙일 때 공급사가 드러나지 않게 끌 수 있다.
-    show_company = str(shipping.get("sm_hide_company") or "").strip() not in ("1", "true", "yes")
+    show_company = not sm_hidden(shipping, "sm_hide_company")
+    show_ref = not sm_hidden(shipping, "sm_hide_ref")
+    show_metrics = not sm_hidden(shipping, "sm_hide_metrics")
     # ── 헤더: 공통 레터헤드 + 중앙 타이틀 ────────────────────────────────
     if show_company:
         story += _letterhead(company, "SHIPPING MARK", s)
@@ -2034,7 +2041,8 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
                              ("BACKGROUND", (4, 0), (4, -1), NAVY),
                              ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
                              ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
-    story += [ref, Spacer(1, 5 * mm)]
+    if show_ref:
+        story += [ref, Spacer(1, 5 * mm)]
 
     # ── 주 마크 박스 — 스텐실 스타일(가운데 정렬, 볼드) ────────────────────
     mark_style = ParagraphStyle("KMMark", parent=s["base"], fontName=DEFAULT_BOLD_FONT,
@@ -2099,7 +2107,8 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
                                  ("BACKGROUND", (0, 0), (0, -1), NAVY), ("BACKGROUND", (2, 0), (2, -1), NAVY),
                                  ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
                                  ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
-    story.append(metrics)
+    if show_metrics:
+        story.append(metrics)
 
     # ── 취급 주의 라인 ───────────────────────────────────────────────────
     handling = str(shipping.get("sm_handling") or "").strip()

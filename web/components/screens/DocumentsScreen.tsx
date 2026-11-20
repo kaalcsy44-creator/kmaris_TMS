@@ -2364,21 +2364,26 @@ function ShippingMarksTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg:
   // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
   const { editing: editable, readMode, fieldsetProps } = useEditGate(canEditDoc(data));
 
+  // CI 의 다른 필드(문서번호·품목·조건 등)는 그대로 보존하고 shipping 의 sm_* 만 갱신.
+  async function persist() {
+    if (!data.ci) return;
+    const outShipping = { ...(data.ci.shipping || {}), ...shipping, shipping_marks: composeShippingMarks(shipping) };
+    await saveCommercialInvoice(data.order.id, {
+      ci_no: data.ci.ci_no,
+      date: data.ci.date,
+      currency: data.ci.currency,
+      vat_rate: data.ci.vat_rate,
+      items: data.ci.items || [],
+      shipping: outShipping,
+      terms: data.ci.terms || {},
+    }, { ciId: pkg.ciId });
+  }
+
   async function save() {
     if (!data.ci) return;
     setBusy(true);
     try {
-      // CI 의 다른 필드(문서번호·품목·조건 등)는 그대로 보존하고 shipping 의 sm_* 만 갱신.
-      const outShipping = { ...(data.ci.shipping || {}), ...shipping, shipping_marks: composeShippingMarks(shipping) };
-      await saveCommercialInvoice(data.order.id, {
-        ci_no: data.ci.ci_no,
-        date: data.ci.date,
-        currency: data.ci.currency,
-        vat_rate: data.ci.vat_rate,
-        items: data.ci.items || [],
-        shipping: outShipping,
-        terms: data.ci.terms || {},
-      }, { ciId: pkg.ciId });
+      await persist();
       onChanged();
     } finally {
       setBusy(false);
@@ -2400,7 +2405,14 @@ function ShippingMarksTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg:
       </fieldset>
       <div className="form-actions stage-actions doc-actions">
         <div className="doc-actions-left">
-          <DocPreviewButton target={{ orderId: data.order.id, ciId: pkg.ciId }} kind="sm/pdf" filename="Shipping Mark.pdf" disabled={!data.ci} xlsxKind="sm/xlsx" />
+          <DocPreviewButton
+            target={{ orderId: data.order.id, ciId: pkg.ciId }}
+            kind="sm/pdf"
+            filename="Shipping Mark.pdf"
+            disabled={!data.ci || busy}
+            xlsxKind="sm/xlsx"
+            beforeOpen={editable && data.order.id !== 0 ? persist : undefined}
+          />
         </div>
         <div className="doc-actions-center" />
         <div className="doc-actions-right">
@@ -3083,6 +3095,13 @@ function ShippingFields({
 // 선적 마크(Shipping Mark) — 구조화 입력 섹션(Item list 와 동일 위계의 제목).
 // 각 항목은 shipping.sm_* 키에 저장하고, 저장 시 composeShippingMarks 로 여러 줄
 // 문자열(shipping.shipping_marks)을 만들어 PDF 에 출력한다.
+// Shipping Mark 출력물에서 켜고 끄는 부분 — 값 "1" = 숨김(기본은 모두 표시). 백엔드 kmaris_docs·doc_xlsx 와 같은 키.
+const SM_PRINT_TOGGLES = [
+  { key: "sm_hide_company", label: "K-MARIS company info (header / footer)" },
+  { key: "sm_hide_ref", label: "REF. NO. / P.O. NO. / DATE strip" },
+  { key: "sm_hide_metrics", label: "N.W. / G.W. / Dimension / Total cases table" },
+];
+
 function ShippingMarksSection({
   shipping,
   setShipping,
@@ -3166,14 +3185,16 @@ function ShippingMarksSection({
           <div className="form-field sm-handling">
             <span>Print</span>
             <div className="sm-handling-opts">
-              <label className="sm-check">
-                <input
-                  type="checkbox"
-                  checked={shipping.sm_hide_company !== "1"}
-                  onChange={(e) => setShipping({ ...shipping, sm_hide_company: e.target.checked ? "" : "1" })}
-                />
-                <span>Show K-MARIS company info (header / footer)</span>
-              </label>
+              {SM_PRINT_TOGGLES.map(({ key, label }) => (
+                <label key={key} className="sm-check">
+                  <input
+                    type="checkbox"
+                    checked={shipping[key] !== "1"}
+                    onChange={(e) => setShipping({ ...shipping, [key]: e.target.checked ? "" : "1" })}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
             </div>
           </div>
         )}
@@ -4201,11 +4222,14 @@ function DocPreviewButton({
   filename,
   disabled,
   xlsxKind,
+  beforeOpen,
 }: {
   target: DocTarget;
   kind: "pi/pdf" | "ci/pdf" | "sm/pdf" | "pl/pdf";
   filename: string;
   disabled: boolean;
+  /** 미리보기 전에 실행(예: 편집 중인 값 저장). */
+  beforeOpen?: () => Promise<void>;
   // 지정 시 미리보기 우측상단에 Excel 다운로드 버튼을 노출한다.
   xlsxKind?: "pi/xlsx" | "ci/xlsx" | "sm/xlsx" | "pl/xlsx";
 }) {
@@ -4218,6 +4242,8 @@ function DocPreviewButton({
   async function open() {
     setBusy(true);
     try {
+      // 미리보기는 서버가 저장된 값으로 그린다 — 화면에서 고친 값이 보이도록 먼저 저장한다.
+      if (beforeOpen) await beforeOpen();
       const res = await fetch(documentDownloadUrl(target, kind), {
         headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
       });

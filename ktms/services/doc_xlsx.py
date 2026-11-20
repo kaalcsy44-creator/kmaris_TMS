@@ -17,7 +17,7 @@ from services.kmaris_docs import (
     pi_optional_sections,
     bank_name_address, origin_mark, incoterms_text,
     normalize_items, calc_totals, _num, DOC_TITLES, doc_parties,
-    packing_totals, consignee_mark_lines, _dim_parts, cbm, _invoice_shipping_rows,
+    packing_totals, consignee_mark_lines, sm_hidden, _dim_parts, cbm, _invoice_shipping_rows,
     PI_COLUMN_UNITS, PI_MIN_ITEM_ROWS, PL_COLUMN_UNITS, PL_MIN_ITEM_ROWS,
     pi_decimals, doc_decimals, print_decimals, pi_charges, pi_doc_date, is_service_doc, service_info_rows,
     SERVICE_PI_DECIMALS, cn_view, cn_contact_line, CN_MIN_ITEM_ROWS,
@@ -947,7 +947,9 @@ def make_shipping_mark_xlsx(
 
     r = 1
     # 회사 정보(로고·배너) 표시 여부 — PDF 와 같은 sm_hide_company 칸을 따른다.
-    show_company = str(shipping.get("sm_hide_company") or "").strip() not in ("1", "true", "yes")
+    show_company = not sm_hidden(shipping, "sm_hide_company")
+    show_ref = not sm_hidden(shipping, "sm_hide_ref")
+    show_metrics = not sm_hidden(shipping, "sm_hide_metrics")
     logo = _find_asset("logo_K-maris.png", "logo.png", "logo.jpg", "logo.jpeg") if show_company else None
     if logo:
         try:
@@ -971,15 +973,16 @@ def make_shipping_mark_xlsx(
         r += 1
 
     # ── 참조 스트립 ──────────────────────────────────────────────────────
-    for c, (label, value) in enumerate([
-        ("REF. NO.", shipping.get("sm_ref_no", "")),
-        ("P.O. NO.", shipping.get("sm_po_no", "")),
-        ("DATE", data.get("date", "")),
-    ]):
-        lc = c * 2 + 1
-        put(r, lc, label, fill=navy, font=white_lbl, align=left)
-        put(r, lc + 1, value, font=normal, align=left)
-    bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 20; r += 2
+    if show_ref:
+        for c, (label, value) in enumerate([
+            ("REF. NO.", shipping.get("sm_ref_no", "")),
+            ("P.O. NO.", shipping.get("sm_po_no", "")),
+            ("DATE", data.get("date", "")),
+        ]):
+            lc = c * 2 + 1
+            put(r, lc, label, fill=navy, font=white_lbl, align=left)
+            put(r, lc + 1, value, font=normal, align=left)
+        bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 20; r += 2
 
     # ── 주 마크 박스 — PDF 와 같은 줄 구성. 한 셀에 줄바꿈으로 넣어야 스텐실용으로
     #    그대로 복사된다(줄마다 행을 쓰면 붙여넣을 때 셀이 쪼개진다).
@@ -1028,7 +1031,7 @@ def make_shipping_mark_xlsx(
         [("DIMENSION", dim_txt),
          ("TOTAL CASES", f"{shipping['sm_total_cases']} CASE(S)" if shipping.get("sm_total_cases") else "")],
     ]
-    for row in metrics:
+    for row in (metrics if show_metrics else []):
         (k1, v1), (k2, v2) = row
         put(r, 1, k1, fill=navy, font=white_lbl, align=left)
         merge(r, 2, r, 3); put(r, 2, v1, font=normal, align=left)
