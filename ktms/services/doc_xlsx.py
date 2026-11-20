@@ -106,7 +106,7 @@ def _compose_marks(sh: Dict[str, Any]) -> str:
     if any(d and str(d).strip() for d in dim):
         push("DIM.: " + " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " CM")
     if sh.get("sm_final_dest"): push(f"FINAL DESTINATION: {sh['sm_final_dest']}")
-    push(origin_mark(sh.get("sm_origin")))
+    # 원산지("MADE IN ...")는 마크에 찍지 않는다(2026-11-20) — CI 의 Country of Origin 칸으로만.
     push(sh.get("sm_handling"))
     return "\n".join(lines)
 
@@ -1004,8 +1004,6 @@ def make_shipping_mark_xlsx(
         lines.append(f"FINAL DESTINATION : {str(shipping['sm_final_dest']).upper()}")
     if shipping.get("sm_case_no"):
         lines.append(f"CASE NO. : {shipping['sm_case_no']}")
-    if shipping.get("sm_origin"):
-        lines.append(origin_mark(shipping["sm_origin"]).upper())
     if not lines:
         lines.append("(NO SHIPPING MARK DATA)")
 

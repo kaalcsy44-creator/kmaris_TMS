@@ -2401,7 +2401,7 @@ function ShippingMarksTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg:
   return (
     <div className="doc-tab">
       <fieldset {...fieldsetProps}>
-        <ShippingMarksSection shipping={shipping} setShipping={setShipping} />
+        <ShippingMarksSection shipping={shipping} setShipping={setShipping} attnHint={data.order.customer_contact || ""} />
       </fieldset>
       <div className="form-actions stage-actions doc-actions">
         <div className="doc-actions-left">
@@ -3106,9 +3106,12 @@ function ShippingMarksSection({
   shipping,
   setShipping,
   readonlyKeys,
+  attnHint,
 }: {
   shipping: Record<string, string>;
   setShipping: (v: Record<string, string>) => void;
+  /** ATTN 칸을 비웠을 때 찍히는 기본 담당자(고객 마스터) — 회색 안내로 보여준다. */
+  attnHint?: string;
   // 이 키들은 입력란 대신 읽기전용 텍스트로 표시(Packing List 의 확정 정보). 없으면 전부 편집 가능.
   readonlyKeys?: Set<string>;
 }) {
@@ -3136,7 +3139,27 @@ function ShippingMarksSection({
             어느 탭에서 고쳐도 함께 바뀐다. 마크에서는 C/O 회사명 바로 아래 줄에 찍힌다. */}
         {ro("consignee_address")
           ? <ReadonlyField label="C/O Address" value={shipping.consignee_address ?? ""} wide />
-          : <Field label="C/O Address" value={shipping.consignee_address ?? ""} onChange={set("consignee_address")} wide />}
+          : (
+            <div className="form-field form-field--wide">
+              <span className="sm-label-with-check">
+                C/O Address
+                {/* 마크에 주소 줄을 찍을지 — 값 "1" = 숨김(기본 표시). */}
+                <label className="sm-check sm-check--inline">
+                  <input
+                    type="checkbox"
+                    checked={shipping.sm_hide_address !== "1"}
+                    onChange={(e) => setShipping({ ...shipping, sm_hide_address: e.target.checked ? "" : "1" })}
+                  />
+                  <span>Show on mark</span>
+                </label>
+              </span>
+              <input value={shipping.consignee_address ?? ""} onChange={(e) => set("consignee_address")(e.target.value)} />
+            </div>
+          )}
+        {/* ATTN — Commercial Invoice 수하인 담당자(consignee_contact)와 같은 칸. 비우면 고객 담당자(회색 안내)로 찍힌다. */}
+        {ro("consignee_contact")
+          ? <ReadonlyField label="ATTN (Contact name)" value={shipping.consignee_contact || attnHint || ""} />
+          : <Field label="ATTN (Contact name)" value={shipping.consignee_contact ?? ""} onChange={set("consignee_contact")} placeholder={attnHint} />}
         {ro("sm_po_no")
           ? <ReadonlyField label="P.O. No." value={shipping.sm_po_no ?? ""} />
           : <Field label="P.O. No." value={shipping.sm_po_no ?? ""} onChange={set("sm_po_no")} />}
@@ -3165,9 +3188,6 @@ function ShippingMarksSection({
         {ro("sm_final_dest")
           ? <ReadonlyField label="Final Destination" value={shipping.sm_final_dest ?? ""} />
           : <ComboField label="Final Destination" value={shipping.sm_final_dest ?? ""} onChange={set("sm_final_dest")} options={FINAL_DEST_OPTIONS} />}
-        {ro("sm_origin")
-          ? <ReadonlyField label="Country of Origin" value={shipping.sm_origin ?? ""} />
-          : <ComboField label="Country of Origin" value={shipping.sm_origin ?? ""} onChange={set("sm_origin")} options={ORIGIN_OPTIONS} />}
         <div className="form-field sm-handling">
           <span>Handling Instructions</span>
           <div className="sm-handling-opts">
@@ -3432,7 +3452,8 @@ function composeShippingMarks(s: Record<string, string>): string {
   // 수하인 — 회사명 다음에 주소를 줄마다 이어 붙인다(현장에서 인도처를 알 수 있어야 한다).
   if (s.sm_consignee) {
     push(`C/O ${s.sm_consignee}`);
-    (s.consignee_address || "").split("\n").forEach((line) => push(line));
+    if (s.sm_hide_address !== "1") (s.consignee_address || "").split("\n").forEach((line) => push(line));
+    if (s.consignee_contact) push(`ATTN: ${s.consignee_contact}`);
   }
   if (s.sm_vessel) push(`M/V ${s.sm_vessel.toUpperCase()}`);
   if (s.sm_po_no) push(`P.O. NO.: ${s.sm_po_no}`);
@@ -3446,9 +3467,7 @@ function composeShippingMarks(s: Record<string, string>): string {
   // 치수 단위는 cm — Packing List 의 전체 포장 규격과 같은 칸(sm_dim_*)을 쓰므로 단위도 같아야 한다.
   if (dim.some((v) => v && v.trim())) push(`DIM.: ${dim.map((v) => (v && v.trim()) || "-").join(" × ")} CM`);
   if (s.sm_final_dest) push(`FINAL DESTINATION: ${s.sm_final_dest}`);
-  // 백엔드 kmaris_docs.origin_mark 와 같은 규칙 — 국가명이면 "MADE IN" 을 붙인다.
-  const origin = (s.sm_origin || "").trim();
-  push(origin && !/^made in/i.test(origin) ? `MADE IN ${origin}` : origin);
+  // 원산지("MADE IN ...")는 마크에 찍지 않는다(2026-11-20) — 원산지는 CI 의 Country of Origin 칸으로만.
   push(s.sm_handling);
   return lines.join("\n");
 }

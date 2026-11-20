@@ -109,6 +109,15 @@ def _ci_doc_shipping(s, order, ci) -> dict:
         if rsh.get("sm_consignee") and (not own or own == ((cust.name or "") if cust else "")):
             for k in _CONSIGNEE_KEYS:
                 sh[k] = rsh.get(k, "")
+    return _fill_attn(s, order, sh)
+
+
+def _fill_attn(s, order, sh: dict) -> dict:
+    """마크의 ATTN(수하인 담당자) — CI 담당자 칸이 비면 고객 대표 담당자(문서 당사자 칸과 같은 기본값)."""
+    if not str(sh.get("consignee_contact") or "").strip():
+        cust = _customer_for_order(s, order)
+        if cust and cust.contact:
+            sh = {**sh, "consignee_contact": cust.contact}
     return sh
 
 
@@ -985,7 +994,7 @@ def packing_list_xlsx(order_id: int, ci_id: int = 0):
 def _packing_list_payload(s, order, ci, pl) -> dict:
     """PL PDF/Excel 공통 payload — 선적정보·Shipping Marks 는 CI 값을 기본으로 상속하되
     PL 이 자체 저장한 값(pl.shipping)이 있으면 그 항목만 덮어쓴다(오버라이드)."""
-    merged_shipping = {**(ci.shipping or {}), **(pl.shipping or {})}
+    merged_shipping = {**_ci_doc_shipping(s, order, ci), **(pl.shipping or {})}
     payload = build_payload(
         doc_no=pl.pl_no, date=pl.date,
         customer=_customer_for_order(s, order),

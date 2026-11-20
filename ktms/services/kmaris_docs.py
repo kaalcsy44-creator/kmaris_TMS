@@ -1935,7 +1935,13 @@ def consignee_mark_lines(sh: Dict[str, Any]) -> List[str]:
     if not name:
         return []
     lines = [f"C/O {name}"]
-    lines += [x.strip() for x in str(sh.get("consignee_address") or "").splitlines() if x.strip()]
+    # 주소 줄은 Shipping Mark 탭의 "Show on mark" 체크로 뺄 수 있다(sm_hide_address).
+    if not sm_hidden(sh, "sm_hide_address"):
+        lines += [x.strip() for x in str(sh.get("consignee_address") or "").splitlines() if x.strip()]
+    # ATTN — CI 수하인 담당자(consignee_contact). 비어 있으면 출력 라우트가 고객 담당자로 채운다.
+    attn = str(sh.get("consignee_contact") or "").strip()
+    if attn:
+        lines.append(f"ATTN: {attn}")
     return lines
 
 
@@ -1978,7 +1984,7 @@ def compose_shipping_marks(sh: Dict[str, Any]) -> str:
     if any(d and str(d).strip() for d in dim):
         push("DIM.: " + " × ".join((str(d).strip() if d and str(d).strip() else "-") for d in dim) + " CM")
     if sh.get("sm_final_dest"): push(f"FINAL DESTINATION: {sh['sm_final_dest']}")
-    push(origin_mark(sh.get("sm_origin")))
+    # 원산지("MADE IN ...")는 마크에 찍지 않는다(2026-11-20) — CI 의 Country of Origin 칸으로만.
     push(sh.get("sm_handling"))
     return "\n".join(lines)
 
@@ -2077,8 +2083,6 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
     flow.append(Spacer(1, 2 * mm))
     if shipping.get("sm_case_no"):
         flow.append(mline(f"CASE NO. : {shipping['sm_case_no']}"))
-    if shipping.get("sm_origin"):
-        flow.append(mline(origin_mark(shipping["sm_origin"]).upper()))
     if not flow:
         flow.append(mline("(NO SHIPPING MARK DATA)"))
 
