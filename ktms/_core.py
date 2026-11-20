@@ -3072,9 +3072,15 @@ def _customer_contacts_brief(session, customer_id: int) -> list[dict]:
 
 
 def _vessel_for_order(session, order: Order):
-    if not order.vessel_id:
+    """오더의 선박 — 오더에 없으면 연결 RFQ(1단계)의 선박. 오더를 만든 뒤 1단계에서
+    선박을 넣어도 7단계 서류·PDF 에 이어지도록."""
+    vid = order.vessel_id
+    if not vid:
+        rfq = _rfq_for_order(session, order)
+        vid = rfq.vessel_id if rfq else None
+    if not vid:
         return None
-    return session.query(Vessel).filter_by(id=order.vessel_id).first()
+    return session.query(Vessel).filter_by(id=vid).first()
 
 
 def _latest_pi(session, order_id: int):

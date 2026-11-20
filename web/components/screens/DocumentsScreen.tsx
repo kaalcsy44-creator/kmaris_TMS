@@ -1579,11 +1579,11 @@ function ProformaInvoiceTab({
     return docDefaultTerms(data.order, data.pi?.terms);
   }
   function initialShipping(): Record<string, string> {
-    return {
+    return fillVessel({
       hs_code: firstHs,
       ...defaultMarkFields(data.order),
       ...docDefaultShipping(data.order, initialTerms().incoterms || "", data.pi?.shipping),
-    };
+    }, data.order);
   }
   const [shipping, setShipping] = useState<Record<string, string>>(initialShipping());
   const [terms, setTerms] = useState<Record<string, string>>(initialTerms());
@@ -1941,11 +1941,11 @@ function ServiceProformaInvoiceTab({
   // 서비스 정보의 빈 칸은 7단계 Service Readiness 에 이미 적어 둔 값으로 채운다 —
   // 같은 내용을 두 번 입력하지 않도록. 저장된 PI 값이 있으면 언제나 그 값이 이긴다.
   function initialShipping(): Record<string, string> {
-    return {
+    return fillVessel({
       ...defaultMarkFields(data.order),
       ...serviceInfoDefaults(data.order),
       ...(data.pi?.shipping || {}),
-    };
+    }, data.order);
   }
   function initialTerms(): Record<string, string> {
     return docDefaultTerms(data.order, data.pi?.terms);
@@ -2156,12 +2156,12 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
     return docDefaultTerms(data.order, data.ci?.terms ?? tt);
   }
   function initialShipping(): Record<string, string> {
-    return {
+    return fillVessel({
       hs_code: firstHs,
       ...defaultMarkFields(data.order),
       // 저장값 우선 + 빈 운송·장소 칸은 상위 단계 값(없으면 기존 기본값)으로 채운다.
       ...docDefaultShipping(data.order, initialTerms().incoterms || "", data.ci?.shipping ?? tplShipping),
-    };
+    }, data.order);
   }
   const [shipping, setShipping] = useState<Record<string, string>>(initialShipping());
   const [terms, setTerms] = useState<Record<string, string>>(initialTerms());
@@ -2356,10 +2356,10 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
 // Shipping Mark 전용 탭 — 케이스 마킹(sm_*) 입력. 값은 CI 레코드의 shipping 에 저장되며
 // 저장은 기존 CI 엔드포인트를 재사용(다른 CI 필드는 그대로 보존하고 sm_* 만 갱신).
 function ShippingMarksTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: PkgSel; onChanged: () => void }) {
-  const [shipping, setShipping] = useState<Record<string, string>>({
+  const [shipping, setShipping] = useState<Record<string, string>>(fillVessel({
     ...defaultMarkFields(data.order),
     ...(data.ci?.shipping || {}),
-  });
+  }, data.order));
   const [busy, setBusy] = useState(false);
   // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
   const { editing: editable, readMode, fieldsetProps } = useEditGate(canEditDoc(data));
@@ -2386,7 +2386,7 @@ function ShippingMarksTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg:
   }
 
   function cancel() {
-    setShipping({ ...defaultMarkFields(data.order), ...(data.ci?.shipping || {}) });
+    setShipping(fillVessel({ ...defaultMarkFields(data.order), ...(data.ci?.shipping || {}) }, data.order));
   }
 
   if (!data.ci) {
@@ -2448,7 +2448,7 @@ function PackingListTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: P
   // 선적정보·Shipping Mark — CI 값을 기본 상속하고, PL 이 저장한 값이 있으면 그것을 우선.
   // 사용자가 수정한 항목만 PL 로 저장되며 나머지는 CI 를 따라간다.
   function initialShipping(): Record<string, string> {
-    return {
+    const base: Record<string, string> = {
       port_loading: "Busan, Republic of Korea",
       port_discharge: "",
       carrier: "TBD",
@@ -2459,6 +2459,7 @@ function PackingListTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: P
       ...(data.ci?.shipping || {}), // CI 상속
       ...(data.pl?.shipping || {}), // PL 자체 저장값 우선
     };
+    return fillVessel(base, data.order);
   }
   const [shipping, setShipping] = useState<Record<string, string>>(initialShipping);
   const [busy, setBusy] = useState(false);
@@ -3346,6 +3347,11 @@ function DocDefaultsHint({ order }: { order: DocumentDetail["order"] }) {
       Empty terms and currency are filled from the {stages}. Changing them here affects this document only.
     </p>
   );
+}
+
+// 저장값의 선박 칸이 비어 있으면 딜의 선박(1단계)으로 채운다 — 선박을 나중에 넣은 딜도 이어지도록.
+function fillVessel(s: Record<string, string>, order: { vessel?: string }): Record<string, string> {
+  return String(s.sm_vessel || "").trim() || !order.vessel ? s : { ...s, sm_vessel: order.vessel };
 }
 
 // Shipping Mark 구조화 필드 기본값(오더 정보로 프리필). 저장값이 있으면 덮어쓴다.
