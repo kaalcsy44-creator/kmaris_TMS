@@ -1969,7 +1969,8 @@ def compose_shipping_marks(sh: Dict[str, Any]) -> str:
         if v and str(v).strip():
             lines.append(str(v).strip())
 
-    push(sh.get("sm_type"))
+    if not sm_hidden(sh, "sm_hide_type"):
+        push(sh.get("sm_type"))
     for line in consignee_mark_lines(sh):
         push(line)
     if sh.get("sm_vessel"): push(f"M/V {str(sh['sm_vessel']).upper()}")
@@ -2029,10 +2030,12 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
     show_company = not sm_hidden(shipping, "sm_hide_company")
     show_ref = not sm_hidden(shipping, "sm_hide_ref")
     show_metrics = not sm_hidden(shipping, "sm_hide_metrics")
-    # ── 헤더: 공통 레터헤드 + 중앙 타이틀 ────────────────────────────────
+    show_title = not sm_hidden(shipping, "sm_hide_title")
+    # ── 헤더: 공통 레터헤드 + 중앙 타이틀(각각 끌 수 있다) ─────────────────
     if show_company:
-        story += _letterhead(company, "SHIPPING MARK", s)
-    else:
+        head = _letterhead(company, "SHIPPING MARK", s)
+        story += head if show_title else head[:2]   # [레터헤드, 여백, 타이틀, 여백]
+    elif show_title:
         story += [Paragraph("SHIPPING MARK", ParagraphStyle(
             "KMSMTitle", parent=s["section"], fontName=DEFAULT_BOLD_FONT, fontSize=17, leading=20,
             alignment=TA_CENTER, textColor=NAVY)), Spacer(1, 4 * mm)]
@@ -2061,7 +2064,7 @@ def _make_shipping_mark_pdf(data: Dict[str, Any], company: Dict[str, Any]) -> by
         return Paragraph(safe, style)
 
     flow = []
-    if shipping.get("sm_type"):
+    if shipping.get("sm_type") and not sm_hidden(shipping, "sm_hide_type"):
         flow += [mline(str(shipping["sm_type"]).upper(), head_style), Spacer(1, 3 * mm)]
     for line in consignee_mark_lines(shipping):
         flow.append(mline(line))

@@ -3098,9 +3098,28 @@ function ShippingFields({
 // Shipping Mark 출력물에서 켜고 끄는 부분 — 값 "1" = 숨김(기본은 모두 표시). 백엔드 kmaris_docs·doc_xlsx 와 같은 키.
 const SM_PRINT_TOGGLES = [
   { key: "sm_hide_company", label: "K-MARIS company info (header / footer)" },
+  { key: "sm_hide_title", label: "SHIPPING MARK title" },
   { key: "sm_hide_ref", label: "REF. NO. / P.O. NO. / DATE strip" },
   { key: "sm_hide_metrics", label: "N.W. / G.W. / Dimension / Total cases table" },
 ];
+
+/** 칸 제목 오른쪽의 "Show on mark" 체크 — 그 줄을 마크에 찍을지(값 "1" = 숨김, 기본 표시). */
+function ShowOnMark({ k, shipping, setShipping }: {
+  k: string;
+  shipping: Record<string, string>;
+  setShipping: (v: Record<string, string>) => void;
+}) {
+  return (
+    <label className="sm-show">
+      <input
+        type="checkbox"
+        checked={shipping[k] !== "1"}
+        onChange={(e) => setShipping({ ...shipping, [k]: e.target.checked ? "" : "1" })}
+      />
+      Show on mark
+    </label>
+  );
+}
 
 function ShippingMarksSection({
   shipping,
@@ -3128,7 +3147,15 @@ function ShippingMarksSection({
       <div className="form-grid doc-form-grid">
         {ro("sm_type")
           ? <ReadonlyField label="Shipping mark type" value={shipping.sm_type ?? ""} />
-          : <ComboField label="Shipping mark type" value={shipping.sm_type ?? ""} onChange={set("sm_type")} options={SM_TYPE_OPTIONS} />}
+          : (
+            <ComboField
+              label="Shipping mark type"
+              labelExtra={<ShowOnMark k="sm_hide_type" shipping={shipping} setShipping={setShipping} />}
+              value={shipping.sm_type ?? ""}
+              onChange={set("sm_type")}
+              options={SM_TYPE_OPTIONS}
+            />
+          )}
         {ro("sm_vessel")
           ? <ReadonlyField label="Vessel Name" value={shipping.sm_vessel ?? ""} />
           : <Field label="Vessel Name" value={shipping.sm_vessel ?? ""} onChange={set("sm_vessel")} />}
@@ -3143,15 +3170,7 @@ function ShippingMarksSection({
             <div className="form-field form-field--wide">
               <span className="sm-label-with-check">
                 C/O Address
-                {/* 마크에 주소 줄을 찍을지 — 값 "1" = 숨김(기본 표시). */}
-                <label className="sm-check sm-check--inline">
-                  <input
-                    type="checkbox"
-                    checked={shipping.sm_hide_address !== "1"}
-                    onChange={(e) => setShipping({ ...shipping, sm_hide_address: e.target.checked ? "" : "1" })}
-                  />
-                  <span>Show on mark</span>
-                </label>
+                <ShowOnMark k="sm_hide_address" shipping={shipping} setShipping={setShipping} />
               </span>
               <input value={shipping.consignee_address ?? ""} onChange={(e) => set("consignee_address")(e.target.value)} />
             </div>
@@ -3448,7 +3467,7 @@ function defaultMarkFields(order: { vessel?: string; po_no?: string; customer?: 
 function composeShippingMarks(s: Record<string, string>): string {
   const lines: string[] = [];
   const push = (v?: string) => { if (v && v.trim()) lines.push(v.trim()); };
-  push(s.sm_type);
+  if (s.sm_hide_type !== "1") push(s.sm_type);
   // 수하인 — 회사명 다음에 주소를 줄마다 이어 붙인다(현장에서 인도처를 알 수 있어야 한다).
   if (s.sm_consignee) {
     push(`C/O ${s.sm_consignee}`);
@@ -3481,29 +3500,36 @@ function ComboField({
   value,
   onChange,
   options,
+  labelExtra,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: string[];
+  /** 제목 오른쪽에 붙일 컨트롤(예: Show on mark 체크). 있으면 바깥을 label 대신 div 로 — label 안 label 을 피한다. */
+  labelExtra?: ReactNode;
 }) {
   const [manual, setManual] = useState(false);
+  const Wrap = labelExtra ? "div" : "label";
+  const head = labelExtra
+    ? <span className="sm-label-with-check">{label}{labelExtra}</span>
+    : <span>{label}</span>;
   if (manual) {
     return (
-      <label className="form-field">
-        <span>{label}</span>
+      <Wrap className="form-field">
+        {head}
         <div className="combo-manual">
           <input value={value} autoFocus onChange={(e) => onChange(e.target.value)} />
           <button type="button" className="btn sm" title="Choose from the list" onClick={() => setManual(false)}>
             list
           </button>
         </div>
-      </label>
+      </Wrap>
     );
   }
   return (
-    <label className="form-field">
-      <span>{label}</span>
+    <Wrap className="form-field">
+      {head}
       <select
         value={value}
         onChange={(e) => {
@@ -3518,7 +3544,7 @@ function ComboField({
         ))}
         <option value={COMBO_MANUAL}>Type manually…</option>
       </select>
-    </label>
+    </Wrap>
   );
 }
 

@@ -91,7 +91,8 @@ def _compose_marks(sh: Dict[str, Any]) -> str:
     def push(v):
         if v and str(v).strip():
             lines.append(str(v).strip())
-    push(sh.get("sm_type"))
+    if not sm_hidden(sh, "sm_hide_type"):
+        push(sh.get("sm_type"))
     for line in consignee_mark_lines(sh):
         push(line)
     if sh.get("sm_vessel"): push(f"M/V {str(sh['sm_vessel']).upper()}")
@@ -950,6 +951,7 @@ def make_shipping_mark_xlsx(
     show_company = not sm_hidden(shipping, "sm_hide_company")
     show_ref = not sm_hidden(shipping, "sm_hide_ref")
     show_metrics = not sm_hidden(shipping, "sm_hide_metrics")
+    show_title = not sm_hidden(shipping, "sm_hide_title")
     logo = _find_asset("logo_K-maris.png", "logo.png", "logo.jpg", "logo.jpeg") if show_company else None
     if logo:
         try:
@@ -959,8 +961,10 @@ def make_shipping_mark_xlsx(
             ws.add_image(img, f"A{r}")
         except Exception:
             pass   # 로고는 장식 — 없거나 실패해도 문서는 나와야 한다.
-    merge(r, 1, r, NCOL); put(r, 1, "SHIPPING MARK", font=title_font, align=center)
-    bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 53.6; r += 1
+    # 1행 = 로고 + 타이틀. 둘 다 끄면 행 자체를 뺀다.
+    if show_company or show_title:
+        merge(r, 1, r, NCOL); put(r, 1, "SHIPPING MARK" if show_title else "", font=title_font, align=center)
+        bd(r, 1, r, NCOL); ws.row_dimensions[r].height = 53.6; r += 1
 
     if show_company:
         banner = "   |   ".join(x for x in [
@@ -987,7 +991,7 @@ def make_shipping_mark_xlsx(
     # ── 주 마크 박스 — PDF 와 같은 줄 구성. 한 셀에 줄바꿈으로 넣어야 스텐실용으로
     #    그대로 복사된다(줄마다 행을 쓰면 붙여넣을 때 셀이 쪼개진다).
     lines = []
-    if shipping.get("sm_type"):
+    if shipping.get("sm_type") and not sm_hidden(shipping, "sm_hide_type"):
         lines.append(str(shipping["sm_type"]).upper())
     lines += consignee_mark_lines(shipping)
     if shipping.get("sm_vessel"):
