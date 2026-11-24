@@ -22862,7 +22862,7 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
 .trows .clause-head, .project-stage-pane .trows .clause-head { margin: 0; padding: 0; flex-wrap: wrap; }
 .project-stage-pane .trows .clause-title { margin: 0; }
 .trow-list { margin: 0; padding: 0; list-style: none; border: 1px solid #e3e9f2; border-radius: 8px; background: #fbfcfe; overflow: hidden; }
-.trow { display: flex; align-items: flex-start; gap: 8px; padding: 3px 8px; position: relative; }
+.trow { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; padding: 3px 8px; position: relative; }
 .trow + .trow { border-top: 1px solid #eef2f8; }
 .trow.on { background: #fff; }
 .trow.dragging { opacity: 0.4; }
@@ -22874,7 +22874,7 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
 .trow-grip { flex: 0 0 auto; padding: 5px 2px; line-height: 18px; color: #a5b0c0; cursor: grab; user-select: none; }
 .trow-grip:active { cursor: grabbing; }
 .trow > input[type="checkbox"] { flex: 0 0 auto; width: auto; margin: 8px 0 0; accent-color: var(--blue); }
-.trow-text { flex: 1 1 auto; min-width: 0; }
+.trow-text { flex: 1 1 0; min-width: 0; }
 .trow-text textarea {
   display: block; width: 100%; min-height: 28px; padding: 4px 6px; border: 1px solid transparent; border-radius: 6px;
   background: transparent; font: inherit; font-size: 12.5px; line-height: 18px; color: #8a95a6;
@@ -22892,6 +22892,8 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
   color: #64748b; font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
 }
 .trow-btn:hover:not(:disabled) { background: #eaf0f8; color: var(--navy); }
+.trow-btn.en { width: 30px; font-size: 11px; font-weight: 700; color: var(--blue, #0055a8); }
+.trow-sugg--row { margin: 2px 0 5px 52px; }
 .trow-btn.del:hover:not(:disabled) { background: #fdecea; color: #c0392b; }
 .trow-btn:disabled { opacity: 0.3; cursor: default; }
 .trow-empty { padding: 8px 10px; border: 1px dashed #d5deea; border-radius: 8px; color: #8a95a6; font-size: 12px; }
@@ -22910,10 +22912,11 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
 .trow-opt { display: flex; align-items: center; gap: 10px; padding: 2px 0; }
 .trow-opt > span { flex: 1 1 auto; min-width: 0; line-height: 1.45; }
 .trow-opt .btn { flex: 0 0 auto; min-width: 64px; }
-.form-fieldset.vm-read :is(.trow-grip, .trow-tools, .trow-compose) { display: none; }
+.form-fieldset.vm-read :is(.trow-grip, .trow-tools, .trow-compose, .trow-sugg) { display: none; }
 @media (max-width: 640px) {
   .trow { gap: 5px; padding: 3px 4px; }
   .trow-compose-btns { flex-direction: row; width: 100%; }
+  .trow-sugg--row { margin-left: 0; }
 }
 
 /* 태그 고르기 메뉴에서 없는 것 바로 등록 · ✨ Auto-fill 결과 · 빠른 메이커 등록 창 */

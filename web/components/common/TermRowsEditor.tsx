@@ -23,6 +23,9 @@ export default function TermRowsEditor({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [points, setPoints] = useState<ClauseSuggestion[] | null>(null);
+  // 한 행의 영문 문장 후보. 행 번호가 아니라 글로 찾는다 — 기다리는 사이 순서를 바꾸거나 지워도
+  // 엉뚱한 행에 붙지 않고, 그 행을 고치면 후보도 사라진다.
+  const [rowSugg, setRowSugg] = useState<{ text: string; options: string[] | null; err?: string } | null>(null);
   const [drag, setDrag] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -100,6 +103,20 @@ export default function TermRowsEditor({
       setBusy(false);
     }
   }
+
+  async function suggestRow(text: string) {
+    setRowSugg({ text, options: null });
+    // 그사이 다른 행을 눌렀으면 늦게 온 답은 버린다.
+    const settle = (p: { options: string[]; err?: string }) =>
+      setRowSugg((cur) => (cur?.text === text ? { text, ...p } : cur));
+    try {
+      settle({ options: (await suggestClauses(text, kind, true)).points[0]?.options ?? [] });
+    } catch (e) {
+      settle({ options: [], err: e instanceof Error ? e.message : "Suggestion failed" });
+    }
+  }
+
+  const suggAt = rowSugg ? rows.findIndex((r) => textOf(r).trim() === rowSugg.text) : -1;
 
   function done() {
     setPoints(null);
@@ -192,6 +209,16 @@ export default function TermRowsEditor({
                 />
               </div>
               <span className="trow-tools">
+                <button
+                  type="button"
+                  className="trow-btn en"
+                  title="Rewrite this row as an English sentence"
+                  aria-label={`Rewrite row ${i + 1} as an English sentence`}
+                  disabled={!textOf(r).trim() || (suggAt === i && !rowSugg?.options)}
+                  onClick={() => suggestRow(textOf(r).trim())}
+                >
+                  {suggAt === i && !rowSugg?.options ? "…" : "EN"}
+                </button>
                 {r.id && r.text != null ? (
                   <button
                     type="button"
@@ -213,6 +240,31 @@ export default function TermRowsEditor({
                   ✕
                 </button>
               </span>
+              {suggAt === i && rowSugg?.options ? (
+                <div className="trow-sugg trow-sugg--row">
+                  {rowSugg.err ? <span className="action-err">{rowSugg.err}</span> : null}
+                  {rowSugg.options.map((o) => (
+                    <div className="trow-opt" key={o}>
+                      <span>{o}</span>
+                      <button
+                        type="button"
+                        className="btn sm primary"
+                        title="Replace this row with this sentence"
+                        onClick={() => {
+                          edit(i, o);
+                          setRowSugg(null);
+                        }}
+                      >
+                        Use
+                      </button>
+                    </div>
+                  ))}
+                  <div className="trow-opt">
+                    <span />
+                    <button type="button" className="btn sm" onClick={() => setRowSugg(null)}>Keep as is</button>
+                  </div>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>

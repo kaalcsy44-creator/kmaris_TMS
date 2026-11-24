@@ -2102,8 +2102,13 @@ export function suggestHsCodes(
 }
 /** 국문 메모 → 견적서 Remark / T&C 영문 문장 추천. 저장하지 않는다. */
 export type ClauseSuggestion = { source: string; options: string[] };
-export function suggestClauses(text: string, kind: "remark" | "terms"): Promise<{ points: ClauseSuggestion[] }> {
-  return post<{ points: ClauseSuggestion[] }>("/api/admin/clause-suggest", { text, kind });
+export function suggestClauses(
+  text: string,
+  kind: "remark" | "terms",
+  /** 이미 적힌 한 행을 문장으로 — 나누지 않고 한 항목으로 받는다. */
+  single = false
+): Promise<{ points: ClauseSuggestion[] }> {
+  return post<{ points: ClauseSuggestion[] }>("/api/admin/clause-suggest", { text, kind, single });
 }
 export type SanctionsStatus = {
   updated_at: string;

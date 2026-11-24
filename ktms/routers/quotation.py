@@ -126,6 +126,7 @@ def term_values():
 class ClauseSuggestIn(BaseModel):
     text: str = ""
     kind: str = "remark"   # remark | terms — 견적서의 어느 섹션에 실을 문장인가
+    single: bool = False   # 이미 적힌 한 행을 문장으로 — 여러 항목으로 나누지 않는다
 
 
 @app.post("/api/admin/clause-suggest", dependencies=[Depends(require_token)])
@@ -137,7 +138,7 @@ def clause_suggest(body: ClauseSuggestIn):
     if len(text) > _clause.MAX_CHARS:
         raise HTTPException(status_code=400, detail=f"Too long — keep it under {_clause.MAX_CHARS} characters.")
     try:
-        return {"points": _clause.suggest(text, "terms" if body.kind == "terms" else "remark")}
+        return {"points": _clause.suggest(text, "terms" if body.kind == "terms" else "remark", body.single)}
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=f"Suggestion failed: {exc}") from exc
 
