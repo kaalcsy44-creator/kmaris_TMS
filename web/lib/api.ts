@@ -1975,6 +1975,29 @@ export function scanPartnerWebsite(
     { website }
   );
 }
+export type PartnerSiteFind = {
+  website: string;
+  company: string;
+  /** 검색에서 확인된 것 — 홈페이지가 없는 회사에 쓴다. */
+  region: string;
+  products: string;
+  categories: { id: number; code: string; path: string }[];
+  reason: string;
+};
+/** 회사 이름 → 공식 홈페이지(웹 검색). 자신 없으면 website 가 빈 값으로 온다. */
+export function findPartnerWebsite(
+  name: string,
+  kind: "vendor" | "maker"
+): Promise<PartnerSiteFind> {
+  return post("/api/admin/partners/find-website", { name, kind });
+}
+/** 이 거래선의 견적·발주 줄에 적힌 메이커(unlisted = 명부에 없는 이름). */
+export function fetchVendorMakerHistory(company: string): Promise<{
+  makers: { id: number; name: string; kind: "po" | "quote"; count: number }[];
+  unlisted: { name: string; count: number }[];
+}> {
+  return get(`/api/admin/settings/vendors/maker-history?company=${encodeURIComponent(company)}`);
+}
 export function updateCustomerCompanyInfo(
   body: CompanyInfoSave
 ): Promise<CompanyInfoSaved> {

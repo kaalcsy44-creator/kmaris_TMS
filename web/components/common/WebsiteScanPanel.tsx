@@ -3,6 +3,9 @@
 import { useState } from "react";
 
 import { scanPartnerWebsite, type PartnerScan } from "@/lib/api";
+import { can } from "@/lib/auth";
+import { rememberNewMaker, useMakerCompanies } from "./MakerCell";
+import QuickMakerCreate from "./QuickMakerCreate";
 
 /**
  * 홈페이지를 읽어 태그 후보를 내미는 칸 — 거래선의 🏢 Company info, 제조사의 🏭 Maker
@@ -50,6 +53,16 @@ export function WebsiteScanPanel({
   // 체크된 후보. 처음에는 전부 켜 둔다 — 대개 맞고, 틀린 것을 빼는 편이 손이 덜 간다.
   const [pickCat, setPickCat] = useState<Set<number>>(new Set());
   const [pickMk, setPickMk] = useState<Set<number>>(new Set());
+
+  // "명부에 없는 브랜드"를 그 자리에서 등록하는 창(null = 닫힘).
+  const [creating, setCreating] = useState<string | null>(null);
+  const makers = useMakerCompanies();
+  const canRegister = !!onMakers && can("settings", "create");
+  const addMaker = (id: number, brand: string) => {
+    if (!(makerIds ?? []).includes(id)) onMakers?.([...(makerIds ?? []), id]);
+    setRes((r) => (r ? { ...r, unlisted_brands: r.unlisted_brands.filter((b) => b !== brand) } : r));
+    setCreating(null);
+  };
 
   const site = (website || "").trim();
 
@@ -163,15 +176,35 @@ export function WebsiteScanPanel({
           {res.unlisted_brands.length ? (
             <div className="scan-group scan-unlisted">
               <b>Brands not in our Maker book</b>
-              {/* 태그로 달 수가 없다 — 명부에 없는 이름이라서다. 그래도 지우지 않고
-                  보여 준다: 무엇을 명부에 올려야 하는지가 여기 적혀 있다. */}
-              <span>{res.unlisted_brands.join(" · ")}</span>
-              <i>Register these under Partners ▸ Maker first, then scan again.</i>
+              {/* 태그로 달 수가 없다 — 명부에 없는 이름이라서다. 거래선 창이라면 눌러서
+                  바로 등록하고 태그까지 단다. */}
+              {canRegister ? (
+                <>
+                  {res.unlisted_brands.map((b) => (
+                    <button key={b} type="button" className="btn sm" onClick={() => setCreating(b)}>＋ {b}</button>
+                  ))}
+                  <i>Press one to register it as a maker and add it to this company.</i>
+                </>
+              ) : (
+                <>
+                  <span>{res.unlisted_brands.join(" · ")}</span>
+                  <i>Register these under Partners ▸ Maker first, then scan again.</i>
+                </>
+              )}
             </div>
           ) : null}
         </div>
       ) : null}
 
+      {creating !== null ? (
+        <QuickMakerCreate
+          defaultName={creating}
+          makers={makers}
+          onPickExisting={(id) => addMaker(id, creating)}
+          onCreated={(m) => { rememberNewMaker(m); addMaker(m.id, creating); }}
+          onClose={() => setCreating(null)}
+        />
+      ) : null}
       <span className="hint-inline">
         Reads the front page and a few product pages — and, where a site prints its text
         into images, those pictures too — then proposes tags. It never saves on its own

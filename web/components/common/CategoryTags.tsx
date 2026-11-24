@@ -18,6 +18,8 @@
 import { useMemo } from "react";
 import { useCategoryOptions, type CategoryOption } from "@/components/common/CategoryCell";
 import TagPickMenu from "@/components/common/TagPickMenu";
+import { useTagAutofillField } from "@/components/common/TagAutofillButton";
+import type { TagAutofill } from "@/lib/tagAutofill";
 import { berthOf } from "@/lib/shipZones";
 
 /** 배지로 쓸 수 있는 분류만 — 대(1)·중(2)분류. 소분류는 너무 잘다. */
@@ -93,18 +95,24 @@ export function CategoryTagPicker({
   value,
   onChange,
   suggestions,
+  autofill,
+  hint,
   disabled = false,
 }: {
   value: number[];
   onChange: (next: number[]) => void;
   /** 이 회사의 실적 제안. 없으면 단추를 내밀지 않는다(누를 게 없다). */
   suggestions?: CategorySuggestion[];
+  /** 거래 기록·홈페이지에서 모아 오는 일. 주면 ✨ Auto-fill 단추가 선다. */
+  autofill?: TagAutofill;
+  hint?: string;
   disabled?: boolean;
 }) {
   const options = useVendorCategoryOptions();
   const picked = pick(options, value);
   const chosen = new Set(value);
   // 제안 중 아직 안 단 것. 이미 다 달았으면 단추를 흐리게 두지 않고 그 사실을 적는다.
+  const auto = useTagAutofillField({ run: autofill, field: "categories", value, onChange });
   const fresh = (suggestions ?? []).filter((s) => !chosen.has(s.id));
 
   return (
@@ -132,6 +140,7 @@ export function CategoryTagPicker({
             value={value}
             onChange={onChange}
           />
+          {auto.button}
           {suggestions?.length ? (
             <button
               type="button"
@@ -150,9 +159,14 @@ export function CategoryTagPicker({
           ) : null}
         </div>
       )}
+      {disabled ? null : auto.report}
       <span className="hint-inline">
-        What this company actually deals in — used to suggest vendors for an RFQ and to show them on Ship View.
-        Brands and makers belong in Specialization below; the tree has no place for them.
+        {hint ?? (
+          <>
+            What this company actually deals in — used to suggest vendors for an RFQ and to show them on Ship View.
+            Brands and makers belong in Specialization below; the tree has no place for them.
+          </>
+        )}
       </span>
     </div>
   );

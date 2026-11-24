@@ -15,11 +15,15 @@
 // 명부에 있는 그 회사"라는 확인이지 장식이 아니다 — MAN 과 MAN B&W 처럼 비슷한 이름이
 // 섞이는 자리에서, 고른 것이 무엇인지 글자보다 먼저 알아보게 한다.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import QuickMakerCreate from "@/components/common/QuickMakerCreate";
+import { useTagAutofillField } from "@/components/common/TagAutofillButton";
 import TagPickMenu from "@/components/common/TagPickMenu";
 import { fetchSettingsMakers } from "@/lib/api";
-import { useCachedData } from "@/lib/useCachedData";
+import { can } from "@/lib/auth";
+import type { TagAutofill } from "@/lib/tagAutofill";
+import { invalidateCache, useCachedData } from "@/lib/useCachedData";
 import type { SettingsMaker } from "@/lib/types";
 
 type MenuPos = { left: number; width: number; top?: number; bottom?: number };
@@ -29,10 +33,32 @@ function norm(v: string): string {
   return v.replace(/[^0-9a-z가-힣]+/gi, " ").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+// 이 화면에서 방금 등록한 메이커 — 명부 캐시를 쓰는 칸이 여럿이라(각자 제 상태를 든다),
+// 다시 받아 올 때까지 여기 얹어 모든 칸에 곧바로 보이게 한다.
+let justAdded: SettingsMaker[] = [];
+const addedListeners = new Set<() => void>();
+const subscribeAdded = (fn: () => void) => {
+  addedListeners.add(fn);
+  return () => { addedListeners.delete(fn); };
+};
+const getAdded = () => justAdded;
+
+export function rememberNewMaker(m: SettingsMaker) {
+  justAdded = [...justAdded, m];
+  invalidateCache("settings-makers");   // 다음에 여는 화면은 서버 명부를 다시 받는다
+  addedListeners.forEach((fn) => fn());
+}
+
 /** 등록된 메이커 명부. 자주 바뀌지 않아 캐시를 길게 둔다(분류 트리와 같은 취급). */
 export function useMakerOptions(): SettingsMaker[] {
   const { data } = useCachedData("settings-makers", fetchSettingsMakers, 300_000);
-  return data ?? [];
+  const added = useSyncExternalStore(subscribeAdded, getAdded, getAdded);
+  return useMemo(() => {
+    const base = data ?? [];
+    // 서버 명부에 이미 들어온 것은 그쪽 값이 이긴다.
+    const extra = added.filter((m) => !base.some((b) => b.id === m.id));
+    return extra.length ? [...base, ...extra].sort((a, b) => (a.name || "").localeCompare(b.name || "")) : base;
+  }, [data, added]);
 }
 
 /** 회사 한 곳당 한 줄인 메이커 목록.
@@ -526,10 +552,13 @@ export function MakerPickBadge({
 export function MakerTagPicker({
   value,
   onChange,
+  autofill,
   disabled = false,
 }: {
   value: number[];
   onChange: (next: number[]) => void;
+  /** 거래 기록·홈페이지에서 모아 오는 일. 주면 ✨ Auto-fill 단추가 선다. */
+  autofill?: TagAutofill;
   disabled?: boolean;
 }) {
   const makers = useMakerCompanies();
@@ -537,6 +566,16 @@ export function MakerTagPicker({
   // 화면에 선 것과 저장할 것을 같은 값으로 맞춘다 — 담당자 줄의 id 로 붙어 있던 옛
   // 태그도 이 자리를 한 번 지나면 회사 대표 id 로 정리된다.
   const ids = picked.map((m) => m.id);
+  const auto = useTagAutofillField({ run: autofill, field: "makers", value: ids, onChange });
+  // 명부에 없는 메이커를 이 자리에서 등록하는 창(null = 닫힘, 글자 = 처음 이름).
+  const [creating, setCreating] = useState<string | null>(null);
+  const canCreate = can("settings", "create");
+  const addId = (id: number) => {
+    if (!ids.includes(id)) onChange([...ids, id]);
+  };
+  // 자동 입력에서 나온 '명부에 없는 이름' — 등록하고 나면 목록에서 빠진다.
+  const unlisted = (auto.result?.unlisted ?? []).filter(
+    (u) => !makers.some((m) => norm(m.name || "") === norm(u.name)));
 
   return (
     <div className="form-field cat-picker">
@@ -563,13 +602,41 @@ export function MakerTagPicker({
             }))}
             value={ids}
             onChange={onChange}
+            onCreate={canCreate ? setCreating : undefined}
+            createLabel="Register new maker"
           />
+          {auto.button}
         </div>
       )}
+      {disabled ? null : auto.report}
+      {!disabled && unlisted.length ? (
+        <div className="tag-auto-new">
+          <span>Not in the maker list yet:</span>
+          {unlisted.map((u) => (
+            <button key={u.name} type="button" className="btn sm" disabled={!canCreate}
+                    title={`${u.why} — register as a maker and add it here`}
+                    onClick={() => setCreating(u.name)}>
+              ＋ {u.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {creating !== null ? (
+        <QuickMakerCreate
+          defaultName={creating}
+          makers={makers}
+          onPickExisting={(id) => { addId(id); setCreating(null); }}
+          onCreated={(m) => {
+            rememberNewMaker(m);
+            addId(m.id);
+            setCreating(null);
+          }}
+          onClose={() => setCreating(null)}
+        />
+      ) : null}
       <span className="hint-inline">
         Whose parts this company can actually supply — the answer to “who do we ask for a
-        YANMAR spare?”. Register the maker under Partners ▸ Maker first; free-text brand
-        names still belong in Specialization.
+        YANMAR spare?”. Not in the list? Type the name and register it right there.
       </span>
     </div>
   );

@@ -120,6 +120,7 @@ import { useColumnLayout } from "@/components/common/useColumnLayout";
 import { ColumnResizer, dragHandleProps } from "@/components/common/tableLayout";
 import { invalidateMasterCategories } from "@/components/common/CategoryCell";
 import { CategoryBadges, CategoryTagPicker, useVendorCategoryOptions } from "@/components/common/CategoryTags";
+import { tagAutofill } from "@/lib/tagAutofill";
 import { MakerBadges, MakerPickBadge, MakerTagPicker, useMakerOptions } from "@/components/common/MakerCell";
 import { AgencyBadges, AgencyTagPicker } from "@/components/common/AgencyPicker";
 import { WebsiteScanPanel } from "@/components/common/WebsiteScanPanel";
@@ -1268,6 +1269,7 @@ export function MakersTab({ newFlow }: { newFlow?: PartnerNewFlow } = {}) {
             <CategoryTagPicker
               value={form.category_ids}
               onChange={(category_ids) => setForm({ ...form, category_ids })}
+              autofill={tagAutofill({ kind: "maker", company: form.name, website: form.website, rowId: null })}
             />
           );
         }
@@ -2163,6 +2165,14 @@ function CompanyInfoModal<
       setRoleBusy(false);
     }
   }
+  // 태그 칸의 ✨ Auto-fill — 지금 폼에 적힌 홈페이지(저장 전이어도)와 거래 기록을 읽는다.
+  const tagFill = tagAutofill({
+    kind: scan?.kind ?? "vendor",
+    company: origName,
+    website: vals.website ?? "",
+    rowId: rows[0].id,
+    history: tags?.suggestions,
+  });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   // 방금 저장이 저쪽 명부까지 닿았다는 한 줄. 이 창의 저장은 보고 있는 명부 밖으로도
@@ -2779,9 +2789,12 @@ function CompanyInfoModal<
           ) : null}
         </div>
         {tags ? (
-          <CategoryTagPicker value={catIds} onChange={setCatIds} suggestions={tags.suggestions} />
+          <CategoryTagPicker value={catIds} onChange={setCatIds} suggestions={tags.suggestions}
+                             autofill={scan ? tagFill : undefined} />
         ) : null}
-        {makerTags ? <MakerTagPicker value={makerIds} onChange={setMakerIds} /> : null}
+        {makerTags ? (
+          <MakerTagPicker value={makerIds} onChange={setMakerIds} autofill={scan ? tagFill : undefined} />
+        ) : null}
         {agencies ? <AgencyTagPicker value={agencyNames} onChange={setAgencyNames} /> : null}
         {roles ? <RolePicker value={roleVals} onChange={setRoleVals} /> : null}
         {twinKinds.length ? (
@@ -3578,6 +3591,8 @@ export function VendorsTab({ newFlow }: { newFlow?: PartnerNewFlow } = {}) {
               onChange={(category_ids) => setForm({ ...form, category_ids })}
               // 이미 아는 회사라면 실적에서 뽑은 제안을 함께 내민다(회사 정보 창과 같다).
               suggestions={suggestFor(form.name)}
+              autofill={tagAutofill({ kind: "vendor", company: form.name, website: form.website, rowId: null,
+                                      history: suggestFor(form.name) })}
             />
           );
         }
@@ -3586,6 +3601,8 @@ export function VendorsTab({ newFlow }: { newFlow?: PartnerNewFlow } = {}) {
             <MakerTagPicker
               value={form.maker_ids}
               onChange={(maker_ids) => setForm({ ...form, maker_ids })}
+              autofill={tagAutofill({ kind: "vendor", company: form.name, website: form.website, rowId: null,
+                                      history: suggestFor(form.name) })}
             />
           );
         }

@@ -31,6 +31,8 @@ export default function TagPickMenu({
   onChange,
   disabled,
   searchPlaceholder = "🔍 Search…",
+  onCreate,
+  createLabel = "Register",
 }: {
   label: string;
   options: TagOption[];
@@ -38,6 +40,9 @@ export default function TagPickMenu({
   onChange: (next: number[]) => void;
   disabled?: boolean;
   searchPlaceholder?: string;
+  /** 주면 목록 밑에 새로 등록하는 단추가 선다 — 친 이름을 건네고 메뉴는 닫힌다. */
+  onCreate?: (draft: string) => void;
+  createLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -98,6 +103,14 @@ export default function TagPickMenu({
     ? options.filter((o) => `${o.name} ${o.sub ?? ""}`.toLowerCase().includes(ql))
     : options;
 
+  // 이름이 똑같은 것이 이미 있으면 새로 등록할 것이 아니다.
+  const exact = options.some((o) => o.name.trim().toLowerCase() === ql);
+  function create() {
+    setOpen(false);
+    setQ("");
+    onCreate?.(q.trim());
+  }
+
   function toggle(id: number) {
     const next = new Set(chosen);
     if (next.has(id)) next.delete(id);
@@ -135,6 +148,13 @@ export default function TagPickMenu({
                 placeholder={searchPlaceholder}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => {
+                  // 찾는 것이 없을 때의 Enter 는 "그럼 이걸로 등록"이다.
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing && onCreate && ql && !list.length) {
+                    e.preventDefault();
+                    create();
+                  }
+                }}
                 autoFocus
               />
               <ul className="tpm-list">
@@ -165,6 +185,11 @@ export default function TagPickMenu({
                   </li>
                 ) : null}
               </ul>
+              {onCreate && !exact ? (
+                <button type="button" className="tpm-create" onClick={create}>
+                  ＋ {createLabel}{ql ? <> “<b>{q.trim()}</b>”</> : null}
+                </button>
+              ) : null}
               <div className="tpm-foot">
                 <span className="tpm-count">{value.length} selected</span>
                 <button type="button" className="btn ghost" onClick={() => setOpen(false)}>

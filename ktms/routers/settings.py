@@ -1177,6 +1177,25 @@ def partner_site_profile(website: str = Body("", embed=True), kind: str = Body("
         raise HTTPException(status_code=400, detail=f"홈페이지 읽기 실패: {exc}") from exc
 
 
+@app.post("/api/admin/partners/find-website", dependencies=[Depends(require_token)])
+def find_partner_website(name: str = Body("", embed=True), kind: str = Body("maker", embed=True)):
+    """회사 이름 → 공식 홈페이지 주소(웹 검색). 못 찾으면 website 가 빈 값. 읽기만 한다."""
+    nm = (name or "").strip()
+    if not nm:
+        raise HTTPException(status_code=400, detail="Enter the company name first.")
+    from services.site_finder import find_website
+    from services.vendor_scan import _menus
+    s = get_session()
+    try:
+        cats = _menus(s)[1]
+    finally:
+        s.close()  # 검색을 기다리는 동안 DB 연결을 잡지 않는다
+    try:
+        return find_website(nm[:200], kind, cats)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=f"Website search failed: {exc}") from exc
+
+
 @app.post("/api/admin/partners/scan-website", dependencies=[Depends(require_token)])
 def scan_new_partner_website(website: str = Body("", embed=True), name: str = Body("", embed=True),
                              kind: str = Body("vendor", embed=True)):
@@ -3635,6 +3654,16 @@ def vendor_tag_suggestion_rows(company: str | None = None) -> list[dict]:
 def vendor_tag_suggestions(company: str = ""):
     """회사별 '태그에 추가할까요?' 목록 — company 를 주면 그 회사만."""
     return {"rows": vendor_tag_suggestion_rows(company.strip() or None)}
+
+
+@app.get("/api/admin/settings/vendors/maker-history", dependencies=[Depends(require_token)])
+def vendor_maker_history(company: str = ""):
+    """이 거래선의 견적·발주 줄에 적힌 메이커 — Makers supplied 의 Auto-fill 이 쓴다."""
+    s = get_session()
+    try:
+        return _vts.maker_history(s, company)
+    finally:
+        s.close()
 
 
 class VendorTagDecision(BaseModel):

@@ -194,6 +194,53 @@ def _category_patterns(s) -> list[tuple[re.Pattern, int, str]]:
     return out
 
 
+def maker_history(s, company: str) -> dict:
+    """이 거래선이 값을 줬거나 우리가 사 온 줄의 Maker — 기간 제한 없이 전부.
+
+    compute 와 달리 이미 단 것·접은 것도 거르지 않는다(사람이 Auto-fill 을 눌러 칸을 채우는
+    자리라, 겹치는 것은 화면이 거른다). 자기 자신이 메이커인 줄은 뺀다.
+    반환: {makers: [{id, name, kind: po|quote, count}], unlisted: [{name, count}]}"""
+    key = (company or "").strip().lower()
+    rows = [v for v in s.query(Vendor.id, Vendor.name, Vendor.maker_id).all()
+            if (v.name or "").strip().lower() == key]
+    vids = {v.id for v in rows}
+    if not vids:
+        return {"makers": [], "unlisted": []}
+    mk = _MakerIndex(s)
+    me = {norm_name(company)} | {norm_name(mk.name_of_id[v.maker_id])
+                                 for v in rows if v.maker_id in mk.name_of_id}
+    makers: dict[int, dict] = {}
+    unlisted: dict[str, dict] = {}
+
+    def take(items, kind: str):
+        for it in (items or []):
+            raw = str((it or {}).get("maker") or "").strip() if isinstance(it, dict) else ""
+            k = norm_name(raw)
+            if not k or k in me:
+                continue
+            hit = mk.match_field(raw)
+            if hit is None:
+                u = unlisted.setdefault(k, {"name": raw[:80], "count": 0})
+                u["count"] += 1
+                continue
+            if norm_name(hit[1]) in me:
+                continue
+            m = makers.setdefault(hit[0], {"id": hit[0], "name": hit[1], "kind": kind, "count": 0})
+            m["count"] += 1
+            if kind == "po":
+                m["kind"] = "po"
+
+    vrfq_ids = [i for (i,) in s.query(VendorRFQ.id).filter(VendorRFQ.vendor_id.in_(vids)).all()]
+    if vrfq_ids:
+        for (items,) in s.query(VendorQuote.items).filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).all():
+            take(items, "quote")
+    for (items,) in s.query(PurchaseOrder.items).filter(PurchaseOrder.vendor_id.in_(vids)).all():
+        take(items, "po")
+    by_count = lambda r: (-r["count"], r["name"].lower())   # noqa: E731
+    return {"makers": sorted(makers.values(), key=by_count),
+            "unlisted": sorted(unlisted.values(), key=by_count)[:20]}
+
+
 def compute(s, company: str | None = None, category_rows: list[dict] | None = None) -> list[dict]:
     """회사별 제안 목록. category_rows = settings.vendor_category_suggestions()['rows']
     (실적 기반 분류 — 넘기면 함께 싣는다).
