@@ -971,6 +971,7 @@ class ScheduleEvent(Base):
     time_start  = Column(String(5))
     time_end    = Column(String(5))
     location    = Column(String(200))
+    location_mode = Column(String(10))  # online / offline — NULL·빈 값 = 안 고름(화면이 장소로 짐작)
     attendees   = Column(Text)          # 한 줄에 한 명(줄바꿈 구분)
     # 번호 붙은 안건과 그 안건의 결과 — [{"text": 안건, "result": 결과}].
     agenda      = Column(JSON, default=list)

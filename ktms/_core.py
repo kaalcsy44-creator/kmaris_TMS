@@ -4071,6 +4071,8 @@ class ScheduleEventCreate(BaseModel):
     time_start: str | None = ""
     time_end: str | None = ""
     location: str | None = ""
+    # online / offline / ""(안 고름). None = 이 칸을 모르는 저장.
+    location_mode: str | None = None
     attendees: str | None = ""
     # [{"text": 안건, "result": 그 안건의 결과}] — 번호는 순서가 정한다.
     agenda: list[dict] | None = None
@@ -4107,6 +4109,8 @@ def _schedule_apply(e: ScheduleEvent, body: ScheduleEventCreate) -> None:
     e.time_start = (body.time_start or "").strip()[:5]
     e.time_end = (body.time_end or "").strip()[:5]
     e.location = (body.location or "").strip()[:200]
+    if body.location_mode is not None:
+        e.location_mode = body.location_mode if body.location_mode in ("online", "offline") else ""
     e.attendees = (body.attendees or "").strip()
     # 안건을 모르는 화면이 보낸 저장(None)은 적어 둔 안건을 지키게 둔다.
     if body.agenda is not None:
@@ -4129,6 +4133,7 @@ def _schedule_row(e: ScheduleEvent, cust_names: dict, user_names: dict) -> dict:
         "time_start": getattr(e, "time_start", None) or "",
         "time_end": getattr(e, "time_end", None) or "",
         "location": getattr(e, "location", None) or "",
+        "location_mode": getattr(e, "location_mode", None) or "",
         "attendees": getattr(e, "attendees", None) or "",
         "agenda": _clean_agenda(getattr(e, "agenda", None)),
         "status": getattr(e, "status", None) or "planned",

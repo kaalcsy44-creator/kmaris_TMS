@@ -54,10 +54,21 @@ export function scheduleColumns(compact = false): ColumnDef<ScheduleRow>[] {
       render: (r) => <span className={`sched-badge ${r.status || "planned"}`}>{SCHEDULE_STATUS_LABEL[r.status] || "Planned"}</span>,
     },
     { key: "customer", label: "Customer", text: (r) => r.customer || "", filter: "facet", render: (r) => (r.customer ? <CustomerName name={r.customer} /> : <>—</>) },
-    { key: "location", label: "Location", text: (r) => r.location || "" },
+    {
+      key: "location", label: "Location",
+      text: (r) => [LOCATION_MODE_LABEL[scheduleMode(r)], r.location].filter(Boolean).join(" · "),
+      render: (r) => {
+        const m = scheduleMode(r);
+        if (!m && !r.location) return <>—</>;
+        return (
+          <>
+            {m ? <span className={`sched-mode ${m}`}>{LOCATION_MODE_LABEL[m]}</span> : null}
+            {r.location ? <span className={m ? "sched-place" : undefined}>{r.location}</span> : null}
+          </>
+        );
+      },
+    },
     { key: "attendees", label: "Attendees", text: (r) => r.attendees || "" },
-    // 진행 후에는 결과가, 그 전에는 안건이 이 일정을 한 줄로 말해 준다.
-    { key: "notes", label: "Notes", text: (r) => (r.status === "done" ? r.outcome || r.minutes : "") || r.notes || "" },
     { key: "pic", label: "PIC", text: (r) => r.owner || "", filter: "facet" },
   ];
   return compact ? cols.filter((c) => ["date", "time", "title", "event_type", "status", "customer", "pic"].includes(c.key)) : cols;
@@ -199,6 +210,26 @@ const SCHEDULE_STATUS_LABEL: Record<string, string> = Object.fromEntries(
   SCHEDULE_STATUS.map((o) => [o.value, o.label])
 );
 
+/** 장소가 온라인인가 오프라인인가. */
+const LOCATION_MODES: { value: string; label: string }[] = [
+  { value: "online", label: "Online" },
+  { value: "offline", label: "Offline" },
+];
+const LOCATION_MODE_LABEL: Record<string, string> = Object.fromEntries(LOCATION_MODES.map((o) => [o.value, o.label]));
+const ONLINE_PLACE =
+  /\b(google\s*meet|meet\.google|zoom|(ms|microsoft)\s*teams|webex|skype|online|(video|conference)\s*call)\b|온라인|화상/i;
+
+/** 아직 안 고른 일정 — 장소 글자로 짐작한다(빈 장소는 짐작하지 않는다). */
+function guessMode(location: string | undefined): string {
+  const s = (location || "").trim();
+  return !s ? "" : ONLINE_PLACE.test(s) ? "online" : "offline";
+}
+
+/** 일정의 온라인/오프라인 — 출장은 늘 오프라인. */
+function scheduleMode(r: { event_type?: string; location?: string; location_mode?: string }): string {
+  return r.event_type === TRIP_TYPE ? "offline" : r.location_mode || guessMode(r.location);
+}
+
 /** 일정의 시간 한 줄 — '14:00–15:30', 끝 시간이 없으면 시작만. */
 function scheduleTime(r: { time_start?: string; time_end?: string }): string {
   if (!r.time_start) return "";
@@ -241,7 +272,7 @@ function scheduleMinutesHtml(d: {
   const cellPair = (k: string, val: string) => `<th>${k}</th><td>${val}</td>`;
   const infoRows = [
     cellPair("Date / time", v(when)) + cellPair("Type", v(s.event_type)),
-    cellPair("Location", v(s.location)) + cellPair("Customer", v(d.customer)),
+    cellPair("Location", v([s.location, LOCATION_MODE_LABEL[s.location_mode || ""]].filter((x) => x?.trim()).join(" · "))) + cellPair("Customer", v(d.customer)),
     cellPair("Status", escHtml(SCHEDULE_STATUS_LABEL[s.status || "planned"] || "Planned")) + cellPair("Prepared by", v(d.owner)),
     `<th>Attendees</th><td colspan="3">${people.length ? people.map(escHtml).join(", ") : "—"}</td>`,
   ];
@@ -324,6 +355,8 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
   const [eventType, setEventType] = useState(row?.event_type || "Meeting");
   const [customerId, setCustomerId] = useState<number | "">(row?.customer_id ?? "");
   const [location, setLocation] = useState(row?.location ?? "");
+  // 온라인/오프라인 — 직접 고르기 전("")에는 장소 글자로 짐작한 값을 보여 준다.
+  const [modePick, setModePick] = useState(row?.location_mode ?? "");
   // 한 칸에 한 명 — 마지막 칸은 늘 비워 두지 않고 '+ Add {isTrip ? "traveler" : "attendee"}' 로 늘린다.
   const [people, setPeople] = useState<string[]>(() => {
     const p = splitPeople(row?.attendees);
@@ -339,6 +372,7 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
   );
   const [tripTab, setTripTab] = useState<TripTab>("report");
   const isTrip = eventType === TRIP_TYPE;
+  const locMode = scheduleMode({ event_type: eventType, location, location_mode: modePick });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -444,11 +478,12 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
       time_end: timeEnd,
       title: title.trim(),
       event_type: eventType,
-      // 목록의 Notes 열·예전 화면이 읽는 평문 안건 — 번호를 붙여 한 줄씩.
+      // 안건 목록을 모르는 예전 화면이 읽는 평문 안건 — 번호를 붙여 한 줄씩.
       notes: items.filter((a) => a.text).map((a, i) => `${i + 1}. ${a.text}`).join("\n"),
       agenda: items,
       customer_id: customerId === "" ? null : customerId,
       location: location.trim(),
+      location_mode: locMode,
       attendees: names.join("\n"),
       status,
       minutes,
@@ -653,15 +688,37 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
           {typeField}
         </div>
         {titleRow}
-        <label className="form-field">
+        <div className="form-field">
           <span>Location</span>
-          <input
-            type="text"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="e.g. Seoul office · Busan port · Zoom"
-          />
-        </label>
+          <div className="sched-loc">
+            <div className="pl-view-toggle sched-status" role="group" aria-label="Online or offline">
+              {LOCATION_MODES.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  className={locMode === o.value ? "on" : ""}
+                  aria-pressed={locMode === o.value}
+                  onClick={() => setModePick(o.value)}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              value={location}
+              aria-label="Location"
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder={
+                locMode === "online"
+                  ? "e.g. Google Meet · Zoom"
+                  : locMode === "offline"
+                    ? "e.g. Seoul office · Busan port"
+                    : "e.g. Seoul office · Busan port · Zoom"
+              }
+            />
+          </div>
+        </div>
         {peopleField}
       </section>
 

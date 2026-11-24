@@ -21660,6 +21660,22 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
 }
 .sched-badge.done { color: #166534; background: #dcfce7; }
 .sched-badge.cancelled { color: #6b7280; background: #f3f4f6; text-decoration: line-through; }
+/* 장소의 온라인/오프라인 칩 — 목록의 Location 칸. */
+.sched-mode {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.sched-mode.online { color: #0055a8; background: #e0edfb; }
+.sched-mode.offline { color: #8a5a00; background: #fdf0d5; }
+.sched-place { margin-left: 6px; }
+/* 입력 창 — 온라인/오프라인 고르기와 장소 칸을 한 줄에. */
+.sched-loc { display: flex; align-items: center; gap: 8px; }
+.sched-loc .sched-status { flex: none; align-self: center; }
+.sched-loc input { flex: 1 1 auto; min-width: 0; }
 /* Schedule 회의록 미리보기 — A4 한 장을 창 안에서 그대로 본다(인쇄는 이 문서만 찍는다). */
 .sched-minutes {
   display: block;

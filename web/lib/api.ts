@@ -1789,6 +1789,8 @@ export type ScheduleSave = {
   time_start?: string;
   time_end?: string;
   location?: string;
+  /** online / offline / ""(안 고름). */
+  location_mode?: string;
   /** 참석자 — 한 줄에 한 명. */
   attendees?: string;
   agenda?: { text: string; result: string }[];

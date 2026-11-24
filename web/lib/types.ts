@@ -2604,6 +2604,8 @@ export type ScheduleRow = {
   time_start: string;
   time_end: string;
   location: string;
+  /** online / offline — 빈 값이면 안 고른 것(화면이 장소 글자로 짐작한다). */
+  location_mode?: string;
   /** 참석자 — 한 줄에 한 명(예전 값은 쉼표로 구분돼 있을 수 있다). */
   attendees: string;
   /** 번호 붙은 안건과 그 안건의 결과. 번호는 순서가 정한다. */

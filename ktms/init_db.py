@@ -119,6 +119,8 @@ _MIGRATIONS = {
         "time_start": "VARCHAR(5)",
         "time_end": "VARCHAR(5)",
         "location": "VARCHAR(200)",
+        # 온라인/오프라인. 기존 행은 NULL = 안 고름(화면이 장소 글자로 짐작해 보여 준다).
+        "location_mode": "VARCHAR(10)",
         # 번호 붙은 안건과 안건별 결과. 기존 행은 NULL = 안건을 notes 평문으로만 적어 둠.
         "agenda": "JSON",
         "attendees": "TEXT",
