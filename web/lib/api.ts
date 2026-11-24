@@ -1164,6 +1164,10 @@ export type FreightRowSave = {
   awarded: boolean;
   notes: string;
 };
+export type FreightBank = {
+  bank_name: string; bank_account: string; bank_holder: string; swift: string;
+  from: "payable" | "vendor" | "previous";
+};
 export type FreightRow = Omit<FreightRowSave, "order_id" | "ci_id"> & {
   id: number;
   order_id: number;
@@ -1173,7 +1177,9 @@ export type FreightRow = Omit<FreightRowSave, "order_id" | "ci_id"> & {
   /** 실제 비용(지급 등록분) 또는 견적 금액의 원화. */
   cost_krw: number;
   /** Finance 지급에 등록된 실제 비용. */
-  payable: FreightPayable | null;
+  payable: (FreightPayable & { bank?: FreightBank | null; notes?: string }) | null;
+  /** 계좌가 아직 없을 때 미리 채울 계좌(거래선 명부·지난번 같은 운송사). */
+  bank_hint?: FreightBank | null;
 };
 export type Freight = {
   rfq_id: number;
@@ -1212,6 +1218,10 @@ export type FreightParse = {
   carrier: string; service: string; doc_no: string; quote_date: string; valid_until: string; transit: string;
   weight: string; tracking_no: string; bill_no: string; bill_date: string; due_date: string; currency: string;
   amount: number; vat_amount: number;
+  /** 청구서에 찍힌 입금 계좌 전부(은행이 여럿일 수 있다). */
+  accounts?: { bank_name: string; bank_account: string; bank_holder: string }[];
+  /** 입금자명 규칙·지로번호·전자납부번호 등 납부할 때 필요한 것. */
+  pay_ref?: string;
 };
 /** 운송사 견적서·청구서 읽기 — 저장하지 않는다. */
 export function parseFreight(file: File): Promise<FreightParse> {
@@ -1234,6 +1244,7 @@ export function saveFreightPayable(
   body: {
     payable_id?: number; supply_amount?: number; vat_amount?: number; currency?: string;
     bill_no?: string; bill_date?: string; due_date?: string;
+    bank_name?: string; bank_account?: string; bank_holder?: string; pay_ref?: string;
   }
 ): Promise<{ ok: boolean; payable_id: number }> {
   return post(`${frtBase(rfqId)}/${id}/payable`, body);

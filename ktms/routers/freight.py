@@ -45,7 +45,8 @@ from _core import (
     require_token,
 )
 from db.models import CommercialInvoice, FreightQuote, ProformaInvoice
-from routers.finance import VENDOR_CATEGORY, _krw_in, _payable_krw, _payable_overdue, _vat_within
+from routers.finance import (VENDOR_CATEGORY, _bank_of, _krw_in, _payable_krw, _payable_overdue, _same_name,
+                             _vat_within, _vendor_company)
 
 PAYERS = ("", "buyer", "rebill", "included")
 # 배송비만 따로 청구한 추가 청구서의 표식(ARRecord.notes) — 다른 추가 청구와 가린다.
@@ -89,6 +90,35 @@ def _payable_out(p: FinancePayable | None) -> dict | None:
             "bill_date": p.bill_date or "", "due_date": p.due_date or "",
             "paid": bool(p.paid), "paid_date": p.paid_date or "",
             "overdue": _payable_overdue(p, bool(p.paid), date.today().isoformat())}
+
+
+def _payable_bank(s, p: FinancePayable) -> dict | None:
+    """이 지급을 보낼 계좌 — 지급 건에 적힌 계좌가 먼저, 없으면 연결 거래선의 계좌
+    (Finance 지급 상세와 같은 규칙)."""
+    own = _bank_of(p, swift_attr="__none__")
+    if own:
+        return {**own, "from": "payable"}
+    bank = _vendor_company(s, vendor_id=p.vendor_id)[1] if p.vendor_id else None
+    return {**bank, "from": "vendor"} if bank else None
+
+
+def _bank_hint(s, row: FreightQuote) -> dict | None:
+    """아직 계좌가 없는 청구서에 미리 채울 계좌 — 연결 거래선, 없으면 같은 운송사에 같은
+    통화로 지난번 보낸 계좌."""
+    if row.vendor_id:
+        bank = _vendor_company(s, vendor_id=row.vendor_id)[1]
+        if bank:
+            return {**bank, "from": "vendor"}
+    if not (row.carrier or "").strip():
+        return None
+    for p in (s.query(FinancePayable)
+              .filter(FinancePayable.category == VENDOR_CATEGORY,
+                      FinancePayable.currency == (row.currency or "KRW"),
+                      FinancePayable.bank_account.isnot(None), FinancePayable.bank_account != "")
+              .order_by(FinancePayable.id.desc()).all()):
+        if _same_name(p.counterparty, row.carrier):
+            return {**_bank_of(p, swift_attr="__none__"), "from": "previous"}
+    return None
 
 
 def _ym(*dates) -> str:
@@ -158,6 +188,10 @@ def project_freight(rfq_id: int):
             if p is not None:
                 linked.add(p.id)
             out = _row_out(row, p, vendor_names, row.order_id or only)
+            if p is not None:
+                out["payable"].update(bank=_payable_bank(s, p), notes=p.notes or "")
+            out["bank_hint"] = (_bank_hint(s, row) if (row.awarded or p is not None)
+                                and not (p is not None and out["payable"]["bank"]) else None)
             rows.append(out)
             if p is not None or (row.awarded and payer != "buyer"):
                 cost_krw += out["cost_krw"]
@@ -378,8 +412,12 @@ def parse_freight(file: UploadFile = File(...)):
     for k, v in data.items():
         if k in ("amount", "vat_amount"):
             out[k] = round(_num(v), 2)
+        elif k == "accounts":
+            out[k] = [a for a in ({f: " ".join(str(x.get(f) or "").split())[:120]
+                                   for f in ("bank_name", "bank_account", "bank_holder")}
+                                  for x in (v or [])) if a["bank_account"]]
         elif k != "truncated":
-            out[k] = " ".join(str(v or "").split())[:200]
+            out[k] = " ".join(str(v or "").split())[:400 if k == "pay_ref" else 200]
     for k in ("quote_date", "valid_until", "bill_date", "due_date"):
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", out.get(k, "")):
             out[k] = ""
@@ -429,6 +467,24 @@ class FreightPayableIn(BaseModel):
     bill_no: str = ""
     bill_date: str = ""
     due_date: str = ""
+    # 입금 계좌·납부 참고(입금자명·지로번호…) — 보내지 않은 칸(None)은 저장된 값을 지킨다.
+    bank_name: str | None = None
+    bank_account: str | None = None
+    bank_holder: str | None = None
+    pay_ref: str | None = None
+
+
+def _apply_bank(s, p: FinancePayable, body: FreightPayableIn) -> None:
+    given = {k: (getattr(body, k) or "").strip()[:120] for k in ("bank_name", "bank_account", "bank_holder")
+             if getattr(body, k) is not None}
+    if given:
+        # 거래선 명부의 계좌 그대로면 지급 건에는 베끼지 않는다 — 명부에서 바뀌면 함께 바뀌게.
+        vendor = _vendor_company(s, vendor_id=p.vendor_id)[1] if p.vendor_id else None
+        same = bool(vendor) and all(vendor[k] == v for k, v in given.items())
+        for k, v in given.items():
+            setattr(p, k, "" if same else v)
+    if body.pay_ref is not None:
+        p.notes = body.pay_ref.strip()
 
 
 def _payable_desc(s, row: FreightQuote) -> str:
@@ -485,6 +541,7 @@ def save_freight_payable(rfq_id: int, row_id: int, body: FreightPayableIn,
             p.currency = (body.currency or "KRW").upper()
             p.bill_date = (body.bill_date or "").strip()[:10]
             p.due_date = (body.due_date or "").strip()[:10]
+            _apply_bank(s, p, body)
         s.flush()
         row.payable_id = p.id
         row.awarded = True

@@ -21,6 +21,7 @@ import {
   saveFreightPayable,
   uploadFreightFile,
   type Freight,
+  type FreightParse,
   type FreightPayer,
   type FreightRow,
   type FreightRowSave,
@@ -313,8 +314,9 @@ export default function FreightPanel({
                   ) : null}
                 </span>
               </div>
+              {r.payable && bill !== r.id ? <PayTo bank={r.payable.bank} notes={r.payable.notes} paid={r.payable.paid} /> : null}
               {bill === r.id ? (
-                <BillForm row={r} others={r.payable ? [] : d.other_payables} busy={!!busy} onError={setErr}
+                <BillForm row={r} rfqId={rfqId} others={r.payable ? [] : d.other_payables} busy={!!busy} onError={setErr}
                           onCancel={() => setBill(null)}
                           onSave={async (b) => {
                             const ok = await run("bill", async () => {
@@ -549,8 +551,9 @@ function Amount({ value, onChange, autoFocus }: { value: number; onChange: (n: n
 }
 
 /** 실제 청구서 → Finance 지급. 처음엔 견적 금액에서 시작한다. */
-function BillForm({ row, others, busy, onSave, onCancel, onError }: {
+function BillForm({ row, rfqId, others, busy, onSave, onCancel, onError }: {
   row: FreightRow;
+  rfqId: number;
   others: Freight["other_payables"];
   busy: boolean;
   onSave: (b: { body: Parameters<typeof saveFreightPayable>[2]; file: File | null }) => void;
@@ -558,14 +561,36 @@ function BillForm({ row, others, busy, onSave, onCancel, onError }: {
   onError: (m: string) => void;
 }) {
   const p = row.payable;
+  const bank0 = p?.bank ?? row.bank_hint;
   const [f, setF] = useState({
     supply_amount: p?.supply_amount ?? row.amount, vat_amount: p?.vat_amount ?? row.vat_amount,
     currency: p?.currency ?? row.currency, bill_no: row.bill_no, bill_date: p?.bill_date ?? "", due_date: p?.due_date ?? "",
+    bank_name: bank0?.bank_name ?? "", bank_account: bank0?.bank_account ?? "", bank_holder: bank0?.bank_holder ?? "",
+    pay_ref: p?.notes ?? "",
   });
+  // 청구서에서 읽은 계좌들 — 은행이 여럿이면 하나를 고른다. readBank = 읽은 값이 칸에 들어갔나.
+  const [accounts, setAccounts] = useState<NonNullable<FreightParse["accounts"]>>([]);
+  const [readBank, setReadBank] = useState(false);
   const [link, setLink] = useState("");
   const [reading, setReading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const set = (x: Partial<typeof f>) => setF((c) => ({ ...c, ...x }));
+
+  /** 이미 붙여 둔 원본을 다시 읽는다 — 파일을 또 고르지 않아도 되게. */
+  async function readAttached() {
+    setReading(true);
+    onError("");
+    try {
+      const res = await fetch(freightFileUrl(rfqId, row.id), { headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {} });
+      if (!res.ok) throw new Error("could not open the attached file");
+      const b = await res.blob();
+      await fill(new File([b], row.filename, { type: b.type }));
+    } catch (e) {
+      onError(`The bill could not be read: ${e instanceof Error ? e.message : "error"}`);
+    } finally {
+      setReading(false);
+    }
+  }
 
   async function read(x: File | undefined) {
     if (!x) return;
@@ -573,20 +598,31 @@ function BillForm({ row, others, busy, onSave, onCancel, onError }: {
     setReading(true);
     onError("");
     try {
-      const r = await parseFreight(x);
-      // 실제 청구서의 숫자가 견적보다 맞다 — 읽힌 값으로 바꾼다.
-      set({
-        ...(r.amount ? { supply_amount: r.amount, vat_amount: r.vat_amount } : {}),
-        ...(r.currency ? { currency: r.currency } : {}),
-        ...(r.bill_no || r.doc_no ? { bill_no: r.bill_no || r.doc_no } : {}),
-        ...(r.bill_date || r.quote_date ? { bill_date: r.bill_date || r.quote_date } : {}),
-        ...(r.due_date ? { due_date: r.due_date } : {}),
-      });
+      await fill(x);
     } catch (e) {
       onError(`The bill could not be read: ${e instanceof Error ? e.message : "error"}`);
     } finally {
       setReading(false);
     }
+  }
+
+  async function fill(x: File) {
+    const r = await parseFreight(x);
+    const accs = r.accounts ?? [];
+    setAccounts(accs);
+    // 지금 적힌 계좌가 청구서에도 있으면 그대로 두고, 아니면 청구서의 첫 계좌로.
+    const pick = accs.find((a) => a.bank_account === f.bank_account) ?? accs[0];
+    setReadBank(!!pick);
+    // 실제 청구서의 숫자가 견적보다 맞다 — 읽힌 값으로 바꾼다.
+    set({
+      ...(r.amount ? { supply_amount: r.amount, vat_amount: r.vat_amount } : {}),
+      ...(r.currency ? { currency: r.currency } : {}),
+      ...(r.bill_no || r.doc_no ? { bill_no: r.bill_no || r.doc_no } : {}),
+      ...(r.bill_date || r.quote_date ? { bill_date: r.bill_date || r.quote_date } : {}),
+      ...(r.due_date ? { due_date: r.due_date } : {}),
+      ...(pick ? { ...pick, bank_holder: pick.bank_holder || (pick.bank_account === f.bank_account ? f.bank_holder : "") } : {}),
+      ...(r.pay_ref ? { pay_ref: r.pay_ref } : {}),
+    });
   }
 
   const total = f.supply_amount + f.vat_amount;
@@ -608,6 +644,9 @@ function BillForm({ row, others, busy, onSave, onCancel, onError }: {
               {reading ? "Reading…" : "📄 Read freight bill"}
               <input type="file" hidden accept=".pdf,image/*" disabled={reading || busy} onChange={(e) => { const x = e.target.files?.[0]; e.target.value = ""; void read(x); }} />
             </label>
+            {row.filename && !file ? (
+              <button type="button" className="btn sm" disabled={reading || busy} title={row.filename} onClick={() => void readAttached()}>↻ Read attached file</button>
+            ) : null}
             <span className="hint-inline">{file ? `📎 ${file.name} — replaces the attached file` : "Starts from the quoted amount; the carrier's bill overrides it."}</span>
           </div>
           <div className="form-grid form-grid--cols4">
@@ -623,6 +662,32 @@ function BillForm({ row, others, busy, onSave, onCancel, onError }: {
             <label className="form-field"><span>VAT</span><Amount value={f.vat_amount} onChange={(v) => set({ vat_amount: v })} /></label>
             <div className="form-field"><span>Total to pay</span><b className="frt-total">{fmt(total, f.currency)}</b></div>
           </div>
+          <div className="frt-bank">
+            <div className="frt-bank-h">Pay to — carrier&apos;s bank account</div>
+            {accounts.length > 1 ? (
+              <div className="frt-bank-pick">
+                {accounts.map((a) => (
+                  <label key={a.bank_account}>
+                    <input type="radio" checked={a.bank_account === f.bank_account} onChange={() => { set(a); setReadBank(true); }} />
+                    {a.bank_name} {a.bank_account}
+                  </label>
+                ))}
+              </div>
+            ) : null}
+            <div className="form-grid form-grid--cols4">
+              <label className="form-field"><span>Bank</span><input value={f.bank_name} onChange={(e) => set({ bank_name: e.target.value })} /></label>
+              <label className="form-field"><span>Account No.</span><input value={f.bank_account} onChange={(e) => set({ bank_account: e.target.value })} /></label>
+              <label className="form-field form-field--span2"><span>Account holder</span><input value={f.bank_holder} onChange={(e) => set({ bank_holder: e.target.value })} /></label>
+              <label className="form-field form-field--full"><span>Payment note (remitter name, giro / e-payment No.)</span>
+                <input value={f.pay_ref} onChange={(e) => set({ pay_ref: e.target.value })} /></label>
+            </div>
+            <p className="hint-inline">
+              {readBank ? "Read from the bill — check it. "
+                : bank0?.from === "previous" ? `Filled from the last ${row.carrier} payment. `
+                : bank0?.from === "vendor" ? "From the linked vendor's record (Partners). " : ""}
+              Finance shows this account when you pay.
+            </p>
+          </div>
         </>
       )}
       <div className="frt-form-act">
@@ -633,6 +698,30 @@ function BillForm({ row, others, busy, onSave, onCancel, onError }: {
           {busy ? "Saving…" : link ? "Link payment" : p ? "Save bill" : "Register in Finance"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** 등록된 청구서의 입금 계좌 한 줄 — 지급할 때 바로 복사한다. */
+function PayTo({ bank, notes, paid }: { bank?: { bank_name: string; bank_account: string; bank_holder: string; swift: string } | null; notes?: string; paid: boolean }) {
+  const [copied, setCopied] = useState(false);
+  if (!bank && !notes && paid) return null;
+  return (
+    <div className="frt-payto">
+      <span className="muted">Pay to</span>
+      {bank ? (
+        <>
+          <b>{[bank.bank_name, bank.bank_account].filter(Boolean).join(" ")}</b>
+          {bank.bank_holder ? <span>({bank.bank_holder})</span> : null}
+          {bank.swift ? <span>SWIFT {bank.swift}</span> : null}
+          {bank.bank_account ? (
+            <button type="button" className="btn xs" onClick={() => {
+              void navigator.clipboard?.writeText(bank.bank_account).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => undefined);
+            }}>{copied ? "Copied ✓" : "Copy"}</button>
+          ) : null}
+        </>
+      ) : <span className="pod-none">No account on the bill — add it with Edit bill</span>}
+      {notes ? <div className="muted frt-payto-note">{notes}</div> : null}
     </div>
   );
 }
