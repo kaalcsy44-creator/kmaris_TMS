@@ -1,17 +1,26 @@
 "use client";
 
 import type { QuotationTerms } from "@/lib/types";
-import { TERM_PRESETS, QUOTATION_CLAUSES, selectedClauseIds, type ClauseContext } from "@/lib/terms";
+import {
+  TERM_PRESETS,
+  QUOTATION_CLAUSES,
+  clauseRows,
+  remarkRows,
+  withClauseRows,
+  withRemarkRows,
+  type ClauseContext,
+} from "@/lib/terms";
 import { fetchTermValues } from "@/lib/api";
 import { useCachedData } from "@/lib/useCachedData";
 import ComboBox, { type ComboSection } from "./ComboBox";
+import TermRowsEditor from "./TermRowsEditor";
 
 /** 목록에서 같은 값(공백·대소문자만 다른 것 포함)을 한 번만 — 앞에 나온 묶음이 이긴다. */
 const normTerm = (v: string) => v.split(/\s+/).join(" ").trim().toLowerCase();
 
 // 거래조건(Terms & Conditions) 편집기 — 견적(3·4단계)·오더(5)·발주서(6)에서 공통 사용.
 // 각 필드는 콤보박스(선택 + 자유입력). 필수 항목은 라벨에 " *" 를 붙여 표시한다.
-// clauses=true 면 견적서에 찍히는 표준 문장 목록을 함께 보여 준다(4단계 전용) —
+// clauses=true 면 견적서에 찍히는 Remark·T&C 를 행 단위로 편집한다(4단계 전용) —
 // 다른 문서(벤더 견적·발주서)는 이 문장들을 쓰지 않으므로 기본은 숨김.
 // omit 은 문서 양식이 그 조건을 자기 섹션에서 이미 묻고 있을 때 쓴다(발주서의
 // Payment Terms·Place 는 "Order/Supplier information" 칸에 있으므로 여기선 뺀다).
@@ -73,84 +82,20 @@ export default function TermsEditor({
     );
   }
 
-  // 체크한 문장만 문서에 찍힌다. 저장은 항상 id 배열로 — 문장 안의 거래조건 값
-  // (Incoterms·결제·보증)은 인쇄 시점에 다시 채워지므로 나중에 조건을 바꿔도 따라간다.
-  const picked = new Set(selectedClauseIds(terms));
-  const toggleClause = (id: string) => {
-    const next = QUOTATION_CLAUSES.filter((c) => (c.id === id ? !picked.has(c.id) : picked.has(c.id)));
-    onChange({ ...terms, clauses: next.map((c) => c.id) });
-  };
-  const allOn = picked.size === QUOTATION_CLAUSES.length;
-
-  // 견적서에 찍히는 표준 문장 고르기 — Terms & Conditions 섹션 안에 선다.
-  const clausePicker = (
-        <div className="clause-picker">
-          <div className="clause-head">
-            <span className="clause-title">Clauses printed on the quotation</span>
-            <span className="clause-count">{picked.size} / {QUOTATION_CLAUSES.length}</span>
-            {/* 전체 선택/해제 — 값을 바꾸는 조작이라 읽기모드에선 CSS 가 감춘다(.clause-all). */}
-            <button
-              type="button"
-              className="btn sm clause-all"
-              onClick={() =>
-                onChange({ ...terms, clauses: allOn ? [] : QUOTATION_CLAUSES.map((c) => c.id) })
-              }
-            >
-              {allOn ? "Clear all" : "Select all"}
-            </button>
-          </div>
-          <ul className="clause-list">
-            {QUOTATION_CLAUSES.map((c) => (
-              <li key={c.id}>
-                <label className={"clause-item" + (picked.has(c.id) ? " on" : "")}>
-                  <input type="checkbox" checked={picked.has(c.id)} onChange={() => toggleClause(c.id)} />
-                  {/* 위 거래조건 필드가 들어간 문장은 지금 값 그대로 보여 준다 — 보이는 문장이 곧 찍힐 문장. */}
-                  <span>{c.text(terms, clauseContext)}</span>
-                </label>
-              </li>
-            ))}
-          </ul>
-          <div className="form-field" style={{ marginTop: 8 }}>
-            <label>Additional clauses (one per line)</label>
-            <textarea
-              rows={2}
-              // 전역 .form-field textarea{min-height:240px} 를 덮는다 — 추가 문장은 보통 한두 줄(예전 높이의 1/3).
-              style={{ minHeight: 80, height: 80 }}
-              value={(terms.extra_clauses || []).join("\n")}
-              onChange={(e) =>
-                onChange({
-                  ...terms,
-                  extra_clauses: e.target.value.split("\n").map((l) => l.trim()).filter(Boolean),
-                })
-              }
-              placeholder="Printed after the standard clauses above."
-            />
-          </div>
-        </div>
-  );
-
   // 견적서(clauses)는 인쇄본과 같은 세 섹션(Remark → Terms & Conditions → Payment)을
   // 같은 급의 제목 띠로 세운다 — 입력란이 한 덩어리로 섞여 있으면 어느 칸이 문서의
-  // 어느 섹션으로 가는지 알 수 없다. 높이는 여러 줄 비고를 한눈에 볼 수 있게 넉넉히.
-  const remarksField = (
-    <div className="form-field" style={clauses ? undefined : { marginTop: 8 }}>
-      {clauses ? null : <label>Remarks</label>}
-      <textarea
-        rows={clauses ? 7 : 3}
-        style={{ minHeight: clauses ? 190 : 72 }}
-        value={terms.remarks ?? ""}
-        onChange={(e) => onChange({ ...terms, remarks: e.target.value })}
-        placeholder={clauses ? "One point per line — each line is printed as a bullet." : undefined}
-      />
-    </div>
-  );
-
+  // 어느 섹션으로 가는지 알 수 없다. Remark·T&C 본문은 행 편집기(체크한 행만 인쇄).
+  // 표준 문장 안의 거래조건 값(Incoterms·보증)은 문구를 고치지 않은 한 인쇄 시점에 다시 채워진다.
   if (clauses) {
     return (
       <div className="stage-card terms-doc" style={{ marginTop: 12 }}>
         <section className="terms-sec">
           <div className="terms-sec-h">Remark</div>
-          {remarksField}
+          <TermRowsEditor
+            kind="remark"
+            rows={remarkRows(terms)}
+            onChange={(rows) => onChange(withRemarkRows(terms, rows))}
+          />
         </section>
 
         <section className="terms-sec">
@@ -161,7 +106,12 @@ export default function TermsEditor({
             {field("packing", "Packing (optional)")}
             {field("warranty", "Warranty *")}
           </div>
-          {clausePicker}
+          <TermRowsEditor
+            kind="terms"
+            rows={clauseRows(terms)}
+            onChange={(rows) => onChange(withClauseRows(terms, rows))}
+            standard={QUOTATION_CLAUSES.map((c) => ({ id: c.id, text: c.text(terms, clauseContext) }))}
+          />
         </section>
 
         <section className="terms-sec">
@@ -183,8 +133,15 @@ export default function TermsEditor({
         {field("warranty", "Warranty *")}
       </div>
 
-
-      {remarksField}
+      <div className="form-field" style={{ marginTop: 8 }}>
+        <label>Remarks</label>
+        <textarea
+          rows={3}
+          style={{ minHeight: 72 }}
+          value={terms.remarks ?? ""}
+          onChange={(e) => onChange({ ...terms, remarks: e.target.value })}
+        />
+      </div>
     </div>
   );
 }

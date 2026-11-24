@@ -20,7 +20,7 @@ export const PAYMENT_TERMS_PRESETS: readonly string[] = [
   "D/A 30 days",
 ];
 
-import type { QuotationTerms } from "./types";
+import type { QuotationTerms, TermRow } from "./types";
 
 // Terms & Conditions 기본값 — 신규 견적/오더/발주서 작성 시 미리 채워지는 값.
 // (Packing·Remarks 는 비워 둔다.) 콤보박스라 사용자가 자유롭게 바꿀 수 있다.
@@ -142,4 +142,45 @@ export function selectedClauseIds(t: QuotationTerms): string[] {
   return Array.isArray(t.clauses)
     ? t.clauses
     : QUOTATION_CLAUSES.map((c) => c.id).filter((id) => !CLAUSES_OFF_BY_DEFAULT.includes(id));
+}
+
+// ── 행 편집기(4단계 Remark · Terms & Conditions) ────────────────────────────
+
+const remarkLines = (v?: string) => (v || "").split("\n").map((l) => l.trim()).filter(Boolean);
+const onTexts = (rows: TermRow[]) => rows.filter((r) => r.on).flatMap((r) => remarkLines(r.text));
+
+/** Remark 행. 문서에 찍히는 글은 언제나 remarks 다 — 벤더 견적 가져오기처럼 remarks 만 바꾸는
+ *  곳이 있어, 저장된 행과 어긋나면 remarks 를 따르고 체크 해제된 행만 뒤에 남긴다. */
+export function remarkRows(t: QuotationTerms): TermRow[] {
+  const lines = remarkLines(t.remarks);
+  const rows = Array.isArray(t.remark_rows) ? t.remark_rows : [];
+  if (onTexts(rows).join("\n") === lines.join("\n")) return rows;
+  const off = rows.filter((r) => !r.on && (r.text || "").trim() && !lines.includes((r.text || "").trim()));
+  return [...lines.map((text) => ({ text, on: true })), ...off];
+}
+
+export function withRemarkRows(t: QuotationTerms, rows: TermRow[]): QuotationTerms {
+  return { ...t, remark_rows: rows, remarks: onTexts(rows).join("\n") };
+}
+
+/** T&C 행. 행으로 저장한 적 없는 견적은 예전 선택(clauses·extra_clauses)을 행으로 편다. */
+export function clauseRows(t: QuotationTerms): TermRow[] {
+  if (Array.isArray(t.clause_rows)) {
+    return t.clause_rows.filter((r) => !r.id || QUOTATION_CLAUSES.some((c) => c.id === r.id));
+  }
+  const on = new Set(selectedClauseIds(t));
+  return [
+    ...QUOTATION_CLAUSES.map((c) => ({ id: c.id, on: on.has(c.id) })),
+    ...(t.extra_clauses || []).map((text) => ({ text, on: true })),
+  ];
+}
+
+/** clauses·extra_clauses 도 함께 맞춰 둔다 — 행을 모르는 쪽(옛 서버)도 같은 문장을 고르게. */
+export function withClauseRows(t: QuotationTerms, rows: TermRow[]): QuotationTerms {
+  return {
+    ...t,
+    clause_rows: rows,
+    clauses: rows.filter((r) => r.id && r.on).map((r) => r.id as string),
+    extra_clauses: rows.filter((r) => !r.id && r.on && (r.text || "").trim()).map((r) => (r.text || "").trim()),
+  };
 }

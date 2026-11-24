@@ -2407,12 +2407,31 @@ def quotation_standard_terms(terms: Dict[str, Any], validity_days: int = 30,
     terms["clauses"] 가 있으면 그 id 들만 골라 찍는다(4단계에서 선택한 문장). 값이 없는
     옛 견적은 선택 이력이 없다는 뜻이라 전부 찍는다 — 기존 견적서 내용이 바뀌지 않게.
     terms["extra_clauses"] 는 사용자가 직접 추가한 문장으로 표준 문장 뒤에 붙인다.
+    terms["clause_rows"](행 편집기에서 저장한 견적)가 있으면 그 목록이 우선한다 — 표준·추가
+    문장을 한 목록에서 순서대로, 체크(on)한 행만 찍는다. 문구를 고친 표준 행은 고친 글(text)로.
     Remarks 는 여기 섞지 않는다 — 품목표와 T&C 사이의 별도 Remark 섹션에서 찍는다."""
     catalog = quotation_clause_catalog(terms, validity_days, valid_until, quote_date)
     # 통합 견적본: 견적마다 값이 다른 문장(유효기간·인도 조건)을 라인별로 풀어 쓴 문장으로 갈음한다.
     over = terms.get("clause_override")
     if isinstance(over, dict) and over:
         catalog = [(cid, str(over.get(cid) or text)) for cid, text in catalog]
+    rows = terms.get("clause_rows")
+    if isinstance(rows, list):
+        std = dict(catalog)
+        lines = []
+        for row in rows:
+            if not isinstance(row, dict) or not row.get("on"):
+                continue
+            cid = str(row.get("id") or "")
+            if cid and cid not in std:
+                continue  # 목록에서 없어진 표준 문장
+            text = row.get("text")
+            # 통합본의 라인별 문장은 고친 문구보다 앞선다 — 고친 글은 견적 한 장의 조건이다.
+            if cid and (text is None or (isinstance(over, dict) and over.get(cid))):
+                text = std[cid]
+            if str(text or "").strip():
+                lines.append(str(text).strip())
+        return lines
     picked = terms.get("clauses")
     if isinstance(picked, list):
         chosen = set(str(c) for c in picked)

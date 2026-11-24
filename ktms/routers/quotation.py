@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import re
 
+from pydantic import BaseModel
+
 from _core import (
     _doc_disposition,
     _doc_filename,
@@ -57,6 +59,7 @@ from _core import (
     USD_KRW_RATE,
     usd_krw_rate,
 )
+from services import clause_suggest as _clause
 from services.fx import get_rates
 from services.kmaris_docs import is_charge_row, line_range_text, quotation_validity_text
 from services.mail_compose import build_attachments, compose_body, compose_parts
@@ -118,6 +121,25 @@ def term_values():
     finally:
         s.close()
     return {k: [shown[k][x] for x, _ in counts[k].most_common(40)] for k in _TERM_VALUE_KEYS}
+
+
+class ClauseSuggestIn(BaseModel):
+    text: str = ""
+    kind: str = "remark"   # remark | terms — 견적서의 어느 섹션에 실을 문장인가
+
+
+@app.post("/api/admin/clause-suggest", dependencies=[Depends(require_token)])
+def clause_suggest(body: ClauseSuggestIn):
+    """국문 메모 → 견적서 Remark / T&C 영문 문장 추천(Claude). 저장하지 않는다."""
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Type something first.")
+    if len(text) > _clause.MAX_CHARS:
+        raise HTTPException(status_code=400, detail=f"Too long — keep it under {_clause.MAX_CHARS} characters.")
+    try:
+        return {"points": _clause.suggest(text, "terms" if body.kind == "terms" else "remark")}
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=f"Suggestion failed: {exc}") from exc
 
 
 @app.get("/api/admin/quotation/next-no", dependencies=[Depends(require_token)])

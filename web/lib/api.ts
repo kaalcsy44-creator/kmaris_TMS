@@ -2077,6 +2077,11 @@ export function suggestHsCodes(
 ): Promise<HsSuggestResult> {
   return post<HsSuggestResult>("/api/admin/hs-suggest", { lines, exclude_doc: excludeDoc });
 }
+/** 국문 메모 → 견적서 Remark / T&C 영문 문장 추천. 저장하지 않는다. */
+export type ClauseSuggestion = { source: string; options: string[] };
+export function suggestClauses(text: string, kind: "remark" | "terms"): Promise<{ points: ClauseSuggestion[] }> {
+  return post<{ points: ClauseSuggestion[] }>("/api/admin/clause-suggest", { text, kind });
+}
 export type SanctionsStatus = {
   updated_at: string;
   lists: Record<string, { fetched_at: string; vessels: number }>;

@@ -6494,12 +6494,7 @@ a.btn.primary:hover {
 .stage-card > .form-grid + .form-field {
   padding-top: 0;
 }
-/* ── 견적서 표준 약관 고르기(Terms & Conditions 카드 안) ─────────────────────
-   문서 하단에 찍힐 문장을 4단계에서 켜고 끈다. 문장이 길어 한 줄에 하나씩 두고,
-   체크된 문장만 진하게 해 "지금 인쇄될 목록"이 한눈에 읽히게 한다. */
-.stage-card > .clause-picker {
-  padding: 0 14px 4px;
-}
+/* ── 견적서 Remark · T&C 행 편집기의 머리줄(본문은 .trows) ── */
 .clause-head {
   display: flex;
   align-items: center;
@@ -6515,39 +6510,6 @@ a.btn.primary:hover {
   margin-right: auto;
   font-size: 11px;
   color: #7a8699;
-}
-.clause-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border: 1px solid #e3e9f2;
-  border-radius: 8px;
-  max-height: 190px;
-  overflow-y: auto;
-  background: #fbfcfe;
-}
-.clause-list > li + li {
-  border-top: 1px solid #eef2f8;
-}
-.clause-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 6px 10px;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: #8a95a6;
-  cursor: pointer;
-}
-.clause-item.on {
-  color: var(--ink);
-  background: #fff;
-}
-.clause-item input {
-  margin-top: 2px;
-  width: auto;
-  flex: 0 0 auto;
-  accent-color: var(--blue);
 }
 /* ── 가격 설정 밴드(Pricing) ─────────────────────────────────────────────────
    단가 계산 설정을 품목표 카드 바로 위에 붙여 "이 설정이 아래 표에 적용된다" 를
@@ -17941,12 +17903,6 @@ button.fin-net-col.on .fin-bar-label { color: var(--blue); font-weight: 700; }
 .form-fieldset.vm-read .ocr-bar {
   display: none;
 }
-/* 조항 목록도 읽기에선 상자 안에서 또 스크롤하지 않는다 — 인쇄될 문장을 훑는 게 일인데
-   10줄짜리 목록이 6줄에서 잘리면 나머지는 없는 것과 같다(textarea 와 같은 규칙). */
-.form-fieldset.vm-read .clause-list {
-  max-height: none;
-  overflow-y: visible;
-}
 /* 행 선택 체크박스 열은 display:none 으로 지우면 안 된다 — 그룹 헤더행(PURCHASE·SALES)과
    합계행은 colspan 으로 만든 행이라, 보통 행에서만 칸이 하나 빠지면 그 뒤 컬럼이 통째로
    한 칸씩 밀린다. 칸은 남기고 폭만 0 으로 접어 자리를 지운다. */
@@ -22621,7 +22577,6 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
 }
 .project-stage-pane .form-fieldset.vm-read .form-field .vm-text { font-size: 12.5px; }
 .project-stage-pane .terms-sec > .terms-sec-h { margin: 0 !important; }
-.project-stage-pane .stage-card > .clause-picker { padding: 0; }
 
 /* 주 버튼 줄(.stage-actions — Save·Cancel·Preview·합계)은 읽기 화면에서도 창 바닥에 붙는다.
    예전엔 "저장 단추가 들어 있는 줄"로 알아봤는데, 읽기 화면에선 저장 단추가 빠져 고정이 풀리고
@@ -22900,3 +22855,63 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
 .assign-sugg { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .assign-sugg b { color: var(--blue); }
 .assign-sugg-on { color: #1f7a43; font-weight: 700; font-size: 11.5px; }
+
+/* 견적서 Remark · T&C 행 편집기(TermRowsEditor) — 한 행 = 문서 한 줄. 체크한 행만 진하게
+   해 "지금 인쇄될 목록"이 한눈에 읽히게 한다. 손잡이·도구는 읽기모드에서 감춘다. */
+.trows { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.trows .clause-head, .project-stage-pane .trows .clause-head { margin: 0; padding: 0; flex-wrap: wrap; }
+.project-stage-pane .trows .clause-title { margin: 0; }
+.trow-list { margin: 0; padding: 0; list-style: none; border: 1px solid #e3e9f2; border-radius: 8px; background: #fbfcfe; overflow: hidden; }
+.trow { display: flex; align-items: flex-start; gap: 8px; padding: 3px 8px; position: relative; }
+.trow + .trow { border-top: 1px solid #eef2f8; }
+.trow.on { background: #fff; }
+.trow.dragging { opacity: 0.4; }
+.trow.drop-before::before, .trow.drop-after::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 2px; background: var(--blue, #0055a8);
+}
+.trow.drop-before::before { top: 0; }
+.trow.drop-after::after { bottom: 0; }
+.trow-grip { flex: 0 0 auto; padding: 5px 2px; line-height: 18px; color: #a5b0c0; cursor: grab; user-select: none; }
+.trow-grip:active { cursor: grabbing; }
+.trow > input[type="checkbox"] { flex: 0 0 auto; width: auto; margin: 8px 0 0; accent-color: var(--blue); }
+.trow-text { flex: 1 1 auto; min-width: 0; }
+.trow-text textarea {
+  display: block; width: 100%; min-height: 28px; padding: 4px 6px; border: 1px solid transparent; border-radius: 6px;
+  background: transparent; font: inherit; font-size: 12.5px; line-height: 18px; color: #8a95a6;
+  resize: none; field-sizing: content;
+}
+.trow.on .trow-text textarea { color: var(--ink); }
+.trow-text textarea:hover { border-color: #d5deea; }
+.trow-text textarea:focus { border-color: var(--blue, #0055a8); background: #fff; outline: none; }
+.trow-text .vm-text { display: block; padding: 4px 0; font-size: 12.5px; line-height: 18px; }
+.form-fieldset:not(.vm-read) .trow-text .vm-text { display: none; }
+.form-fieldset.vm-read .trow:not(.on) .trow-text :is(textarea, .vm-text) { color: #8a95a6 !important; font-weight: 400 !important; }
+.trow-tools { flex: 0 0 auto; display: inline-flex; gap: 2px; padding-top: 2px; }
+.trow-btn {
+  width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none;
+  color: #64748b; font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
+}
+.trow-btn:hover:not(:disabled) { background: #eaf0f8; color: var(--navy); }
+.trow-btn.del:hover:not(:disabled) { background: #fdecea; color: #c0392b; }
+.trow-btn:disabled { opacity: 0.3; cursor: default; }
+.trow-empty { padding: 8px 10px; border: 1px dashed #d5deea; border-radius: 8px; color: #8a95a6; font-size: 12px; }
+.trow-compose { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.trow-compose > textarea {
+  flex: 1 1 320px; min-width: 0; min-height: 56px; padding: 7px 10px; border: 1px solid #cdd9e8; border-radius: 8px;
+  background: #fff; font: inherit; font-size: 12.5px; line-height: 1.45; resize: vertical; field-sizing: content;
+}
+.trow-compose-btns { display: flex; flex-direction: column; gap: 4px; }
+.trow-compose > .action-err, .trow-sugg { flex: 1 1 100%; }
+.trow-sugg { padding: 8px 12px; border: 1px solid #c9dcf6; border-radius: 8px; background: #f5f9ff; font-size: 12.5px; }
+.trow-sugg-head { display: flex; align-items: center; gap: 8px; }
+.trow-sugg-head b { margin-right: auto; }
+.trow-point { margin-top: 6px; padding-top: 6px; border-top: 1px solid #dde8f6; }
+.trow-point .muted { font-size: 12px; }
+.trow-opt { display: flex; align-items: center; gap: 10px; padding: 2px 0; }
+.trow-opt > span { flex: 1 1 auto; min-width: 0; line-height: 1.45; }
+.trow-opt .btn { flex: 0 0 auto; min-width: 64px; }
+.form-fieldset.vm-read :is(.trow-grip, .trow-tools, .trow-compose) { display: none; }
+@media (max-width: 640px) {
+  .trow { gap: 5px; padding: 3px 4px; }
+  .trow-compose-btns { flex-direction: row; width: 100%; }
+}

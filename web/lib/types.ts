@@ -956,6 +956,9 @@ export type AwardedItems = {
   currencies: string[];
 };
 
+/** 견적서 Remark · T&C 편집기의 한 행. id 가 있으면 표준 문장(text 는 고친 문구, 없으면 자동 문구). */
+export type TermRow = { id?: string; text?: string; on: boolean };
+
 export type QuotationTerms = {
   incoterms?: string;
   payment_terms?: string;
@@ -968,6 +971,10 @@ export type QuotationTerms = {
   // 값이 없으면 "고른 적 없음" = 전체 문장 인쇄(기존 견적 그대로).
   clauses?: string[];
   extra_clauses?: string[];  // 사용자가 직접 추가한 T&C 문장(표준 문장 뒤에 붙는다)
+  /** T&C 행 목록(표준 + 추가, 인쇄 순서). 있으면 clauses·extra_clauses 보다 우선한다. */
+  clause_rows?: TermRow[];
+  /** Remark 행 목록 — 체크 해제한 행까지. 인쇄되는 건 remarks(체크한 행만 이은 글)다. */
+  remark_rows?: TermRow[];
   // 견적서 헤더 문서 필드(첨부 양식) — terms JSON 에 함께 보관.
   messrs?: string;
   attn?: string;
