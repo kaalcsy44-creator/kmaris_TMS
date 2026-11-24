@@ -22961,3 +22961,51 @@ table.pod-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .pod-none { color: #b45309; }
 .pod-msgs { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
 .pod-single { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+/* 배송비 탭(FreightPanel) — 누가 내나 · 견적 · 실제 비용(Finance) · 고객 청구 */
+.frt-payers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.frt-payer {
+  display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid #d5deea; border-radius: 8px;
+  background: #fff; font: inherit; text-align: left; color: var(--ink); cursor: pointer;
+}
+.frt-payer:hover:not(:disabled) { border-color: var(--blue, #0055a8); }
+.frt-payer.on { border-color: var(--blue, #0055a8); background: #eef5ff; }
+.frt-payer:disabled { cursor: default; }
+.frt-payer:disabled:not(.on) { opacity: 0.6; }
+.frt-payer b { font-size: 13px; }
+.frt-payer span { font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+.frt-note { display: block; margin: 6px 0 0; }
+.frt .form-grid { margin-top: 8px; }
+.frt-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.frt-kpi { display: flex; flex-direction: column; gap: 1px; padding: 9px 12px; border: 1px solid #e3e9f2; border-radius: 8px; background: #fbfcfe; }
+.frt-kpi span { font-size: 11.5px; color: var(--muted); }
+.frt-kpi b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.frt-kpi b.good { color: #1f7a43; }
+.frt-kpi b.bad { color: #b42318; }
+.frt-kpi em { min-height: 15px; font-style: normal; font-size: 11.5px; color: #7a8699; font-variant-numeric: tabular-nums; }
+.frt-warn { margin-top: 10px; padding: 8px 12px; border: 1px solid #fde68a; border-radius: 8px; background: #fffbeb; color: #92400e; font-size: 12.5px; line-height: 1.55; }
+.frt-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.frt-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.frt-table tbody tr { cursor: default; }
+.frt-table .muted { font-size: 11.5px; color: var(--muted); }
+.frt-form { margin-top: 10px; padding: 12px; border: 1px solid #c9dcf6; border-radius: 8px; background: #f5f9ff; }
+.frt-form-act { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.frt-amt { display: flex; gap: 6px; }
+.frt-amt select { flex: 0 0 82px; width: 82px; }
+.frt-amt input { flex: 1 1 auto; min-width: 0; text-align: right; }
+.frt-form input.num, .frt-paydate input.num { text-align: right; }
+.frt-total { padding: 8px 0; font-size: 14px; }
+.frt-pay { padding: 9px 0; border-bottom: 1px solid #e8eef6; }
+.frt-pay:last-of-type { border-bottom: 0; }
+.frt-pay-head { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; font-size: 13px; }
+.frt-pay-act { display: inline-flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.frt-paydate { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.frt-paydate input { height: 30px; width: 130px; padding: 3px 8px; border: 1px solid #cdd9e8; border-radius: 6px; font: inherit; font-size: 12.5px; }
+.frt-sep { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+@media (max-width: 760px) {
+  .frt-payers { grid-template-columns: 1fr; }
+  .frt-kpis { grid-template-columns: 1fr 1fr; }
+  .frt-pay-act { margin-left: 0; }
+}
+.frt-form-act .dfc-sub { font-size: 12.5px; }
+table.frt-table { min-width: 720px; }

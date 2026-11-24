@@ -9,6 +9,7 @@ import {
   fetchPoWorkOptions,
   fetchDocumentDetail,
   fetchApByOrder,
+  fetchFreight,
   addRfqStageNote,
   updateRfqStageNote,
   deleteRfqStageNote,
@@ -1636,6 +1637,19 @@ function OrderItemGroup({
       total: (acc?.total ?? 0) + add.freight + add.packing + add.insurance,
     };
   }, null);
+  // 실제 배송비(🚚 Freight 탭에서 고르거나 Finance 에 올린 것) — 이 오더 몫을 매입 운임에 얹는다.
+  const { data: frt } = useCachedData(`freight:${nav.rfqId}`, () => fetchFreight(nav.rfqId));
+  const frtCost = (frt?.rows ?? [])
+    .filter((r) => r.order_id === order.id && (r.payable || (r.awarded && frt?.info.payer !== "buyer")))
+    .reduce((s, r) => s + convertCurrency(r.cost_krw, "KRW", vpoCur, rate), 0);
+  const purCharges: Charges | null = frtCost
+    ? {
+        freight: (apCharges?.freight ?? 0) + frtCost,
+        packing: apCharges?.packing ?? 0,
+        insurance: apCharges?.insurance ?? 0,
+        total: (apCharges?.total ?? 0) + frtCost,
+      }
+    : apCharges;
   const ciVatRate = vatFraction(ci?.vat_rate);
   // 매입 VAT 율 — 벤더 청구서의 세율(국내 매입은 대개 10%). 여러 건이면 첫 값을 쓴다.
   const apVatRate = vatFraction(apRecords.find((a) => a.vat_rate != null)?.vat_rate);
@@ -1676,9 +1690,10 @@ function OrderItemGroup({
   // C/I 단계 금액 = 품목 합계 + 부대비용(=공급가액). VAT 는 그 위에 따로 얹는다 —
   // 마진은 공급가액끼리 봐야 뜻이 맞고(부가세는 남는 돈이 아니다), 청구 총액은 아래
   // "Total incl. VAT" 줄에서 확인한다.
-  const ciPurSupply = addCharges(total(lines.map((l) => l.cPur)), apCharges?.total);
+  const ciPurSupply = addCharges(total(lines.map((l) => l.cPur)), purCharges?.total);
   const ciSalesSupply = addCharges(total(lines.map((l) => l.cSales)), ciCharges?.total);
-  const ciPurVat = ciPurSupply == null ? null : ciPurSupply * apVatRate;
+  // 배송비(대개 영세율)에는 벤더 청구의 세율을 곱하지 않는다.
+  const ciPurVat = ciPurSupply == null ? null : (ciPurSupply - frtCost) * apVatRate;
   const ciSalesVat = ciSalesSupply == null ? null : ciSalesSupply * ciVatRate;
   // 양쪽 다 0이면(수출처럼 영세율뿐이면) VAT 줄을 만들지 않는다. 한쪽만 붙는 경우
   // (국내 매입 10% + 수출 매출 0%)는 흔하므로, 0 인 쪽도 0 으로 적어 대비를 보여준다.
@@ -1792,11 +1807,11 @@ function OrderItemGroup({
       ))}
       {/* 부대비용 — 값이 있는 항목만 한 줄씩. 위 Total 에는 이미 더해져 있다. */}
       {CHARGE_LABELS.map(([k, label]) =>
-        apCharges?.[k] || ciCharges?.[k] ? (
+        purCharges?.[k] || ciCharges?.[k] ? (
           <ExtraRow
             key={k}
             label={label}
-            pur={apCharges?.[k] ?? null}
+            pur={purCharges?.[k] ?? null}
             sales={ciCharges?.[k] ?? null}
             purCur={vpoCur}
             salesCur={ciCur}

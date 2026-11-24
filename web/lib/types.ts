@@ -3229,6 +3229,6 @@ export type ProjectSummary = {
     outstanding: number; due: string; paid_date: string; kind: string;
   }[];
   money: {
-    sales_krw: number; cost_krw: number; margin_krw: number | null; margin_pct: number | null; sales_basis: string;
+    sales_krw: number; cost_krw: number; direct_krw?: number; margin_krw: number | null; margin_pct: number | null; sales_basis: string;
   };
 };

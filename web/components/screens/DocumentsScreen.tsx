@@ -44,6 +44,7 @@ import ProjectNo from "@/components/common/ProjectNo";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import HsCodeField from "@/components/common/HsCodeField";
 import PodTab from "@/components/screens/PodTab";
+import FreightPanel from "@/components/screens/FreightPanel";
 import { useEditGate } from "@/lib/viewMode";
 import {
   amountInputValue,
@@ -90,7 +91,7 @@ type StageTab = "s7" | "s8" | "s9";
 type WorkView = "parts" | "service";
 
 // 문서 종류 → 표시 라벨(작업 모달 제목 등).
-type DocKind = "pi" | "spi" | "ci" | "sm" | "pl" | "pod" | "tax";
+type DocKind = "pi" | "spi" | "ci" | "sm" | "pl" | "frt" | "pod" | "tax";
 const KIND_CFG: Record<DocKind, { label: string }> = {
   pi: { label: "Proforma Invoice" },
   // 서비스 딜의 Proforma Invoice — 같은 저장 자리(오더당 PI 1건)에 서비스 서식으로 입력한다.
@@ -98,6 +99,7 @@ const KIND_CFG: Record<DocKind, { label: string }> = {
   ci: { label: "Commercial Invoice" },
   sm: { label: "Shipping Mark" },
   pl: { label: "Packing List" },
+  frt: { label: "Freight" },
   pod: { label: "POD" },
   tax: { label: "Tax Invoice" },
 };
@@ -122,7 +124,7 @@ export function DocumentsOverview({
     s === 8 ? "s8" : s === 9 ? "s9" : "s7";
   const [workView, setWorkView] = useState<WorkView>(initialView === "service" ? "service" : "parts");
   const [stage, setStage] = useState<StageTab>(stageFromProp(initialStage));
-  const [readyDoc, setReadyDoc] = useState<"pi" | "ci" | "sm" | "pl">("ci"); // 7단계 하위(Proforma(선택)/CI/PL/Shipping Mark)
+  const [readyDoc, setReadyDoc] = useState<"pi" | "ci" | "sm" | "pl" | "frt">("ci"); // 7단계 하위(Proforma(선택)/CI/PL/Shipping Mark)
   const [svcDoc, setSvcDoc] = useState<"ready" | "pi">("ready"); // 서비스 7단계 하위(준비사항/Proforma)
 
   const { data: overview, refresh } = useCachedData(
@@ -214,6 +216,10 @@ export function DocumentsOverview({
           </button>
           <button className={readyDoc === "sm" ? "on" : ""} onClick={() => setReadyDoc("sm")}>
             Shipping Mark
+          </button>
+          {/* 배송비 — 견적·실제 비용(Finance)·고객 청구를 한 자리에서. */}
+          <button className={readyDoc === "frt" ? "on" : ""} onClick={() => setReadyDoc("frt")}>
+            🚚 Freight
           </button>
         </div>
       ) : null}
@@ -891,6 +897,9 @@ function DocEditorContent({
             <ServiceProformaInvoiceTab key={`spi-${data.order.id}-${data.pi?.id ?? 0}`} data={data} onChanged={afterChange} target={{ orderId: data.order.id }} />
           ) : kind === "ci" || kind === "sm" || kind === "pl" ? (
             <PackageDocs kind={kind} data={data} onChanged={afterChange} />
+          ) : kind === "frt" ? (
+            <FreightPanel rfqId={data.order.rfq_id ?? 0} orderId={data.order.id} canEdit={canEditDoc(data)}
+                          carriers={CARRIER_OPTIONS.filter((c) => c !== "TBD")} onChanged={onChanged} />
           ) : kind === "pod" ? (
             <PodTab key={`pod-${data.order.id}`} data={data} onChanged={afterChange} rule={incotermRule((data.order.doc_defaults?.incoterms || "").trim())} carriers={CARRIER_OPTIONS.filter((c) => c !== "TBD")} canEdit={canEditDoc(data)} />
           ) : (

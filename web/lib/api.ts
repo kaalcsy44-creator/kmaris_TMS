@@ -1127,6 +1127,128 @@ export function documentDownloadUrl(
   return `${API_BASE}${docApiBase(target)}/${kind}${q}`;
 }
 
+// ── 배송비(딜) — 견적 · 실제 비용(Finance 지급) · 고객 청구 ─────────────────────
+export type FreightPayer = "" | "buyer" | "rebill" | "included";
+export type FreightPayable = {
+  id: number;
+  counterparty: string;
+  description: string;
+  amount: number;
+  vat_amount: number;
+  supply_amount: number;
+  currency: string;
+  bill_date: string;
+  due_date: string;
+  paid: boolean;
+  paid_date: string;
+  overdue: boolean;
+};
+export type FreightRowSave = {
+  order_id: number | null;
+  /** 포장(CI). null = 선적 전체. */
+  ci_id: number | null;
+  carrier: string;
+  vendor_id: number | null;
+  service: string;
+  quote_no: string;
+  quote_date: string;
+  valid_until: string;
+  transit: string;
+  weight: string;
+  tracking_no: string;
+  bill_no: string;
+  currency: string;
+  /** 공급가액(부가세 별도). */
+  amount: number;
+  vat_amount: number;
+  awarded: boolean;
+  notes: string;
+};
+export type FreightRow = Omit<FreightRowSave, "order_id" | "ci_id"> & {
+  id: number;
+  order_id: number;
+  ci_id: number;
+  vendor: string;
+  filename: string;
+  /** 실제 비용(지급 등록분) 또는 견적 금액의 원화. */
+  cost_krw: number;
+  /** Finance 지급에 등록된 실제 비용. */
+  payable: FreightPayable | null;
+};
+export type Freight = {
+  rfq_id: number;
+  info: { payer: FreightPayer; account_no: string; note: string };
+  orders: { id: number; po_no: string; incoterms: string; packages: { ci_id: number; ci_no: string }[] }[];
+  rows: FreightRow[];
+  docs: { kind: "pi" | "ci"; id: number; order_id: number; no: string; date: string; currency: string; freight: number; packing: number; insurance: number }[];
+  ar: {
+    id: number; order_id: number; kind: string; freight_only: boolean; invoice_no: string; date: string; due_date: string;
+    currency: string; amount: number; freight: number; paid_amount: number; outstanding: number; paid: boolean; paid_date: string;
+  }[];
+  /** 이 딜에 직접 등록됐지만 배송비 줄에 안 걸린 지급 — 이중 등록 방지용. */
+  other_payables: FreightPayable[];
+  /** 벤더 청구서에 얹혀 온 운임(이미 원가). */
+  vendor_freight: { vendor: string; bill_no: string; currency: string; freight: number }[];
+  currency: string;
+  /** 청구 통화 1 = ? KRW. */
+  krw_per: number;
+  totals: { cost_krw: number; paid_krw: number; charged_krw: number; collected_krw: number };
+};
+const frtBase = (rfqId: number) => `/api/admin/projects/${rfqId}/freight`;
+export function fetchFreight(rfqId: number): Promise<Freight> {
+  return get<Freight>(frtBase(rfqId));
+}
+export function saveFreightInfo(rfqId: number, info: Freight["info"]): Promise<{ ok: boolean }> {
+  return put(`/api/admin/projects/${rfqId}/freight-info`, info);
+}
+/** id 0 = 새 견적. */
+export function saveFreight(rfqId: number, id: number, body: FreightRowSave): Promise<{ ok: boolean; id: number }> {
+  return id ? put(`${frtBase(rfqId)}/${id}`, body) : post(frtBase(rfqId), body);
+}
+export function deleteFreight(rfqId: number, id: number): Promise<{ ok: boolean }> {
+  return del(`${frtBase(rfqId)}/${id}`);
+}
+export type FreightParse = {
+  carrier: string; service: string; doc_no: string; quote_date: string; valid_until: string; transit: string;
+  weight: string; tracking_no: string; bill_no: string; bill_date: string; due_date: string; currency: string;
+  amount: number; vat_amount: number;
+};
+/** 운송사 견적서·청구서 읽기 — 저장하지 않는다. */
+export function parseFreight(file: File): Promise<FreightParse> {
+  const fd = new FormData();
+  fd.append("file", file);
+  return postForm<FreightParse>("/api/admin/documents-freight/parse", fd);
+}
+export function uploadFreightFile(rfqId: number, id: number, file: File): Promise<{ ok: boolean; filename: string }> {
+  const fd = new FormData();
+  fd.append("file", file);
+  return postForm(`${frtBase(rfqId)}/${id}/file`, fd);
+}
+export function freightFileUrl(rfqId: number, id: number): string {
+  return `${API_BASE}${frtBase(rfqId)}/${id}/file`;
+}
+/** 실제 배송비를 Finance 지급에 등록·수정(payable_id = 이미 있는 지급을 잇는다). */
+export function saveFreightPayable(
+  rfqId: number,
+  id: number,
+  body: {
+    payable_id?: number; supply_amount?: number; vat_amount?: number; currency?: string;
+    bill_no?: string; bill_date?: string; due_date?: string;
+  }
+): Promise<{ ok: boolean; payable_id: number }> {
+  return post(`${frtBase(rfqId)}/${id}/payable`, body);
+}
+export function removeFreightPayable(rfqId: number, id: number): Promise<{ ok: boolean }> {
+  return del(`${frtBase(rfqId)}/${id}/payable`);
+}
+/** 고객 청구 — PI·CI 의 Freight 칸 또는 배송비만 별도 청구서(AR). */
+export function chargeFreight(
+  rfqId: number,
+  body: { target: "pi" | "ci" | "invoice"; doc_id?: number; order_id?: number; amount: number; currency?: string; due_date?: string; description?: string }
+): Promise<{ ok: boolean; ar_updated?: boolean; ar_manual?: boolean; invoice_no?: string }> {
+  return post(`/api/admin/projects/${rfqId}/freight-charge`, body);
+}
+
 // ── 9) POD(인도 증빙) 파일 + 단계 완료 콜 ─────────────────────────────────────
 export function uploadPod(
   orderId: number,

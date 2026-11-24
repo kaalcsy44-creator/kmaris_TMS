@@ -517,6 +517,9 @@ class RFQ(Base):
     # 폴더 이름이 아니라 ID 로 잇는 까닭: 사람이 폴더 이름을 고치거나 옮겨도 끊기지 않게.
     drive_folder_id  = Column(String(80))
     drive_folder_url = Column(String(300))
+    # 배송비 부담 — {"payer": "buyer"|"rebill"|"included", "account_no", "note"}.
+    # buyer=고객이 운송사에 직접, rebill=우리가 내고 고객에게 청구, included=우리가 내고 값에 포함.
+    freight_info     = Column(JSON)
     # 프로젝트 번호 몸통("P-057"·"S-012") — 등록할 때 한 번 매기고 바꾸지 않는다.
     # 견적서·PDF·메일에 찍혀 밖으로 나가는 이름이라, 수신시각을 고치거나 과거 건을
     # 늦게 등록해도 움직이면 안 된다(예전엔 수신시각 순으로 매번 다시 세서 밀렸다).
@@ -977,6 +980,38 @@ class ScheduleEvent(Base):
     outcome     = Column(Text)          # 결과·후속 조치
     # 출장(Business trip) 보고서의 나머지 — 개요·후속 조치·일정·경비·업체별 메모(JSON 한 덩어리).
     trip        = Column(JSON)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+
+
+class FreightQuote(Base):
+    """딜의 배송비 견적 한 건(운송사·포워더). 고른 견적의 실제 비용은 FinancePayable 로 선다(payable_id).
+
+    FK 를 걸지 않는다 — 지급은 Finance 에서, 포장(CI)·딜은 제 화면에서 지워질 수 있고, 그때
+    이 줄이 남의 삭제를 막아서는 안 된다(읽는 쪽이 없는 것으로 본다)."""
+    __tablename__ = "freight_quotes"
+    id          = Column(Integer, primary_key=True)
+    rfq_id      = Column(Integer, index=True, nullable=False)
+    order_id    = Column(Integer)          # 이 고객 P/O 의 선적(비우면 딜 전체)
+    ci_id       = Column(Integer)          # 이 포장(CI)의 배송(비우면 선적 전체)
+    carrier     = Column(String(120))      # DHL · FedEx · 포워더
+    vendor_id   = Column(Integer)          # 거래선 명부 연결(선택, 입금 계좌)
+    service     = Column(String(120))
+    quote_no    = Column(String(80))
+    quote_date  = Column(String(10))
+    valid_until = Column(String(10))
+    transit     = Column(String(80))       # 소요 기간
+    weight      = Column(String(80))       # 중량·부피(견적 기준)
+    tracking_no = Column(String(80))       # 운송장·AWB
+    bill_no     = Column(String(80))       # 운송사 청구서 번호
+    currency    = Column(String(10), default="KRW")
+    amount      = Column(Float, default=0.0)      # 견적 공급가액(부가세 별도)
+    vat_amount  = Column(Float, default=0.0)
+    awarded     = Column(Boolean, default=False)  # 이 견적으로 보낸다
+    payable_id  = Column(Integer)                 # FinancePayable.id — 등록된 실제 비용
+    notes       = Column(Text)
+    filename    = Column(String(255))             # 견적서·청구서 원본
+    mime        = Column(String(120))
+    data        = Column(LargeBinary)
     created_at  = Column(DateTime, default=datetime.utcnow)
 
 

@@ -49,6 +49,7 @@ _MIGRATIONS = {
         # 공유 드라이브 프로젝트 폴더(ID 로 잇고, URL 은 화면에서 바로 열려고 함께 둔다).
         "drive_folder_id": "VARCHAR(80)",
         "drive_folder_url": "VARCHAR(300)",
+        "freight_info": "JSON",          # 배송비 부담 주체
         # 고정 프로젝트 번호 몸통("P-057") — migrate_seed_project_codes 가 채운다.
         "project_code": "VARCHAR(12)",
     },

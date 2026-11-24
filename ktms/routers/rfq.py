@@ -941,6 +941,8 @@ def delete_rfq(rfq_id: int):
              .filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids))
              .delete(synchronize_session=False))
         s.query(VendorRFQ).filter_by(rfq_id=rfq_id).delete(synchronize_session=False)
+        from db.models import FreightQuote
+        s.query(FreightQuote).filter_by(rfq_id=rfq_id).delete(synchronize_session=False)
         s.query(RFQ).filter_by(id=rfq_id).delete(synchronize_session=False)
         s.commit()
         return {"ok": True, "rfq_no": rfq_no}

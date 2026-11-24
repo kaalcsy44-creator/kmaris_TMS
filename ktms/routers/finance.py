@@ -3642,6 +3642,15 @@ def finance_project_summary(rfq_id: int):
             r_ = float(a.vat_rate if a.vat_rate is not None else 0.1)
             cost_krw += _krw_in((a.invoice_amount or 0) / (1 + r_), cur, (a.bill_date or today)[:7], fx_seen)
         vendors = sorted(vend.values(), key=lambda v: (not v["pos"], not v["quoted"], v["name"]))
+        # 발주서 없이 이 딜에 직접 걸린 지급(배송비·협력사)과, 고르기만 하고 아직 지급에 올리지
+        # 않은 배송비 견적 — 손익이 세는 것(_is_deal_purchase)과 같은 원가다.
+        from routers.freight import planned_freight_krw
+        direct_krw = planned_freight_krw(s, rfq_id)
+        for p in (s.query(FinancePayable)
+                  .filter(FinancePayable.rfq_id == rfq_id, FinancePayable.category == VENDOR_CATEGORY).all()):
+            direct_krw += _payable_krw(p, (p.amount or 0) - float(p.vat_amount or 0),
+                                       (p.bill_date or p.due_date or today)[:7], fx_seen)
+        cost_krw += direct_krw
 
         # 청구·수금
         ord_map = {o.id: o for o in orders}
@@ -3686,6 +3695,8 @@ def finance_project_summary(rfq_id: int):
             "items": items, "items_source": items_src, "items_currency": items_cur,
             "vendors": vendors, "ar": ar_rows,
             "money": {"sales_krw": round(sales_krw), "cost_krw": round(cost_krw),
+                      # 원가 중 발주서 없는 몫(배송비 포함) — 화면이 따로 밝힌다.
+                      "direct_krw": round(direct_krw),
                       "margin_krw": round(margin) if margin is not None else None,
                       "margin_pct": (round(margin / sales_krw * 100, 1)
                                      if margin is not None and sales_krw else None),

@@ -101,7 +101,7 @@ export default function ProjectSummaryModal({ rfqId, onClose }: { rfqId: number;
                 <div>
                   <span>Purchase</span>
                   <b>{m && m.cost_krw ? amt(m.cost_krw, "KRW") : "—"}</b>
-                  <small>Vendor bills (net) or P/O</small>
+                  <small>Vendor bills (net) or P/O{m?.direct_krw ? ` + freight · direct ${amt(m.direct_krw, "KRW")}` : ""}</small>
                 </div>
                 <div className={m && m.margin_krw !== null && m.margin_krw < 0 ? "neg" : ""}>
                   <span>Margin</span>
