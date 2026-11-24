@@ -425,6 +425,36 @@ export function archiveIssuedDocUrl(objectUrl: string, filename: string, ref: st
     .then((b) => archiveIssuedDoc(b, filename, ref, doc))
     .catch((e) => console.warn(`[drive] ${filename} not archived`, e));
 }
+/** 견적 저장 창 — 02 QTN 아래 어디에 저장되는지(드라이브에 쓰지 않는다). ref: qtn:ID · vq:ID. */
+export type DriveTarget = {
+  project: string;
+  /** 02 QTN 폴더의 실제 이름. */
+  sub: string;
+  /** 02 QTN 안에 이미 있는 폴더들. */
+  existing: string[];
+  /** 기본 폴더 이름 — 고객사명/공급사명(같은 회사 폴더가 있으면 그 이름). */
+  party: string;
+};
+export function fetchDriveTarget(rfqId: number, ref: string): Promise<DriveTarget> {
+  return get<DriveTarget>(`/api/admin/rfq/${rfqId}/drive-target?ref=${encodeURIComponent(ref)}`);
+}
+export type DriveSaveResult = {
+  folder_url: string;
+  path: string;
+  created: string[];
+  saved: { name: string; url: string; same: boolean }[];
+  skipped: { name: string; reason: string }[];
+  failed: { name: string; reason: string }[];
+};
+/** 견적 파일을 프로젝트 폴더 02 QTN(/folders…)에 저장 — 사람이 창에서 누른 것만. */
+export function saveToDrive(
+  rfqId: number, folders: string[], files: { blob: Blob; name: string }[]
+): Promise<DriveSaveResult> {
+  const fd = new FormData();
+  for (const f of files) fd.append("files", f.blob, f.name);
+  for (const n of folders) fd.append("folders", n);
+  return postForm<DriveSaveResult>(`/api/admin/rfq/${rfqId}/drive-save`, fd);
+}
 /** "폴더 만들기" 확인 창 — 만들어질 폴더 이름·위치·하위 폴더(드라이브에 쓰지 않는다). */
 export type DriveSubKey = "RFQ" | "QTN" | "PO" | "INV";
 export type RfqDriveFolderPreview = {
@@ -2772,8 +2802,8 @@ export function createVendorQuote(
   sourceFiles?: RfqSourceFile[],
   fxRate?: number | null,
   validUntil?: string
-): Promise<{ ok: boolean; vendor_quote_no: string } & StampResult> {
-  return post<{ ok: boolean; vendor_quote_no: string } & StampResult>(`/api/admin/rfq/${rfqId}/vendor-quote`, {
+): Promise<{ ok: boolean; id: number; vendor_quote_no: string } & StampResult> {
+  return post<{ ok: boolean; id: number; vendor_quote_no: string } & StampResult>(`/api/admin/rfq/${rfqId}/vendor-quote`, {
     vendor_rfq_id: vendorRfqId,
     vendor_quote_no: vendorQuoteNo,
     amount,

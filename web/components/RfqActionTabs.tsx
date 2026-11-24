@@ -118,6 +118,8 @@ import DetailTabBar, { DetailTab } from "./common/DetailTabBar";
 import { ProjectProformaInvoice } from "./screens/DocumentsScreen";
 import { useEditGate, useViewMode } from "@/lib/viewMode";
 import SourceFilesList from "./common/SourceFilesList";
+import DriveSaveButton from "./common/DriveSaveButton";
+import { promptDriveSave, type DriveSaveRequest } from "@/lib/driveSave";
 import { withDefaultTerms, TERM_TEXT_KEYS, NO_WARRANTY } from "@/lib/terms";
 import { sortByDocNo } from "@/lib/sort";
 import DiscountSummary from "./common/DiscountSummary";
@@ -206,6 +208,52 @@ function parsedValidUntil(r: VendorQuoteParseResult, receivedAt: string): string
   if (/^\d{4}-\d{2}-\d{2}$/.test(vu)) return vu;
   const n = Number(r.validity_days);
   return r.validity_days != null && Number.isFinite(n) && n > 0 ? addDaysToDate(receivedAt, Math.round(n)) : null;
+}
+
+/** 고객 견적서 한 장을 드라이브에 저장하는 창의 내용 — 파일은 서버의 저장본으로 만든다. */
+function quotationDriveRequest(
+  q: { id: number; rfqId: number; no: string; vessel?: string | null }, note = ""
+): DriveSaveRequest {
+  const file = (format: "pdf" | "xlsx", on: boolean) => ({
+    name: docFileName(q.no || "Quotation", q.vessel, format),
+    on,
+    get: async () => {
+      const url = format === "xlsx" ? quotationXlsxUrl(q.id, "quotation") : quotationPdfUrl(q.id, "quotation");
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!res.ok) throw new Error("The quotation file could not be created.");
+      return res.blob();
+    },
+  });
+  return {
+    rfqId: q.rfqId,
+    ref: `qtn:${q.id}`,
+    title: `Save ${q.no || "this quotation"} to Google Drive?`,
+    files: [file("pdf", true), file("xlsx", false)],
+    note,
+  };
+}
+
+/** 받은 견적을 드라이브에 저장하는 창의 내용 — 벤더가 보낸 원본 파일을 올린다.
+ *  Auto-fill 에 넣은 파일은 이미 들고 있으므로 함께 담고, 없으면 창에서 고른다. */
+function vendorQuoteDriveRequest(
+  q: { id: number; rfqId: number; no: string; vendor: string }, files: File[], onSaved?: () => void
+): DriveSaveRequest {
+  // 캡쳐 붙여넣기는 이름이 모두 image.png 라 무엇인지 알 수 없다 — 견적번호로 바꿔 담는다.
+  const named = files.map((f, i) => {
+    const m = f.name.match(/^image\.(png|jpe?g|webp)$/i);
+    if (f.name && !m) return f;
+    const base = (q.no || `${q.vendor} quote`).replace(/[\\/:*?"<>|]+/g, "-");
+    return new File([f], `${base} capture${i ? ` ${i + 1}` : ""}.${m?.[1] || "png"}`, { type: f.type });
+  });
+  return {
+    rfqId: q.rfqId,
+    ref: `vq:${q.id}`,
+    title: `Save ${q.vendor || "vendor"} quote to Google Drive?`,
+    files: [],
+    attach: named,
+    allowAttach: true,
+    onSaved,
+  };
 }
 
 /** Auto-fill 로 읽은 거래조건을 지금 Terms 에 얹는다 — 견적서에 적힌 칸만 덮고(기본값보다
@@ -2179,6 +2227,9 @@ function VendorQuoteDetailModal({
   const [fxRate, setFxRate] = useState<number | null>(null);
   const [fxMode, setFxMode] = useState<FxMode>("auto");
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
+  // 그 파일들의 원본 — 서버에는 이름만 남으므로, 저장한 뒤 드라이브에 올릴 때까지 들고 있는다.
+  const rawFiles = useRef<File[]>([]);
+  const keptRaw = () => rawFiles.current.filter((f) => ocrFiles.some((o) => o.name === (f.name || "(unnamed)")));
   const [parseMsg, setParseMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -2261,6 +2312,7 @@ function VendorQuoteDetailModal({
         setTerms((t) => mergeParsedTerms(t, r));
         added += parsed.length;
         ok++;
+        rawFiles.current.push(file);
         newFiles.push({
           name: file.name || "(unnamed)",
           media_type: file.type || "",
@@ -2358,6 +2410,7 @@ function VendorQuoteDetailModal({
         source_files: ocrFiles,
       });
       markClean();
+      if (d?.rfq_id) promptDriveSave(driveRequest());
       onChanged();
       onClose();
     } catch (e) {
@@ -2366,6 +2419,12 @@ function VendorQuoteDetailModal({
       setBusy(false);
     }
   }
+
+  const driveRequest = () => vendorQuoteDriveRequest(
+    { id, rfqId: d?.rfq_id ?? 0, no: no.trim(), vendor: d?.vendor ?? "" },
+    keptRaw(),
+    () => { rawFiles.current = []; }
+  );
 
   async function remove() {
     if (!window.confirm("Delete this Vendor quote?")) return;
@@ -2524,6 +2583,7 @@ function VendorQuoteDetailModal({
               <span className="hint-inline">{editBlockReason("rfq", d?.assignee_id)}</span>
             ) : null}
             <span style={{ marginLeft: "auto" }} />
+            <DriveSaveButton rfqId={d.rfq_id} build={driveRequest} />
             {canDeleteThis && !readMode ? (
               <button className="btn danger" onClick={remove} disabled={busy}>Delete</button>
             ) : null}
@@ -2871,6 +2931,7 @@ function CustomerQuoteDetailModal({
     setErr(null);
     try {
       await persist();
+      if (d?.rfq_id) promptDriveSave(driveRequest());
       onClose();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Update failed");
@@ -2878,6 +2939,9 @@ function CustomerQuoteDetailModal({
       setBusy(false);
     }
   }
+
+  const driveRequest = (note = "") =>
+    quotationDriveRequest({ id, rfqId: d?.rfq_id ?? 0, no: qtnNo || d?.qtn_no || "", vessel: d?.vessel }, note);
 
   // 인증 GET 으로 문서 blob 을 받아온다(다운로드 엔드포인트는 Bearer 토큰 필요).
   async function fetchDocBlob(format: "pdf" | "xlsx"): Promise<Blob> {
@@ -3267,6 +3331,10 @@ function CustomerQuoteDetailModal({
             <button className="btn" onClick={openPreview} disabled={busy || dlBusy}>
               {dlBusy && !previewUrl ? "Opening…" : "Preview"}
             </button>
+            <DriveSaveButton
+              rfqId={d.rfq_id}
+              build={() => driveRequest(dirty ? "You have unsaved changes — the last saved version will be stored." : "")}
+            />
             <span style={{ margin: "0 auto" }}>
               <StageTotal label="Final" value={finalTotal} currency={currency} rate={effRate} />
             </span>
@@ -4113,6 +4181,9 @@ function VendorQuoteAction({
   const [fxRate, setFxRate] = useState<number | null>(null);
   const [fxMode, setFxMode] = useState<FxMode>("auto");
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
+  // 그 파일들의 원본 — 서버에는 이름만 남으므로, 저장한 뒤 드라이브에 올릴 때까지 들고 있는다.
+  const rawFiles = useRef<File[]>([]);
+  const keptRaw = () => rawFiles.current.filter((f) => ocrFiles.some((o) => o.name === (f.name || "(unnamed)")));
   const [parseMsg, setParseMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -4158,6 +4229,7 @@ function VendorQuoteAction({
         setTerms((t) => mergeParsedTerms(t, r));
         added += parsed.length;
         ok++;
+        rawFiles.current.push(file);
         newFiles.push({
           name: file.name || "(unnamed)",
           media_type: file.type || "",
@@ -4272,6 +4344,11 @@ function VendorQuoteAction({
         fxRate,
         validUntil
       );
+      promptDriveSave(vendorQuoteDriveRequest(
+        { id: r.id, rfqId, no: no.trim(), vendor: vendorRfqs.find((v) => v.id === vrfqId)?.vendor ?? "" },
+        keptRaw()
+      ));
+      rawFiles.current = [];
       setMsg(
         `Registered — ${r.vendor_quote_no}` +
           (r.unmatched ? ` · ${r.unmatched} line(s) not linked to a project item — open the quote to pick` : "")
@@ -5850,6 +5927,10 @@ function CustomerQuoteAction({
     try {
       const r = await createCustomerQuote(rfqId, currency, finalTotal, items, validUntil, undefined, withCostFx(terms, costCurrency, crossFx, items, currency), qtnNo.trim() === autoNo ? "" : qtnNo.trim(), sentAt, costCurrency, roundDigits, discountPct, fxRate, docSourceId(items, importVqId === "" ? null : importVqId), defaultMargin);
       setQtn({ id: r.id, qtn_no: r.qtn_no });
+      // 파일명에 선박명이 들어간다 — 이 폼은 딜 정보를 들고 있지 않아 저장본에서 읽는다.
+      fetchCustomerQuotationDetail(r.id)
+        .then((q) => promptDriveSave(quotationDriveRequest({ id: r.id, rfqId, no: r.qtn_no, vessel: q.vessel })))
+        .catch(() => {});
       setMsg(`Sent — ${r.qtn_no}`);
       onDone();
     } catch (e) {

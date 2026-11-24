@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import AuthGate from "./AuthGate";
 import TopNav from "./TopNav";
+import DriveSaveHost from "./common/DriveSaveHost";
 import { can, isAdmin } from "@/lib/auth";
 import { useTodayFxReady } from "@/lib/todayFx";
 import type { PermModule } from "@/lib/auth";
@@ -100,6 +101,7 @@ function ShellInner({
           {children}
         </div>
       </main>
+      <DriveSaveHost />
     </div>
   );
 }

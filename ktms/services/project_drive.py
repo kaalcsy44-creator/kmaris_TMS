@@ -231,6 +231,12 @@ DOC_FOLDER = {
 }
 
 
+def _vendor_rfq_of(s, vq_id: int):
+    from db.models import VendorQuote, VendorRFQ
+    q = s.query(VendorQuote).filter_by(id=vq_id).first()
+    return s.query(VendorRFQ).filter_by(id=q.vendor_rfq_id).first() if q else None
+
+
 def rfq_id_for(s, ref: str) -> int | None:
     """'qtn:12' · 'order:5' · 'rfq:9' · 'vpo:3' · 'cn:4' → 그 문서가 속한 프로젝트(RFQ) id."""
     from db.models import Claim, CreditNote, Order, PurchaseOrder, Quotation
@@ -251,6 +257,9 @@ def rfq_id_for(s, ref: str) -> int | None:
     if kind == "qtn":
         q = s.query(Quotation).filter_by(id=key).first()
         return q.rfq_id if q else None
+    if kind == "vq":
+        v = _vendor_rfq_of(s, key)
+        return v.rfq_id if v else None
     if kind == "order":
         return by_order(key)
     if kind == "vpo":
@@ -320,3 +329,91 @@ def archive_doc(ref: str, doc: str, filename: str, data: bytes, mime: str) -> di
                                skip_if_prop="ktms_fp")
     return {"status": "same" if up["skipped"] else "saved", "name": up["name"], "url": up["url"],
             "folder": key, "created": folder["created"]}
+
+
+# ── 견적을 저장할 때 02 QTN 에 남기기(사람이 창에서 확인하고 누른 것만) ──────────
+
+QTN_KEY = "QTN"
+MAX_DEPTH = 2          # 02 QTN 아래로 상대 이름 / (선택) 하위 폴더 하나까지
+
+
+def _loose(name: str) -> str:
+    """폴더 이름 견주기 — 대소문자·기호·법인 표기 차이는 같은 회사로 본다."""
+    t = re.sub(r"[^0-9a-z가-힣]+", " ", (name or "").lower())
+    t = re.sub(r"\b(co|ltd|limited|inc|corp|corporation|company|pte|pty|gmbh|llc)\b|주식회사", " ", t)
+    return " ".join(t.split())
+
+
+def _party_names(s, ref: str, rfq: RFQ) -> list[str]:
+    """02 QTN 아래 폴더 이름 후보 — 받은 견적은 공급사명, 보낸 견적은 고객사명(약칭 먼저)."""
+    from db.models import Vendor
+    kind, _, raw = (ref or "").partition(":")
+    if kind == "vq":
+        v = _vendor_rfq_of(s, int(raw)) if raw.isdigit() else None
+        ven = s.query(Vendor).filter_by(id=v.vendor_id).first() if v and v.vendor_id else None
+        return [ven.name.strip()] if ven and (ven.name or "").strip() else []
+    cust = s.query(Customer).filter_by(id=rfq.customer_id).first() if rfq.customer_id else None
+    return [n for n in dict.fromkeys([customer_label(cust), (cust.name or "").strip() if cust else ""]) if n]
+
+
+def save_target(rfq_id: int, ref: str) -> dict:
+    """저장 창용 — 어디에 저장되는지 미리 보여 준다(드라이브에 쓰지 않는다).
+
+    party: 기본 폴더 이름. 02 QTN 에 같은 회사로 보이는 폴더가 이미 있으면 그 이름을 쓴다."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if rfq is None:
+            raise drive_svc.DriveError(f"RFQ {rfq_id} 가 없습니다.")
+        if rfq_id_for(s, ref) != rfq_id:
+            raise drive_svc.DriveError("이 견적은 그 프로젝트의 것이 아닙니다.")
+        fid, names = getattr(rfq, "drive_folder_id", None), _party_names(s, ref, rfq)
+    finally:
+        s.close()
+    meta = drive_svc.get_folder(fid) if fid else None
+    if not meta:
+        raise drive_svc.DriveError(NO_FOLDER)
+    sub = drive_svc.find_subfolder(fid, QTN_KEY)
+    existing = sorted((f["name"] for f in drive_svc._children(sub["id"], folders_only=True)),
+                      key=str.lower) if sub else []
+    keys = {_loose(n) for n in names} - {""}
+    hit = next((n for n in existing if _loose(n) in keys), None)
+    return {"project": meta.get("name", ""), "sub": sub["name"] if sub else drive_svc.SUBFOLDERS[QTN_KEY][0],
+            "existing": existing, "party": hit or (drive_svc.sanitize_name(names[0]) if names else "")}
+
+
+def save_quote_files(rfq_id: int, folders: list[str], files: list) -> dict:
+    """견적 파일들을 `02 QTN/[폴더]/[폴더]` 에 올린다. 없는 폴더만 만든다.
+
+    files: [(파일명, 읽기 가능한 파일 객체, 크기, mime)]. 덮어쓰지 않는다 — 같은 이름에
+    내용이 바뀌었으면 ' (2)', 같으면 건너뛰고 same 으로 알린다. 부분 실패를 허용한다."""
+    names = [n for n in (drive_svc.sanitize_name(f) for f in folders) if n]
+    if len(names) > MAX_DEPTH:
+        raise drive_svc.DriveError("하위 폴더는 두 단계까지만 만들 수 있습니다.")
+    base = ensure_rfq_folder(rfq_id, subs=(QTN_KEY,))        # 프로젝트 폴더는 새로 만들지 않는다
+    created = list(base["created"])
+    target = base["sub"][QTN_KEY]
+    sub = drive_svc.find_subfolder(base["folder_id"], QTN_KEY)
+    path = [base["folder_name"], sub["name"] if sub else drive_svc.SUBFOLDERS[QTN_KEY][0]]
+    for n in names:
+        target, made = drive_svc.ensure_folder_report(target, n)
+        path.append(n)
+        if made:
+            created.append("/".join(path[1:]))
+    saved, skipped, failed = [], [], []
+    for name, stream, size, mime in files:
+        name = name or "file"
+        if size is not None and size > MAX_UPLOAD:
+            skipped.append({"name": name, "reason": f"{size / 1024 / 1024:.0f}MB — 50MB 초과"})
+            continue
+        try:
+            data = stream.read()
+            up = drive_svc.upload_file(target, name, data, mime or "application/octet-stream",
+                                       app_properties={"ktms_fp": fingerprint(data, name)},
+                                       skip_if_prop="ktms_fp")
+            saved.append({"name": up["name"], "url": up["url"], "same": up["skipped"]})
+        except drive_svc.DriveError as exc:
+            log.warning("project_drive: %s 업로드 실패 — %s", name, exc)
+            failed.append({"name": name, "reason": str(exc)[:200]})
+    return {"folder_url": drive_svc.folder_url(target), "path": " / ".join(path),
+            "created": created, "saved": saved, "skipped": skipped, "failed": failed}

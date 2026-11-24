@@ -305,6 +305,15 @@ def ensure_project(project_name: str, *, work_type: str | None = None,
     return {"folder_id": fid, "folder_url": folder_url(fid), "sub": ensure_subfolders(fid)}
 
 
+def find_subfolder(project_folder_id: str, key: str) -> dict | None:
+    """하위 폴더 하나({id, name})를 찾기만 한다 — 없으면 None(만들지 않는다)."""
+    _, aliases = SUBFOLDERS[key.upper()]
+    by = {f["name"].strip().upper(): f
+          for f in sorted(_children(project_folder_id, folders_only=True),
+                          key=lambda f: f["id"], reverse=True)}
+    return next((by[a.upper()] for a in aliases if a.upper() in by), None)
+
+
 def subfolder_id(project_folder_id: str, key: str) -> str:
     """하위 폴더 하나(RFQ/QTN/PO/INV)의 ID. 없으면 **그 하나만** 만든다."""
     key = key.upper()

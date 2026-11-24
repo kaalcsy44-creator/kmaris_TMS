@@ -502,6 +502,32 @@ def upload_rfq_drive_files(rfq_id: int,
         raise HTTPException(status_code=502, detail=f"드라이브에 올리지 못했습니다: {exc}")
 
 
+def _drive_http(exc: "drive_svc.DriveError", what: str) -> HTTPException:
+    if str(exc) == project_drive.NO_FOLDER:
+        return HTTPException(status_code=409, detail=str(exc))
+    return HTTPException(status_code=502, detail=f"{what}: {exc}")
+
+
+@app.get("/api/admin/rfq/{rfq_id}/drive-target", dependencies=[Depends(require_token)])
+def rfq_drive_target(rfq_id: int, ref: str):
+    """견적 저장 창 — 02 QTN 아래 어디에 저장되는지(드라이브에 쓰지 않는다). ref: qtn:ID · vq:ID."""
+    try:
+        return project_drive.save_target(rfq_id, ref)
+    except drive_svc.DriveError as exc:
+        raise _drive_http(exc, "드라이브를 확인하지 못했습니다")
+
+
+@app.post("/api/admin/rfq/{rfq_id}/drive-save", dependencies=[Depends(require_token)])
+def rfq_drive_save(rfq_id: int, files: list[UploadFile] = File(...),
+                   folders: list[str] = Form(default=[])):
+    """견적 파일을 프로젝트 폴더 02 QTN(/folders…)에 저장 — 사람이 창에서 확인하고 누른 것만."""
+    items = [(f.filename, f.file, f.size, f.content_type) for f in files]
+    try:
+        return project_drive.save_quote_files(rfq_id, folders, items)
+    except drive_svc.DriveError as exc:
+        raise _drive_http(exc, "드라이브에 저장하지 못했습니다")
+
+
 @app.post("/api/admin/drive/archive", dependencies=[Depends(require_token)])
 def archive_issued_doc(file: UploadFile = File(...), ref: str = Form(...), doc: str = Form(...)):
     """발행 문서(사람이 **다운로드한 그 파일**)를 프로젝트 폴더에 한 벌 남긴다.
