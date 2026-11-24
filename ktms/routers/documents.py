@@ -1,6 +1,8 @@
 """K-Maris TMS — documents routes (split from admin_api.py; behavior unchanged)."""
 from __future__ import annotations
 
+import re
+
 from _core import (
     ARRecord,
     ARStatus,
@@ -43,7 +45,10 @@ from _core import (
     _first_rfq_iso,
     _kst_iso,
     _latest_ci,
+    _doc_disposition,
+    _ocr_image_media_type,
     _order_cis,
+    _pods_complete,
     _pick_ci,
     _primary_ci,
     _sync_pl_items,
@@ -155,16 +160,20 @@ def documents_overview():
         for sa in s.query(ShippingAdvice).all():
             if sa.order_id not in sa_by_order or sa.id > sa_by_order[sa.order_id].id:
                 sa_by_order[sa.order_id] = sa
-        pod_by_order: dict[int, DeliveryProof] = {}
-        for pod in s.query(DeliveryProof).all():
-            if pod.order_id not in pod_by_order or pod.id > pod_by_order[pod.order_id].id:
-                pod_by_order[pod.order_id] = pod
+        # 파일 본문(BLOB)은 읽지 않는다. 포장이 여럿이면 다 모여야 has_pod 다(_pods_complete).
+        pods_by_order: dict[int, list] = {}
+        for pod in (s.query(DeliveryProof.id, DeliveryProof.order_id, DeliveryProof.ci_id,
+                            DeliveryProof.filename).order_by(DeliveryProof.id.asc()).all()):
+            pods_by_order.setdefault(pod.order_id, []).append(pod)
+        ci_ids_by_order: dict[int, list[int]] = {}
+        for cid, oid in s.query(CommercialInvoice.id, CommercialInvoice.order_id).all():
+            ci_ids_by_order.setdefault(oid, []).append(cid)
 
         rows = []
         for o in s.query(Order).order_by(Order.id.desc()).all():
             ci = ci_by_order.get(o.id)
             sa = sa_by_order.get(o.id)
-            pod = pod_by_order.get(o.id)
+            pods = pods_by_order.get(o.id, [])
             ci_id = ci.id if ci else None
             # 업무타입(서비스)·서비스 단계(7·8 수동완료) 상태 — 이 고객 P/O(오더) 기준
             rfq = _rfq_for_order(s, o)
@@ -190,11 +199,11 @@ def documents_overview():
                 "sa_no": sa.sa_no if sa else "",
                 "sa_sent_date": (sa.sent_date or "") if sa else "",
                 "tax_no": tax_no_by_ci.get(ci_id, "") if ci_id else "",
-                "pod_filename": (pod.filename or "") if pod else "",
+                "pod_filename": (pods[-1].filename or "") if pods else "",
                 "has_ci": bool(ci),
                 "has_pl": bool(ci_id and ci_id in pl_ci_ids),
                 "has_sa": bool(sa),
-                "has_pod": bool(pod),
+                "has_pod": _pods_complete(pods, ci_ids_by_order.get(o.id, [])),
                 "has_tax": bool(ci_id and ci_id in tax_ci_ids),
                 # 서비스 단계 수동 완료 상태(7). 8(Complete·Report)은 has_pod, 9(Billing)은 svc_billed.
                 "svc_ready_done": bool(sd.get("7")),
@@ -836,6 +845,9 @@ def delete_commercial_invoice(order_id: int, ci_id: int = 0):
         if len(cis) > 1 and cis[0].id == ci.id:
             raise HTTPException(status_code=400,
                 detail="포장별로 나눈 CI 가 더 있습니다. 첫 번째 CI 는 나머지 CI 를 먼저 삭제한 뒤 지우세요.")
+        if s.query(DeliveryProof.id).filter_by(ci_id=ci.id).first():
+            raise HTTPException(status_code=400,
+                detail="이 포장의 POD 가 있어 삭제할 수 없습니다. 먼저 8단계에서 그 POD 를 삭제하세요.")
         # 하위 Packing List 를 CI 삭제보다 먼저 DB 에 반영해야 FK 제약(Postgres)에 안 걸린다.
         s.query(PackingList).filter_by(ci_id=ci.id).delete(synchronize_session=False)
         s.flush()
@@ -877,6 +889,11 @@ def reset_stage(order_id: int, stage: int):
                 detail=f"이 P/O는 {cur}단계까지 완료돼 있습니다. {stage}단계보다 위 단계부터 순서대로 초기화하세요.")
 
         if stage == 7:
+            # 일부 포장만 POD 가 있으면 8단계는 아직 '완료'가 아니라 위 검사를 지나온다.
+            if s.query(DeliveryProof.id).filter(DeliveryProof.order_id == order_id,
+                                                DeliveryProof.ci_id.isnot(None)).first():
+                raise HTTPException(status_code=400,
+                    detail="포장별 POD 가 있습니다. 먼저 8단계에서 POD 를 삭제하세요.")
             # 포장별로 나눠 발행한 CI 전부(+하위 PL) → SA 순(FK 제약 회피)
             for ci in _order_cis(s, order_id):
                 s.query(PackingList).filter_by(ci_id=ci.id).delete(synchronize_session=False)
@@ -1250,21 +1267,56 @@ def tax_invoice_pdf(order_id: int, body: TaxInvoicePdfReq):
 
 
 # ── 9) 운송 완료 · POD 수취 — 인도 증빙(POD) 파일 ───────────────────────────────
+@app.post("/api/admin/documents-pod/parse", dependencies=[Depends(require_token)])
+def parse_pod(file: UploadFile = File(...)):
+    """운송사 POD(DHL 등, PDF·이미지) → 운송장번호·인도일시·서명자 등. 저장하지 않는다."""
+    from services.pdf_parser import parse_pod_image, parse_pod_pdf_document
+    img_media = _ocr_image_media_type(file)
+    try:
+        file.file.seek(0)
+        if img_media:
+            data = parse_pod_image(file.file.read(), img_media)
+        elif (file.filename or "").lower().endswith(".pdf"):
+            data = parse_pod_pdf_document(file.file.read())
+        else:
+            raise HTTPException(status_code=400, detail="PDF 또는 이미지 파일만 읽을 수 있습니다.")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"POD 인식 실패: {exc}") from exc
+    out = {k: " ".join(str(v or "").split())[:300] for k, v in data.items() if k != "truncated"}
+    # 입력칸(date·time)이 받는 꼴이 아니면 비운다 — 틀린 값을 넣느니 사람이 적는 편이 낫다.
+    for k in ("delivered_date", "picked_date"):
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", out.get(k, "")):
+            out[k] = ""
+    for k in ("delivered_time", "picked_time"):
+        m = re.fullmatch(r"(\d{1,2})[:.](\d{2})", out.get(k, ""))
+        out[k] = f"{int(m.group(1)):02d}:{m.group(2)}" if m else ""
+    return out
+
+
 @app.post("/api/admin/documents/{order_id}/pod", dependencies=[Depends(require_token)])
-def upload_pod(order_id: int, file: UploadFile = File(...)):
-    """POD(인도 증빙) 파일 업로드 — 오더당 1건(기존 파일 교체). 업로드 시 9단계 완료."""
+def upload_pod(order_id: int, file: UploadFile = File(...), ci_id: int = 0):
+    """POD(인도 증빙) 파일 업로드. ci_id = 포장(CI)별 POD, 없으면 오더 전체의 한 건.
+    같은 자리의 기존 파일은 교체한다. 포장이 여럿이면 모두 모여야 8단계 완료."""
     s = get_session()
     try:
         order = s.query(Order).filter_by(id=order_id).first()
         if not order:
             raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
+        if ci_id and not _pick_ci(s, order_id, ci_id):
+            raise HTTPException(status_code=404, detail="이 오더의 포장(CI)이 아닙니다.")
         file.file.seek(0)
         data = file.file.read()
         if not data:
             raise HTTPException(status_code=400, detail="빈 파일입니다.")
-        s.query(DeliveryProof).filter_by(order_id=order_id).delete()
+        slot = ci_id or None
+        (s.query(DeliveryProof)
+         .filter(DeliveryProof.order_id == order_id, DeliveryProof.ci_id == slot)
+         .delete(synchronize_session=False))
         proof = DeliveryProof(
             order_id=order_id,
+            ci_id=slot,
             filename=file.filename or "POD",
             mime=file.content_type or "application/octet-stream",
             data=data,
@@ -1272,23 +1324,27 @@ def upload_pod(order_id: int, file: UploadFile = File(...)):
         )
         s.add(proof)
         s.commit()
-        return {"ok": True, "filename": proof.filename, "uploaded_at": proof.uploaded_at}
+        return {"ok": True, "id": proof.id, "filename": proof.filename, "uploaded_at": proof.uploaded_at}
     finally:
         s.close()
 
 
 @app.get("/api/admin/documents/{order_id}/pod/file", dependencies=[Depends(require_token)])
-def download_pod(order_id: int):
+def download_pod(order_id: int, proof_id: int = 0):
+    """POD 파일 — proof_id 로 고른 것, 없으면 가장 최근 것."""
     s = get_session()
     try:
-        proof = (s.query(DeliveryProof).filter_by(order_id=order_id)
-                 .order_by(DeliveryProof.created_at.desc()).first())
+        q = s.query(DeliveryProof).filter_by(order_id=order_id)
+        if proof_id:
+            q = q.filter_by(id=proof_id)
+        proof = q.order_by(DeliveryProof.id.desc()).first()
         if not proof or not proof.data:
             raise HTTPException(status_code=404, detail="POD 파일이 없습니다.")
         return Response(
             content=proof.data,
             media_type=proof.mime or "application/octet-stream",
-            headers={"Content-Disposition": f'attachment; filename="{proof.filename or "POD"}"'},
+            # 파일명에 한글이 있으면 filename="…" 만으로는 헤더를 못 만든다(latin-1).
+            headers={"Content-Disposition": _doc_disposition(proof.filename or "POD")},
         )
     finally:
         s.close()
@@ -1303,11 +1359,30 @@ def save_pod_notes(order_id: int, body: PodNotesSave):
         if not order:
             raise HTTPException(status_code=404, detail="Order를 찾을 수 없습니다.")
         order.pod_notes = (body.notes or "").strip() or None
-        if body.info is not None:
+        def clean(d: dict) -> dict:
             # 문자열 값만, 앞뒤 공백 정리 — 빈 칸은 버려 "기록 없음"과 구분되게 한다.
-            info = {str(k): str(v).strip() for k, v in body.info.items()
-                    if v is not None and str(v).strip()}
-            order.pod_info = info or None  # 재할당해야 JSON 변경이 감지된다
+            return {str(k): str(v).strip() for k, v in d.items()
+                    if k != "packages" and v is not None and str(v).strip()}
+
+        cur = dict(order.pod_info or {})
+        pkgs = dict(cur.pop("packages", None) or {})
+        if body.info is not None:
+            cur = clean(body.info)
+        if body.packages is not None:
+            mine = {str(c.id) for c in _order_cis(s, order_id)}
+            for key, val in body.packages.items():
+                if key not in mine:
+                    continue
+                kept = clean(val or {})
+                if kept:
+                    pkgs[key] = kept
+                else:
+                    pkgs.pop(key, None)
+        # 지금 없는 포장의 기록은 걷어 낸다(CI 를 지운 포장).
+        pkgs = {k: v for k, v in pkgs.items() if k in {str(c.id) for c in _order_cis(s, order_id)}}
+        if pkgs:
+            cur["packages"] = pkgs
+        order.pod_info = cur or None  # 재할당해야 JSON 변경이 감지된다
         s.commit()
         return {"ok": True, "notes": order.pod_notes or "", "info": order.pod_info or {}}
     finally:
@@ -1315,10 +1390,14 @@ def save_pod_notes(order_id: int, body: PodNotesSave):
 
 
 @app.delete("/api/admin/documents/{order_id}/pod", dependencies=[Depends(require_token)])
-def delete_pod(order_id: int):
+def delete_pod(order_id: int, proof_id: int = 0):
+    """POD 파일 삭제 — proof_id 하나, 없으면 이 오더의 것 전부."""
     s = get_session()
     try:
-        n = s.query(DeliveryProof).filter_by(order_id=order_id).delete()
+        q = s.query(DeliveryProof).filter(DeliveryProof.order_id == order_id)
+        if proof_id:
+            q = q.filter(DeliveryProof.id == proof_id)
+        n = q.delete(synchronize_session=False)
         s.commit()
         return {"ok": True, "deleted": n}
     finally:

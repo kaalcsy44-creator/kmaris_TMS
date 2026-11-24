@@ -1183,7 +1183,8 @@ export type DocumentDetail = {
     vendor_docs_sent_date: string;
     pod_notes?: string;          // 8) Delivery Complete · POD 메모
     // 8) 인도 기록 — Incoterms 인도 지점(우리 책임 종료점)에서의 인계일·장소·인수자·증빙 종류.
-    pod_info?: Record<string, string>;
+    // 포장별로 나눈 오더는 packages 에 포장(CI id)마다 같은 칸을 따로 둔다.
+    pod_info?: Record<string, string> & { packages?: Record<string, Record<string, string>> };
     items: DocumentWorkItem[];
     // 상위 단계에서 이미 입력한 값 — 문서(PI/CI)의 빈 칸을 채우는 기본값.
     // 우선순위는 고객 P/O(5단계) > 견적(3·4단계)이며, sources 는 각 값이 어느 단계에서 왔는지.
@@ -1198,6 +1199,10 @@ export type DocumentDetail = {
     };
   };
   pod: null | { id: number; filename: string; uploaded_at: string };
+  /** POD 파일 전부 — ci_id = 포장(CI), 0 = 오더 전체. */
+  pods?: { id: number; ci_id: number; filename: string; uploaded_at: string }[];
+  /** 필요한 POD 가 다 모였나(포장이 여럿이면 포장마다 하나). */
+  pods_complete?: boolean;
   stage_done: { "7": boolean; "8": boolean; tax: boolean; "10": boolean };
   pi: null | {
     id: number;

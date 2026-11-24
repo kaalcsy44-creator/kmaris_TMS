@@ -23,7 +23,6 @@ import {
   uploadPod,
   podDownloadUrl,
   deletePod,
-  savePodNotes,
   saveServiceStage,
   deleteServiceStage,
   fetchCompanyProfile,
@@ -44,6 +43,7 @@ import { ModalTitle } from "@/components/common/BaseMeta";
 import ProjectNo from "@/components/common/ProjectNo";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import HsCodeField from "@/components/common/HsCodeField";
+import PodTab from "@/components/screens/PodTab";
 import { useEditGate } from "@/lib/viewMode";
 import {
   amountInputValue,
@@ -892,7 +892,7 @@ function DocEditorContent({
           ) : kind === "ci" || kind === "sm" || kind === "pl" ? (
             <PackageDocs kind={kind} data={data} onChanged={afterChange} />
           ) : kind === "pod" ? (
-            <PodTab key={`pod-${data.order.id}`} data={data} onChanged={afterChange} />
+            <PodTab key={`pod-${data.order.id}`} data={data} onChanged={afterChange} rule={incotermRule((data.order.doc_defaults?.incoterms || "").trim())} carriers={CARRIER_OPTIONS.filter((c) => c !== "TBD")} canEdit={canEditDoc(data)} />
           ) : (
             <TaxInvoiceTab key={`tax-${data.order.id}-${data.tax?.id ?? 0}`} data={data} onChanged={afterChange} />
           )}
@@ -1183,262 +1183,6 @@ export function ProjectProformaInvoice({
   );
 }
 
-/** 9) 운송 완료 · POD 수취 — 인도 증빙(POD) 파일 업로드/다운로드/삭제. 업로드 시 9단계 완료. */
-function PodTab({
-  data,
-  onChanged,
-  docLabel = "POD (proof of delivery)",
-}: {
-  data: DocumentDetail;
-  onChanged: () => void;
-  docLabel?: string;
-}) {
-  const pod = data.pod;
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  // 읽기모드(단계 화면 토글)에선 권한이 있어도 폼을 잠근다 — 저장·삭제 버튼도 함께 사라진다.
-  const { editing: editable, readMode, fieldsetProps } = useEditGate(canEditDoc(data));
-
-  // 거래조건 — 고객 P/O(5단계) > 견적 순으로 이미 정해진 Incoterms·지정 장소.
-  const dd = data.order.doc_defaults;
-  const incoterms = (dd?.incoterms || "").trim();
-  const namedPlace = (dd?.delivery_place || "").trim();
-  const rule = incotermRule(incoterms);
-
-  // 인도 기록 + 메모 — 파일과 독립 저장. 서버 값이 바뀌면(저장·재조회) 입력값을 맞춘다.
-  const savedNotes = data.order.pod_notes || "";
-  const savedInfo = data.order.pod_info || {};
-  const savedKey = JSON.stringify([savedNotes, savedInfo]);
-  const initForm = (): Record<string, string> => {
-    const f: Record<string, string> = {};
-    for (const k of POD_INFO_KEYS) f[k] = String(savedInfo[k] ?? "");
-    // 인계 장소는 비어 있으면 Incoterms 지정 장소에서 시작한다(보통 그곳이 인도 지점).
-    if (!f.handover_place && namedPlace) f.handover_place = namedPlace;
-    return f;
-  };
-  const [form, setForm] = useState<Record<string, string>>(initForm);
-  const [notes, setNotes] = useState(savedNotes);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setForm(initForm()); setNotes(savedNotes); }, [savedKey]);
-  const hasEntry = !!savedNotes || Object.keys(savedInfo).length > 0 || !!pod;
-  const dirty = notes !== savedNotes || POD_INFO_KEYS.some((k) => (form[k] || "") !== initForm()[k]);
-  const setF = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
-
-  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || !data.order.id) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      await uploadPod(data.order.id, file);
-      onChanged();
-    } catch (x) {
-      setErr(x instanceof Error ? x.message : "Upload failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function save() {
-    if (!data.order.id) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      await savePodNotes(data.order.id, notes, form);
-      onChanged();
-    } catch (x) {
-      setErr(x instanceof Error ? x.message : "Save failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // Cancel = 저장 안 한 편집을 버리고 저장본으로 되돌린다.
-  function cancel() {
-    setForm(initForm());
-    setNotes(savedNotes);
-    setErr(null);
-  }
-
-  // 단계 기록 전체 삭제 — 인도 기록·메모·증빙 파일(→ 8단계 완료도 풀린다).
-  async function removeEntry() {
-    if (!confirm("Delete this stage's entry? (handover record, notes and evidence file — stage 8 completion will be undone)")) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      await savePodNotes(data.order.id, "", {});
-      if (pod) await deletePod(data.order.id);
-      onChanged();
-    } catch (x) {
-      setErr(x instanceof Error ? x.message : "Delete failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function download() {
-    const res = await fetch(podDownloadUrl(data.order.id), {
-      headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
-    });
-    if (!res.ok) {
-      setErr("Download failed");
-      return;
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = pod?.filename || "POD";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function removeFile() {
-    if (!confirm("Delete the evidence file? (stage 8 completion will be undone)")) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      await deletePod(data.order.id);
-      onChanged();
-    } catch (x) {
-      setErr(x instanceof Error ? x.message : "Delete failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="doc-tab">
-      <div className="milestone-row" style={{ marginBottom: 12 }}>
-        <span className={`ar-badge${pod ? "" : " overdue"}`}>{pod ? "Done" : "Pending"}</span>
-      </div>
-
-      {/* ① 거래조건 — 어디서 우리 책임이 끝나는지(Incoterms 인도 지점). 읽기 전용: 값의 정본은 P/O·견적. */}
-      <div className="stage-card">
-        <div className="form-section-title">Delivery terms (Incoterms® 2020)</div>
-        <dl className="intl-meta">
-          <div><dt>Incoterms</dt><dd>{incoterms || "—"}</dd></div>
-          <div><dt>Named place</dt><dd>{namedPlace || "—"}</dd></div>
-          <div>
-            <dt>Our responsibility ends</dt>
-            <dd>{rule ? rule.point : "Set Incoterms on the customer P/O (stage 5) or quotation."}</dd>
-          </div>
-          {rule ? <div><dt>Typical evidence</dt><dd>{rule.evidence}</dd></div> : null}
-        </dl>
-      </div>
-
-      {/* ② 인도 기록 — 책임 종료 시점의 날짜·장소·인수자. */}
-      <fieldset {...fieldsetProps}>
-        <div className="stage-card">
-          <div className="form-section-title">Handover — end of our responsibility</div>
-          <div className="form-grid form-grid--cols4">
-            <Field label="Handover date" type="date" value={form.handover_date || ""} onChange={(v) => setF("handover_date", v)} />
-            <Field
-              label="Handover place"
-              value={form.handover_place || ""}
-              onChange={(v) => setF("handover_place", v)}
-              placeholder={rule?.placeHint || "Port / warehouse / vessel"}
-              options={namedPlace ? [namedPlace] : undefined}
-              span2
-            />
-            <SvcFieldInput
-              field={{ key: "evidence_type", label: "Evidence document", type: "select", options: POD_EVIDENCE_TYPES }}
-              value={form.evidence_type || ""}
-              onChange={(v) => setF("evidence_type", v)}
-            />
-            <Field
-              label="Handed over to"
-              value={form.handed_to || ""}
-              onChange={(v) => setF("handed_to", v)}
-              placeholder={rule?.partyHint || "Carrier / forwarder / consignee"}
-              span2
-            />
-            <Field label="Received by (name)" value={form.received_by || ""} onChange={(v) => setF("received_by", v)} placeholder="Signed by" />
-            <Field label="B/L · AWB · Ref. No." value={form.transport_ref || ""} onChange={(v) => setF("transport_ref", v)} />
-            <label className="form-field form-field--full">
-              <span>Notes</span>
-              <textarea
-                className="po-textarea small"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Delivery remarks (carrier, consignee contact, damage, etc.)"
-              />
-            </label>
-          </div>
-        </div>
-      </fieldset>
-
-      {/* ③ 증빙 파일 — 올리는 순간 8단계 완료. 다운로드는 읽기모드에서도 되도록 fieldset 밖에 둔다. */}
-      <div className="stage-card">
-        <div className="form-section-title">Evidence file</div>
-        <div className="pod-current">
-          {pod ? (
-            <>
-              <span className="pod-file">📄 {pod.filename}</span>
-              {pod.uploaded_at ? <span className="pod-when">Uploaded {fmtDateTime(pod.uploaded_at)}</span> : null}
-              <button type="button" className="btn" onClick={download} disabled={busy}>
-                Download
-              </button>
-            </>
-          ) : (
-            <span className="hint-inline">No {docLabel} file yet.</span>
-          )}
-          {editable ? (
-            <>
-              <label className="btn primary" style={{ cursor: busy ? "default" : "pointer", marginLeft: "auto" }}>
-                {busy ? "Working…" : pod ? "Replace" : "Upload"}
-                <input type="file" hidden accept=".pdf,image/*" onChange={onPick} disabled={busy} />
-              </label>
-              {pod ? (
-                <button type="button" className="btn danger" onClick={removeFile} disabled={busy}>
-                  Remove file
-                </button>
-              ) : null}
-            </>
-          ) : null}
-        </div>
-        <p className="hint-inline" style={{ display: "block", marginTop: 6 }}>
-          {rule ? `${rule.evidence} — ` : ""}PDF · image. Uploading completes stage 8.
-        </p>
-      </div>
-
-      <div className="form-actions stage-actions" style={{ marginTop: 14 }}>
-        {!editable ? (
-          readMode ? null : <span className="hint-inline">{editBlockReason("documents", data.order.assignee_id)}</span>
-        ) : (
-          <button className="btn primary" disabled={busy || !dirty || data.order.id === 0} onClick={save}>
-            {busy ? "Working…" : dirty ? "Save" : "Saved"}
-          </button>
-        )}
-        <button className="btn" disabled={busy || !dirty} onClick={cancel}>
-          Cancel
-        </button>
-        {hasEntry && editable ? (
-          <button className="btn danger" disabled={busy} onClick={removeEntry}>
-            Delete
-          </button>
-        ) : null}
-        {err ? <span className="action-err">{err}</span> : null}
-      </div>
-    </div>
-  );
-}
-
-const POD_INFO_KEYS = ["handover_date", "handover_place", "handed_to", "received_by", "transport_ref", "evidence_type"];
-
-const POD_EVIDENCE_TYPES = [
-  "Signed POD / delivery note",
-  "Bill of Lading (on board)",
-  "Sea Waybill",
-  "Air Waybill",
-  "Forwarder's Cargo Receipt (FCR)",
-  "Mate's / dock receipt",
-  "CMR / road waybill",
-  "Pickup receipt (EXW)",
-  "Other",
-];
-
 /** Incoterms 2020 규칙별 인도 지점 — 매도인(우리) 위험·책임이 끝나는 곳과 그 증빙.
  *  "EXW (Ex Works)" 처럼 라벨이 붙어 와도 앞 3글자 코드로 찾는다. */
 function incotermRule(
@@ -1495,12 +1239,6 @@ function incotermRule(
     default:
       return null;
   }
-}
-
-/** "YYYY-MM-DDTHH:MM" → "yy-mm-dd HH:MM". */
-function fmtDateTime(iso: string): string {
-  if (!iso || iso.length < 16) return iso || "";
-  return `${iso.slice(2, 10)} ${iso.slice(11, 16)}`;
 }
 
 function OrderMilestones({ data, onChanged }: { data: DocumentDetail; onChanged: () => void }) {

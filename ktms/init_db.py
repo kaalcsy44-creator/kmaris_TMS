@@ -299,6 +299,9 @@ _MIGRATIONS = {
         # 이 메일을 읽어 온 사서함(sales@·samcho@…) — 첨부를 다시 받을 때 열 곳.
         "received_account": "VARCHAR(200)",
     },
+    "delivery_proofs": {
+        "ci_id": "INTEGER",      # 포장별 POD — NULL = 오더 전체
+    },
     "credit_notes": {
         # 발행 문서(CREDIT NOTE) 한 장을 그대로 채우는 칸 — 실제 발행 양식과 같은 항목.
         "items":             "JSON",

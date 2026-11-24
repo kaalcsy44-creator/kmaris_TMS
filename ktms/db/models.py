@@ -622,7 +622,10 @@ class Order(Base):
     vendor_docs_sent_date    = Column(String(10))  # 8) Delivery arrangement - Vendor 서류 확인 (수동)
     pod_notes                = Column(Text)        # 8) Delivery Complete · POD 자유 메모
     # 8) 인도(우리 책임 종료) 기록 — Incoterms 인도 지점에서의 인계일·장소·인수자·증빙 종류.
-    # {"handover_date","handover_place","handed_to","received_by","transport_ref","evidence_type"}
+    # {"handover_date","handover_place","handed_to","received_by","transport_ref","evidence_type",
+    #  "carrier","delivered_date","delivered_time","destination","ship_status","service","picked_date",
+    #  "picked_time","origin","piece_ids","shipper_ref"} — 운송사 POD 에 찍히는 칸들.
+    # 포장별로 나눈 오더는 "packages": {"<ci_id>": {같은 칸들}} 에 포장마다 따로 둔다.
     pod_info                 = Column(JSON)
     items          = Column(JSON, default=list)
     terms          = Column(JSON, default=dict)   # 거래조건(Incoterms·Place·결제·포장·보증 등)
@@ -633,10 +636,14 @@ class Order(Base):
 
 
 class DeliveryProof(Base):
-    """9) 운송 완료 · POD 수취 — 인도 증빙(POD) 파일 1건/오더. DB BLOB 저장(Render 파일시스템 휘발 회피)."""
+    """8) 운송 완료 · POD 수취 — 인도 증빙(POD) 파일. DB BLOB 저장(Render 파일시스템 휘발 회피).
+
+    포장(CI)별로 나눠 보낸 오더는 포장마다 한 건(ci_id), 나누지 않은 오더는 오더에 한 건(ci_id NULL).
+    ci_id 가 NULL 인 파일은 오더 전체의 증빙으로 본다(포장별 POD 가 생기기 전 파일 포함)."""
     __tablename__ = "delivery_proofs"
     id          = Column(Integer, primary_key=True)
     order_id    = Column(Integer, ForeignKey("orders.id"), index=True)
+    ci_id       = Column(Integer)      # 포장 = CommercialInvoice.id (NULL = 오더 전체)
     filename    = Column(String(255))
     mime        = Column(String(120))
     data        = Column(LargeBinary)

@@ -887,8 +887,13 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
         # 걸리지 않지만, 뜻을 코드로 못박아 둔다(AR 쪽과 같은 규칙).
         aps = (s.query(APRecord).filter_by(order_id=order.id)
                .filter((APRecord.kind == None) | (APRecord.kind != "extra")).all())  # noqa: E711
-        pod = (s.query(DeliveryProof).filter_by(order_id=order.id)
-               .order_by(DeliveryProof.created_at.asc()).first())
+        # 포장별로 나눠 보낸 오더는 포장마다 POD 가 있어야 8단계 완료다.
+        _pods = _pod_rows(s, order.id)
+        pod = None
+        if _pods and _pods_complete(_pods, [] if any(p.ci_id is None for p in _pods) else
+                                    [i for (i,) in s.query(CommercialInvoice.id)
+                                     .filter(CommercialInvoice.order_id == order.id).all()]):
+            pod = max(_pods, key=lambda p: p.uploaded_at or "")
     else:
         pos, sa, ci, pi, tax, ars, aps, pod = [], None, None, None, None, [], [], None
 
@@ -3108,6 +3113,22 @@ def _order_cis(session, order_id: int) -> list:
             .order_by(CommercialInvoice.id.asc()).all())
 
 
+def _pod_rows(session, order_id: int) -> list:
+    """이 오더의 POD 파일 목록(올린 순) — 파일 본문(BLOB)은 읽지 않는다."""
+    return (session.query(DeliveryProof.id, DeliveryProof.ci_id, DeliveryProof.filename,
+                          DeliveryProof.uploaded_at)
+            .filter(DeliveryProof.order_id == order_id).order_by(DeliveryProof.id.asc()).all())
+
+
+def _pods_complete(pods, ci_ids) -> bool:
+    """POD 가 다 모였나 — 포장(CI)이 여럿이면 포장마다 하나씩 있어야 한다(2026-11-24).
+    ci_id 없는 파일은 오더 전체의 증빙이라 하나면 충분하다."""
+    if not pods:
+        return False
+    have = {p.ci_id for p in pods}
+    return None in have or len(ci_ids) <= 1 or set(ci_ids) <= have
+
+
 def _primary_ci(session, order_id: int):
     """대표 CI(첫 장) — 세금계산서(9단계)·청구가 붙는 CI. 한 장뿐이면 _latest_ci 와 같다."""
     return (session.query(CommercialInvoice).filter_by(order_id=order_id)
@@ -3496,8 +3517,8 @@ def _document_detail_payload(session, order: Order) -> dict:
     from services import packing_sync
     pi_terms_view, pack_sh = packing_sync.fill_views(
         (pi.terms or {}) if pi else None, [c.shipping or {} for c in cis])
-    pod = (session.query(DeliveryProof).filter_by(order_id=order.id)
-           .order_by(DeliveryProof.created_at.desc()).first())
+    pods = _pod_rows(session, order.id)
+    pod = pods[-1] if pods else None
     rfq = _rfq_for_order(session, order)
     sd = manual_stage_dates(rfq, order)
     # 발주된 Vendor(들) — 이 오더의 PurchaseOrder vendor_id → Vendor.name (중복 제거)
@@ -3563,6 +3584,10 @@ def _document_detail_payload(session, order: Order) -> dict:
             "filename": pod.filename or "POD",
             "uploaded_at": pod.uploaded_at or "",
         },
+        # 포장별 POD — ci_id 0 = 오더 전체. pods_complete = 8단계 완료 근거가 다 모였나.
+        "pods": [{"id": p.id, "ci_id": p.ci_id or 0, "filename": p.filename or "POD",
+                  "uploaded_at": p.uploaded_at or ""} for p in pods],
+        "pods_complete": _pods_complete(pods, [c.id for c in cis]),
         # 수동 완료(완료 버튼) 표시 — 7·8(서비스) · tax(9단계 안 세금계산서 발행) · 10(수금)
         "stage_done": {k: bool(sd.get(k)) for k in ("7", "8", "tax", "10")},
         "pi": None if not pi else {
@@ -3836,6 +3861,8 @@ class PodNotesSave(BaseModel):
     info 가 None 이면 인도 기록은 건드리지 않는다(메모만 보내던 옛 호출 호환)."""
     notes: str = ""
     info: Optional[Dict[str, Any]] = None
+    # 포장별 기록 {"<ci_id>": {...}} — 준 포장만 갈아 끼우고 나머지 포장은 그대로 둔다.
+    packages: Optional[Dict[str, Dict[str, Any]]] = None
 
 
 class ProformaInvoiceSave(BaseModel):
@@ -5392,6 +5419,8 @@ __all__ = [
     "_kst_iso",
     "_latest_ci",
     "_order_cis",
+    "_pod_rows",
+    "_pods_complete",
     "_primary_ci",
     "_pick_ci",
     "_sync_pl_items",

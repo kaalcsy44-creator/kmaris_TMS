@@ -1130,29 +1130,56 @@ export function documentDownloadUrl(
 // ── 9) POD(인도 증빙) 파일 + 단계 완료 콜 ─────────────────────────────────────
 export function uploadPod(
   orderId: number,
-  file: File
-): Promise<{ ok: boolean; filename: string; uploaded_at: string }> {
+  file: File,
+  /** 포장(CI)별 POD. 0 = 오더 전체의 한 건. */
+  ciId = 0
+): Promise<{ ok: boolean; id: number; filename: string; uploaded_at: string }> {
   const fd = new FormData();
   fd.append("file", file);
-  return postForm(`/api/admin/documents/${orderId}/pod`, fd);
+  return postForm(`/api/admin/documents/${orderId}/pod${ciId ? `?ci_id=${ciId}` : ""}`, fd);
 }
 
-export function podDownloadUrl(orderId: number): string {
-  return `${API_BASE}/api/admin/documents/${orderId}/pod/file`;
+/** 운송사 POD(DHL 등)를 읽은 값 — 저장하지 않는다. 안 찍힌 칸은 빈 글자. */
+export type PodParse = {
+  carrier: string;
+  waybill_no: string;
+  ship_status: string;
+  delivered_date: string;
+  delivered_time: string;
+  signed_by: string;
+  destination: string;
+  service: string;
+  picked_date: string;
+  picked_time: string;
+  origin: string;
+  piece_ids: string;
+  shipper_ref: string;
+  document_type: string;
+};
+export function parsePod(file: File): Promise<PodParse> {
+  const fd = new FormData();
+  fd.append("file", file);
+  return postForm<PodParse>("/api/admin/documents-pod/parse", fd);
 }
 
-export function deletePod(orderId: number): Promise<{ ok: boolean; deleted: number }> {
-  return del(`/api/admin/documents/${orderId}/pod`);
+/** proofId 를 빼면 가장 최근 파일. */
+export function podDownloadUrl(orderId: number, proofId = 0): string {
+  return `${API_BASE}/api/admin/documents/${orderId}/pod/file${proofId ? `?proof_id=${proofId}` : ""}`;
+}
+
+/** proofId 를 빼면 이 오더의 POD 전부. */
+export function deletePod(orderId: number, proofId = 0): Promise<{ ok: boolean; deleted: number }> {
+  return del(`/api/admin/documents/${orderId}/pod${proofId ? `?proof_id=${proofId}` : ""}`);
 }
 
 /** POD 화면 메모 + 인도 기록 저장 — 파일과 독립(파일을 지워도 남는다).
- *  info 를 빼면 인도 기록은 그대로 둔다. */
+ *  info = 오더 전체 기록, packages = 포장(CI id)별 기록. 뺀 것은 그대로 둔다. */
 export function savePodNotes(
   orderId: number,
   notes: string,
-  info?: Record<string, string>
-): Promise<{ ok: boolean; notes: string; info: Record<string, string> }> {
-  return post(`/api/admin/documents/${orderId}/pod/notes`, info ? { notes, info } : { notes });
+  rec: { info?: Record<string, string>; packages?: Record<string, Record<string, string>> } = {}
+): Promise<{ ok: boolean; notes: string }> {
+  return post(`/api/admin/documents/${orderId}/pod/notes`, { notes, ...rec });
 }
 
 /** 11·12 등 수동 완료 단계 토글 — 완료 시 현황판 단계가 해당 단계로 진행. */
