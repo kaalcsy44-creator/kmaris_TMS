@@ -880,13 +880,18 @@ export type BoardLine = {
   sent_count: number;
   quoted_count: number;
   /** 최저가 칸(추천). 견적 통화가 섞이면 비교가 뜻을 잃어 null 이 온다. */
-  best: (LineCell & { vrfq_id: number }) | null;
+  best: (LineCell & { vrfq_id: number; col?: string }) | null;
   mixed_currency: boolean;
   award: LineAward | null;
   state: "not_sourced" | "sourcing" | "quoted" | "awarded" | "declined";
 };
 
 export type BoardVendor = {
+  /** 열 열쇠 — cells[lid][key]. 보통 String(vrfq_id), 한 벤더 RFQ 에 통화가 다른 견적이
+   *  있으면 통화마다 열이 나뉘어 "12-KRW" 처럼 된다. */
+  key: string;
+  /** 통화로 나눈 열이면 그 통화(아니면 ""). */
+  currency_split?: string;
   vrfq_id: number;
   vendor_id: number;
   vendor: string;

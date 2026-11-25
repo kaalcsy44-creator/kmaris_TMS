@@ -6342,7 +6342,7 @@ function CustomerQuoteItemEditor({
     fetchLineBoard(rfqId)
       .then((b) => {
         if (!alive) return;
-        const byVrfq = new Map(b.vendors.map((v) => [String(v.vrfq_id), v.vendor]));
+        const byVrfq = new Map(b.vendors.map((v) => [v.key ?? String(v.vrfq_id), v.vendor]));
         const out: Record<string, LineQuoteOption[]> = {};
         for (const [lid, row] of Object.entries(b.cells)) {
           const opts: LineQuoteOption[] = [];

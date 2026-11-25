@@ -1270,97 +1270,109 @@ def _line_board(s, rfq) -> dict:
 
     for vr in vrfqs:
         declined = (vr.status or "") == _VRFQ_DECLINED
-        quotes = vq_by_vrfq.get(vr.id, [])
-        cols.append({
-            "vrfq_id": vr.id,
-            "vendor_id": vr.vendor_id or 0,
-            "vendor": vendor_names.get(vr.vendor_id, "—"),
-            "kmaris_rfq_no": _rfq_no_disp(vr.kmaris_rfq_no or ""),
-            "sent_at": vr.sent_at or "",
-            "status": vr.status or "",
-            "declined": declined,
-            # 몇 번째 RFQ 로 물은 곳인가(0 = 재요청 없음) · 지금 RFQ 앞의 것인가.
-            "round": vr_round[vr.id] if cur_round > 1 else 0,
-            "old": (vr_round[vr.id] < cur_round
-                    and all(_old_quote(q) for q in vq_by_vrfq.get(vr.id, []))),
-            # 같은 운임을 고쳐 다시 보낸 견적이 두 번 더해지지 않게 같은 줄은 하나로 친다.
-            "charges": list({(c["description"], c["amount"], c["currency"]): c
-                             for q in quotes for c in _doc_charges(lines_src, q)}.values()),
-            "quotes": [{
-                "id": q.id,
-                "vendor_quote_no": q.vendor_quote_no or "",
-                "currency": q.currency or "USD",
-                "received_at": q.received_at or q.received_date or "",
-            } for q in quotes],
-        })
-        # 이 벤더에게 물어본 줄 — 갈라 보냈으면 딜의 일부만 여기 있다.
-        asked = index_doc_by_line(lines_src, vr.items or [])
-        # 그 벤더가 값을 매긴 줄. 견적이 여러 장이면 나중 것이 앞선 것을 덮는다
-        # (같은 줄을 다시 견적해 왔다면 나중 값이 지금 값이다).
-        priced: dict[str, tuple] = {}
-        for q in quotes:
-            alts = doc_line_alts(lines_src, q.items or [], getattr(q, "line_modes", None))
-            for lid, it in index_doc_by_line(lines_src, q.items or [], kits=True).items():
-                priced[lid] = (q, it, _cell_cost(it), alts.get(lid))
-        for idx, ln in enumerate(lines):
-            key = line_id_of(lines_src[idx]) or ln["lid"]
-            hit, got = asked.get(key), priced.get(key)
-            if hit is None and got is None:
-                continue
-            if got is not None:
-                q, it, cost, alts = got
-                low = None
-                if alts:
-                    # 대안이 있는 줄의 값은 그중 가장 싼 것이다 — 합계·최저가는 이 값을 쓴다.
-                    low = _cheapest_alt(alts)
-                    cost = _cell_cost(alts[low]) if low is not None else None
-                    it = {"lead_time": alts[low]["lead_time"] if low is not None else ""}
-                covered = (it.get("covered_by") or "") if isinstance(it, dict) else ""
-                cells.setdefault(ln["lid"], {})[str(vr.id)] = {
-                    # 0원은 값이 아니다 — 견적을 못 냈다는 뜻이라 최저가·채택 후보에서 뺀다.
-                    # 완제품 줄에 포함된 라인은 "included"(값은 대표 라인 칸에 있다).
-                    "state": "included" if covered else (
-                        "quoted" if cost is not None and cost > 0 else "no_price"),
-                    "covered_by": covered,
-                    # 대표 라인 칸 — 이 값이 덮는 라인 전부(완제품). 다른 벤더의 이 라인 값과
-                    # 그대로 견주면 안 된다(그쪽은 이 라인 하나 값이다) — 화면이 표시한다.
-                    "covers": (lambda l: l if len(l) > 1 else [])(
-                        line_ids_of(it) if isinstance(it, dict) and not covered else []),
-                    "unit_cost": cost,
-                    "currency": q.currency or "USD",
-                    "lead_time": (it.get("lead_time") or "") if isinstance(it, dict) else "",
-                    "qty": (it.get("qty") if isinstance(it, dict) else None) or ln["qty"],
-                    "vendor_quote_id": q.id,
+        all_quotes = vq_by_vrfq.get(vr.id, [])
+        # 같은 벤더 RFQ 에 통화가 다른 견적이 있으면(USD·KRW 로 각각 낸 견적) 재견적이 아니라
+        # 나란히 놓고 볼 별개의 견적이다 — 통화마다 열을 나눈다. 같은 통화끼리는 예전처럼
+        # 나중 견적이 앞선 것을 덮는다(재견적).
+        by_cur: dict[str, list] = {}
+        for q in all_quotes:
+            by_cur.setdefault((q.currency or "USD").upper(), []).append(q)
+        groups = list(by_cur.items()) if len(by_cur) > 1 else [("", all_quotes)]
+        for cur_tag, quotes in groups:
+            col_key = f"{vr.id}-{cur_tag}" if cur_tag else str(vr.id)
+            cols.append({
+                # 열 열쇠 — cells[lid][key]. 통화로 나눈 열이면 "12-KRW" 처럼 붙는다.
+                "key": col_key,
+                "currency_split": cur_tag,
+                "vrfq_id": vr.id,
+                "vendor_id": vr.vendor_id or 0,
+                "vendor": vendor_names.get(vr.vendor_id, "—"),
+                "kmaris_rfq_no": _rfq_no_disp(vr.kmaris_rfq_no or ""),
+                "sent_at": vr.sent_at or "",
+                "status": vr.status or "",
+                "declined": declined,
+                # 몇 번째 RFQ 로 물은 곳인가(0 = 재요청 없음) · 지금 RFQ 앞의 것인가.
+                "round": vr_round[vr.id] if cur_round > 1 else 0,
+                "old": (vr_round[vr.id] < cur_round
+                        and all(_old_quote(q) for q in vq_by_vrfq.get(vr.id, []))),
+                # 같은 운임을 고쳐 다시 보낸 견적이 두 번 더해지지 않게 같은 줄은 하나로 친다.
+                "charges": list({(c["description"], c["amount"], c["currency"]): c
+                                 for q in quotes for c in _doc_charges(lines_src, q)}.values()),
+                "quotes": [{
+                    "id": q.id,
                     "vendor_quote_no": q.vendor_quote_no or "",
-                    # 한 줄을 여러 부품으로 쪼개 견적한 세트면 그 줄 수(화면에 "9-line set").
-                    "kit_lines": (it.get("kit_lines") or 0) if isinstance(it, dict) else 0,
-                    # 벤더가 낸 대안들 — 화면은 같은 벤더 안에서 열을 나눠 보인다.
-                    "alts": [{
-                        "idx": i,
-                        "unit_cost": _cell_cost(a),
-                        "lead_time": a.get("lead_time") or "",
-                        "maker": a.get("maker") or "",
-                        "part_no": a.get("part_no") or "",
-                        "description": a.get("description") or "",
-                        "quoted_qty": a.get("quoted_qty"),
-                        "quoted_unit": a.get("quoted_unit") or "",
-                        "quoted_price": a.get("quoted_price"),
-                    } for i, a in enumerate(alts or [])],
-                    "alt_low": low,
-                }
-            elif declined:
-                cells.setdefault(ln["lid"], {})[str(vr.id)] = {"state": "declined"}
-            elif quotes:
-                # 물어봤고 답도 왔는데 이 줄만 빠졌다 — 가장 놓치기 쉬운 칸이다.
-                cells.setdefault(ln["lid"], {})[str(vr.id)] = {"state": "omitted"}
-            else:
-                cells.setdefault(ln["lid"], {})[str(vr.id)] = {"state": "sent"}
-            if got is not None:
-                old = _old_quote(got[0])
-            else:
-                old = vr_round[vr.id] < cur_round
-            if old:
-                cells[ln["lid"]][str(vr.id)]["old"] = True
+                    "currency": q.currency or "USD",
+                    "received_at": q.received_at or q.received_date or "",
+                } for q in quotes],
+            })
+            # 이 벤더에게 물어본 줄 — 갈라 보냈으면 딜의 일부만 여기 있다.
+            asked = index_doc_by_line(lines_src, vr.items or [])
+            # 그 벤더가 값을 매긴 줄. 견적이 여러 장이면 나중 것이 앞선 것을 덮는다
+            # (같은 줄을 다시 견적해 왔다면 나중 값이 지금 값이다).
+            priced: dict[str, tuple] = {}
+            for q in quotes:
+                alts = doc_line_alts(lines_src, q.items or [], getattr(q, "line_modes", None))
+                for lid, it in index_doc_by_line(lines_src, q.items or [], kits=True).items():
+                    priced[lid] = (q, it, _cell_cost(it), alts.get(lid))
+            for idx, ln in enumerate(lines):
+                key = line_id_of(lines_src[idx]) or ln["lid"]
+                hit, got = asked.get(key), priced.get(key)
+                if hit is None and got is None:
+                    continue
+                if got is not None:
+                    q, it, cost, alts = got
+                    low = None
+                    if alts:
+                        # 대안이 있는 줄의 값은 그중 가장 싼 것이다 — 합계·최저가는 이 값을 쓴다.
+                        low = _cheapest_alt(alts)
+                        cost = _cell_cost(alts[low]) if low is not None else None
+                        it = {"lead_time": alts[low]["lead_time"] if low is not None else ""}
+                    covered = (it.get("covered_by") or "") if isinstance(it, dict) else ""
+                    cells.setdefault(ln["lid"], {})[col_key] = {
+                        # 0원은 값이 아니다 — 견적을 못 냈다는 뜻이라 최저가·채택 후보에서 뺀다.
+                        # 완제품 줄에 포함된 라인은 "included"(값은 대표 라인 칸에 있다).
+                        "state": "included" if covered else (
+                            "quoted" if cost is not None and cost > 0 else "no_price"),
+                        "covered_by": covered,
+                        # 대표 라인 칸 — 이 값이 덮는 라인 전부(완제품). 다른 벤더의 이 라인 값과
+                        # 그대로 견주면 안 된다(그쪽은 이 라인 하나 값이다) — 화면이 표시한다.
+                        "covers": (lambda l: l if len(l) > 1 else [])(
+                            line_ids_of(it) if isinstance(it, dict) and not covered else []),
+                        "unit_cost": cost,
+                        "currency": q.currency or "USD",
+                        "lead_time": (it.get("lead_time") or "") if isinstance(it, dict) else "",
+                        "qty": (it.get("qty") if isinstance(it, dict) else None) or ln["qty"],
+                        "vendor_quote_id": q.id,
+                        "vendor_quote_no": q.vendor_quote_no or "",
+                        # 한 줄을 여러 부품으로 쪼개 견적한 세트면 그 줄 수(화면에 "9-line set").
+                        "kit_lines": (it.get("kit_lines") or 0) if isinstance(it, dict) else 0,
+                        # 벤더가 낸 대안들 — 화면은 같은 벤더 안에서 열을 나눠 보인다.
+                        "alts": [{
+                            "idx": i,
+                            "unit_cost": _cell_cost(a),
+                            "lead_time": a.get("lead_time") or "",
+                            "maker": a.get("maker") or "",
+                            "part_no": a.get("part_no") or "",
+                            "description": a.get("description") or "",
+                            "quoted_qty": a.get("quoted_qty"),
+                            "quoted_unit": a.get("quoted_unit") or "",
+                            "quoted_price": a.get("quoted_price"),
+                        } for i, a in enumerate(alts or [])],
+                        "alt_low": low,
+                    }
+                elif declined:
+                    cells.setdefault(ln["lid"], {})[col_key] = {"state": "declined"}
+                elif quotes:
+                    # 물어봤고 답도 왔는데 이 줄만 빠졌다 — 가장 놓치기 쉬운 칸이다.
+                    cells.setdefault(ln["lid"], {})[col_key] = {"state": "omitted"}
+                else:
+                    cells.setdefault(ln["lid"], {})[col_key] = {"state": "sent"}
+                if got is not None:
+                    old = _old_quote(got[0])
+                else:
+                    old = vr_round[vr.id] < cur_round
+                if old:
+                    cells[ln["lid"]][col_key]["old"] = True
 
     vendor_of_quote = {}
     for c in cols:
@@ -1377,7 +1389,7 @@ def _line_board(s, rfq) -> dict:
             if len(c.get("covers") or []) > 1:
                 continue      # 완제품 값은 이 라인 하나의 값과 견줄 수 없다
             if best is None or c["unit_cost"] < best["unit_cost"]:
-                best = {**c, "vrfq_id": int(key)}
+                best = {**c, "vrfq_id": int(key.split("-")[0]), "col": key}
         ln["sent_count"] = len(states)
         # 완제품 줄에 포함된 칸도 '값을 받은 것'으로 센다(그 값은 대표 라인 칸에 있다).
         ln["quoted_count"] = sum(1 for x in states if x in ("quoted", "included"))

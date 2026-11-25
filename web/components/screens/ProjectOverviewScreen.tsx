@@ -1938,7 +1938,7 @@ function VendorLineRows({
   nav: DocNav;
 }) {
   const cells = board.cells[line.lid] ?? {};
-  const vendorOf = new Map(board.vendors.map((v) => [String(v.vrfq_id), v]));
+  const vendorOf = new Map(board.vendors.map((v) => [v.key ?? String(v.vrfq_id), v]));
   const awardQ = line.award?.vendor_quote_id ?? null;
   const bestQ = line.best?.vendor_quote_id ?? null;
   const order: Record<LineCell["state"], number> = { quoted: 2, included: 2, no_price: 3, omitted: 4, sent: 5, declined: 6 };

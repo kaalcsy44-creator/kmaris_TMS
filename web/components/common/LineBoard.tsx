@@ -246,16 +246,16 @@ export default function LineBoard({
   // 이 보드에 나온 통화들 — 비교 통화 목록과 환율 조회 대상.
   // 벤더별 열 수 — 대안을 낸 줄이 있으면 그 벤더 안에서 대안 수만큼 열을 나눈다.
   const spans = useMemo(() => {
-    const m = new Map<number, number>();
+    const m = new Map<string, number>();
     for (const v of vendors) {
       let n = 1;
-      for (const l of lines) n = Math.max(n, cells[l.lid]?.[String(v.vrfq_id)]?.alts?.length ?? 0);
-      m.set(v.vrfq_id, n);
+      for (const l of lines) n = Math.max(n, cells[l.lid]?.[v.key]?.alts?.length ?? 0);
+      m.set(v.key, n);
     }
     return m;
   }, [vendors, lines, cells]);
-  const spanOf = (vrfqId: number) => spans.get(vrfqId) ?? 1;
-  const vendorCols = vendors.reduce((n, v) => n + spanOf(v.vrfq_id), 0);
+  const spanOf = (vrfqId: string) => spans.get(vrfqId) ?? 1;
+  const vendorCols = vendors.reduce((n, v) => n + spanOf(v.key), 0);
 
   const quoteCurs = useMemo(() => {
     const set = new Set<string>();
@@ -339,14 +339,14 @@ export default function LineBoard({
   // 비교 통화로 본 줄별 최저가(통화가 섞여 서버가 최저가를 못 고른 줄도 여기선 고른다).
   // 값이 온 칸 중 하나라도 환산이 안 되면 그 줄은 고르지 않는다.
   const cmpBest = useMemo(() => {
-    const m = new Map<string, { vrfq: number; alt: number | null }>();
+    const m = new Map<string, { vrfq: string; alt: number | null }>();
     if (!cmpCur) return m;
     for (const l of lines) {
-      let best: { vrfq: number; alt: number | null } | null = null;
+      let best: { vrfq: string; alt: number | null } | null = null;
       let bestV: number | null = null;
       let ok = true;
       for (const v of vendors) {
-        const c = cells[l.lid]?.[String(v.vrfq_id)];
+        const c = cells[l.lid]?.[v.key];
         if (c?.state !== "quoted" || c.unit_cost == null || Number(c.unit_cost) <= 0) continue;
         if (c.old) continue;   // 앞선 RFQ 에 받은 값 — 보이기만 하고 최저가로 치지 않는다
         // 완제품 칸(여러 라인 값)은 이 라인 하나의 값과 견줄 수 없다 — 최저가에서 뺀다.
@@ -354,7 +354,7 @@ export default function LineBoard({
         // 칸의 unit_cost 는 대안이 있으면 이미 그중 최저가다.
         const x = conv(c.unit_cost, c.currency);
         if (x == null) { ok = false; break; }
-        if (bestV == null || x < bestV) { bestV = x; best = { vrfq: v.vrfq_id, alt: c.alt_low ?? null }; }
+        if (bestV == null || x < bestV) { bestV = x; best = { vrfq: v.key, alt: c.alt_low ?? null }; }
       }
       if (ok && best != null) m.set(l.lid, best);
     }
@@ -367,7 +367,7 @@ export default function LineBoard({
       if (!l.named || l.award) continue;
       if (cmpCur) {
         const b = cmpBest.get(l.lid);
-        const id = b ? cells[l.lid]?.[String(b.vrfq)]?.vendor_quote_id : undefined;
+        const id = b ? cells[l.lid]?.[b.vrfq]?.vendor_quote_id : undefined;
         if (b && id) out.push({ lid: l.lid, vendor_quote_id: id, alt: b.alt });
       } else if (l.best?.vendor_quote_id) {
         out.push({ lid: l.lid, vendor_quote_id: l.best.vendor_quote_id, alt: l.best.alt_low ?? null });
@@ -376,10 +376,10 @@ export default function LineBoard({
     return out;
   }, [lines, cells, cmpCur, cmpBest]);
   const bestCount = bestTodo.length;
-  const isBestCell = (l: BoardLine, vrfqId: number, alt: number | null = null) => {
+  const isBestCell = (l: BoardLine, vrfqId: string, alt: number | null = null) => {
     const b = cmpCur ? cmpBest.get(l.lid) : null;
     if (cmpCur) return !!b && b.vrfq === vrfqId && (b.alt ?? null) === alt;
-    return !!l.best && l.best.vrfq_id === vrfqId && (l.best.alt_low ?? null) === alt;
+    return !!l.best && (l.best.col ?? String(l.best.vrfq_id)) === vrfqId && (l.best.alt_low ?? null) === alt;
   };
   /** 이 칸(대안이면 그 대안)이 채택된 것인가. */
   const isAwardCell = (l: BoardLine, c: LineCell | undefined, alt: number | null = null) =>
@@ -409,12 +409,12 @@ export default function LineBoard({
   // 비교 통화를 골랐으면 환산 합계를 한 줄 더 붙인다. 벤더마다 답한 줄 수가 다르면 합계끼리
   // 바로 견줄 수 없으므로 "n/총 lines" 를 함께 보인다.
   const vendorTotals = useMemo(() => {
-    const out = new Map<number, { sums: [string, number][]; n: number; cmp: number | null }>();
+    const out = new Map<string, { sums: [string, number][]; n: number; cmp: number | null }>();
     for (const v of vendors) {
       const by = new Map<string, number>();
       let n = 0;
       for (const l of lines) {
-        const c = cells[l.lid]?.[String(v.vrfq_id)];
+        const c = cells[l.lid]?.[v.key];
         if (c?.state !== "quoted" || c.unit_cost == null) continue;
         const cur = (c.currency || "USD").toUpperCase();
         by.set(cur, (by.get(cur) ?? 0) + Number(c.unit_cost) * Number(l.qty || 1));
@@ -434,7 +434,7 @@ export default function LineBoard({
           cmp += x;
         }
       }
-      out.set(v.vrfq_id, { sums, n, cmp });
+      out.set(v.key, { sums, n, cmp });
     }
     return out;
   }, [vendors, lines, cells, cmpCur, conv]);
@@ -445,7 +445,7 @@ export default function LineBoard({
   const chargeTitle = (v: LineBoardData["vendors"][number]): string =>
     (v.charges ?? []).map((c) => `${c.description}: ${money(c.amount, c.currency)}`).join("\n");
   /** 합계 칸의 줄들 — 통화별 합계, 환산 합계(필요할 때), 답한 줄 수. */
-  const vendorTotalLines = (vrfqId: number): string[] => {
+  const vendorTotalLines = (vrfqId: string): string[] => {
     const t = vendorTotals.get(vrfqId);
     if (!t || !t.n) return [];
     const showCmp = cmpCur && (t.sums.length > 1 || t.sums[0][0] !== cmpCur);
@@ -467,8 +467,8 @@ export default function LineBoard({
 
   function buildPrint(): PrintBook {
     const meta = data?.meta;
-    const cellText = (l: BoardLine, vrfqId: number, alt: LineAlt | null = null): string => {
-      const c = alt ? altCell(cells[l.lid][String(vrfqId)], alt) : cells[l.lid]?.[String(vrfqId)];
+    const cellText = (l: BoardLine, vrfqId: string, alt: LineAlt | null = null): string => {
+      const c = alt ? altCell(cells[l.lid][vrfqId], alt) : cells[l.lid]?.[vrfqId];
       if (!c) return "";
       if (c.state === "declined") return "✕ declined";
       if (c.state === "omitted") return "– not quoted";
@@ -488,22 +488,22 @@ export default function LineBoard({
       ].filter(Boolean).join("\n");
     };
     /** 벤더 한 곳의 인쇄 칸들 — 화면처럼 대안 수만큼 나눈다. */
-    const vendorCells = (l: BoardLine, vrfqId: number): string[] => {
-      const alts = cells[l.lid]?.[String(vrfqId)]?.alts ?? [];
+    const vendorCells = (l: BoardLine, vrfqId: string): string[] => {
+      const alts = cells[l.lid]?.[vrfqId]?.alts ?? [];
       const n = spanOf(vrfqId);
       if (!alts.length) return [cellText(l, vrfqId), ...Array<string>(n - 1).fill("")];
       return Array.from({ length: n }, (_, i) => (alts[i] ? cellText(l, vrfqId, alts[i]) : ""));
     };
     /** 벤더별로 한 값 + 대안 열 수만큼의 빈 칸 — 합계 줄용. */
     const footCells = (fn: (v: LineBoardData["vendors"][number]) => string): string[] =>
-      vendors.flatMap((v) => [fn(v), ...Array<string>(spanOf(v.vrfq_id) - 1).fill("")]);
+      vendors.flatMap((v) => [fn(v), ...Array<string>(spanOf(v.key) - 1).fill("")]);
     const lastLabel = mode === "award" ? "Buying from" : "Status";
     const rows: string[][] = lines.map((l) => [
       String(l.no),
       l.part_no || "",
       l.description || "",
       `${Number(l.qty || 1)}${l.unit ? ` ${l.unit}` : ""}`,
-      ...vendors.flatMap((v) => vendorCells(l, v.vrfq_id)),
+      ...vendors.flatMap((v) => vendorCells(l, v.key)),
       l.award
         ? [l.award.vendor, awardedAlt(l) ? `Option ${awardedAlt(l)!.idx + 1}` : "",
            money(l.award.unit_cost, l.award.currency), cmpText(l.award.unit_cost, l.award.currency)]
@@ -518,7 +518,7 @@ export default function LineBoard({
     if (hasVendorTotals) {
       rows.push([
         "", "", "Quote total", "",
-        ...footCells((v) => vendorTotalLines(v.vrfq_id).join("\n")),
+        ...footCells((v) => vendorTotalLines(v.key).join("\n")),
         "",
       ]);
     }
@@ -551,8 +551,8 @@ export default function LineBoard({
         { label: "Part No.", width: 11 },
         { label: "Description", width: 16 },
         { label: "Qty", width: 4, align: "right" },
-        ...vendors.flatMap((v) => Array.from({ length: spanOf(v.vrfq_id) }, (_, i) => ({
-          label: `${v.vendor}${spanOf(v.vrfq_id) > 1 ? ` (${i + 1})` : ""}\n${v.kmaris_rfq_no}`,
+        ...vendors.flatMap((v) => Array.from({ length: spanOf(v.key) }, (_, i) => ({
+          label: `${v.vendor}${spanOf(v.key) > 1 ? ` (${i + 1})` : ""}\n${v.kmaris_rfq_no}`,
           width: 11,
           align: "right" as const,
         }))),
@@ -654,9 +654,14 @@ export default function LineBoard({
               <th className="lb-desc">Description</th>
               <th className="lb-qty">Qty</th>
               {vendors.map((v) => (
-                <th key={v.vrfq_id} colSpan={spanOf(v.vrfq_id)} className={"lb-v" + (v.declined ? " out" : "") + (v.old ? " old" : "")}>
+                <th key={v.key} colSpan={spanOf(v.key)} className={"lb-v" + (v.declined ? " out" : "") + (v.old ? " old" : "")}>
                   <VendorName entries={[{ name: v.vendor, state: v.declined ? "declined" : v.quotes.length ? "quoted" : "plain" }]} />
                   <span className="lb-v-no">{v.kmaris_rfq_no}</span>
+                  {v.currency_split ? (
+                    <span className="lb-v-cur" title={`This vendor sent separate quotes in different currencies — this column is the ${v.currency_split} quote (${v.quotes.map((q) => q.vendor_quote_no).filter(Boolean).join(", ") || "no ref."})`}>
+                      {v.currency_split} quote
+                    </span>
+                  ) : null}
                   {v.round ? <span className={`rfq-round-tag${v.old ? " old" : ""}`} title={v.old ? "Asked for an earlier RFQ — shown for reference, not counted as sourced" : undefined}>RFQ #{v.round}</span> : null}
                 </th>
               ))}
@@ -689,18 +694,18 @@ export default function LineBoard({
                 <td className="lb-desc">{l.description || <span className="muted">—</span>}</td>
                 <td className="lb-qty">{Number(l.qty || 1)}{l.unit ? ` ${l.unit}` : ""}</td>
                 {vendors.flatMap((v) => {
-                  const c = cells[l.lid]?.[String(v.vrfq_id)];
-                  const span = spanOf(v.vrfq_id);
+                  const c = cells[l.lid]?.[v.key];
+                  const span = spanOf(v.key);
                   const canMode = mode === "award" && !busy && !!c?.vendor_quote_id;
                   if (c?.alts?.length) {
                     const tds = c.alts.map((a) => {
                       const ac = altCell(c, a);
                       return (
                         <Cell
-                          key={`${v.vrfq_id}-${a.idx}`}
+                          key={`${v.key}-${a.idx}`}
                           cell={ac}
                           alt={a}
-                          isBest={isBestCell(l, v.vrfq_id, a.idx)}
+                          isBest={isBestCell(l, v.key, a.idx)}
                           cmp={ac.state === "quoted" ? cmpText(a.unit_cost, c.currency) : ""}
                           isAward={isAwardCell(l, c, a.idx)}
                           canAward={mode === "award" && l.named && !busy && ac.state === "quoted"}
@@ -714,15 +719,15 @@ export default function LineBoard({
                       );
                     });
                     for (let i = c.alts.length; i < span; i++)
-                      tds.push(<td key={`${v.vrfq_id}-pad-${i}`} className="lb-c empty" />);
+                      tds.push(<td key={`${v.key}-pad-${i}`} className="lb-c empty" />);
                     return tds;
                   }
                   return [
                     <Cell
-                      key={v.vrfq_id}
+                      key={v.key}
                       cell={c}
                       colSpan={span}
-                      isBest={!!c && isBestCell(l, v.vrfq_id)}
+                      isBest={!!c && isBestCell(l, v.key)}
                       cmp={c?.state === "quoted" ? cmpText(c.unit_cost, c.currency) : ""}
                       isAward={isAwardCell(l, c)}
                       canAward={mode === "award" && l.named && !busy
@@ -771,7 +776,7 @@ export default function LineBoard({
                     Other charges (not on a line)
                   </td>
                   {vendors.map((v) => (
-                    <td key={v.vrfq_id} colSpan={spanOf(v.vrfq_id)} className="lb-foot lb-c num"
+                    <td key={v.key} colSpan={spanOf(v.key)} className="lb-foot lb-c num"
                         title={chargeTitle(v)}>
                       {chargeText(v)}
                     </td>
@@ -785,9 +790,9 @@ export default function LineBoard({
                     Quote total
                   </td>
                   {vendors.map((v) => {
-                    const ls = vendorTotalLines(v.vrfq_id);
+                    const ls = vendorTotalLines(v.key);
                     return (
-                      <td key={v.vrfq_id} colSpan={spanOf(v.vrfq_id)} className="lb-foot lb-c num">
+                      <td key={v.key} colSpan={spanOf(v.key)} className="lb-foot lb-c num">
                         {ls.length ? (
                           <>
                             <b>{ls[0]}</b>

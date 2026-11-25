@@ -23106,3 +23106,7 @@ table.mini.items-edit.rre-table td.rre-st select { width: 100%; height: 28px; bo
 .form-field.rre-notes textarea { min-height: 64px; }
 .lb-v.old { opacity: 0.72; }
 @media (max-width: 720px) { .rfq-round-bar { flex-wrap: wrap; } }
+
+/* 비교표 — 한 벤더가 통화별로 따로 낸 견적의 열 표시 */
+.lb-v .lb-v-cur { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 8px;
+  background: #fff4e0; color: #8a5a00; font-size: 11px; font-weight: 600; }
