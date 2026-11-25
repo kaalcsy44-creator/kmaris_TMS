@@ -1198,6 +1198,8 @@ export type Freight = {
   currency: string;
   /** 청구 통화 1 = ? KRW. */
   krw_per: number;
+  /** PI 뒤에 CI 에서 더 얹은 운임 중 아직 매출채권(AR)에 없는 몫. */
+  unbilled?: { order_id: number; amount: number; currency: string; main_paid: boolean }[];
   totals: { cost_krw: number; paid_krw: number; charged_krw: number; collected_krw: number };
 };
 const frtBase = (rfqId: number) => `/api/admin/projects/${rfqId}/freight`;

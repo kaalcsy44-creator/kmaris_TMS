@@ -153,6 +153,28 @@ def _doc_charges(terms) -> dict:
     return {k: round(_num(t.get(k)), 2) for k in ("freight", "packing", "insurance")}
 
 
+def _unbilled_on_ci(pi, cis, ars) -> tuple[float, str]:
+    """PI 뒤에 CI 에서 새로 얹은 운임 — (금액, 통화). PI·본 청구·배송비 청구서에 이미 선 만큼은 뺀다.
+
+    PI 를 EXW 로 끊어 선입금까지 받은 뒤 CI 를 DAP 로 바꾸며 운임을 더하는 일이 있다. 이때 CI 의
+    운임은 PI 와 같은 돈이 아니라 추가 청구이고, 매출채권(AR)은 PI 로 서 있어 그만큼 빠져 있다.
+    CI 는 운임·포장·보험을 한 줄로 받기도 해서 셋의 합으로 견준다. 통화가 다르면 견주지 않는다."""
+    cur = (pi.currency or "USD").upper() if pi is not None else ""
+    if pi is None or not cis or any((c.currency or "USD").upper() != cur for c in cis):
+        return 0.0, cur
+    same = [a for a in ars if (a.currency or "USD").upper() == cur]
+    on_ci = [_doc_charges(c.terms) for c in cis]
+    main = sum(sum(_doc_charges(a.charges).values()) for a in same if (a.kind or "main") != "extra")
+    extra = sum((a.invoice_amount or 0) / (1 + (a.vat_rate or 0)) for a in same if _freight_only(a))
+    over = sum(sum(c.values()) for c in on_ci) - max(sum(_doc_charges(pi.terms).values()), main) - extra
+    over = round(min(over, sum(c["freight"] for c in on_ci)), 2)
+    return (over if over >= 0.01 else 0.0), cur
+
+
+def _freight_only(a) -> bool:
+    return (a.kind or "") == "extra" and (a.notes or "").startswith(FREIGHT_AR_MARK)
+
+
 def planned_freight_krw(s, rfq_id: int) -> float:
     """고르기만 하고 아직 Finance 에 올리지 않은 배송비(원화) — 딜 요약의 마진이 쓴다.
     (올린 것은 지급대장에서 세고, buyer 가 직접 내는 딜은 우리 원가가 아니다.)"""
@@ -199,7 +221,7 @@ def project_freight(rfq_id: int):
                     paid_krw += out["cost_krw"]
 
         # ── 고객에게 청구한 배송비 — 문서마다 ──
-        docs, charged_krw, collected_krw = [], 0.0, 0.0
+        docs, charged_krw, collected_krw, unbilled = [], 0.0, 0.0, []
         pis = [(o, _latest_pi(s, o.id)) for o in orders]
         if not any(pi for _, pi in pis):
             pis = [(None, _project_pi(s, rfq_id))]
@@ -217,15 +239,22 @@ def project_freight(rfq_id: int):
                 docs.append({"kind": "ci", "id": ci.id, "order_id": o.id, "no": ci.ci_no or f"CI #{i + 1}",
                              "date": ci.date or "", "currency": (ci.currency or "USD").upper(),
                              **_doc_charges(ci.terms)})
-            # 같은 돈을 PI 와 CI 에 각각 적는다 — 청구액은 PI 하나(없으면 CI 합)로만 센다.
+            # 같은 돈을 PI 와 CI 에 각각 적는다 — 겹치는 몫은 PI(없으면 CI 합)로 한 번만 세고,
+            # PI 뒤에 CI 에서 더 얹은 운임만 보탠다(아직 매출채권에 없는 돈 = unbilled).
             if pi is not None:
-                amt = _krw_in(_doc_charges(pi.terms)["freight"], pi.currency or "USD", _ym(pi.date))
+                pcur = (pi.currency or "USD").upper()
+                on_ar = sum(_doc_charges(a.charges)["freight"] for a in mains if (a.currency or "USD").upper() == pcur)
+                amt = _krw_in(max(_doc_charges(pi.terms)["freight"], on_ar), pcur, _ym(pi.date))
+                over, _cur = _unbilled_on_ci(pi, cis, ars)
+                if over:
+                    unbilled.append({"order_id": o.id, "amount": over, "currency": _cur, "main_paid": paid_main})
+                    charged_krw += _krw_in(over, _cur, _ym(cis[0].date))
             else:
                 amt = sum(_krw_in(_doc_charges(c.terms)["freight"], c.currency or "USD", _ym(c.date)) for c in cis)
             charged_krw += amt
             collected_krw += amt if paid_main else 0.0
             for a in ars:
-                freight_only = (a.kind or "") == "extra" and (a.notes or "").startswith(FREIGHT_AR_MARK)
+                freight_only = _freight_only(a)
                 if (a.kind or "main") == "extra" and not freight_only:
                     continue
                 ar_rows.append({"id": a.id, "order_id": o.id, "kind": a.kind or "main",
@@ -263,10 +292,12 @@ def project_freight(rfq_id: int):
             "rfq_id": rfq_id,
             "info": {"payer": payer, "account_no": info.get("account_no") or "", "note": info.get("note") or ""},
             "orders": [{"id": o.id, "po_no": o.po_no or "",
-                        "incoterms": (o.terms or {}).get("incoterms") or "",
+                        # 선적 조건은 CI 가 최신이다 — P/O 는 EXW 인데 CI 에서 DAP 로 바뀐 딜이 있다.
+                        "incoterms": next((t for t in ((c.terms or {}).get("incoterms") for c in _order_cis(s, o.id)) if t), "")
+                                     or (o.terms or {}).get("incoterms") or "",
                         "packages": [{"ci_id": c.id, "ci_no": c.ci_no or ""} for c in _order_cis(s, o.id)]}
                        for o in orders],
-            "rows": rows, "docs": docs, "ar": ar_rows, "other_payables": others,
+            "rows": rows, "docs": docs, "ar": ar_rows, "unbilled": unbilled, "other_payables": others,
             "vendor_freight": vendor_freight,
             "currency": cur, "krw_per": round(per, 4),
             "totals": {"cost_krw": round(cost_krw), "paid_krw": round(paid_krw),

@@ -133,7 +133,16 @@ export default function FreightPanel({
   if (buyerPays && active.length) warnings.push("Buyer pays the carrier, but a freight payment is registered in Finance for this deal.");
   if (payer === "rebill" && t.cost_krw > 0 && t.charged_krw <= 0) warnings.push("Freight cost is not charged to the buyer yet — set it on the PI / CI or create a separate invoice.");
   if (payer !== "buyer" && t.charged_krw > 0 && t.cost_krw <= 0) warnings.push("Freight is charged to the buyer, but the actual cost is not recorded — this deal's profit looks larger than it is.");
-  if (pi && cis.length && Math.abs(piCharge - ciCharge) >= 0.01) {
+  // CI 에서 더 얹은 운임 — 청구액에는 들어가지만 매출채권이 없어 수금 대장에 안 보인다.
+  const unbilled = d.unbilled ?? [];
+  for (const u of unbilled) {
+    warnings.push(`${fmt(u.amount, u.currency)} of freight is on the CI but not in receivables (AR) — ${
+      u.main_paid ? "the PI was already collected without it, so create a separate freight invoice below."
+        : "set the same freight on the PI, or create a separate freight invoice below."}`);
+  }
+  // 배송비 청구서를 따로 낸 만큼은 PI 와 CI 가 다른 것이 맞다.
+  const extraCharge = d.ar.reduce((s, a) => s + (a.freight_only ? a.freight : 0), 0);
+  if (pi && cis.length && !unbilled.length && Math.abs(piCharge - ciCharge) >= 0.01 && !(ciCharge > piCharge && ciCharge - piCharge <= extraCharge + 0.01)) {
     warnings.push(`Charges differ: PI ${fmt(piCharge, pi.currency)} vs CI ${cis.length > 1 ? "total " : ""}${fmt(ciCharge, cis[0].currency)}.`);
   }
 
@@ -388,15 +397,15 @@ export default function FreightPanel({
         ) : null}
 
         {editable && d.orders.length && !buyerPays ? (
-          <SeparateInvoice d={d} orderId={orderId || d.orders[0].id} busy={!!busy}
-                           suggest={Math.max(0, inCur(t.cost_krw - t.charged_krw))}
+          <SeparateInvoice d={d} orderId={unbilled[0]?.order_id || orderId || d.orders[0].id} busy={!!busy}
+                           suggest={unbilled[0]?.amount ?? Math.max(0, inCur(t.cost_krw - t.charged_krw))}
                            defaultDesc={`Freight charge${active[0] ? ` — ${active[0].carrier}${active[0].tracking_no ? ` ${active[0].tracking_no}` : ""}` : ""}`}
                            onCreate={(b) => run("charge", async () => {
                              const r = await chargeFreight(rfqId, { target: "invoice", ...b });
                              return `Invoice ${r.invoice_no} created — print and collect it in stage 9 (AR).`;
                            })} />
         ) : null}
-        <p className="hint-inline frt-note">Freight on the PI and on the CI is the same money, so only the PI (or the CI total when there is no PI) counts as charged, plus freight-only invoices.</p>
+        <p className="hint-inline frt-note">Freight on both the PI and the CI is counted once. Freight added on the CI after the PI counts as an extra charge, together with freight-only invoices.</p>
       </div>
     </div>
   );
