@@ -8942,6 +8942,8 @@ table.mini .num {
   font-size: 12px;
   color: var(--muted);
 }
+/* 자동 입력 분석을 멈추는 단추. */
+.ocr-cancel { flex: none; white-space: nowrap; }
 
 .action-block {
   margin-top: 18px;

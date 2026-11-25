@@ -25,6 +25,7 @@ import { LookupNote, SanctionWarning, VesselLookupButton } from "@/components/co
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
 import Modal from "@/components/common/Modal";
 import { imageFromClipboard } from "@/lib/imagePaste";
+import { orCancelled, useScanCancel } from "@/lib/useScanCancel";
 import { useEditGate } from "@/lib/viewMode";
 import CustomerSelect from "@/components/common/CustomerSelect";
 import ContactMultiSelect from "@/components/common/ContactMultiSelect";
@@ -184,6 +185,7 @@ export default function NewRfqForm({
   ]);
   const [busy, setBusy] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
+  const scan = useScanCancel();
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [ocrMsg, setOcrMsg] = useState<string | null>(null);
@@ -368,6 +370,7 @@ export default function NewRfqForm({
     const files = input instanceof File ? [input] : Array.from(input);
     if (files.length === 0) return;
     setOcrBusy(true);
+    const sig = scan.begin();
     setErr(null);
     setOcrMsg(null);
     try {
@@ -377,7 +380,8 @@ export default function NewRfqForm({
       let ok = 0;
       let headerFilled = false;
       for (const file of files) {
-        const r = await parseRfqPdf(file);
+        const r = await orCancelled(parseRfqPdf(file, sig), sig);
+        if (!r) break;   // 취소 — 먼저 끝난 파일까지만 남긴다
         ok++;
         // 업로드한 소스 파일 메타 기록(파일명·타입·추출 아이템수).
         newFiles.push({
@@ -423,6 +427,10 @@ export default function NewRfqForm({
           }
         }
       }
+      if (sig.aborted && !ok) {
+        setOcrMsg("Cancelled — nothing was filled.");
+        return;
+      }
       // 기존 아이템(빈 placeholder 행 제외)에 이번 추출분을 누적.
       const keptCount = items.filter(
         (it) => it.part_no.trim() || it.description.trim()
@@ -437,16 +445,16 @@ export default function NewRfqForm({
       // 소스 파일 목록에 누적(중복 파일명은 그대로 추가 — 사용자가 개별 삭제 가능).
       if (newFiles.length) setOcrFiles((prev) => [...prev, ...newFiles]);
       // 자동입력에 쓴 원본(고객이 보낸 RFQ 문서·캡처)은 드라이브 `01 RFQ` 에도 남긴다.
-      if (driveOn) setIntake((v) => ({ ...v, files: [...v.files, ...files] }));
+      if (driveOn) setIntake((v) => ({ ...v, files: [...v.files, ...files.slice(0, ok)] }));
       setOcrMsg(
-        `Extracted: +${collected.length} item(s)${
+        `${sig.aborted ? "Cancelled · " : ""}Extracted: +${collected.length} item(s)${
           files.length > 1 ? ` from ${ok} files` : ""
         } · ${totalAfter} total${firstHint ? ` · Customer hint ${firstHint}` : ""}`
       );
     } catch (e) {
       setErr(e instanceof Error ? e.message : "OCR extraction failed");
     } finally {
-      setOcrBusy(false);
+      setOcrBusy(scan.end(sig));
     }
   }
 
@@ -960,7 +968,10 @@ export default function NewRfqForm({
             disabled={ocrBusy}
           />
           {ocrBusy ? (
-            <span className="hint-inline">AI analyzing…</span>
+            <>
+              <span className="hint-inline">AI analyzing…</span>
+              <button type="button" className="btn sm ocr-cancel" onClick={scan.cancel}>✕ Cancel</button>
+            </>
           ) : ocrMsg ? (
             <span className="action-ok">{ocrMsg}</span>
           ) : (

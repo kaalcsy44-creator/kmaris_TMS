@@ -89,6 +89,7 @@ import type {
 import SourceFilesList from "@/components/common/SourceFilesList";
 import { withDefaultTerms, NO_WARRANTY } from "@/lib/terms";
 import { useEditGate } from "@/lib/viewMode";
+import { orCancelled, useScanCancel } from "@/lib/useScanCancel";
 
 type OrderOpt = PoWorkOptions["orders"][number];
 type PoOpt = PoWorkOptions["purchase_orders"][number];
@@ -364,6 +365,7 @@ function OrderDetailModal({
   const [terms, setTerms] = useState<QuotationTerms>(withDefaultTerms());
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
   const [ocrBusy, setOcrBusy] = useState(false);
+  const scan = useScanCancel();
   const [ocrMsg, setOcrMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -434,6 +436,7 @@ function OrderDetailModal({
     const files = input instanceof File ? [input] : Array.from(input);
     if (!files.length) return;
     setOcrBusy(true);
+    const sig = scan.begin();
     setErr(null);
     setOcrMsg(null);
     try {
@@ -443,7 +446,8 @@ function OrderDetailModal({
       let headerFilled = false;
       let hint = "";
       for (const file of files) {
-        const r = await parseOrderPdf(file);
+        const r = await orCancelled(parseOrderPdf(file, sig), sig);
+        if (!r) break;   // 취소 — 먼저 끝난 파일까지만 남긴다
         ok++;
         newFiles.push({
           name: file.name || "(unnamed)",
@@ -476,6 +480,10 @@ function OrderDetailModal({
           );
         }
       }
+      if (sig.aborted && !ok) {
+        setOcrMsg("Cancelled — nothing was filled.");
+        return;
+      }
       setOcrFiles((prev) => [...prev, ...newFiles]);
       if (collected.length) {
         setItems((prev) => {
@@ -484,14 +492,14 @@ function OrderDetailModal({
         });
       }
       setOcrMsg(
-        `Extracted: +${collected.length} item(s)${files.length > 1 ? ` from ${ok} files` : ""}${
+        `${sig.aborted ? "Cancelled · " : ""}Extracted: +${collected.length} item(s)${files.length > 1 ? ` from ${ok} files` : ""}${
           hint ? ` · Customer hint ${hint}` : ""
         }`
       );
     } catch (e) {
       setErr(e instanceof Error ? e.message : "File parsing failed");
     } finally {
-      setOcrBusy(false);
+      setOcrBusy(scan.end(sig));
     }
   }
 
@@ -616,7 +624,10 @@ function OrderDetailModal({
                 disabled={ocrBusy || busy}
               />
               {ocrBusy ? (
-                <span className="hint-inline">Analyzing…</span>
+                <>
+                  <span className="hint-inline">Analyzing…</span>
+                  <button type="button" className="btn sm ocr-cancel" onClick={scan.cancel}>✕ Cancel</button>
+                </>
               ) : ocrMsg ? (
                 <span className="action-ok">{ocrMsg}</span>
               ) : (
@@ -1527,6 +1538,7 @@ function CustomerPoNewForm({
   const [ocrFiles, setOcrFiles] = useState<RfqSourceFile[]>([]); // Auto-fill 소스 파일 목록(영구 보관)
   const [busy, setBusy] = useState(false);
   const [ocrBusy, setOcrBusy] = useState(false);
+  const scan = useScanCancel();
   const [showOcr, setShowOcr] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [ocrMsg, setOcrMsg] = useState<string | null>(null);
@@ -1579,6 +1591,7 @@ function CustomerPoNewForm({
     const files = input instanceof File ? [input] : Array.from(input);
     if (!files.length) return;
     setOcrBusy(true);
+    const sig = scan.begin();
     setErr(null);
     setOcrMsg(null);
     try {
@@ -1588,7 +1601,8 @@ function CustomerPoNewForm({
       let headerFilled = false;
       let hint = "";
       for (const file of files) {
-        const r = await parseOrderPdf(file);
+        const r = await orCancelled(parseOrderPdf(file, sig), sig);
+        if (!r) break;   // 취소 — 먼저 끝난 파일까지만 남긴다
         ok++;
         newFiles.push({
           name: file.name || "(unnamed)",
@@ -1621,6 +1635,10 @@ function CustomerPoNewForm({
           );
         }
       }
+      if (sig.aborted && !ok) {
+        setOcrMsg("Cancelled — nothing was filled.");
+        return;
+      }
       setOcrFiles((prev) => [...prev, ...newFiles]);
       if (collected.length) {
         setItems((prev) => {
@@ -1629,14 +1647,14 @@ function CustomerPoNewForm({
         });
       }
       setOcrMsg(
-        `Extracted: +${collected.length} item(s)${files.length > 1 ? ` from ${ok} files` : ""}${
+        `${sig.aborted ? "Cancelled · " : ""}Extracted: +${collected.length} item(s)${files.length > 1 ? ` from ${ok} files` : ""}${
           hint ? ` · Customer hint ${hint}` : ""
         }`
       );
     } catch (e) {
       setErr(e instanceof Error ? e.message : "OCR extraction failed");
     } finally {
-      setOcrBusy(false);
+      setOcrBusy(scan.end(sig));
     }
   }
 
@@ -1722,7 +1740,10 @@ function CustomerPoNewForm({
             disabled={ocrBusy}
           />
           {ocrBusy ? (
-            <span className="hint-inline">AI is analyzing the PDF…</span>
+            <>
+              <span className="hint-inline">AI is analyzing the PDF…</span>
+              <button type="button" className="btn sm ocr-cancel" onClick={scan.cancel}>✕ Cancel</button>
+            </>
           ) : ocrMsg ? (
             <span className="action-ok">{ocrMsg}</span>
           ) : (

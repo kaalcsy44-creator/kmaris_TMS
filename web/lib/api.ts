@@ -237,11 +237,12 @@ async function del<T>(path: string): Promise<T> {
   return handle<T>(res, path);
 }
 
-async function postForm<T>(path: string, body: FormData): Promise<T> {
+async function postForm<T>(path: string, body: FormData, signal?: AbortSignal): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: authHeaders(),
     body,
+    signal,
   });
   return handle<T>(res, path);
 }
@@ -683,10 +684,10 @@ export function deleteRfq(rfqId: number): Promise<{ ok: boolean; rfq_no: string 
   return del(`/api/admin/rfq/${rfqId}`);
 }
 
-export function parseRfqPdf(file: File): Promise<RfqOcrResult> {
+export function parseRfqPdf(file: File, signal?: AbortSignal): Promise<RfqOcrResult> {
   const fd = new FormData();
   fd.append("file", file);
-  return postForm<RfqOcrResult>("/api/admin/ocr/rfq", fd);
+  return postForm<RfqOcrResult>("/api/admin/ocr/rfq", fd, signal);
 }
 
 // 명함(사진·캡쳐·PDF) 인식 — Customer/Vendor 등록 폼 자동 입력용.
@@ -715,10 +716,10 @@ export function parseVendorBill(file: File): Promise<import("./types").VendorBil
   return postForm("/api/admin/ap/ocr", fd);
 }
 
-export function parseOrderPdf(file: File): Promise<OrderOcrResult> {
+export function parseOrderPdf(file: File, signal?: AbortSignal): Promise<OrderOcrResult> {
   const fd = new FormData();
   fd.append("file", file);
-  return postForm<OrderOcrResult>("/api/admin/ocr/order", fd);
+  return postForm<OrderOcrResult>("/api/admin/ocr/order", fd, signal);
 }
 
 export function fetchPipeline(
@@ -3037,10 +3038,10 @@ export type VendorQuoteParseResult = {
   remarks?: string | null;
 };
 
-export function parseVendorQuoteFile(file: File): Promise<VendorQuoteParseResult> {
+export function parseVendorQuoteFile(file: File, signal?: AbortSignal): Promise<VendorQuoteParseResult> {
   const fd = new FormData();
   fd.append("file", file);
-  return postForm<VendorQuoteParseResult>("/api/admin/vendor-quote-parse", fd);
+  return postForm<VendorQuoteParseResult>("/api/admin/vendor-quote-parse", fd, signal);
 }
 
 // 해당일의 고시환율(수출입은행) 조회. source: "exim"(고시값) | "fixed"(폴백 고정환율).

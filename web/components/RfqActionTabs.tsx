@@ -106,6 +106,7 @@ import { invalidateCache } from "@/lib/useCachedData";
 import VendorSuggest from "./common/VendorSuggest";
 import CustomerName from "./common/CustomerName";
 import { imageFromClipboard } from "@/lib/imagePaste";
+import { orCancelled, useScanCancel } from "@/lib/useScanCancel";
 import Modal from "./common/Modal";
 import { nowLocalInput } from "./common/ActivityNoteForm";
 import BaseMetaRows, { ModalTitle } from "./common/BaseMeta";
@@ -2232,6 +2233,7 @@ function VendorQuoteDetailModal({
   const rawFiles = useRef<File[]>([]);
   const keptRaw = () => rawFiles.current.filter((f) => ocrFiles.some((o) => o.name === (f.name || "(unnamed)")));
   const [parseMsg, setParseMsg] = useState<string | null>(null);
+  const scan = useScanCancel();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [showOcr, setShowOcr] = useState(false); // Auto-fill 도구 접힘/펼침(1단계와 동일 포맷)
@@ -2292,6 +2294,7 @@ function VendorQuoteDetailModal({
     const files = input instanceof File ? [input] : Array.from(input);
     if (!files.length) return;
     setBusy(true);
+    const sig = scan.begin();
     setErr(null);
     setParseMsg(null);
     try {
@@ -2300,7 +2303,8 @@ function VendorQuoteDetailModal({
       const newFiles: RfqSourceFile[] = [];
       let next = items;
       for (const file of files) {
-        const r = await parseVendorQuoteFile(file);
+        const r = await orCancelled(parseVendorQuoteFile(file, sig), sig);
+        if (!r) break;   // 취소 — 먼저 끝난 파일까지만 남긴다
         const parsed = r.items || [];
         // 견적서 머리글의 견적번호는 비어 있을 때만, 통화는 표에 아직 단가가 없을 때만 채운다.
         const pno = (r.vendor_quote_no || "").trim();
@@ -2323,18 +2327,23 @@ function VendorQuoteDetailModal({
         next = accumulateVendorItems(next, parsed);
         setItems(next);
       }
+      scan.end(sig);
+      if (sig.aborted && !ok) {
+        setParseMsg("Cancelled — nothing was filled.");
+        return;
+      }
       // 읽어 온 줄은 이름(lid)이 없다 — 딜의 어느 품목 줄인지 바로 짝지어 둔다.
       setItems(await lm.run(next));
       setOcrFiles((prev) => [...prev, ...newFiles]);
       setParseMsg(
         added
-          ? `Auto-filled ${added} item(s)${files.length > 1 ? ` from ${ok} files` : ""} — review and edit`
+          ? `${sig.aborted ? "Cancelled · " : ""}Auto-filled ${added} item(s)${files.length > 1 ? ` from ${ok} files` : ""} — review and edit`
           : "Could not extract items. Enter manually or try another file."
       );
     } catch (e) {
       setErr(e instanceof Error ? e.message : "File parsing failed");
     } finally {
-      setBusy(false);
+      setBusy(scan.end(sig));
     }
   }
 
@@ -2486,7 +2495,10 @@ function VendorQuoteDetailModal({
                 }}
               />
               {busy ? (
-                <span className="hint-inline">Analyzing…</span>
+                <>
+                  <span className="hint-inline">Analyzing…</span>
+                  {scan.active ? <button type="button" className="btn sm ocr-cancel" onClick={scan.cancel}>✕ Cancel</button> : null}
+                </>
               ) : parseMsg ? (
                 <span className="action-ok">{parseMsg}</span>
               ) : (
@@ -4188,6 +4200,7 @@ function VendorQuoteAction({
   const rawFiles = useRef<File[]>([]);
   const keptRaw = () => rawFiles.current.filter((f) => ocrFiles.some((o) => o.name === (f.name || "(unnamed)")));
   const [parseMsg, setParseMsg] = useState<string | null>(null);
+  const scan = useScanCancel();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -4211,6 +4224,7 @@ function VendorQuoteAction({
     const files = input instanceof File ? [input] : Array.from(input);
     if (!files.length) return;
     setBusy(true);
+    const sig = scan.begin();
     setErr(null);
     setParseMsg(null);
     try {
@@ -4219,7 +4233,8 @@ function VendorQuoteAction({
       const newFiles: RfqSourceFile[] = [];
       let next = items;
       for (const file of files) {
-        const r = await parseVendorQuoteFile(file);
+        const r = await orCancelled(parseVendorQuoteFile(file, sig), sig);
+        if (!r) break;   // 취소 — 먼저 끝난 파일까지만 남긴다
         const parsed = r.items || [];
         // 견적서 머리글의 견적번호는 비어 있을 때만, 통화는 표에 아직 단가가 없을 때만 채운다.
         const pno = (r.vendor_quote_no || "").trim();
@@ -4242,18 +4257,23 @@ function VendorQuoteAction({
         next = accumulateVendorItems(next, parsed);
         setItems(next);
       }
+      scan.end(sig);
+      if (sig.aborted && !ok) {
+        setParseMsg("Cancelled — nothing was filled.");
+        return;
+      }
       // 읽어 온 줄은 이름(lid)이 없다 — 딜의 어느 품목 줄인지 바로 짝지어 둔다.
       setItems(await lm.run(next));
       setOcrFiles((prev) => [...prev, ...newFiles]);
       setParseMsg(
         added
-          ? `Auto-filled ${added} item(s)${files.length > 1 ? ` from ${ok} files` : ""} — review and edit`
+          ? `${sig.aborted ? "Cancelled · " : ""}Auto-filled ${added} item(s)${files.length > 1 ? ` from ${ok} files` : ""} — review and edit`
           : "Could not extract items. Enter manually or try another file."
       );
     } catch (e) {
       setErr(e instanceof Error ? e.message : "File parsing failed");
     } finally {
-      setBusy(false);
+      setBusy(scan.end(sig));
     }
   }
 
@@ -4408,7 +4428,10 @@ function VendorQuoteAction({
                 }}
               />
               {busy ? (
-                <span className="hint-inline">Analyzing…</span>
+                <>
+                  <span className="hint-inline">Analyzing…</span>
+                  {scan.active ? <button type="button" className="btn sm ocr-cancel" onClick={scan.cancel}>✕ Cancel</button> : null}
+                </>
               ) : parseMsg ? (
                 <span className="action-ok">{parseMsg}</span>
               ) : (
