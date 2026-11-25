@@ -60,7 +60,12 @@ export default function VesselOwnerRow({
   }, [companyName, manager, owner, companies]);
 
   const hasImo = /\d{7}/.test(vessel.imo || "");
-  if (!owner && !manager && !hasImo) return null;
+  if (!owner && !manager && !hasImo) {
+    // 메일 자동 입력처럼 이름만 들어온 배 — 여기서 IMO 를 적거나 이름으로 찾아 넣는다.
+    return editable ? (
+      <ImoMissingRow vessel={vessel} onVesselSaved={onVesselSaved} />
+    ) : null;
+  }
 
   async function runLookup() {
     setBusy("lookup");
@@ -139,6 +144,116 @@ export default function VesselOwnerRow({
           <button type="button" className="btn xs" onClick={() => onPickCompany(suggest.c.name)}>
             Use as customer
           </button>
+        </span>
+      ) : null}
+      {err ? <span className="action-err">{err}</span> : null}
+    </div>
+  );
+}
+
+
+/** IMO 가 없는 배 — IMO 를 직접 적거나, 이름으로 웹에서 찾아 확인한 뒤 선박 마스터에 저장한다.
+ *  찾은 값은 웹 검색이라 틀릴 수 있어(개명·동명선) 출처와 함께 보이고 사람이 "Save" 를 누른다.
+ *  저장되면 IMO 가 생겨 위의 선주·관리사 줄로 바뀐다. */
+function ImoMissingRow({
+  vessel,
+  onVesselSaved,
+}: {
+  vessel: SettingsVessel;
+  onVesselSaved: () => void | Promise<void>;
+}) {
+  const [imo, setImo] = useState("");
+  const [found, setFound] = useState<VesselLookupResult | null>(null);
+  const [busy, setBusy] = useState<"" | "lookup" | "save">("");
+  const [err, setErr] = useState<string | null>(null);
+  const typed = imo.replace(/\D/g, "");
+
+  async function findByName() {
+    setBusy("lookup");
+    setErr(null);
+    setFound(null);
+    try {
+      const r = await lookupVessel("", vessel.name);
+      if (r.imo) {
+        setFound(r);
+        setImo(r.imo);
+      } else {
+        setErr(r.note || "IMO not found on public pages — enter it manually.");
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Lookup failed");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function save() {
+    if (typed.length !== 7) {
+      setErr("IMO must be 7 digits.");
+      return;
+    }
+    setBusy("save");
+    setErr(null);
+    try {
+      // 찾은 결과가 지금 칸의 IMO 와 같을 때만 선종·기국·선주·관리사도 빈 칸에 함께 넣는다.
+      const r = found && found.imo === typed ? found : null;
+      const { id, customer: _c, sanctions: _s, ...rest } = vessel;
+      await updateSettingsVessel(id, {
+        ...rest,
+        imo: typed,
+        vessel_type: vessel.vessel_type || r?.vessel_type || "",
+        ais_flag: vessel.ais_flag || r?.flag || "",
+        registered_owner: vessel.registered_owner || r?.registered_owner || "",
+        ism_manager: vessel.ism_manager || r?.ism_manager || "",
+        owner_checked: r && (r.registered_owner || r.ism_manager) ? todayYmd() : (vessel.owner_checked || ""),
+      });
+      await onVesselSaved();
+      setFound(null);
+      setImo("");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const r = found && found.imo === typed ? found : null;
+  return (
+    <div className="vs-owner-row vm-stack">
+      <span className="vs-owner-vals">
+        <span><small>IMO</small> <span className="dash">—</span></span>
+        <span className="muted">No IMO on this vessel yet.</span>
+      </span>
+      <span className="vs-imo-edit">
+        <input
+          value={imo}
+          onChange={(e) => setImo(e.target.value)}
+          placeholder="IMO (7 digits)"
+          inputMode="numeric"
+          maxLength={10}
+          style={{ width: 120 }}
+        />
+        <button type="button" className="btn xs" disabled={!!busy} onClick={findByName}
+                title={`Find the IMO number of "${vessel.name}" on public ship pages`}>
+          {busy === "lookup" ? "Finding… (~20s)" : "🔍 Find IMO by name"}
+        </button>
+        <button type="button" className="btn xs primary" disabled={!!busy || typed.length !== 7} onClick={save}
+                title="Save this IMO to the vessel master (Partners › Vessel)">
+          {busy === "save" ? "Saving…" : "Save IMO"}
+        </button>
+      </span>
+      {r ? (
+        <span className="vs-imo-found">
+          <span>
+            <small>Found</small> {r.name || vessel.name}
+            {[r.vessel_type, r.flag].filter(Boolean).length ? ` · ${[r.vessel_type, r.flag].filter(Boolean).join(" · ")}` : ""}
+          </span>
+          <span className={`vs-conf vs-conf-${r.confidence}`}>{r.confidence}</span>
+          {r.sources[0] ? (
+            <a href={r.sources[0].url} target="_blank" rel="noopener noreferrer" title={r.note}>source</a>
+          ) : null}
+          {r.confidence === "low" && r.note ? <span className="muted">{r.note}</span> : null}
+          {r.sanctions.length ? <span className="action-err">⚠ On a sanctions list — check before saving.</span> : null}
         </span>
       ) : null}
       {err ? <span className="action-err">{err}</span> : null}

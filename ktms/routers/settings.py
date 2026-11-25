@@ -2224,18 +2224,23 @@ def vessel_lookup(body: VesselLookupIn):
     """IMO → 선종·기국·등록 선주·ISM 관리사(Claude 웹 검색, 출처 포함) + 제재 명부 확인. 저장하지 않는다 —
     화면이 칸에 채워 보여 주고 사람이 저장한다."""
     imo = _sanctions._norm_imo(body.imo)
-    if not imo:
-        raise HTTPException(status_code=400, detail="IMO 번호(7자리)를 입력하세요.")
-    s = get_session()
+    name = (body.name or "").strip()
+    if not imo and not name:
+        raise HTTPException(status_code=400, detail="IMO 번호(7자리)나 선박 이름을 입력하세요.")
+    # IMO 가 없으면 이름으로 IMO 부터 찾는다(메일 자동 입력처럼 이름만 아는 배).
     try:
-        hits = _sanctions.check(s, imo)
-    finally:
-        s.close()
-    try:
-        found = lookup_vessel(imo, (body.name or "").strip())
+        found = lookup_vessel(imo, name)
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=f"선박 조회 실패: {exc}") from exc
-    return {"imo": imo, **found, "sanctions": hits}
+    imo = imo or _sanctions._norm_imo(found.get("imo") or "")
+    hits = []
+    if imo:
+        s = get_session()
+        try:
+            hits = _sanctions.check(s, imo)
+        finally:
+            s.close()
+    return {**found, "imo": imo or "", "sanctions": hits}
 
 
 @app.get("/api/admin/settings/vessels/sanctions-check", dependencies=[Depends(require_token)])

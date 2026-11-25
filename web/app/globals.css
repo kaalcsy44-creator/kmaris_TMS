@@ -21237,6 +21237,11 @@ tr.alt-off td.seq .alt-pick { color: #b25f00; }
   display: none;
 }
 .vs-owner-row .vs-conf { margin-left: 0; }
+/* IMO 없는 배 — IMO 입력·이름으로 찾기·저장 */
+.vs-imo-edit { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.vs-imo-edit input { height: 26px; padding: 2px 8px; font-size: 12.5px; }
+.vs-imo-found { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.vs-imo-found small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
 .vs-owner-suggest { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px;
   border-radius: 6px; background: #eef4ff; }
 .vs-owner { margin-top: 2px; }

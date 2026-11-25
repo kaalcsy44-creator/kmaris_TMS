@@ -22,6 +22,32 @@ VESSEL_TYPES = [
 ]
 
 
+def _prompt_by_name(name: str) -> str:
+    """IMO 를 모를 때 — 이름으로 그 배의 IMO 를 찾는다. 같은 이름의 배가 여럿일 수 있어(개명·동명)
+    지금 그 이름을 쓰는 배 한 척만, 확신이 없으면 confidence 를 낮춰 답하게 한다."""
+    return f"""Find the merchant ship currently named "{name}" and its 7-digit IMO number.
+Search the web (ship-tracking and registry pages such as VesselFinder, MarineTraffic, MyShipTracking,
+BalticShipping, Equasis summaries). Ships get renamed and names can repeat, so pick the ship that
+CURRENTLY carries this exact name. If several active ships share it, pick the most likely one, set
+confidence to "low" and name the other IMO numbers in "note".
+
+Report for that ship:
+- imo: the 7-digit IMO number (digits only)
+- name: the current ship name
+- vessel_type: use one of {VESSEL_TYPES} when one fits; otherwise a short English ship type
+- flag: the current flag state as an English country name
+- registered_owner: the current registered owner company
+- ism_manager: the current ISM manager / technical manager. Company names as written, without the address.
+
+If you cannot find the ship, use null for the fields you could not confirm.
+
+Reply with ONLY this JSON object, no other text:
+{{"imo": string|null, "name": string|null, "vessel_type": string|null, "flag": string|null,
+  "registered_owner": string|null, "ism_manager": string|null,
+  "confidence": "high"|"medium"|"low", "note": string}}
+"note" is one short English sentence (e.g. which sites agreed, or why nothing was found)."""
+
+
 def _prompt(imo: str, name: str) -> str:
     return f"""Find the merchant ship with IMO number {imo}{f' (our records call it "{name}")' if name else ''}.
 Search the web for this exact IMO number (ship-tracking and registry pages such as VesselFinder,
@@ -46,9 +72,11 @@ Reply with ONLY this JSON object, no other text:
 
 
 def lookup_vessel(imo: str, name: str = "") -> dict:
-    """{name, vessel_type, flag, registered_owner, ism_manager, confidence, note, sources:[{title,url}]}."""
+    """{imo, name, vessel_type, flag, registered_owner, ism_manager, confidence, note, sources:[{title,url}]}.
+    imo 가 비면 name 으로 IMO 부터 찾는다(그때 돌려주는 imo 는 웹에서 찾은 값)."""
     client = _anthropic_client()
-    messages: list = [{"role": "user", "content": _prompt(imo, name)}]
+    prompt = _prompt(imo, name) if imo else _prompt_by_name(name)
+    messages: list = [{"role": "user", "content": prompt}]
     tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 6}]
     sources: list[dict] = []
     seen: set[str] = set()
@@ -74,7 +102,7 @@ def lookup_vessel(imo: str, name: str = "") -> dict:
         raise ValueError(_api_error_message(exc)) from exc
 
     if resp is None or resp.stop_reason == "refusal":
-        return {"name": None, "vessel_type": None, "flag": None,
+        return {"imo": imo or None, "name": None, "vessel_type": None, "flag": None,
                 "registered_owner": None, "ism_manager": None, "confidence": "low",
                 "note": "The lookup was declined.", "sources": []}
     # 답(JSON)은 마지막 텍스트 블록들에 있다 — 검색 중간의 짧은 말과 섞이지 않게 끝에서부터 잇는다.
@@ -92,7 +120,9 @@ def lookup_vessel(imo: str, name: str = "") -> dict:
                 cited.append(u)
     sources.sort(key=lambda s: (s["url"] not in cited, cited.index(s["url"]) if s["url"] in cited else 0))
     clean = lambda v: (str(v).strip() or None) if v not in (None, "") else None
+    found_imo = imo or "".join(ch for ch in str(data.get("imo") or "") if ch.isdigit())
     return {
+        "imo": found_imo if len(found_imo) == 7 else None,
         "name": clean(data.get("name")),
         "vessel_type": clean(data.get("vessel_type")),
         "flag": clean(data.get("flag")),
