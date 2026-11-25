@@ -1186,7 +1186,9 @@ export type Freight = {
   info: { payer: FreightPayer; account_no: string; note: string };
   orders: { id: number; po_no: string; incoterms: string; packages: { ci_id: number; ci_no: string }[] }[];
   rows: FreightRow[];
-  docs: { kind: "pi" | "ci"; id: number; order_id: number; no: string; date: string; currency: string; freight: number; packing: number; insurance: number }[];
+  docs: { kind: "pi" | "ci"; id: number; order_id: number; no: string; date: string; currency: string; freight: number; packing: number; insurance: number;
+    /** 이 문서의 운임을 청구액으로 읽는다(기본 CI, 화면에서 바꿀 수 있다). */
+    counted: boolean }[];
   ar: {
     id: number; order_id: number; kind: string; freight_only: boolean; invoice_no: string; date: string; due_date: string;
     currency: string; amount: number; freight: number; paid_amount: number; outstanding: number; paid: boolean; paid_date: string;
@@ -1198,8 +1200,8 @@ export type Freight = {
   currency: string;
   /** 청구 통화 1 = ? KRW. */
   krw_per: number;
-  /** PI 뒤에 CI 에서 더 얹은 운임 중 아직 매출채권(AR)에 없는 몫. */
-  unbilled?: { order_id: number; amount: number; currency: string; main_paid: boolean }[];
+  /** 고른 문서의 운임이 매출채권(AR)에 선 상태 — main 본 청구 · extra 배송비 청구서 · unbilled 아직 없음. */
+  billing: { order_id: number; currency: string; amount: number; main: number; extra: number; unbilled: number; has_main: boolean; main_paid: boolean }[];
   totals: { cost_krw: number; paid_krw: number; charged_krw: number; collected_krw: number };
 };
 const frtBase = (rfqId: number) => `/api/admin/projects/${rfqId}/freight`;
@@ -1253,6 +1255,10 @@ export function saveFreightPayable(
 }
 export function removeFreightPayable(rfqId: number, id: number): Promise<{ ok: boolean }> {
   return del(`${frtBase(rfqId)}/${id}/payable`);
+}
+/** 이 PI·CI 의 운임을 청구액에 넣을지. */
+export function pickFreightDoc(rfqId: number, body: { kind: "pi" | "ci"; doc_id: number; include: boolean }): Promise<{ ok: boolean }> {
+  return put(`/api/admin/projects/${rfqId}/freight-charge-doc`, body);
 }
 /** 고객 청구 — PI·CI 의 Freight 칸 또는 배송비만 별도 청구서(AR). */
 export function chargeFreight(

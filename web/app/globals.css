@@ -23023,6 +23023,7 @@ table.pod-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .frt-pay-act { display: inline-flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
 .frt-paydate { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .frt-paydate input { height: 30px; width: 130px; padding: 3px 8px; border: 1px solid #cdd9e8; border-radius: 6px; font: inherit; font-size: 12.5px; }
+.frt-reg { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .frt-sep { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 @media (max-width: 760px) {
   .frt-payers { grid-template-columns: 1fr; }

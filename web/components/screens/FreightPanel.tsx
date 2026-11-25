@@ -15,6 +15,7 @@ import {
   freightFileUrl,
   parseFreight,
   payFinancePayable,
+  pickFreightDoc,
   removeFreightPayable,
   saveFreight,
   saveFreightInfo,
@@ -120,11 +121,7 @@ export default function FreightPanel({
   const diff = t.charged_krw - t.cost_krw;
   const active = d.rows.filter((r) => r.payable || (r.awarded && !buyerPays));
   const unpaid = active.filter((r) => !r.payable?.paid);
-  const pi = d.docs.find((x) => x.kind === "pi");
   const cis = d.docs.filter((x) => x.kind === "ci");
-  // PI 와 CI 는 같은 돈을 적는다 — 어긋나면 알려 준다(CI 는 운임·포장·보험을 한 줄로 받는다).
-  const piCharge = pi ? pi.freight + pi.packing + pi.insurance : 0;
-  const ciCharge = cis.reduce((s, x) => s + x.freight + x.packing + x.insurance, 0);
   const incoterms = d.orders.find((o) => o.incoterms)?.incoterms ?? "";
   const term = incoterms.slice(0, 3).toUpperCase();
 
@@ -133,17 +130,10 @@ export default function FreightPanel({
   if (buyerPays && active.length) warnings.push("Buyer pays the carrier, but a freight payment is registered in Finance for this deal.");
   if (payer === "rebill" && t.cost_krw > 0 && t.charged_krw <= 0) warnings.push("Freight cost is not charged to the buyer yet — set it on the PI / CI or create a separate invoice.");
   if (payer !== "buyer" && t.charged_krw > 0 && t.cost_krw <= 0) warnings.push("Freight is charged to the buyer, but the actual cost is not recorded — this deal's profit looks larger than it is.");
-  // CI 에서 더 얹은 운임 — 청구액에는 들어가지만 매출채권이 없어 수금 대장에 안 보인다.
-  const unbilled = d.unbilled ?? [];
+  // 청구액에는 들어가지만 매출채권이 없어 수금 대장에 안 보이는 운임.
+  const unbilled = (d.billing ?? []).filter((b) => b.unbilled > 0 && b.order_id);
   for (const u of unbilled) {
-    warnings.push(`${fmt(u.amount, u.currency)} of freight is on the CI but not in receivables (AR) — ${
-      u.main_paid ? "the PI was already collected without it, so create a separate freight invoice below."
-        : "set the same freight on the PI, or create a separate freight invoice below."}`);
-  }
-  // 배송비 청구서를 따로 낸 만큼은 PI 와 CI 가 다른 것이 맞다.
-  const extraCharge = d.ar.reduce((s, a) => s + (a.freight_only ? a.freight : 0), 0);
-  if (pi && cis.length && !unbilled.length && Math.abs(piCharge - ciCharge) >= 0.01 && !(ciCharge > piCharge && ciCharge - piCharge <= extraCharge + 0.01)) {
-    warnings.push(`Charges differ: PI ${fmt(piCharge, pi.currency)} vs CI ${cis.length > 1 ? "total " : ""}${fmt(ciCharge, cis[0].currency)}.`);
+    warnings.push(`${fmt(u.unbilled, u.currency)} of freight is charged on the document but not in receivables (AR) — register it under "Charged to the buyer".`);
   }
 
   const setInfo = (p: Partial<Freight["info"]>) =>
@@ -357,13 +347,24 @@ export default function FreightPanel({
         {d.docs.length ? (
           <div className="table-wrap pod-table-wrap">
             <table className="pod-table frt-table">
-              <thead><tr><th>Document</th><th>Date</th><th className="num">Freight</th><th className="num">Packing · Insurance</th><th /></tr></thead>
+              <thead><tr><th>Charge</th><th>Document</th><th>Date</th><th className="num">Freight</th><th className="num">Packing · Insurance</th><th>Receivable (AR)</th><th /></tr></thead>
               <tbody>
                 {d.docs.map((x) => {
                   const own = x.kind === "ci" ? active.filter((r) => r.ci_id === x.id) : [];
                   const base = own.length ? own.reduce((s, r) => s + r.cost_krw, 0) : x.kind === "pi" || cis.length === 1 ? t.cost_krw : 0;
+                  // 매출채권 상태는 P/O(통화)별 한 번 — 고른 문서의 첫 줄에 단다.
+                  const first = d.docs.find((y) => y.order_id === x.order_id && y.currency === x.currency && y.counted && y.freight);
+                  const bill = first === x ? (d.billing ?? []).find((b) => b.order_id === x.order_id && b.currency === x.currency) : undefined;
                   return (
-                    <ChargeRow key={`${x.kind}${x.id}`} doc={x} suggest={d.krw_per ? base / d.krw_per : 0} editable={editable} busy={!!busy}
+                    <ChargeRow key={`${x.kind}${x.id}`} doc={x} bill={bill}
+                               onPick={(include) => void run("charge", async () => { await pickFreightDoc(rfqId, { kind: x.kind, doc_id: x.id, include }); })}
+                               onRegister={(amount, due) => run("charge", async () => {
+                                 const r = await chargeFreight(rfqId, {
+                                   target: "invoice", order_id: x.order_id, amount, currency: x.currency, due_date: due,
+                                   description: `Freight charge — ${x.no}`,
+                                 });
+                                 return `Invoice ${r.invoice_no} registered — print and collect it in stage 9 (AR).`;
+                               })} suggest={d.krw_per ? base / d.krw_per : 0} editable={editable} busy={!!busy}
                                onSet={(amount) => run("charge", async () => {
                                  const r = await chargeFreight(rfqId, { target: x.kind, doc_id: x.id, amount });
                                  return x.kind === "pi"
@@ -397,15 +398,15 @@ export default function FreightPanel({
         ) : null}
 
         {editable && d.orders.length && !buyerPays ? (
-          <SeparateInvoice d={d} orderId={unbilled[0]?.order_id || orderId || d.orders[0].id} busy={!!busy}
-                           suggest={unbilled[0]?.amount ?? Math.max(0, inCur(t.cost_krw - t.charged_krw))}
+          <SeparateInvoice d={d} orderId={orderId || d.orders[0].id} busy={!!busy}
+                           suggest={Math.max(0, inCur(t.cost_krw - t.charged_krw))}
                            defaultDesc={`Freight charge${active[0] ? ` — ${active[0].carrier}${active[0].tracking_no ? ` ${active[0].tracking_no}` : ""}` : ""}`}
                            onCreate={(b) => run("charge", async () => {
                              const r = await chargeFreight(rfqId, { target: "invoice", ...b });
                              return `Invoice ${r.invoice_no} created — print and collect it in stage 9 (AR).`;
                            })} />
         ) : null}
-        <p className="hint-inline frt-note">Freight on both the PI and the CI is counted once. Freight added on the CI after the PI counts as an extra charge, together with freight-only invoices.</p>
+        <p className="hint-inline frt-note">The PI and the CI carry the same freight, so one of them is counted — the CI by default, the PI when no CI has freight. Use the Charge boxes to change it. Freight-only invoices are added only for what they charge beyond the document.</p>
       </div>
     </div>
   );
@@ -752,8 +753,12 @@ function PayButton({ paid, busy, onPay }: { paid: boolean; busy: boolean; onPay:
   );
 }
 
-function ChargeRow({ doc, suggest, editable, busy, onSet }: {
+function ChargeRow({ doc, bill, suggest, editable, busy, onPick, onRegister, onSet }: {
   doc: Freight["docs"][number];
+  /** 고른 운임이 매출채권에 선 상태(P/O 의 첫 줄에만). */
+  bill?: Freight["billing"][number];
+  onPick: (include: boolean) => void;
+  onRegister: (amount: number, due: string) => Promise<boolean>;
   /** 이 문서에 실을 만한 금액(실제 비용을 문서 통화로) — 0 이면 제안하지 않는다. */
   suggest: number;
   editable: boolean;
@@ -762,14 +767,39 @@ function ChargeRow({ doc, suggest, editable, busy, onSet }: {
 }) {
   const [open, setOpen] = useState(false);
   const [v, setV] = useState(0);
+  const [reg, setReg] = useState(false);
+  const [due, setDue] = useState(today());
   const extra: ReactNode = doc.packing || doc.insurance ? fmt(doc.packing + doc.insurance, doc.currency) : "—";
   const tip = Math.round(suggest * 100) / 100;
   return (
     <tr>
+      <td>
+        <input type="checkbox" checked={doc.counted && !!doc.freight} disabled={!editable || busy || !doc.freight}
+               aria-label={`Charge the freight on ${doc.no}`} title={doc.freight ? "Count this document's freight as charged to the buyer" : "No freight on this document"}
+               onChange={(e) => onPick(e.target.checked)} />
+      </td>
       <td><b>{doc.kind === "pi" ? "PI" : "CI"}</b> {doc.no}</td>
       <td>{doc.date || "—"}</td>
       <td className="num">{doc.freight ? fmt(doc.freight, doc.currency) : "—"}</td>
       <td className="num">{extra}</td>
+      <td>
+        {!doc.freight ? "—" : !doc.counted ? <span className="muted">Not counted</span> : !bill ? "—"
+          : bill.unbilled > 0 ? (
+            <span className="frt-reg">
+              <span className="ar-badge overdue">Not in AR · {fmt(bill.unbilled, bill.currency)}</span>
+              {!editable || !bill.order_id ? null : reg ? (
+                <span className="frt-paydate">
+                  <span>Due</span>
+                  <input type="date" value={due} aria-label="Due date" onChange={(e) => setDue(e.target.value)} />
+                  <button type="button" className="btn sm primary" disabled={busy || !due} onClick={async () => { if (await onRegister(bill.unbilled, due)) setReg(false); }}>Register</button>
+                  <button type="button" className="btn sm" onClick={() => setReg(false)}>Cancel</button>
+                </span>
+              ) : (
+                <button type="button" className="btn sm primary" disabled={busy} onClick={() => { setDue(today()); setReg(true); }}>＋ Register in AR</button>
+              )}
+            </span>
+          ) : bill.has_main ? <span className="ar-badge">In AR ✓</span> : <span className="muted">No AR invoice yet</span>}
+      </td>
       <td className="pod-act">
         {!editable ? null : open ? (
           <span className="frt-paydate">

@@ -153,22 +153,39 @@ def _doc_charges(terms) -> dict:
     return {k: round(_num(t.get(k)), 2) for k in ("freight", "packing", "insurance")}
 
 
-def _unbilled_on_ci(pi, cis, ars) -> tuple[float, str]:
-    """PI 뒤에 CI 에서 새로 얹은 운임 — (금액, 통화). PI·본 청구·배송비 청구서에 이미 선 만큼은 뺀다.
+def _charge_docs(pi, cis, pick: dict) -> tuple[bool, set]:
+    """청구액으로 읽을 문서 — (PI 를 읽나, 읽을 CI id 들). PI 와 CI 는 같은 돈이라 한쪽만 읽는다.
 
-    PI 를 EXW 로 끊어 선입금까지 받은 뒤 CI 를 DAP 로 바꾸며 운임을 더하는 일이 있다. 이때 CI 의
-    운임은 PI 와 같은 돈이 아니라 추가 청구이고, 매출채권(AR)은 PI 로 서 있어 그만큼 빠져 있다.
-    CI 는 운임·포장·보험을 한 줄로 받기도 해서 셋의 합으로 견준다. 통화가 다르면 견주지 않는다."""
-    cur = (pi.currency or "USD").upper() if pi is not None else ""
-    if pi is None or not cis or any((c.currency or "USD").upper() != cur for c in cis):
-        return 0.0, cur
+    기본은 CI 다(나중에 나온 문서이고, PI 뒤에 운임을 더하는 일이 있다). 운임이 적힌 CI 가 없으면
+    PI 를 읽는다. 사람이 화면에서 고른 것(pick: {"pi:8": True, "ci:9": False})이 있으면 그것을 따른다."""
+    with_freight = {c.id for c in cis if _doc_charges(c.terms)["freight"]}
+    chosen = pick.get(f"pi:{pi.id}") if pi is not None else False
+    use_pi = chosen if chosen is not None else not with_freight
+    if use_pi:
+        return True, set()
+    return False, {i for i in with_freight if pick.get(f"ci:{i}", True)}
+
+
+def _charge_split(doc_freight: float, doc_total: float, pi, ars, cur: str) -> dict:
+    """고른 문서의 운임(doc_freight)이 매출채권에 얼마나 서 있나 — 같은 통화의 청구만 견준다.
+
+    main = 본 청구에 들어 있는 몫, extra = 배송비 청구서가 덮은 몫, unbilled = 아직 아무 청구에도 없는 몫.
+    PI 를 EXW 로 끊어 선입금까지 받은 뒤 CI 를 DAP 로 바꾸며 운임을 더하면 그만큼이 unbilled 다.
+    CI 는 운임·포장·보험을 한 줄로 받기도 해서 본 청구와는 셋의 합으로 견준다."""
     same = [a for a in ars if (a.currency or "USD").upper() == cur]
-    on_ci = [_doc_charges(c.terms) for c in cis]
-    main = sum(sum(_doc_charges(a.charges).values()) for a in same if (a.kind or "main") != "extra")
-    extra = sum((a.invoice_amount or 0) / (1 + (a.vat_rate or 0)) for a in same if _freight_only(a))
-    over = sum(sum(c.values()) for c in on_ci) - max(sum(_doc_charges(pi.terms).values()), main) - extra
-    over = round(min(over, sum(c["freight"] for c in on_ci)), 2)
-    return (over if over >= 0.01 else 0.0), cur
+    mains = [a for a in ars if (a.kind or "main") != "extra"]
+    extras = sum((a.invoice_amount or 0) / (1 + (a.vat_rate or 0)) for a in same if _freight_only(a))
+    need = 0.0
+    # 본 청구가 아직 없거나 통화가 다르면 빠진 몫을 따지지 않는다(앞으로 설 본 청구에 실린다).
+    if mains and all((a.currency or "USD").upper() == cur for a in mains):
+        on_main = sum(sum(_doc_charges(a.charges).values()) for a in mains)
+        if pi is not None and (pi.currency or "USD").upper() == cur:
+            on_main = max(on_main, sum(_doc_charges(pi.terms).values()))
+        need = min(max(doc_total - on_main, 0.0), doc_freight)
+    extra = min(extras, need)
+    unbilled = round(need - extra, 2)
+    return {"main": round(doc_freight - need, 2), "extra": round(extra, 2),
+            "unbilled": unbilled if unbilled >= 0.01 else 0.0}
 
 
 def _freight_only(a) -> bool:
@@ -221,7 +238,8 @@ def project_freight(rfq_id: int):
                     paid_krw += out["cost_krw"]
 
         # ── 고객에게 청구한 배송비 — 문서마다 ──
-        docs, charged_krw, collected_krw, unbilled = [], 0.0, 0.0, []
+        docs, charged_krw, collected_krw, billing = [], 0.0, 0.0, []
+        pick = info.get("charge_docs") or {}
         pis = [(o, _latest_pi(s, o.id)) for o in orders]
         if not any(pi for _, pi in pis):
             pis = [(None, _project_pi(s, rfq_id))]
@@ -231,28 +249,28 @@ def project_freight(rfq_id: int):
             ars = s.query(ARRecord).filter_by(order_id=o.id).all() if o else []
             mains = [a for a in ars if (a.kind or "main") != "extra"]
             paid_main = bool(mains) and all(_enum_val(a.status) == "완납" for a in mains)
+            use_pi, use_cis = _charge_docs(pi, cis, pick)
+            picked = ([pi] if use_pi and pi is not None else []) + [c for c in cis if c.id in use_cis]
             if pi is not None:
-                c = _doc_charges(pi.terms)
                 docs.append({"kind": "pi", "id": pi.id, "order_id": o.id if o else 0, "no": pi.pi_no or "PI",
-                             "date": pi.date or "", "currency": (pi.currency or "USD").upper(), **c})
+                             "date": pi.date or "", "currency": (pi.currency or "USD").upper(),
+                             "counted": use_pi, **_doc_charges(pi.terms)})
             for i, ci in enumerate(cis):
                 docs.append({"kind": "ci", "id": ci.id, "order_id": o.id, "no": ci.ci_no or f"CI #{i + 1}",
                              "date": ci.date or "", "currency": (ci.currency or "USD").upper(),
-                             **_doc_charges(ci.terms)})
-            # 같은 돈을 PI 와 CI 에 각각 적는다 — 겹치는 몫은 PI(없으면 CI 합)로 한 번만 세고,
-            # PI 뒤에 CI 에서 더 얹은 운임만 보탠다(아직 매출채권에 없는 돈 = unbilled).
-            if pi is not None:
-                pcur = (pi.currency or "USD").upper()
-                on_ar = sum(_doc_charges(a.charges)["freight"] for a in mains if (a.currency or "USD").upper() == pcur)
-                amt = _krw_in(max(_doc_charges(pi.terms)["freight"], on_ar), pcur, _ym(pi.date))
-                over, _cur = _unbilled_on_ci(pi, cis, ars)
-                if over:
-                    unbilled.append({"order_id": o.id, "amount": over, "currency": _cur, "main_paid": paid_main})
-                    charged_krw += _krw_in(over, _cur, _ym(cis[0].date))
-            else:
-                amt = sum(_krw_in(_doc_charges(c.terms)["freight"], c.currency or "USD", _ym(c.date)) for c in cis)
-            charged_krw += amt
-            collected_krw += amt if paid_main else 0.0
+                             "counted": ci.id in use_cis, **_doc_charges(ci.terms)})
+            for dcur in sorted({(x.currency or "USD").upper() for x in picked}):
+                mine = [x for x in picked if (x.currency or "USD").upper() == dcur]
+                ch = [_doc_charges(x.terms) for x in mine]
+                total = round(sum(c["freight"] for c in ch), 2)
+                if not total:
+                    continue
+                sp = _charge_split(total, sum(sum(c.values()) for c in ch), pi, ars, dcur)
+                ym = _ym(mine[0].date)
+                charged_krw += _krw_in(sp["main"] + sp["unbilled"], dcur, ym)
+                collected_krw += _krw_in(sp["main"], dcur, ym) if paid_main else 0.0
+                billing.append({"order_id": o.id if o else 0, "currency": dcur, "amount": total, **sp,
+                                "has_main": bool(mains), "main_paid": paid_main})
             for a in ars:
                 freight_only = _freight_only(a)
                 if (a.kind or "main") == "extra" and not freight_only:
@@ -268,6 +286,8 @@ def project_freight(rfq_id: int):
                                 "outstanding": round(_ar_outstanding(a), 2),
                                 "paid": _enum_val(a.status) == "완납", "paid_date": a.paid_date or ""})
                 if freight_only:
+                    # 배송비 청구서는 전부 청구액이다 — 고른 문서의 운임 중 이것이 덮은 몫(sp["extra"])은
+                    # 위에서 더하지 않았다.
                     k = _krw_in(a.invoice_amount or 0, a.currency or "USD", _ym(a.invoice_date))
                     charged_krw += k
                     collected_krw += k if _enum_val(a.status) == "완납" else 0.0
@@ -297,7 +317,7 @@ def project_freight(rfq_id: int):
                                      or (o.terms or {}).get("incoterms") or "",
                         "packages": [{"ci_id": c.id, "ci_no": c.ci_no or ""} for c in _order_cis(s, o.id)]}
                        for o in orders],
-            "rows": rows, "docs": docs, "ar": ar_rows, "unbilled": unbilled, "other_payables": others,
+            "rows": rows, "docs": docs, "ar": ar_rows, "billing": billing, "other_payables": others,
             "vendor_freight": vendor_freight,
             "currency": cur, "krw_per": round(per, 4),
             "totals": {"cost_krw": round(cost_krw), "paid_krw": round(paid_krw),
@@ -320,7 +340,9 @@ def save_freight_info(rfq_id: int, body: FreightInfoIn):
     s = get_session()
     try:
         r = _rfq(s, rfq_id)
-        info = {k: v for k, v in {"payer": body.payer, "account_no": body.account_no.strip()[:80],
+        # 청구에 넣을 문서 고르기(charge_docs)는 따로 저장한다 — 여기서 지우지 않는다.
+        keep = (getattr(r, "freight_info", None) or {}).get("charge_docs")
+        info = {k: v for k, v in {"charge_docs": keep, "payer": body.payer, "account_no": body.account_no.strip()[:80],
                                   "note": body.note.strip()[:500]}.items() if v}
         r.freight_info = info or None
         s.commit()
@@ -602,6 +624,49 @@ def remove_freight_payable(rfq_id: int, row_id: int):
 
 
 # ── 고객 청구 ────────────────────────────────────────────────────────────────
+class FreightChargeDocIn(BaseModel):
+    kind: str                   # pi | ci
+    doc_id: int
+    include: bool = True
+
+
+@app.put("/api/admin/projects/{rfq_id}/freight-charge-doc", dependencies=[Depends(require_token)])
+def pick_charge_doc(rfq_id: int, body: FreightChargeDocIn):
+    """이 문서의 운임을 청구액에 넣을지 — PI 와 CI 는 같은 돈이라 한 P/O 에서 한쪽만 켜진다."""
+    s = get_session()
+    try:
+        r = _rfq(s, rfq_id)
+        order_ids = {o.id for o in _orders_for_rfq(s, rfq_id)}
+        model = {"pi": ProformaInvoice, "ci": CommercialInvoice}.get(body.kind)
+        doc = s.query(model).filter_by(id=body.doc_id).first() if model else None
+        if not doc or not (doc.order_id in order_ids
+                           or (body.kind == "pi" and doc.order_id is None and doc.rfq_id == rfq_id)):
+            raise HTTPException(status_code=404, detail="이 딜의 문서가 아닙니다.")
+        info = dict(getattr(r, "freight_info", None) or {})
+        pick = dict(info.get("charge_docs") or {})
+        pick[f"{body.kind}:{doc.id}"] = bool(body.include)
+        if body.include and doc.order_id:
+            if body.kind == "ci":
+                for p in s.query(ProformaInvoice.id).filter_by(order_id=doc.order_id).all():
+                    pick[f"pi:{p.id}"] = False
+            else:
+                # PI 로 읽는 동안 CI 는 꺼진다 — 나중에 PI 를 끄고 CI 를 켤 수 있게 선택은 비운다.
+                for c in s.query(CommercialInvoice.id).filter_by(order_id=doc.order_id).all():
+                    pick.pop(f"ci:{c.id}", None)
+        elif body.kind == "pi" and doc.order_id:
+            # PI 를 끄면 청구 없음 — CI 가 저절로 켜지지 않게 적어 둔다.
+            for c in s.query(CommercialInvoice.id).filter_by(order_id=doc.order_id).all():
+                pick[f"ci:{c.id}"] = False
+        elif body.kind == "ci" and doc.order_id:
+            for p in s.query(ProformaInvoice.id).filter_by(order_id=doc.order_id).all():
+                pick[f"pi:{p.id}"] = False
+        r.freight_info = {**info, "charge_docs": pick}
+        s.commit()
+        return {"ok": True}
+    finally:
+        s.close()
+
+
 class FreightChargeIn(BaseModel):
     target: str                 # pi | ci | invoice(배송비만 별도 청구서)
     doc_id: int = 0             # pi·ci 의 id
