@@ -78,6 +78,7 @@ import NewRfqForm from "./screens/NewRfqForm";
 import WorkTypeBadge from "./WorkTypeBadge";
 import FilterTable, { ColumnDef } from "./common/FilterTable";
 import { identityColumns, projectNoColumn, statusColumns } from "./common/identityColumns";
+import { RoundTag, RoundTodo, latestRoundRow } from "@/components/common/RfqRounds";
 import VendorName from "./common/VendorName";
 import { invalidateVendorLogos } from "@/lib/vendorLogos";
 import LineBoard from "./common/LineBoard";
@@ -719,7 +720,7 @@ function EmbeddedVendorRfq({
       </div>
     );
   }
-  const selected = mine.find((r) => r.id === selId) ?? mine[0];
+  const selected = mine.find((r) => r.id === selId) ?? latestRoundRow(mine);
   return (
     <div className="embedded-record-wrap">
       <div className="embedded-record-bar pane-row">
@@ -728,13 +729,19 @@ function EmbeddedVendorRfq({
             <RecordPicker
               rows={mine}
               selectedId={selected.id}
-              label={(r) => r.vendor ? <VendorName entries={[{ name: r.vendor, state: vstate(r) }]} /> : `RFQ ${r.id}`}
+              label={(r) => (
+                <>
+                  {r.vendor ? <VendorName entries={[{ name: r.vendor, state: vstate(r) }]} /> : `RFQ ${r.id}`}
+                  <RoundTag round={r.round} current={r.rfq_round} />
+                </>
+              )}
               rowClass={(r) => (r.status === "견적 불가" ? "vendor-out-chip" : "")}
               onSelect={setSelId}
             />
           ) : (
             <span className="embedded-record-current">
               <VendorName entries={[{ name: selected.vendor || "", state: vstate(selected) }]} />
+              <RoundTag round={selected.round} current={selected.rfq_round} />
             </span>
           )}
           {/* 배지는 선택된 Vendor RFQ 고유 번호(001·002…). 프로젝트 공통 번호가 아님. */}
@@ -770,6 +777,7 @@ function EmbeddedVendorRfq({
           <button type="button" className="btn primary sm" onClick={() => { setSeedLids(null); setAdding(true); }}>+ Send another</button>
         </div>
       </div>
+      <RoundTodo rows={mine} text="not sent to any vendor yet. Press “+ Send another”." />
       {boardOn ? (
         <LineBoard
           rfqId={rfqId ?? 0}
@@ -964,7 +972,7 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
       </div>
     );
   }
-  const selected = mine.find((r) => r.id === selId) ?? mine[0];
+  const selected = mine.find((r) => r.id === selId) ?? latestRoundRow(mine);
   return (
     <div className="embedded-record-wrap">
       <div className="embedded-record-bar pane-row">
@@ -976,6 +984,7 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
               <span className="rec-tab-label">
                 {r.vendor ? <VendorName name={r.vendor} /> : `Quote ${r.id}`}
                 {r.vendor_quote_no ? <span className="rec-quote-no">{r.vendor_quote_no}</span> : null}
+                <RoundTag round={r.round} current={r.rfq_round} />
               </span>
             )}
             onSelect={setSelId}
@@ -984,6 +993,7 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
           <span className="embedded-record-current">
             <VendorName name={selected.vendor || ""} />
             <b className="rec-doc-no">{selected.vendor_quote_no || ""}</b>
+            <RoundTag round={selected.round} current={selected.rfq_round} />
           </span>
         )}
         <button
@@ -997,6 +1007,7 @@ function EmbeddedVendorQuote({ rfqId, onChanged }: { rfqId: number | null; onCha
         {cmp.canCompare ? <CompareButton on={cmp.comparing} onToggle={cmp.toggle} /> : null}
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ Register another</button>
       </div>
+      <RoundTodo rows={mine} text="no vendor quotation received yet." />
       {boardOn ? (
         <LineBoard
           rfqId={rfqId ?? 0}
@@ -1057,22 +1068,29 @@ function EmbeddedCustomerQuote({ rfqId, onChanged }: { rfqId: number | null; onC
       </div>
     );
   }
-  const selected = mine.find((r) => r.id === selId) ?? mine[0];
+  const selected = mine.find((r) => r.id === selId) ?? latestRoundRow(mine);
   return (
     <div className="embedded-record-wrap">
       <div className="embedded-record-bar pane-row">
         {mine.length > 1 ? (
-          <RecordPicker rows={mine} selectedId={selected.id} label={(r) => r.qtn_no || `Quote ${r.id}`} onSelect={setSelId} />
+          <RecordPicker
+            rows={mine}
+            selectedId={selected.id}
+            label={(r) => <>{r.qtn_no || `Quote ${r.id}`}<RoundTag round={r.round} current={r.rfq_round} /></>}
+            onSelect={setSelId}
+          />
         ) : (
           <span className="embedded-record-current">
             <CustomerName name={selected.customer || ""} />
             <b className="rec-doc-no">{selected.qtn_no || ""}</b>
+            <RoundTag round={selected.round} current={selected.rfq_round} />
           </span>
         )}
         {cmp.canCompare ? <CompareButton on={cmp.comparing} onToggle={cmp.toggle} /> : null}
         {mine.length > 1 && rfqId ? <CombinedQuoteButton rfqId={rfqId} ids={mine.map((r) => r.id)} /> : null}
         <button type="button" className="btn primary sm" onClick={() => setAdding(true)}>+ New quotation</button>
       </div>
+      <RoundTodo rows={mine} text="not quoted yet. Press “+ New quotation”." />
       {cmp.comparing ? (
         <div className="vm-compare">
           {mine.map((q) => (
@@ -4451,7 +4469,13 @@ function VendorQuoteAction({
               {/* 옵션 라벨이 벤더명이라 벤더 로고를 함께 보여준다(값은 Vendor RFQ id). */}
               <VendorSelect
                 value={vrfqId}
-                options={vendorRfqs.map((v) => ({ id: v.id, name: v.vendor }))}
+                options={[...vendorRfqs].sort((a, b) => (b.round ?? 1) - (a.round ?? 1)).map((v) => ({
+                  id: v.id,
+                  name: v.vendor,
+                  // 재요청이 있던 딜은 같은 벤더가 두 번 선다 — 몇 번째 RFQ 로 물은 것인지 붙인다.
+                  label: vendorRfqs.some((x) => (x.round ?? 1) > 1)
+                    ? <>{v.vendor}<RoundTag round={v.round ?? 1} /></> : undefined,
+                }))}
                 placeholder="Select Vendor RFQ…"
                 onChange={setVrfqId}
               />

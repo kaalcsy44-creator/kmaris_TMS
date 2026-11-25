@@ -33,6 +33,8 @@ _MIGRATIONS = {
         "stage_notes": "JSON",
         "source_files": "JSON",
         "received_at": "VARCHAR(16)",
+        "round_at": "VARCHAR(16)",       # 재요청 RFQ(#2~) 수신일시. NULL = RFQ 하나뿐
+        "past_rounds": "JSON",           # 앞선 RFQ 들
         "contact_person": "VARCHAR(100)",
         "request_channel": "VARCHAR(40)",
         "created_by": "INTEGER",

@@ -2365,6 +2365,7 @@ function PipelineCell({
               <ProjectNo value={r.project_no} />
             </button>
             <WorkTypeBadge type={r.work_type} />
+            {(r.rfq_round ?? 1) > 1 ? <span className="rfq-round-tag" title={`RFQ #${r.rfq_round} received ${(r.round_at || "").replace("T", " ")}`}>RFQ #{r.rfq_round}</span> : null}
             {vessels ? <span className="pl-vessel">{vessels}</span> : null}
           </div>
           <div className="pl-title">
@@ -3114,6 +3115,9 @@ export function PipelineModal({
               {/* pl-selectable: 드래그 손잡이에서 빼 블록지정·복사가 되게 한다(번호·제목·선박명). */}
               <b className="pl-selectable"><ProjectNo value={r.project_no} /></b>
               <WorkTypeBadge type={r.work_type} />
+              {(r.rfq_round ?? 1) > 1 ? (
+                <span className="rfq-round-tag" title={`The customer sent the RFQ again — RFQ #${r.rfq_round} received ${(r.round_at || "").replace("T", " ")}`}>RFQ #{r.rfq_round}</span>
+              ) : null}
               {r.project_title ? <span className="pl-proj-name pl-selectable">{r.project_title}</span> : null}
               {r.vessels || r.vessel ? (
                 <span className="pl-proj-vessel pl-selectable">

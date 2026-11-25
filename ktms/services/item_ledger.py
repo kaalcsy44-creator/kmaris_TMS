@@ -717,7 +717,7 @@ def master_party_fallback(session) -> dict[int, dict]:
     # 고객 RFQ — 물어본 고객.
     for r in rfq_by_id.values():
         for item_id in lines_of(r.items):
-            note(item_id, when=(r.received_at or ""), customer_id=r.customer_id,
+            note(item_id, when=(r.round_at or r.received_at or ""), customer_id=r.customer_id,
                  rfq_id=r.id, vessel_id=r.vessel_id)
     # 벤더 RFQ — 견적을 의뢰한 공급사(고객은 그 딜의 고객).
     for vr in session.query(VendorRFQ).all():

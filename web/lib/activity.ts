@@ -143,10 +143,21 @@ export function buildActivities(row: PipelineRow, steps: string[]): Activity[] {
         date,
         stage: n,
         label: steps[n - 1] || `Stage ${n}`,
-        party: autoParty(n, row),
+        party: autoParty(n, row) + (n === 1 && (row.rfq_round ?? 1) > 1 ? ` · RFQ #${row.rfq_round}` : ""),
         pic: row.assignee,
         at: full,
       });
+  }
+  // 재요청 전 RFQ 의 접수·견적 발송 — 단계 일시는 지금 RFQ 의 것만 담으므로 따로 세운다.
+  // (2·3단계는 발송·수신 이력 전체가 이미 위에서 한 건씩 섰다.)
+  for (const p of row.past_rounds ?? []) {
+    for (const [stage, at] of [[1, p.received_at], [4, p.quoted_at]] as const) {
+      if (!at) continue;
+      out.push({
+        kind: "auto", date: at.slice(0, 10), stage, label: steps[stage - 1] || `Stage ${stage}`,
+        party: `${autoParty(stage, row)} · RFQ #${p.no}`, pic: row.assignee, at,
+      });
+    }
   }
   for (const [stage, list] of Object.entries(row.stage_notes ?? {})) {
     (list ?? []).forEach((note, index) => {

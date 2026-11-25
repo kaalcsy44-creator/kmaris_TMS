@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 from _core import (
+    rfq_round_no,
+    round_of,
+    vquote_round,
+    _vrfq_sent_iso,
     Customer,
     Depends,
     _deal_identity,
@@ -121,6 +125,9 @@ def vrfq_overview():
                 "status": vr.status or "",
                 "item_count": len(vr.items or []),
                 "quote_count": quote_counts.get(vr.id, 0),
+                # 재요청이 있던 딜에서 몇 번째 RFQ 로 물은 것인가(0 = 재요청 없음).
+                "round": (round_of(rfq, _vrfq_sent_iso(vr)) if rfq and rfq_round_no(rfq) > 1 else 0),
+                "rfq_round": rfq_round_no(rfq) if rfq else 1,
                 # 공통 식별 컬럼(Deal identity)
                 **_deal_identity(s, rfq, cust_names=cust_names,
                                  vessel_names=vessel_names, user_names=user_names),
@@ -164,6 +171,8 @@ def vendor_quote_overview():
                 "received_date": q.received_date or "",
                 "item_count": len(items),
                 "amount": round(amount, 2),
+                "round": (vquote_round(rfq, q, vr) if rfq and rfq_round_no(rfq) > 1 else 0),
+                "rfq_round": rfq_round_no(rfq) if rfq else 1,
                 "currency": getattr(q, "currency", None) or "USD",
                 # 공통 식별 컬럼(Deal identity)
                 **_deal_identity(s, rfq, cust_names=cust_names,
@@ -188,8 +197,9 @@ def rfq_vendor_suggestions(rfq_id: int, limit: int = 6):
         rfq = s.query(RFQ).filter_by(id=rfq_id).first()
         if not rfq:
             raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        # 재요청이면 지금 RFQ 로 물은 곳만 뺀다 — 지난번에 물은 곳은 다시 물을 첫 후보다.
         sent = [v.vendor_id for v in s.query(VendorRFQ).filter_by(rfq_id=rfq_id).all()
-                if v.vendor_id]
+                if v.vendor_id and round_of(rfq, _vrfq_sent_iso(v)) == rfq_round_no(rfq)]
         return suggest_vendors(s, rfq.items or [],
                                limit=max(1, min(int(limit or 6), 12)),
                                exclude_ids=sent, title=rfq.project_title or "")
@@ -1244,6 +1254,14 @@ def _line_board(s, rfq) -> dict:
                   .order_by(VendorQuote.id.asc()).all()):
             vq_by_vrfq.setdefault(q.vendor_rfq_id, []).append(q)
 
+    # 재요청 RFQ — 앞선 RFQ 의 칸은 보여 주되(지난 값) 현황·최저가에는 세지 않는다.
+    cur_round = rfq_round_no(rfq)
+    vr_round = {v.id: round_of(rfq, _vrfq_sent_iso(v)) for v in vrfqs}
+    vr_by_id = {v.id: v for v in vrfqs}
+
+    def _old_quote(q) -> bool:
+        return cur_round > 1 and vquote_round(rfq, q, vr_by_id.get(q.vendor_rfq_id)) < cur_round
+
     # 채택 기록 — 줄당 한 곳(스키마의 rfq_id+lid 유일 제약).
     awards = {a.lid: a for a in s.query(DealLineAward).filter_by(rfq_id=rfq.id).all()}
 
@@ -1261,6 +1279,10 @@ def _line_board(s, rfq) -> dict:
             "sent_at": vr.sent_at or "",
             "status": vr.status or "",
             "declined": declined,
+            # 몇 번째 RFQ 로 물은 곳인가(0 = 재요청 없음) · 지금 RFQ 앞의 것인가.
+            "round": vr_round[vr.id] if cur_round > 1 else 0,
+            "old": (vr_round[vr.id] < cur_round
+                    and all(_old_quote(q) for q in vq_by_vrfq.get(vr.id, []))),
             # 같은 운임을 고쳐 다시 보낸 견적이 두 번 더해지지 않게 같은 줄은 하나로 친다.
             "charges": list({(c["description"], c["amount"], c["currency"]): c
                              for q in quotes for c in _doc_charges(lines_src, q)}.values()),
@@ -1333,6 +1355,12 @@ def _line_board(s, rfq) -> dict:
                 cells.setdefault(ln["lid"], {})[str(vr.id)] = {"state": "omitted"}
             else:
                 cells.setdefault(ln["lid"], {})[str(vr.id)] = {"state": "sent"}
+            if got is not None:
+                old = _old_quote(got[0])
+            else:
+                old = vr_round[vr.id] < cur_round
+            if old:
+                cells[ln["lid"]][str(vr.id)]["old"] = True
 
     vendor_of_quote = {}
     for c in cols:
@@ -1341,10 +1369,10 @@ def _line_board(s, rfq) -> dict:
 
     for ln in lines:
         row = cells.get(ln["lid"], {})
-        states = [c.get("state") for c in row.values()]
+        states = [c.get("state") for c in row.values() if not c.get("old")]
         best = None
         for key, c in row.items():
-            if c.get("state") != "quoted" or c.get("unit_cost") is None:
+            if c.get("state") != "quoted" or c.get("unit_cost") is None or c.get("old"):
                 continue
             if len(c.get("covers") or []) > 1:
                 continue      # 완제품 값은 이 라인 하나의 값과 견줄 수 없다
@@ -1354,7 +1382,8 @@ def _line_board(s, rfq) -> dict:
         # 완제품 줄에 포함된 칸도 '값을 받은 것'으로 센다(그 값은 대표 라인 칸에 있다).
         ln["quoted_count"] = sum(1 for x in states if x in ("quoted", "included"))
         # 최저가 — 통화가 섞이면 비교가 뜻을 잃으므로 한 통화일 때만 매긴다.
-        curs = {c.get("currency") for c in row.values() if c.get("state") == "quoted"}
+        curs = {c.get("currency") for c in row.values()
+                if c.get("state") == "quoted" and not c.get("old")}
         ln["best"] = best if len(curs) <= 1 else None
         ln["mixed_currency"] = len(curs) > 1
         a = awards.get(ln["lid"])

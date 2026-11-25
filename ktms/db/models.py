@@ -493,6 +493,12 @@ class RFQ(Base):
     request_channel  = Column(String(40))   # 고객 요청 수단: Email/Phone/SMS/WhatsApp/WeChat 등
     items            = Column(JSON, default=list)
     notes            = Column(Text)
+    # 재요청 RFQ(같은 딜에 다시 온 RFQ) — 위 헤더·품목은 늘 **지금(마지막) RFQ** 의 것이고,
+    # 앞선 RFQ 는 통째로 past_rounds 에 쌓인다([{no, received_at, customer_rfq_no, items, …}]).
+    # received_at 은 첫 RFQ 수신일시로 남는다(프로젝트 번호 괄호 날짜·폴더 이름이 이 값이다) —
+    # 지금 RFQ 의 수신일시는 round_at. 문서가 몇 번째 RFQ 것인지는 날짜로 가린다(_core.round_of).
+    round_at         = Column(String(16))
+    past_rounds      = Column(JSON)
     # 내부 12단계 완료 일시(수동 입력/보정값). {"1": "YYYY-MM-DDTHH:MM", ...} (KST 기준).
     # 비어있는 단계는 이벤트 레코드 created_at 에서 자동 동기화해 표시한다.
     stage_dates      = Column(JSON, default=dict)

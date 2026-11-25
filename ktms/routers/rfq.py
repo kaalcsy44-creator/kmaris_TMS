@@ -3,6 +3,17 @@ from __future__ import annotations
 import os
 
 from _core import (
+    DealLineAward,
+    RfqRoundAdd,
+    _orders_for_rfq,
+    line_id_of,
+    live_quotations,
+    live_vquotes,
+    rfq_round_at,
+    rfq_round_no,
+    rfq_round_starts,
+    round_of,
+    stamp_doc_line_ids,
     Consultant,
     Customer,
     Depends,
@@ -131,7 +142,7 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None,
                 vq_at = _kst(vq0.created_at)
                 # 매입(견적) 금액은 받은 견적 중 가장 싼 것(경쟁 견적이라 합산하지 않는다).
                 # 파이프라인 목록과 같은 값이어야 하므로 같은 함수를 쓴다.
-                _, vendor_amount = cheapest_vendor_quote(vqs)
+                _, vendor_amount = cheapest_vendor_quote(live_vquotes(r, vqs, vrfqs))
             else:
                 vq_main, vq_at, vendor_amount = "", "", ""
 
@@ -144,7 +155,7 @@ def rfq_overview(customer_id: int | None = None, work_type: str | None = None,
                 # 통화 혼재 시 USD 환산 합산 후 대표(최신) 견적 통화로 표기.
                 _c_disp = (qtn0.currency or "USD").upper()
                 _cust_usd_sum = 0.0
-                for _q in qtns:
+                for _q in live_quotations(r, qtns):   # 재요청이면 새 견적만 — 옛 견적을 더하지 않는다
                     _qc = (getattr(_q, "currency", None) or "USD").upper()
                     _qt = _quotation_total(_q.items or [], getattr(_q, "discount_pct", 0) or 0)
                     _cust_usd_sum += (_qt / usd_krw_rate()) if _qc == "KRW" else _qt
@@ -219,6 +230,7 @@ def rfq_detail(rfq_id: int):
             "id": v.id,
             "vendor": vendor_names.get(v.vendor_id, "—"),
             "at": _fmt_received(_vrfq_sent_iso(v)),
+            "round": round_of(r, _vrfq_sent_iso(v)),
         } for v in vrfqs]
 
         vrfq_ids = [v.id for v in vrfqs]
@@ -264,7 +276,12 @@ def rfq_detail(rfq_id: int):
             "vessel_id": r.vessel_id or 0,
             "project_title": getattr(r, "project_title", None) or "",
             "work_type": _enum_val(r.work_type) if r.work_type else "부품공급",
-            "received_at": getattr(r, "received_at", None) or "",
+            # 폼이 고치는 값은 지금 RFQ 의 수신 일시다(재요청이 없으면 첫 RFQ).
+            "received_at": (rfq_round_at(r) if rfq_round_no(r) > 1
+                            else getattr(r, "received_at", None) or ""),
+            "round_no": rfq_round_no(r),
+            "rounds": _rounds_view(s, r),
+            "has_order": bool(_orders_for_rfq(s, r.id)),
             "first_rfq_at": _first_rfq_iso(r),
             "project_no": _project_no_map(s).get(r.id, ""),
             "date": r.date or "",
@@ -361,6 +378,197 @@ def _clean_cc_ids(s, customer_id, ids) -> list[int]:
     return [i for i in want if i in ok]
 
 
+def _rfq_items_in(rows) -> list[dict]:
+    """화면이 보낸 품목 줄 → 저장할 줄(빈 줄은 버린다)."""
+    return [{
+        "part_no": (it.part_no or "").strip(),
+        "description": (it.description or "").strip(),
+        "type": (it.type or "").strip(),
+        "serial_no": (it.serial_no or "").strip(),
+        "maker": (it.maker or "").strip(),
+        "grade": (it.grade or "").strip(),
+        "qty": it.qty or 1,
+        "unit": (it.unit or "").strip(),
+        "remark": (it.remark or "").strip(),
+        "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택). 없으면 None
+        "applied_to": it.applied_to,   # 용역이 닿은 계통(선택)
+        # 옵션 표시행 표식 — 견적에서 나눠 둔 옵션이 이 문서에서도 그대로 서게 한다.
+        "row_kind": (getattr(it, "row_kind", "") or ""),
+        "lid": (getattr(it, "lid", "") or "").strip(),
+    } for it in rows if (it.part_no or it.description)]
+
+
+def _past_items(rfq) -> list[dict]:
+    """앞선 RFQ 들의 품목 줄 — 나중 RFQ 의 것이 앞선다(같은 lid 는 한 번만)."""
+    out, seen = [], set()
+    for p in reversed(getattr(rfq, "past_rounds", None) or []):
+        for it in (p.get("items") or []):
+            lid = line_id_of(it)
+            if lid and lid not in seen:
+                seen.add(lid)
+                out.append(it)
+    return out
+
+
+def _line_up_items(s, rfq, items: list[dict], extra_reserved=()) -> list[dict]:
+    """이 딜의 품목 줄에 이름(lid)을 단다 — 재요청이면 앞선 RFQ 의 같은 품목 이름을 이어받는다."""
+    past = _past_items(rfq)
+    if past:
+        # "남은 게 한 줄씩"(only)이라는 이유만으로는 같은 품목으로 보지 않는다 — 벤더의 답과 달리
+        # 재요청에는 새 품목이 얼마든지 섞인다.
+        for m in stamp_doc_line_ids(past, items)["matches"]:
+            if m["how"] == "only":
+                items[m["index"]]["lid"] = ""
+    reserved = deal_used_line_ids(s, rfq.id) | {line_id_of(it) for it in past} | set(extra_reserved)
+    return assign_line_ids(items, reserved=reserved)
+
+
+def _check_round_at(at: str) -> str:
+    try:
+        datetime.strptime(at, "%Y-%m-%dT%H:%M")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="RFQ 수신 일시 형식이 잘못됐습니다(YYYY-MM-DDTHH:MM).")
+    return at
+
+
+def _rounds_view(s, rfq) -> list[dict]:
+    """RFQ #1·#2… — 마지막이 지금 RFQ. 앞선 RFQ 는 품목까지 실어 보낸다(화면이 읽기 전용으로 보인다)."""
+    past = getattr(rfq, "past_rounds", None) or []
+    out = [{
+        "no": i + 1, "current": False,
+        "received_at": p.get("received_at") or "",
+        "customer_rfq_no": p.get("customer_rfq_no") or "",
+        "contact_person": p.get("contact_person") or "",
+        "request_channel": p.get("request_channel") or "",
+        "notes": p.get("notes") or "",
+        "items": [_item_view(it) for it in (p.get("items") or [])],
+        "source_files": p.get("source_files") or [],
+    } for i, p in enumerate(past)]
+    out.append({
+        "no": len(past) + 1, "current": True,
+        "received_at": rfq_round_at(rfq),
+        "customer_rfq_no": rfq.customer_rfq_no or "",
+        "contact_person": getattr(rfq, "contact_person", None) or "",
+        "request_channel": getattr(rfq, "request_channel", None) or "",
+        "notes": rfq.notes or "", "items": [], "source_files": [],
+    })
+    return out
+
+
+@app.post("/api/admin/rfq/{rfq_id}/rounds", dependencies=[Depends(require_token)])
+def add_rfq_round(rfq_id: int, body: RfqRoundAdd, user: dict = Depends(get_current_user)):
+    """같은 딜에 RFQ 를 하나 더 — 지금 RFQ 를 이력으로 넘기고 새 RFQ 가 그 자리에 선다.
+
+    2~4단계는 새 RFQ 의 문서로 다시 채워진다(앞선 벤더 RFQ·견적은 지우지 않고 RFQ #1 로 남는다).
+    줄별 채택(award)은 앞선 RFQ 의 결정이라 함께 넘긴다 — 새 수량에는 다시 골라야 한다."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        if _orders_for_rfq(s, rfq_id):
+            raise HTTPException(status_code=400,
+                detail="이미 고객 P/O 가 있는 딜입니다. 새 요청은 Copy as new 로 새 프로젝트를 만드세요.")
+        items = _rfq_items_in(body.items)
+        at = _check_round_at((body.received_at or "").strip()[:16] or _kst_iso(datetime.utcnow()))
+        prev_at = rfq_round_at(rfq)
+        if at <= prev_at:
+            raise HTTPException(status_code=400,
+                detail=f"새 RFQ 의 수신 일시는 앞선 RFQ({prev_at.replace('T', ' ')})보다 뒤여야 합니다.")
+        dates = dict(rfq.stage_dates or {})
+        awards = s.query(DealLineAward).filter_by(rfq_id=rfq_id).all()
+        past = list(rfq.past_rounds or [])
+        past.append({
+            "no": len(past) + 1,
+            "received_at": prev_at,
+            "customer_rfq_no": rfq.customer_rfq_no or "",
+            "customer_id": rfq.customer_id,
+            "contact_person": rfq.contact_person or "",
+            "cc_contact_ids": rfq.cc_contact_ids or [],
+            "request_channel": rfq.request_channel or "",
+            "notes": rfq.notes or "",
+            "items": [dict(it) for it in (rfq.items or [])],
+            "source_files": rfq.source_files or [],
+            # 앞선 RFQ 에서 손으로 찍은 1~4단계 완료일 — 새 RFQ 의 단계가 끝난 것으로 보이지 않게.
+            "stage_dates": {k: dates.pop(k) for k in ("1", "2", "3", "4") if k in dates},
+            "awards": [{c.name: getattr(a, c.name) for c in DealLineAward.__table__.columns
+                        if c.name not in ("id", "rfq_id") and not isinstance(getattr(a, c.name), datetime)}
+                       for a in awards],
+        })
+        rfq.past_rounds = past
+        rfq.stage_dates = dates
+        rfq.round_at = at
+        rfq.customer_rfq_no = (body.customer_rfq_no or "").strip() or None
+        rfq.request_channel = (body.request_channel or "").strip() or None
+        rfq.notes = (body.notes or "").strip() or None
+        rfq.source_files = []
+        if body.customer_id and body.customer_id != rfq.customer_id:
+            cust = s.query(Customer).filter_by(id=body.customer_id).first()
+            if not cust:
+                raise HTTPException(status_code=400, detail="Customer를 찾을 수 없습니다.")
+            rfq.customer_id = cust.id
+            rfq.contact_person = cust.contact or None
+            rfq.cc_contact_ids = _clean_cc_ids(s, cust.id, rfq.cc_contact_ids)
+        rfq.items = _line_up_items(s, rfq, items, {a.lid for a in awards if a.lid})
+        apply_line_categories(s, rfq.items)
+        for a in awards:
+            s.delete(a)
+        # 접어 둔 딜이면 되살린다 — 다시 물어 왔으니 살아 있는 딜이다.
+        reopened = _enum_val(rfq.status) == RFQStatus.LOST.value
+        rfq.status = RFQStatus.RECEIVED
+        rfq.close_reason = rfq.close_reason_note = rfq.closed_at = None
+        no = len(past) + 1
+        ref = f" ({rfq.customer_rfq_no})" if rfq.customer_rfq_no else ""
+        # 접수 자체는 1단계 자동 이벤트(수신 일시)가 활동 로그에 세운다 — 되살린 딜만 한 줄 남긴다.
+        if reopened:
+            log_stage_note(s, rfq_id, f"딜 재활성 — 재요청 RFQ #{no} 접수{ref}",
+                           user.get("username", ""), stage=1, system="reopen", when=at)
+        s.commit()
+        return {"ok": True, "round_no": no}
+    finally:
+        s.close()
+
+
+@app.delete("/api/admin/rfq/{rfq_id}/rounds/{round_no}", dependencies=[Depends(require_token)])
+def remove_rfq_round(rfq_id: int, round_no: int, user: dict = Depends(get_current_user)):
+    """마지막 RFQ 를 지우고 앞선 RFQ 로 되돌린다(잘못 추가했을 때). 벤더 RFQ·견적은 건드리지 않는다."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        past = list(rfq.past_rounds or [])
+        # 두 번 눌러 앞선 RFQ 까지 지우지 않게 — 화면이 본 번호가 지금 RFQ 일 때만.
+        if not past or round_no != len(past) + 1:
+            raise HTTPException(status_code=400, detail="마지막 재요청 RFQ 만 지울 수 있습니다.")
+        prev = past.pop()
+        rfq.past_rounds = past or None
+        rfq.round_at = (prev.get("received_at") or None) if past else None
+        rfq.customer_rfq_no = prev.get("customer_rfq_no") or None
+        rfq.request_channel = prev.get("request_channel") or None
+        rfq.notes = prev.get("notes") or None
+        rfq.items = prev.get("items") or []
+        rfq.source_files = prev.get("source_files") or []
+        if prev.get("customer_id") and s.query(Customer).filter_by(id=prev["customer_id"]).first():
+            rfq.customer_id = prev["customer_id"]
+            rfq.contact_person = prev.get("contact_person") or None
+            rfq.cc_contact_ids = _clean_cc_ids(s, rfq.customer_id, prev.get("cc_contact_ids"))
+        rfq.stage_dates = {**(rfq.stage_dates or {}), **(prev.get("stage_dates") or {})}
+        # 앞선 채택을 되살린다 — 새 RFQ 에서 고른 것은 그 RFQ 와 함께 사라진다.
+        s.query(DealLineAward).filter_by(rfq_id=rfq_id).delete(synchronize_session=False)
+        have = {i for (i,) in s.query(VendorQuote.id).all()}
+        for a in prev.get("awards") or []:
+            if a.get("vendor_quote_id") and a["vendor_quote_id"] not in have:
+                continue       # 그 사이 지워진 견적
+            s.add(DealLineAward(rfq_id=rfq_id, **a))
+        log_stage_note(s, rfq_id, f"재요청 RFQ #{round_no} 삭제", user.get("username", ""),
+                       stage=1, system="re_rfq")
+        s.commit()
+        return {"ok": True, "round_no": round_no - 1}
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/rfq", dependencies=[Depends(require_token)])
 def create_rfq(body: RfqCreate, background: BackgroundTasks,
                user: dict = Depends(get_current_user)):
@@ -371,22 +579,7 @@ def create_rfq(body: RfqCreate, background: BackgroundTasks,
         cust = s.query(Customer).filter_by(id=body.customer_id).first()
         if not cust:
             raise HTTPException(status_code=400, detail="Customer를 선택하세요.")
-        items = [{
-            "part_no": (it.part_no or "").strip(),
-            "description": (it.description or "").strip(),
-            "type": (it.type or "").strip(),
-            "serial_no": (it.serial_no or "").strip(),
-            "maker": (it.maker or "").strip(),
-            "grade": (it.grade or "").strip(),
-            "qty": it.qty or 1,
-            "unit": (it.unit or "").strip(),
-            "remark": (it.remark or "").strip(),
-            "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택). 없으면 None
-            "applied_to": it.applied_to,   # 용역이 닿은 계통(선택)
-            # 옵션 표시행 표식 — 견적에서 나눠 둔 옵션이 이 문서에서도 그대로 서게 한다.
-            "row_kind": (getattr(it, "row_kind", "") or ""),
-            "lid": (getattr(it, "lid", "") or "").strip(),
-        } for it in body.items if (it.part_no or it.description)]
+        items = _rfq_items_in(body.items)
         # 줄이 태어나는 자리 — 여기서 붙인 이름(L01·L02…)을 이후 모든 문서가 안고 다닌다.
         assign_line_ids(items)
         src_files = _clean_source_files(body.source_files)
@@ -689,7 +882,16 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
             rfq.work_type = wt
         if body.received_at is not None:
             recv = body.received_at.strip()
-            if recv:
+            if recv and rfq_round_no(rfq) > 1:
+                # 재요청 RFQ 의 수신 일시 — 첫 RFQ 의 것(프로젝트 번호 날짜)은 건드리지 않는다.
+                if recv[:16] != (rfq.round_at or ""):
+                    _check_round_at(recv[:16])
+                    prev_at = rfq_round_starts(rfq)[-2]
+                    if recv[:16] <= prev_at:
+                        raise HTTPException(status_code=400,
+                            detail=f"이 RFQ 의 수신 일시는 앞선 RFQ({prev_at.replace('T', ' ')})보다 뒤여야 합니다.")
+                    rfq.round_at = recv[:16]
+            elif recv:
                 rfq.received_at = recv
                 rfq.date = recv[:10]
         if body.assignee_id is not None:
@@ -701,28 +903,11 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
             else:
                 raise HTTPException(status_code=400, detail="담당자(사용자)를 찾을 수 없습니다.")
         if body.items is not None:
-            new_items = [{
-                "part_no": (it.part_no or "").strip(),
-                "description": (it.description or "").strip(),
-                "type": (it.type or "").strip(),
-                "serial_no": (it.serial_no or "").strip(),
-                "maker": (it.maker or "").strip(),
-                "grade": (it.grade or "").strip(),
-                "qty": it.qty or 1,
-                "unit": (it.unit or "").strip(),
-                "remark": (it.remark or "").strip(),
-                "category_id": it.category_id,   # 입력 시 고른 품목 분류(선택)
-                "applied_to": it.applied_to,   # 용역이 닿은 계통(선택)
-                # 옵션 표시행 표식 — 견적에서 나눠 둔 옵션이 이 문서에서도 그대로 서게 한다.
-                "row_kind": (getattr(it, "row_kind", "") or ""),
-                "lid": (getattr(it, "lid", "") or "").strip(),
-            } for it in body.items if (it.part_no or it.description)]
             # 다른 문서(벤더 RFQ·견적·채택 기록…)가 아직 쓰는 이름만 예약한다 — 지운 줄의
             # 이름이 그 문서들에 남아 있으면 되살리면 안 된다. 아무 데도 안 쓰인 이름은
             # 비워 준다(품목을 통째로 다시 넣었을 때 L51 이 아니라 L01 부터 서게).
-            reserved = deal_used_line_ids(s, rfq.id)
-            new_items = assign_line_ids(new_items, reserved=reserved)
-            rfq.items = new_items
+            # 재요청 RFQ 면 앞선 RFQ 의 같은 품목 이름을 이어받는다(_line_up_items).
+            rfq.items = _line_up_items(s, rfq, _rfq_items_in(body.items))
             apply_line_categories(s, rfq.items)
         if body.source_files is not None:
             # 프론트가 현재 전체 목록을 보내므로 통째로 교체.

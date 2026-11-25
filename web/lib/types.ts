@@ -816,6 +816,8 @@ export type CustomerQuoteItem = {
 
 /** 표의 한 칸 — 품목 줄(행) × 물어본 곳(열)이 만나는 자리. */
 export type LineCell = {
+  /** 앞선 RFQ 에 물은·받은 값 — 보이기만 하고 현황·최저가에는 세지 않는다. */
+  old?: boolean;
   /** sent=물어봤고 아직 답 없음 · quoted=값이 왔다 · no_price=답은 왔는데 값이 비었다
    *  · omitted=견적은 왔는데 이 줄만 빠졌다 · declined=견적 불가 통보 */
   state: "sent" | "quoted" | "no_price" | "omitted" | "declined" | "included";
@@ -892,6 +894,9 @@ export type BoardVendor = {
   sent_at: string;
   status: string;
   declined: boolean;
+  /** 몇 번째 RFQ 로 물은 곳인가(0 = 재요청 없음) · 앞선 RFQ 의 것인가. */
+  round?: number;
+  old?: boolean;
   /** 품목에 이어지지 않은 견적 줄(운임 등) — 벤더 합계에는 들어간다. */
   charges?: { description: string; amount: number; currency: string }[];
   quotes: { id: number; vendor_quote_no: string; currency: string; received_at: string }[];
@@ -1002,6 +1007,8 @@ export type QuotationTerms = {
 
 // Customer Quotation 작성 시 공급사 견적에서 cost 불러오기용
 export type VendorQuoteOverviewRow = {
+  round?: number;      // 몇 번째 RFQ 것인가(0 = 재요청 없음)
+  rfq_round?: number;  // 이 딜의 지금 RFQ
   id: number;
   rfq_id: number | null;
   vendor_quote_no: string;
@@ -1041,6 +1048,8 @@ export type VendorQuoteForImport = {
 };
 
 export type QtnRow = {
+  round?: number;      // 몇 번째 RFQ 것인가(0 = 재요청 없음)
+  rfq_round?: number;  // 이 딜의 지금 RFQ
   id: number;
   rfq_id: number | null;
   qtn_no: string;
@@ -1068,6 +1077,8 @@ export type QtnRow = {
 };
 
 export type VrfqRow = {
+  round?: number;      // 몇 번째 RFQ 것인가(0 = 재요청 없음)
+  rfq_round?: number;  // 이 딜의 지금 RFQ
   id: number;
   rfq_id: number | null;
   customer_rfq_no: string;
@@ -2297,6 +2308,11 @@ export type PipelineRow = {
   // 견적 수신 이력 — 벤더 견적 1건 = 수신 1건. 견적을 실제로 준 벤더는 이 목록이 근거다
   // (RFQ 를 보낸 벤더 전체가 아니다). 3단계 활동을 수신별 별도 행으로 표시.
   quote_receipts?: { id: number; vendor: string; received_at: string; quote_no?: string }[];
+  /** 재요청 RFQ — 2 이상이면 RFQ 가 다시 온 딜. round_at = 지금 RFQ 수신 일시. */
+  rfq_round?: number;
+  round_at?: string;
+  /** 앞선 RFQ 들의 수신·견적 발송 일시(활동 로그용 — 단계 일시는 지금 RFQ 의 것만 담는다). */
+  past_rounds?: { no: number; received_at: string; quoted_at: string }[];
   stage: number;
   /** 단계별 완료 목록 — stage 까지는 모두 들어 있고, 선입금 딜에서만 그 뒤로 9~11 이
    *  건너뛰어 붙는다(돈이 물건 7·8 보다 먼저 끝난 경우). 옛 백엔드면 없다. */
@@ -2387,6 +2403,19 @@ export type RfqSourceFile = {
   at?: string;
 };
 
+/** 같은 딜에 온 RFQ 하나 — 마지막(current)이 지금 1단계 폼이 고치는 RFQ 다. */
+export type RfqRound = {
+  no: number;
+  current: boolean;
+  received_at: string;
+  customer_rfq_no: string;
+  contact_person: string;
+  request_channel: string;
+  notes: string;
+  items: RfqItem[];
+  source_files: RfqSourceFile[];
+};
+
 export type RfqDetail = {
   id: number;
   rfq_no: string;
@@ -2423,7 +2452,11 @@ export type RfqDetail = {
   source_files: RfqSourceFile[];
   /** 공유 드라이브 프로젝트 폴더 링크(비면 아직 없음). */
   drive_folder_url?: string;
-  vendor_rfqs: { id: number; vendor: string; at: string }[];
+  vendor_rfqs: { id: number; vendor: string; at: string; round?: number }[];
+  /** 지금 RFQ 가 몇 번째인가(1 = 재요청 없음) · RFQ 전부(앞선 것은 품목까지). */
+  round_no?: number;
+  rounds?: RfqRound[];
+  has_order?: boolean;
   vendor_quotes: { vendor_quote_no: string; amount: string; at: string }[];
   quotation: { qtn_no: string; amount: string; status: string; at: string } | null;
 };

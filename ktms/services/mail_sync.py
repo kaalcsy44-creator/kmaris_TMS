@@ -780,9 +780,11 @@ def doc_no_index(s) -> dict[str, int]:
 
     for rid, pno in _project_no_map(s).items():
         put(pno, rid)
-    for r in s.query(RFQ.id, RFQ.rfq_no, RFQ.customer_rfq_no).all():
+    for r in s.query(RFQ.id, RFQ.rfq_no, RFQ.customer_rfq_no, RFQ.past_rounds).all():
         put(r.rfq_no or "", r.id)
         put(r.customer_rfq_no or "", r.id)
+        for p in (r.past_rounds or []):      # 재요청 전 RFQ 번호로 오는 답장도 이 딜이다
+            put(p.get("customer_rfq_no") or "", r.id)
     for vr in s.query(VendorRFQ.rfq_id, VendorRFQ.kmaris_rfq_no).all():
         put(vr.kmaris_rfq_no or "", vr.rfq_id)
     for q in s.query(Quotation.rfq_id, Quotation.qtn_no).all():

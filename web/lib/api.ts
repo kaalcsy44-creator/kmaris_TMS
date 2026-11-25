@@ -520,6 +520,22 @@ export function createRfq(body: {
   return post("/api/admin/rfq", body);
 }
 
+/** 같은 딜에 다시 온 RFQ 추가 — 지금 RFQ 는 이력이 되고 새 RFQ 가 그 자리에 선다. */
+export function addRfqRound(rfqId: number, body: {
+  received_at: string;
+  customer_rfq_no?: string;
+  request_channel?: string;
+  customer_id?: number;
+  notes?: string;
+  items: { part_no: string; description: string; type?: string; serial_no?: string; maker?: string; grade?: string; qty: number; unit?: string; remark?: string; category_id?: number | null; applied_to?: number | null; row_kind?: string; lid?: string }[];
+}): Promise<{ ok: boolean; round_no: number }> {
+  return post(`/api/admin/rfq/${rfqId}/rounds`, body);
+}
+/** 마지막 RFQ 를 지우고 앞선 RFQ 로 되돌린다(roundNo 는 지금 RFQ 여야 한다). */
+export function removeRfqRound(rfqId: number, roundNo: number): Promise<{ ok: boolean; round_no: number }> {
+  return del(`/api/admin/rfq/${rfqId}/rounds/${roundNo}`);
+}
+
 export function updateRfq(
   rfqId: number,
   body: {

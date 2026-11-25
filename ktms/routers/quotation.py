@@ -6,6 +6,10 @@ import re
 from pydantic import BaseModel
 
 from _core import (
+    quote_sent_iso,
+    rfq_round_no,
+    round_of,
+    round_rfq_ref,
     _doc_disposition,
     _doc_filename,
     _doc_vessel_name,
@@ -243,6 +247,10 @@ def quotation_overview(customer_id: int | None = None,
                 "sent_at": getattr(qt, "sent_at", None) or "",
                 "sent_date": getattr(qt, "sent_at", None) or qt.sent_date or "",
                 "date": qt.date or "",
+                # 재요청이 있던 딜에서 이 견적이 몇 번째 RFQ 것인가(0 = 재요청 없음).
+                "round": (round_of(rfq_map[qt.rfq_id], quote_sent_iso(qt))
+                          if qt.rfq_id in rfq_map and rfq_round_no(rfq_map[qt.rfq_id]) > 1 else 0),
+                "rfq_round": rfq_round_no(rfq_map[qt.rfq_id]) if qt.rfq_id in rfq_map else 1,
                 "stage": stage,
                 "pipeline": _status_label(stage, rfq_wt.get(qt.rfq_id)) if stage else "",
                 # 공통 식별 컬럼
@@ -455,7 +463,7 @@ def _quotation_payload(s, qtn):
     vessel, rfq = _deal_vessel(s, qtn)
     project_title = (getattr(rfq, "project_title", None) or "") if rfq else ""
     tm = qtn.terms or {}
-    ref_no = tm.get("ref_no") or ((getattr(rfq, "customer_rfq_no", None) or "") if rfq else "")
+    ref_no = tm.get("ref_no") or (round_rfq_ref(rfq, quote_sent_iso(qtn)) if rfq else "")
     attn = tm.get("attn") or (getattr(cust, "contact", None) or "" if cust else "")
     messrs = tm.get("messrs") or ""
     return build_payload(

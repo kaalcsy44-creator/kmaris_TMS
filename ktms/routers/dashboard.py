@@ -4,6 +4,13 @@ from __future__ import annotations
 from sqlalchemy.orm import defer
 
 from _core import (
+    live_quotations,
+    live_vquotes,
+    quote_sent_iso,
+    rfq_round_at,
+    rfq_round_no,
+    rfq_round_starts,
+    round_of,
     ItemMaster,
     ItemCategory,
     ARRecord,
@@ -455,7 +462,7 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 vquote_at = _kst(vq0.created_at)
                 # 매입(견적) 금액은 받은 견적 중 가장 싼 것. 합산하지 않는다 —
                 # 같은 품목을 여러 벤더에 물은 경쟁 견적이라 더하면 원가가 부푼다.
-                vendor_usd, vendor_amount = cheapest_vendor_quote(vqs)
+                vendor_usd, vendor_amount = cheapest_vendor_quote(live_vquotes(r, vqs, vrfqs))
             else:
                 vquote_no, vquote_at, vendor_amount = "", "", ""
                 vendor_usd = None
@@ -521,7 +528,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 # — 고객에게 나간 값이 그것이고, 목록의 마진율도 그 값으로 나와야 한다.
                 _c_disp = (qtn.currency or "USD").upper()
                 _customer_usd_sum = 0.0
-                for _q in qtns:
+                # 재요청 RFQ 로 다시 낸 견적은 앞 견적을 갈음한다 — 새 견적만 더한다.
+                for _q in live_quotations(r, qtns):
                     _qc = (getattr(_q, "currency", None) or "USD").upper()
                     _qt = _quotation_total(_q.items or [], getattr(_q, "discount_pct", 0) or 0)
                     _customer_usd_sum += (_qt / usd_krw_rate()) if _qc == "KRW" else _qt
@@ -632,15 +640,16 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
             # 여러 곳에서 견적을 받았으면 곳마다 한 줄 — 목록에서 값을 견주려면 접힌
             # 숫자를 펴야 한다. 발주가 나간 뒤에는 세우지 않는다: 그때의 매입은 추정이
             # 아니라 실제로 산 값(P/O)이고, 어디서 살지 고르는 일은 이미 끝났다.
-            quote_lines = [] if _has_po else _vendor_quote_lines(vqs, qtns, _vrfq_vendor)
+            _lvqs, _lqtns = live_vquotes(r, vqs, vrfqs), live_quotations(r, qtns)
+            quote_lines = [] if _has_po else _vendor_quote_lines(_lvqs, _lqtns, _vrfq_vendor)
             # 품목 기준 목록 — 발주 전이고 받은 견적이 있을 때. 품목이 하나뿐이고 견적도
             # 한 곳뿐이면 합계 한 줄과 같은 말이라 세우지 않는다.
             item_quotes = None
             if not _has_po and vqs:
                 _base_n = sum(1 for it in (r.items or []) if isinstance(it, dict)
                               and not is_option_row(it))
-                if _base_n >= 2 or len(vqs) >= 2:
-                    item_quotes = _item_quote_lines(r.items, vrfqs, vqs, qtns, _vrfq_vendor)
+                if _base_n >= 2 or len(_lvqs) >= 2:
+                    item_quotes = _item_quote_lines(r.items, vrfqs, _lvqs, _lqtns, _vrfq_vendor)
 
             vessels_disp = "\n".join(_vessels)
             customer_po_nos_disp = "\n".join(_po_nos)
@@ -686,6 +695,17 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "project_title": getattr(r, "project_title", None) or "",
                 "received_at": getattr(r, "received_at", None) or "",
                 "first_rfq_at": _first_rfq_iso(r),
+                # 재요청 RFQ — 2 이상이면 RFQ 가 다시 온 딜. past_rounds 는 활동 로그용(앞선 RFQ 의
+                # 수신·견적 발송일 — 단계 일시는 지금 RFQ 의 것만 담는다).
+                "rfq_round": rfq_round_no(r),
+                "round_at": rfq_round_at(r) if rfq_round_no(r) > 1 else "",
+                "past_rounds": [{
+                    "no": i + 1,
+                    "received_at": st,
+                    "quoted_at": min((quote_sent_iso(_q) for _q in qtns
+                                      if _q.status != QuotationStatus.DRAFT
+                                      and round_of(r, quote_sent_iso(_q)) == i + 1), default=""),
+                } for i, st in enumerate(rfq_round_starts(r)[:-1])],
                 "project_no": _project_no_map(s).get(r.id, ""),
                 # 담당자(PIC) = created_by 직원. 직접 지정 가능(설정 시 created_by 갱신).
                 "assignee": user_names.get(getattr(r, "created_by", None), "") or "",
@@ -839,7 +859,8 @@ def global_search(q: str = "", limit: int = 40, user: dict = Depends(get_current
             c = cust.get(r.customer_id)
             ves = vessels.get(r.vessel_id) if r.vessel_id else None
             proj_no = proj_map.get(r.id, "")
-            add("Customer RFQ No.", r.customer_rfq_no)
+            add("Customer RFQ No.", r.customer_rfq_no,
+                *[p.get("customer_rfq_no") for p in (r.past_rounds or [])])
             add("K-Maris RFQ No.", _rfq_no_disp(r.rfq_no))
             add("Project No.", proj_no)
             add("Project title", getattr(r, "project_title", None))

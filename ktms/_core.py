@@ -858,9 +858,24 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
     vrfq_ids = [v.id for v in vrfqs]
     vquotes = (s.query(VendorQuote).filter(VendorQuote.vendor_rfq_id.in_(vrfq_ids)).all()
                if vrfq_ids else [])
-    quo = (s.query(Quotation)
-           .filter(Quotation.rfq_id == rfq_id, Quotation.status != QuotationStatus.DRAFT)
-           .order_by(Quotation.created_at.asc()).first())
+    quos = (s.query(Quotation)
+            .filter(Quotation.rfq_id == rfq_id, Quotation.status != QuotationStatus.DRAFT)
+            .order_by(Quotation.created_at.asc()).all())
+    # 재요청 RFQ 가 온 딜 — 2~4단계는 지금 RFQ 의 문서로만 끝난다(앞선 RFQ 의 견적은 이력).
+    # 다만 고객이 옛 견적으로 발주했으면(지금 RFQ 의 견적이 없는 오더) 있는 문서를 그대로 센다.
+    _round = rfq_round_no(rfq)
+    if _round > 1:
+        _vr_by = {v.id: v for v in vrfqs}
+        _q_now = [q for q in quos if round_of(rfq, quote_sent_iso(q)) == _round]
+        if order is None or _q_now:
+            quos = _q_now
+            vquotes = [q for q in vquotes
+                       if vquote_round(rfq, q, _vr_by.get(q.vendor_rfq_id)) == _round]
+            _answered = {q.vendor_rfq_id for q in vquotes}
+            # 새로 보낸 것이 없으면, 새 견적이 걸린 옛 벤더 RFQ 라도 2단계의 근거로 본다.
+            vrfqs = ([v for v in vrfqs if round_of(rfq, _vrfq_sent_iso(v)) == _round]
+                     or [v for v in vrfqs if v.id in _answered])
+    quo = quos[0] if quos else None
     if order:
         pos = (s.query(PurchaseOrder).filter_by(order_id=order.id)
                .order_by(PurchaseOrder.created_at.asc()).all())
@@ -1026,7 +1041,7 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
             auto[str(stg)] = val
 
     # 1) Customer RFQ 수신 — 수신 일시(received_at) 우선, 없으면 생성 시각
-    _set(1, (getattr(rfq, "received_at", None) or "") or _kst_iso(rfq.created_at))
+    _set(1, rfq_round_at(rfq))
     # 2) Vendor RFQ 발신 · 3) Vendor Quot. 수신
     if vrfqs:
         _set(2, min((_vrfq_sent_iso(v) for v in vrfqs), default=""))
@@ -1478,6 +1493,81 @@ def customer_options(s) -> list[dict]:
                     # 그 말을 하므로 같은 말을 두 번 붙이지 않는다.
                     "bounced": bool(bad) and grade != "X"})
     return out
+
+
+# ── 재요청 RFQ ───────────────────────────────────────────────────────────────
+# 견적을 내고 멈춘 딜에 같은 배·같은 품목의 RFQ 가 다시 온다(수량만 바뀌는 식). 딜은 그대로
+# 두고 RFQ 만 하나 더 쌓는다. 벤더 RFQ·견적이 몇 번째 RFQ 것인지는 따로 적지 않고 **날짜**로
+# 가린다 — 늦게 등록하거나 날짜를 고쳐도 저절로 제자리를 찾는다.
+def rfq_round_no(rfq) -> int:
+    """지금 RFQ 가 몇 번째인가(1 = 재요청 없음)."""
+    return len(getattr(rfq, "past_rounds", None) or []) + 1
+
+
+def rfq_round_at(rfq) -> str:
+    """지금 RFQ 의 수신 일시 — 재요청이 없으면 첫 RFQ 의 것."""
+    return ((getattr(rfq, "round_at", None) or "") if rfq_round_no(rfq) > 1 else "") or _first_rfq_iso(rfq)
+
+
+def rfq_round_starts(rfq) -> list[str]:
+    """RFQ #1·#2… 의 수신 일시."""
+    past = getattr(rfq, "past_rounds", None) or []
+    return [str(p.get("received_at") or "") for p in past] + [rfq_round_at(rfq)]
+
+
+def round_of(rfq, when: str) -> int:
+    """그 일시의 문서가 몇 번째 RFQ 것인가. 시각을 모르는 날짜(T00:00)는 날짜끼리 견준다."""
+    starts = rfq_round_starts(rfq)
+    w = str(when or "")
+    day_only = len(w) == 10 or w.endswith("T00:00")
+    no = 1
+    for i, st in enumerate(starts[1:], start=2):
+        if st and (w[:10] >= st[:10] if day_only else w[:16] >= st[:16]):
+            no = i
+    return no
+
+
+def quote_sent_iso(q) -> str:
+    """고객 견적의 일시 — 보낸 일시, 아직이면 문서 일자·생성 시각."""
+    return ((getattr(q, "sent_at", None) or "").strip() or _date_iso(q.sent_date)
+            or _kst_iso(q.created_at) or _date_iso(q.date))
+
+
+def vquote_round(rfq, q, vrfq=None) -> int:
+    """벤더 견적의 RFQ 회차 — 옛 벤더 RFQ 에 걸어 등록했어도 새 RFQ 뒤에 받았으면 새 회차다."""
+    n = round_of(rfq, _vquote_recv_iso(q))
+    return max(n, round_of(rfq, _vrfq_sent_iso(vrfq))) if vrfq is not None else n
+
+
+def live_round_docs(rfq, docs, when) -> list:
+    """금액 집계에 쓸 문서 — 문서가 있는 가장 최근 RFQ 의 것만.
+
+    재견적은 앞 견적을 **갈음**한다. 예전 합산 규칙(견적이 여러 장이면 서로 다른 품목)을
+    그대로 쓰면 같은 품목의 옛 견적과 새 견적이 더해져 매출이 두 배로 찍힌다."""
+    docs = list(docs or [])
+    if rfq_round_no(rfq) == 1 or not docs:
+        return docs
+    no = {id(d): when(d) for d in docs}
+    top = max(no.values())
+    return [d for d in docs if no[id(d)] == top]
+
+
+def live_vquotes(rfq, vqs, vrfqs) -> list:
+    by_id = {v.id: v for v in vrfqs or []}
+    return live_round_docs(rfq, vqs, lambda q: vquote_round(rfq, q, by_id.get(q.vendor_rfq_id)))
+
+
+def live_quotations(rfq, qtns) -> list:
+    return live_round_docs(rfq, qtns, lambda q: round_of(rfq, quote_sent_iso(q)))
+
+
+def round_rfq_ref(rfq, when: str) -> str:
+    """그 일시에 낸 문서가 답하는 고객 RFQ No. — 옛 견적을 다시 열어도 새 번호로 바뀌지 않게."""
+    past = getattr(rfq, "past_rounds", None) or []
+    no = round_of(rfq, when)
+    if no <= len(past):
+        return past[no - 1].get("customer_rfq_no") or ""
+    return getattr(rfq, "customer_rfq_no", None) or ""
 
 
 def _vrfq_sent_iso(v) -> str:
@@ -5088,6 +5178,16 @@ class RfqUpdate(BaseModel):
     assignee_id: int | None = None      # 담당자(PIC) = created_by. 0 → 미지정 해제
     items: list[RfqItemIn] | None = None  # 보내면 품목 전체 교체
     source_files: list[RfqSourceFileIn] | None = None  # 보내면 소스 파일 메타 전체 교체
+
+
+class RfqRoundAdd(BaseModel):
+    """같은 딜에 다시 온 RFQ(#2~). 비운 항목은 앞선 RFQ 의 값을 물려받지 않는다(품목 제외)."""
+    received_at: str | None = None      # "YYYY-MM-DDTHH:MM"(비우면 현재)
+    customer_rfq_no: str | None = ""
+    request_channel: str | None = ""
+    customer_id: int | None = None      # 이번 RFQ 를 보낸 담당자(비우면 그대로)
+    notes: str | None = ""
+    items: list[RfqItemIn] = []
 
 
 class RfqLevelUpdate(BaseModel):

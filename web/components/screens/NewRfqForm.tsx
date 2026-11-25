@@ -10,6 +10,7 @@ import {
   updateRfq,
   fetchRfqDetail,
   deleteRfq,
+  removeRfqRound,
   parseRfqPdf,
   createSettingsCustomer,
   createSettingsVessel,
@@ -19,7 +20,7 @@ import {
   type DriveUploadResult,
 } from "@/lib/api";
 import DriveIntakePanel, { EMPTY_INTAKE, intakeSummary, type DriveIntake } from "@/components/common/DriveIntakePanel";
-import type { CustomerOption, SettingsVessel, SettingsConsultant, RfqSourceFile } from "@/lib/types";
+import type { CustomerOption, SettingsVessel, SettingsConsultant, RfqRound, RfqSourceFile } from "@/lib/types";
 import type { VesselLookupResult } from "@/lib/api";
 import { LookupNote, SanctionWarning, VesselLookupButton } from "@/components/common/VesselSanctions";
 import { can, canEditDeal, editBlockReason } from "@/lib/auth";
@@ -28,6 +29,7 @@ import { imageFromClipboard } from "@/lib/imagePaste";
 import { orCancelled, useScanCancel } from "@/lib/useScanCancel";
 import { useEditGate } from "@/lib/viewMode";
 import CustomerSelect from "@/components/common/CustomerSelect";
+import { AddRfqRoundModal, PastRfqView, RfqRoundBar, RoundDiff } from "@/components/common/RfqRounds";
 import ContactMultiSelect from "@/components/common/ContactMultiSelect";
 import VesselOwnerRow from "@/components/common/VesselOwnerRow";
 import PrintListButton from "@/components/common/PrintListModal";
@@ -201,6 +203,11 @@ export default function NewRfqForm({
   const [copyMove, setCopyMove] = useState(false);
   const [copyBusy, setCopyBusy] = useState(false);
   const [copyErr, setCopyErr] = useState<string | null>(null);
+  // 재요청 RFQ — 폼은 늘 마지막 RFQ 를 고치고, 앞선 RFQ 는 골라서 읽기만 한다(viewRound).
+  const [rounds, setRounds] = useState<RfqRound[]>([]);
+  const [viewRound, setViewRound] = useState(0);   // 0 = 지금 RFQ
+  const [hasOrder, setHasOrder] = useState(false);
+  const [addRound, setAddRound] = useState(false);
   // 품목 표 컬럼 폭(헤더 경계 드래그로 조절, localStorage 유지).
   const itemCols = useColumnLayout("rfq-item-cols", RFQ_ITEM_COLS);
   const itemColW = (k: string) => itemCols.widths[k] ?? RFQ_ITEM_DEFAULT_W[k];
@@ -460,6 +467,8 @@ export default function NewRfqForm({
 
   function resetForm() {
     setEditId(null);
+    setRounds([]);
+    setViewRound(0);
     setAssigneeId(0);
     setCustomerId("");
     setCcIds([]);
@@ -490,6 +499,9 @@ export default function NewRfqForm({
     try {
       const d = await fetchRfqDetail(id);
       setEditId(id);
+      setRounds(Array.isArray(d.rounds) ? d.rounds : []);
+      setViewRound(0);
+      setHasOrder(!!d.has_order);
       // 미발급 RFQ 는 상세 API 가 "-" 로 내려준다 → 배지는 빈칸으로(번호는 2단계 발송 시 부여).
       setLoadedRfqNo(d.rfq_no && d.rfq_no !== "-" ? d.rfq_no : "");
       setAssigneeId(d.assignee_id ?? 0);
@@ -815,6 +827,30 @@ export default function NewRfqForm({
     }
   }
 
+  const pastRound = rounds.find((r) => r.no === viewRound && !r.current);
+  const lastRound = rounds[rounds.length - 1];
+  const prevRound = rounds.length > 1 ? rounds[rounds.length - 2] : undefined;
+
+  async function removeRound() {
+    if (!editId || !lastRound || rounds.length < 2) return;
+    if (!window.confirm(
+      `Remove RFQ #${lastRound.no} and go back to RFQ #${lastRound.no - 1}?\n` +
+      "Its items, notes and line awards are deleted. Vendor RFQs and quotations stay."
+    )) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await removeRfqRound(editId, lastRound.no);
+      await loadRfq(editId);
+      setMsg(`RFQ #${lastRound.no} removed`);
+      onCreated?.("");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Remove failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const customerName = customerId === "" ? "" : (customers.find((c) => c.id === customerId)?.name || "");
 
   // 회사 목록(중복 제거) — Customer select 는 회사명만 보여준다. 로고는 같은 회사의
@@ -910,6 +946,20 @@ export default function NewRfqForm({
           <PrintListButton small label="🖨 Preview / Print" build={buildLinePrint} />
         </div>
       ) : null}
+      {editId && embedded ? (
+        <RfqRoundBar
+          rounds={rounds}
+          viewNo={pastRound ? pastRound.no : lastRound?.no ?? 1}
+          onView={(no) => setViewRound(no === lastRound?.no ? 0 : no)}
+          canAdd={canEditThis && rounds.length > 0}
+          addBlocked={hasOrder ? "This project already has a customer P/O — use “Copy as new” for a new enquiry." : ""}
+          onAdd={() => setAddRound(true)}
+          onRemove={hasOrder || !canDeleteThis ? undefined : removeRound}
+          busy={busy}
+        />
+      ) : null}
+      {pastRound ? <PastRfqView round={pastRound} prev={rounds.find((r) => r.no === pastRound.no - 1)} /> : null}
+      <div style={pastRound ? { display: "none" } : undefined}>
       <fieldset {...fieldsetProps}>
       <div className="sub-h" style={{ marginTop: 0, marginBottom: 8 }}>
         Basic info
@@ -1227,6 +1277,7 @@ export default function NewRfqForm({
       </div>
       </div>
 
+      {prevRound ? <RoundDiff prevNo={prevRound.no} prev={prevRound.items} now={items} /> : null}
       <div className="items-head" style={{ marginTop: 18 }}>
         <div className="sub-h">Item list</div>
         <div className="items-head-actions">
@@ -1397,6 +1448,22 @@ export default function NewRfqForm({
         {msg ? <span className="action-ok">{msg}</span> : null}
         {err ? <span className="action-err">{err}</span> : null}
       </div>
+      </div>
+
+      {addRound && editId ? (
+        <AddRfqRoundModal
+          rfqId={editId}
+          contacts={companyContacts}
+          contactId={customerId}
+          onClose={() => setAddRound(false)}
+          onAdded={async (no) => {
+            setAddRound(false);
+            await loadRfq(editId);
+            setMsg(`RFQ #${no} added — stages 2–4 start again for this RFQ`);
+            onCreated?.(""); // 목록·단계 막대 새로고침
+          }}
+        />
+      ) : null}
 
       {copyOpen ? (
         <Modal title="📋 Copy RFQ as a new deal" onClose={() => setCopyOpen(false)} form maxWidth={720}>

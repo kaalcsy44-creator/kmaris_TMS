@@ -23063,3 +23063,27 @@ table.pod-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 }
 .frt-form-act .dfc-sub { font-size: 12.5px; }
 table.frt-table { min-width: 720px; }
+/* ── 재요청 RFQ(같은 딜의 RFQ #1·#2…) ── */
+.rfq-round-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: #e6f0ff; color: #0b4ea2; font-size: 11px; font-weight: 600; line-height: 1.5; white-space: nowrap; vertical-align: middle; }
+.rfq-round-tag.old { background: #eef1f5; color: #6b7686; }
+.rfq-round-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; min-width: 0; }
+.rfq-round-acts { margin-left: auto; display: flex; gap: 6px; flex: 0 0 auto; }
+.rfq-round-todo { margin: 0 0 12px; padding: 9px 12px; border-radius: 8px; background: #fff6e0; color: #7a5200; font-size: 13px; }
+.rfq-round-diff { margin: 14px 0 0; padding: 9px 12px; border-radius: 8px; background: #f3f7fc; font-size: 13px; }
+.rfq-round-diff ul { margin: 5px 0 0; padding-left: 18px; }
+.rfq-round-diff li { margin: 2px 0; }
+.rfq-round-add { color: #16794a; font-weight: 600; }
+.rfq-round-gone { color: #a33b2c; font-weight: 600; }
+.rfq-round-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 24px; margin: 12px 0; }
+.rfq-round-meta dt { color: var(--muted); font-size: 12.5px; }
+.rfq-round-meta dd { margin: 2px 0 0; font-weight: 500; }
+.rfq-round-past .table-wrap { margin-top: 12px; }
+.rfq-round-notes { white-space: pre-wrap; font-size: 13px; }
+.rfq-round-mode { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; }
+.rfq-round-mode label { display: inline-flex; align-items: center; gap: 5px; }
+.rfq-round-off td { opacity: 0.45; }
+.rfq-round-off td:first-child { opacity: 1; }
+input.rfq-round-qty { width: 80px; text-align: right; }
+input.rfq-round-qty.changed { border-color: #d08a00; background: #fffaf0; font-weight: 600; }
+.lb-v.old { opacity: 0.72; }
+@media (max-width: 720px) { .rfq-round-bar { flex-wrap: wrap; } }

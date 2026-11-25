@@ -348,6 +348,7 @@ export default function LineBoard({
       for (const v of vendors) {
         const c = cells[l.lid]?.[String(v.vrfq_id)];
         if (c?.state !== "quoted" || c.unit_cost == null || Number(c.unit_cost) <= 0) continue;
+        if (c.old) continue;   // 앞선 RFQ 에 받은 값 — 보이기만 하고 최저가로 치지 않는다
         // 완제품 칸(여러 라인 값)은 이 라인 하나의 값과 견줄 수 없다 — 최저가에서 뺀다.
         if ((c.covers?.length ?? 0) > 1) continue;
         // 칸의 unit_cost 는 대안이 있으면 이미 그중 최저가다.
@@ -653,9 +654,10 @@ export default function LineBoard({
               <th className="lb-desc">Description</th>
               <th className="lb-qty">Qty</th>
               {vendors.map((v) => (
-                <th key={v.vrfq_id} colSpan={spanOf(v.vrfq_id)} className={"lb-v" + (v.declined ? " out" : "")}>
+                <th key={v.vrfq_id} colSpan={spanOf(v.vrfq_id)} className={"lb-v" + (v.declined ? " out" : "") + (v.old ? " old" : "")}>
                   <VendorName entries={[{ name: v.vendor, state: v.declined ? "declined" : v.quotes.length ? "quoted" : "plain" }]} />
                   <span className="lb-v-no">{v.kmaris_rfq_no}</span>
+                  {v.round ? <span className={`rfq-round-tag${v.old ? " old" : ""}`} title={v.old ? "Asked for an earlier RFQ — shown for reference, not counted as sourced" : undefined}>RFQ #{v.round}</span> : null}
                 </th>
               ))}
               <th className="lb-state">{mode === "award" ? "Buying from" : "Status"}</th>
