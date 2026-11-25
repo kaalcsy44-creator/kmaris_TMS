@@ -375,6 +375,7 @@ def _apply_row(s, row: FreightQuote, body: FreightRowIn) -> None:
     if not (body.carrier.strip() or body.vendor_id):
         raise HTTPException(status_code=400, detail="Enter the carrier or forwarder.")
     order_ids = {o.id for o in _orders_for_rfq(s, row.rfq_id)}
+    was = (row.ci_id or 0, row.order_id or 0)
     row.order_id = body.order_id if body.order_id in order_ids else None
     ci = s.query(CommercialInvoice).filter_by(id=body.ci_id).first() if body.ci_id else None
     row.ci_id = ci.id if ci and ci.order_id in order_ids else None
@@ -391,7 +392,7 @@ def _apply_row(s, row: FreightQuote, body: FreightRowIn) -> None:
     row.amount = round(body.amount or 0, 2)
     row.vat_amount = round(body.vat_amount or 0, 2)
     row.notes = (body.notes or "").strip()
-    if body.awarded and not row.awarded:
+    if body.awarded and (not row.awarded or was != (row.ci_id or 0, row.order_id or 0)):
         # 같은 자리(같은 포장)의 다른 견적은 고른 것에서 빠진다 — 이미 지급에 등록한 것은 남긴다.
         for other in _light(s, row.rfq_id):
             if (other.id != row.id and other.awarded and not other.payable_id

@@ -99,7 +99,7 @@ export default function FreightPanel({
       ["finance:", "ap:", "ar", "documents", `freight:${rfqId}`].forEach((k) => invalidateCache(k));
       await load();
       onChanged?.();
-      if (m) setMsg(m);
+      setMsg(m || (label === "file" ? "" : "Saved ✓"));
       return true;
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
@@ -115,11 +115,15 @@ export default function FreightPanel({
   const inCur = (krw: number) => (d.krw_per ? krw / d.krw_per : krw);
   const payer = d.info.payer;
   const buyerPays = payer === "buyer";
-  const packages = d.orders.flatMap((o) => o.packages.map((p, i) => ({ ...p, label: `#${i + 1} ${p.ci_no || "CI"}` })));
+  const packages = d.orders.flatMap((o) => o.packages.map((p, i) => ({ ...p, order_id: o.id, label: `#${i + 1} ${p.ci_no || "CI"}` })));
+  // 포장이 둘 이상이면 포장마다 견적·비용·청구를 따로 본다.
+  const byPkg = packages.length >= 2;
+  const pkgOrder = (ci: number) => { const i = packages.findIndex((p) => p.ci_id === ci); return i < 0 ? packages.length : i; };
+  const rows = byPkg ? [...d.rows].sort((a, b) => pkgOrder(a.ci_id) - pkgOrder(b.ci_id) || a.id - b.id) : d.rows;
   const pkgLabel = (id: number) => packages.find((p) => p.ci_id === id)?.label ?? "Whole shipment";
   const t = d.totals;
   const diff = t.charged_krw - t.cost_krw;
-  const active = d.rows.filter((r) => r.payable || (r.awarded && !buyerPays));
+  const active = rows.filter((r) => r.payable || (r.awarded && !buyerPays));
   const unpaid = active.filter((r) => !r.payable?.paid);
   const cis = d.docs.filter((x) => x.kind === "ci");
   const incoterms = d.orders.find((o) => o.incoterms)?.incoterms ?? "";
@@ -134,6 +138,16 @@ export default function FreightPanel({
   const unbilled = (d.billing ?? []).filter((b) => b.unbilled > 0 && b.order_id);
   for (const u of unbilled) {
     warnings.push(`${fmt(u.unbilled, u.currency)} of freight is charged on the document but not in receivables (AR) — register it under "Charged to the buyer".`);
+  }
+
+  const wholeActive = active.some((r) => !r.ci_id);
+  const pkgMissing = byPkg && !buyerPays && !wholeActive && active.length
+    ? packages.filter((p) => !active.some((r) => r.ci_id === p.ci_id)) : [];
+  if (pkgMissing.length) warnings.push(`No freight cost yet for package ${pkgMissing.map((p) => p.label).join(", ")}.`);
+  if (byPkg && wholeActive && active.length && !buyerPays) {
+    warnings.push(active.some((r) => r.ci_id)
+      ? "Freight is in use both for the whole shipment and for a single package — check that the same cost is not counted twice."
+      : `This shipment has ${packages.length} packages, but the freight in use is set to "Whole shipment". If it covers one package only, change "For" in the quotation list.`);
   }
 
   const setInfo = (p: Partial<Freight["info"]>) =>
@@ -160,7 +174,24 @@ export default function FreightPanel({
       URL.revokeObjectURL(url);
     });
 
-  const newRow = () => setEdit({ id: 0, form: { ...EMPTY, order_id: orderId || null, quote_date: today(), awarded: d.rows.length === 0 }, file: null });
+  /** 새 견적 — 포장이 여럿이면 아직 비용이 없는 첫 포장부터. */
+  const newRow = (ci?: number) => {
+    const target = ci ?? (byPkg ? packages.find((p) => !d.rows.some((r) => r.ci_id === p.ci_id))?.ci_id ?? 0 : 0);
+    const own = packages.find((p) => p.ci_id === target);
+    setBill(null);
+    setEdit({
+      id: 0, file: null,
+      form: { ...EMPTY, order_id: own?.order_id ?? (orderId || null), ci_id: target || null, quote_date: today(),
+              awarded: !d.rows.some((r) => (r.ci_id || 0) === target) },
+    });
+  };
+  /** 이 견적을 다른 포장으로 — 그 포장에 이미 쓰는 견적이 있으면 고르지 않은 견적으로 옮긴다. */
+  const moveRow = (r: FreightRow, ci: number) => run("row", async () => {
+    const own = packages.find((p) => p.ci_id === ci);
+    const clash = d.rows.some((x) => x.id !== r.id && (x.awarded || x.payable) && (x.ci_id || 0) === ci);
+    await saveFreight(rfqId, r.id, { ...toSave(r), ci_id: ci || null, order_id: own?.order_id ?? (r.order_id || null), awarded: r.awarded && !clash });
+    return clash ? `Moved to ${pkgLabel(ci)} — another quotation is already in use there, so this one is not ticked.` : "Saved ✓";
+  });
 
   return (
     <div className="doc-tab frt">
@@ -217,11 +248,54 @@ export default function FreightPanel({
         </div>
       ) : null}
 
+      {editable ? (
+        <p className="hint-inline frt-note">Ticks and choices on this page are saved right away. Only the open forms (quotation, bill, invoice) have their own Save button.</p>
+      ) : null}
+
+      {/* 포장별 한눈에 — 포장이 둘 이상일 때만 */}
+      {byPkg ? (
+        <div className="stage-card">
+          <div className="form-section-title">By package</div>
+          <div className="table-wrap pod-table-wrap">
+            <table className="pod-table frt-table">
+              <thead>
+                <tr><th>Package</th><th>Carrier</th><th className="num">Cost</th><th className="num">Charged to buyer</th><th className="num">Difference</th><th>Payment</th><th /></tr>
+              </thead>
+              <tbody>
+                {[...packages, ...(wholeActive ? [{ ci_id: 0, ci_no: "", order_id: 0, label: "Whole shipment" }] : [])].map((p) => {
+                  const own = active.filter((r) => (r.ci_id || 0) === p.ci_id);
+                  const cost = own.reduce((s, r) => s + r.cost_krw, 0);
+                  const doc = cis.find((x) => x.id === p.ci_id && x.counted && x.freight);
+                  // 문서 통화가 화면 통화와 같을 때만 차액을 낸다.
+                  const gap = doc && own.length && doc.currency === cur ? Math.round((doc.freight - inCur(cost)) * 100) / 100 : null;
+                  const open = own.filter((r) => !r.payable?.paid);
+                  return (
+                    <tr key={p.ci_id}>
+                      <td><b>{p.label}</b></td>
+                      <td>{own.length ? [...new Set(own.map((r) => r.carrier))].join(", ") : buyerPays ? "—" : p.ci_id && wholeActive ? <span className="muted">In whole shipment</span> : <span className="pod-none">No freight yet</span>}
+                        {own.some((r) => r.tracking_no) ? <div className="muted">{own.map((r) => r.tracking_no).filter(Boolean).join(", ")}</div> : null}</td>
+                      <td className="num">{own.length ? fmt(Math.round(inCur(cost) * 100) / 100, cur) : "—"}{own.length && cur !== "KRW" ? <div className="muted">{fmt(Math.round(cost), "KRW")}</div> : null}</td>
+                      <td className="num">{doc ? fmt(doc.freight, doc.currency) : "—"}</td>
+                      <td className="num">{gap === null ? "—" : fmt(gap, cur)}</td>
+                      <td>{!own.length ? "—" : !open.length ? <span className="ar-badge">Paid ✓</span>
+                        : open.every((r) => r.payable) ? <span className={`ar-badge${open.some((r) => r.payable?.overdue) ? " overdue" : ""}`}>Unpaid</span> : <span className="pod-none">Not registered</span>}</td>
+                      <td className="pod-act">
+                        {editable && p.ci_id && !buyerPays ? <button type="button" className="btn sm" disabled={!!busy} onClick={() => newRow(p.ci_id)}>＋ Quotation</button> : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
       {/* ③ 운송사 견적 */}
       <div className="stage-card">
         <div className="embedded-add-head frt-head">
           <div className="form-section-title">Freight quotations</div>
-          {editable && !edit ? <button type="button" className="btn sm primary" onClick={newRow}>＋ Add quotation</button> : null}
+          {editable && !edit ? <button type="button" className="btn sm primary" onClick={() => newRow()}>＋ Add quotation</button> : null}
         </div>
         {d.rows.length ? (
           <div className="table-wrap pod-table-wrap">
@@ -233,7 +307,7 @@ export default function FreightPanel({
                 </tr>
               </thead>
               <tbody>
-                {d.rows.map((r) => (
+                {rows.map((r) => (
                   <tr key={r.id} className={r.awarded || r.payable ? "on" : ""}>
                     <td>
                       <input type="checkbox" checked={r.awarded || !!r.payable} disabled={!editable || !!busy || !!r.payable}
@@ -241,7 +315,13 @@ export default function FreightPanel({
                              onChange={(e) => void run("row", async () => { await saveFreight(rfqId, r.id, { ...toSave(r), awarded: e.target.checked }); })} />
                     </td>
                     <td><b>{r.carrier}</b>{r.service ? <div className="muted">{r.service}</div> : null}</td>
-                    <td>{pkgLabel(r.ci_id)}{r.weight ? <div className="muted">{r.weight}</div> : null}</td>
+                    <td>{editable && byPkg ? (
+                      <select className="frt-for" value={r.ci_id || 0} disabled={!!busy} aria-label={`Package of the ${r.carrier} quotation`}
+                              onChange={(e) => void moveRow(r, Number(e.target.value))}>
+                        <option value={0}>Whole shipment</option>
+                        {packages.map((p) => <option key={p.ci_id} value={p.ci_id}>{p.label}</option>)}
+                      </select>
+                    ) : pkgLabel(r.ci_id)}{r.weight ? <div className="muted">{r.weight}</div> : null}</td>
                     <td>{r.quote_no || "—"}<div className="muted">{[r.quote_date, r.valid_until ? `valid ${r.valid_until}` : ""].filter(Boolean).join(" · ")}</div></td>
                     <td>{r.transit || "—"}</td>
                     <td className="num">{fmt(r.amount, r.currency)}{r.vat_amount ? <div className="muted">VAT {fmt(r.vat_amount, r.currency)}</div> : null}</td>
