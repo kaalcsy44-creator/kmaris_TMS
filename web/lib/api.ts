@@ -477,6 +477,23 @@ export function createRfqDriveFolder(
 ): Promise<RfqDriveFolder & { folder_name: string; created: string[] }> {
   return post(`/api/admin/rfq/${rfqId}/drive-folder`, opts);
 }
+/** 드라이브에 이미 있는 프로젝트 폴더 — 이 딜과 이름이 비슷한 순. linked_to = 다른 딜이 쓰는 중. */
+export type DriveFolderCandidate = {
+  id: string; name: string; where: string; url: string; linked_to: string; current: boolean; score: number;
+};
+export function fetchDriveFolderCandidates(rfqId: number): Promise<{ root: "PARTS" | "SERVICE"; folders: DriveFolderCandidate[] }> {
+  return get(`/api/admin/rfq/${rfqId}/drive-folder/candidates`);
+}
+/** 기존 폴더 연결(링크 또는 ID) — 드라이브에는 아무것도 쓰지 않는다. */
+export function linkRfqDriveFolder(
+  rfqId: number, folder: string, replace = false
+): Promise<RfqDriveFolder & { folder_name: string }> {
+  return put(`/api/admin/rfq/${rfqId}/drive-folder/link`, { folder, replace });
+}
+/** 연결만 푼다 — 폴더·파일은 그대로. */
+export function unlinkRfqDriveFolder(rfqId: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/rfq/${rfqId}/drive-folder/link`);
+}
 
 export function createRfq(body: {
   customer_id: number;

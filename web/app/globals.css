@@ -11804,6 +11804,34 @@ tr:hover > td > .pl-ov-link { color: var(--blue); }
 @media print {
   .drive-chip { display: none; }
 }
+/* 연결된 폴더 — 열기 + 연결 바꾸기(▾). */
+.drive-chip-pair { display: inline-flex; align-items: center; gap: 2px; }
+.drive-chip-more {
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.drive-chip-more:hover { background: var(--zebra); color: var(--ink); }
+@media print { .drive-chip-more { display: none; } }
+/* 기존 폴더 연결 — 폴더 고르기 목록 */
+.dfc-tabs { align-self: flex-start; }
+.dfc-pick { max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.dfc-pick > .hint-inline { display: block; padding: 10px; }
+.dfc-pick-row { display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); font-size: 12.5px; line-height: 1.4; cursor: pointer; }
+.dfc-pick-row:last-child { border-bottom: 0; }
+.dfc-pick-row.on { background: #eef5ff; }
+.dfc-pick-row.off { color: var(--muted); cursor: default; }
+.dfc-pick-row input { flex: none; margin-top: 2px; }
+.dfc-pick-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.dfc-pick-name i { font-style: normal; color: var(--muted); }
+.dfc-pick-name em { display: block; font-style: normal; font-size: 11.5px; color: #8a5a00; }
+.dfc-pick-row a { flex: none; text-decoration: none; }
+.dfc-unlink { margin-right: auto; color: #b42318; }
 /* 드라이브 폴더 만들기 확인 창 */
 .dfc-backdrop {
   position: fixed;

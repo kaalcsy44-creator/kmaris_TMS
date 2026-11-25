@@ -164,9 +164,9 @@ def _children(parent_id: str, *, name: str | None = None, folders_only: bool = F
 
 
 def get_folder(folder_id: str) -> dict | None:
-    """폴더가 살아 있으면 메타({id,name,parents}), 없거나 휴지통이면 None."""
+    """폴더가 살아 있으면 메타({id,name,parents,driveId}), 없거나 휴지통이면 None."""
     r = _call("GET", f"{API}/files/{folder_id}",
-              params={"fields": "id,name,mimeType,trashed,parents"}, ok=(200, 404))
+              params={"fields": "id,name,mimeType,trashed,parents,driveId"}, ok=(200, 404))
     if r.status_code == 404:
         return None
     meta = r.json()

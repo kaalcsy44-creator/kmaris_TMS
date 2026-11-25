@@ -582,6 +582,41 @@ def create_rfq_drive_folder(rfq_id: int, body: DriveFolderCreate | None = None):
             "folder_name": out["folder_name"], "created": out["created"]}
 
 
+@app.get("/api/admin/rfq/{rfq_id}/drive-folder/candidates", dependencies=[Depends(require_token)])
+def rfq_drive_folder_candidates(rfq_id: int):
+    """"기존 폴더 연결" — 드라이브에 이미 있는 프로젝트 폴더 목록(드라이브에 쓰지 않는다)."""
+    try:
+        return project_drive.folder_candidates(rfq_id)
+    except drive_svc.DriveError as exc:
+        raise HTTPException(status_code=502, detail=f"드라이브를 확인하지 못했습니다: {exc}")
+
+
+class DriveFolderLink(BaseModel):
+    folder: str             # 폴더 링크 또는 ID
+    replace: bool = False   # 이미 연결된 폴더를 바꾼다
+
+
+@app.put("/api/admin/rfq/{rfq_id}/drive-folder/link", dependencies=[Depends(require_token)])
+def link_rfq_drive_folder(rfq_id: int, body: DriveFolderLink):
+    """사람이 드라이브에서 만든 폴더를 이 프로젝트에 잇는다(링크만 적는다)."""
+    try:
+        return {"enabled": True, **project_drive.link_folder(rfq_id, body.folder, replace=body.replace)}
+    except project_drive.FolderChoiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except drive_svc.DriveError as exc:
+        raise HTTPException(status_code=502, detail=f"드라이브를 확인하지 못했습니다: {exc}")
+
+
+@app.delete("/api/admin/rfq/{rfq_id}/drive-folder/link", dependencies=[Depends(require_token)])
+def unlink_rfq_drive_folder(rfq_id: int):
+    """폴더 연결만 푼다 — 드라이브의 폴더·파일은 그대로."""
+    try:
+        project_drive.unlink_folder(rfq_id)
+    except project_drive.FolderChoiceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return {"ok": True}
+
+
 @app.post("/api/admin/rfq/{rfq_id}/assign-no", dependencies=[Depends(require_token)])
 def assign_rfq_no_endpoint(rfq_id: int, body: RfqAssignNo):
     """케이마리스 RFQ No. 단독 발번(미발급이면 부여, 이미 발급됐으면 유지)."""

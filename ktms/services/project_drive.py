@@ -154,6 +154,129 @@ def ensure_rfq_folder(rfq_id: int, *, create: bool = False, subs=ALL_SUBS,
         s.close()
 
 
+# ── 사람이 드라이브에서 먼저 만들어 둔 폴더 잇기 ──────────────────────────────────
+class FolderChoiceError(ValueError):
+    """고른 폴더를 이을 수 없다(주소가 아님·다른 딜이 씀·공유 드라이브 밖) — 사용자에게 그대로 보인다."""
+
+
+_STOP = {"spare", "spares", "parts", "part", "the", "and", "for", "of", "na", "mv", "mt", "marine"}
+_MONTH = re.compile(r"\d{4}$")          # 월별 보관 폴더(2606·2607…)
+
+
+def _toks(text: str) -> set[str]:
+    return {t for t in re.findall(r"[a-z0-9가-힣]+", (text or "").lower()) if t not in _STOP and len(t) > 1}
+
+
+def parse_folder_id(text: str) -> str:
+    """폴더 링크(drive.google.com/…/folders/ID, …?id=ID) 또는 ID 자체 → 폴더 ID. 아니면 ''."""
+    t = (text or "").strip()
+    m = re.search(r"/folders/([A-Za-z0-9_-]{10,})", t) or re.search(r"[?&]id=([A-Za-z0-9_-]{10,})", t)
+    if m:
+        return m[1]
+    return t if re.fullmatch(r"[A-Za-z0-9_-]{15,}", t) else ""
+
+
+def _linked_by(s, ids, not_rfq: int) -> dict[str, str]:
+    """{폴더 ID: 그 폴더를 쓰는 다른 딜의 표시 이름}."""
+    if not ids:
+        return {}
+    return {r.drive_folder_id: " ".join(x for x in (r.project_code or "", r.project_title or "") if x) or f"RFQ {r.id}"
+            for r in s.query(RFQ).filter(RFQ.drive_folder_id.in_(list(ids)), RFQ.id != not_rfq).all()}
+
+
+def folder_candidates(rfq_id: int) -> dict:
+    """이 딜에 이을 만한 기존 폴더 — 루트 바로 아래와 월별 폴더 아래. 드라이브를 읽기만 한다.
+
+    이름이 이 딜(날짜·고객사·선박·제목)과 비슷한 순. 다른 딜이 쓰는 폴더는 linked_to 를 적어 돌려준다."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if rfq is None:
+            raise drive_svc.DriveError(f"RFQ {rfq_id} 가 없습니다.")
+        wt = work_type_key(rfq)
+        if not drive_svc.enabled(wt):
+            raise drive_svc.DriveError("드라이브 연동이 설정되지 않았습니다.")
+        folders = []
+        for f in drive_svc._children(drive_svc.root_id(wt), folders_only=True):
+            if _MONTH.match(f["name"].strip()):
+                folders += [{**g, "where": f["name"]} for g in drive_svc._children(f["id"], folders_only=True)]
+            else:
+                folders.append({**f, "where": ""})
+        mine = folder_name(s, rfq)
+        day, want = mine[:6], _toks(mine[6:])
+        taken = _linked_by(s, {f["id"] for f in folders}, rfq.id)
+        rows = []
+        for f in folders:
+            nm = f["name"].strip()
+            got = _toks(re.sub(r"^\d{6}", "", nm))
+            score = len(want & got) / len(want | got) if want | got else 0.0
+            # 날짜는 다른 낱말이 하나라도 맞을 때만 보탠다 — 같은 날 다른 고객 딜이 위로 오지 않게.
+            same_day = nm.startswith(day)
+            rows.append({"id": f["id"], "name": nm, "where": f["where"], "url": drive_svc.folder_url(f["id"]),
+                         "linked_to": taken.get(f["id"], ""), "current": f["id"] == (rfq.drive_folder_id or ""),
+                         "score": round(score + (0.3 if same_day and want & got else 0.0), 3)})
+        rows.sort(key=lambda r: r["name"] if r["name"][:6].isdigit() else "", reverse=True)  # 점수가 같으면 최근 것부터
+        rows.sort(key=lambda r: (bool(r["linked_to"]), -r["score"]))
+        return {"root": wt, "folders": rows}
+    finally:
+        s.close()
+
+
+def link_folder(rfq_id: int, folder: str, *, replace: bool = False) -> dict:
+    """이미 있는 드라이브 폴더를 이 딜에 잇는다 — 링크만 적고 드라이브에는 아무것도 쓰지 않는다.
+
+    폴더 하나 = 딜 하나(2026-11-08 사용자 원칙). KTMS 가 나중에 여기에 파일을 올리므로
+    서비스 계정이 쓰는 공유 드라이브 안의 폴더만 받는다."""
+    fid = parse_folder_id(folder)
+    if not fid:
+        raise FolderChoiceError("드라이브 폴더 링크가 아닙니다 — 폴더를 연 주소(…/folders/…)를 붙여 넣으세요.")
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if rfq is None:
+            raise FolderChoiceError("RFQ 를 찾을 수 없습니다.")
+        wt = work_type_key(rfq)
+        if not drive_svc.enabled(wt):
+            raise drive_svc.DriveError("드라이브 연동이 설정되지 않았습니다.")
+        if rfq.drive_folder_id and rfq.drive_folder_id != fid and not replace:
+            raise FolderChoiceError("이 프로젝트에는 이미 다른 폴더가 연결돼 있습니다 — 새로고침한 뒤 다시 확인하세요.")
+        roots = {i for i in (drive_svc.root_id("PARTS"), drive_svc.root_id("SERVICE")) if i}
+        meta = drive_svc.get_folder(fid)
+        if not meta:
+            raise FolderChoiceError("KTMS 가 볼 수 없는 폴더입니다 — 공유 드라이브 K-MARIS PROJECTS 안의 폴더인지, 휴지통에 있지 않은지 확인하세요.")
+        home = drive_svc.get_folder(drive_svc.root_id(wt)) or {}
+        if not meta.get("driveId") or meta["driveId"] != home.get("driveId"):
+            raise FolderChoiceError("공유 드라이브 K-MARIS PROJECTS 밖의 폴더입니다 — 그 안으로 옮긴 뒤 연결하세요.")
+        name = (meta.get("name") or "").strip()
+        subs = {a.upper() for _, al in drive_svc.SUBFOLDERS.values() for a in al}
+        if fid in roots or fid == meta["driveId"] or _MONTH.match(name):
+            raise FolderChoiceError("프로젝트 하나의 폴더가 아니라 여러 프로젝트를 담는 폴더입니다.")
+        if name.upper() in subs:
+            raise FolderChoiceError(f"'{name}' 는 프로젝트 안의 하위 폴더입니다 — 한 단계 위의 프로젝트 폴더를 고르세요.")
+        other = _linked_by(s, {fid}, rfq.id).get(fid)
+        if other:
+            raise FolderChoiceError(f"이미 다른 프로젝트가 쓰는 폴더입니다: {other}")
+        rfq.drive_folder_id, rfq.drive_folder_url = fid, drive_svc.folder_url(fid)
+        s.commit()
+        log.info("project_drive: RFQ %s — 기존 폴더 연결 %s", rfq_id, name)
+        return {"folder_id": fid, "folder_url": drive_svc.folder_url(fid), "folder_name": name}
+    finally:
+        s.close()
+
+
+def unlink_folder(rfq_id: int) -> None:
+    """연결만 푼다 — 드라이브의 폴더와 파일은 그대로 둔다."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if rfq is None:
+            raise FolderChoiceError("RFQ 를 찾을 수 없습니다.")
+        rfq.drive_folder_id = rfq.drive_folder_url = None
+        s.commit()
+    finally:
+        s.close()
+
+
 MAX_UPLOAD = 50 * 1024 * 1024     # 이보다 큰 파일은 건너뛰고 경고만 남긴다
 
 
