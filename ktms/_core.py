@@ -5177,6 +5177,9 @@ class RfqUpdate(BaseModel):
     received_at: str | None = None      # "YYYY-MM-DDTHH:MM"
     assignee_id: int | None = None      # 담당자(PIC) = created_by. 0 → 미지정 해제
     items: list[RfqItemIn] | None = None  # 보내면 품목 전체 교체
+    # 재요청 RFQ 의 이름 없는 줄을 앞선 RFQ 의 품목과 자동으로 이을까. 사람이 줄마다 "다른 품목"
+    # 까지 정해 보낸 편집기(RFQ 비교 창)는 False — 정한 것을 서버가 다시 묶으면 안 된다.
+    match_lines: bool = True
     source_files: list[RfqSourceFileIn] | None = None  # 보내면 소스 파일 메타 전체 교체
 
 
@@ -5188,6 +5191,7 @@ class RfqRoundAdd(BaseModel):
     customer_id: int | None = None      # 이번 RFQ 를 보낸 담당자(비우면 그대로)
     notes: str | None = ""
     items: list[RfqItemIn] = []
+    source_files: list[RfqSourceFileIn] = []   # Auto-fill 로 읽은 문서
 
 
 class RfqLevelUpdate(BaseModel):

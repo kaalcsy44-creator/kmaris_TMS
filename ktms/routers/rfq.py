@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 
 from _core import (
+    RfqItemIn,
+    is_option_row,
     DealLineAward,
     RfqRoundAdd,
     _orders_for_rfq,
@@ -410,15 +412,19 @@ def _past_items(rfq) -> list[dict]:
     return out
 
 
-def _line_up_items(s, rfq, items: list[dict], extra_reserved=()) -> list[dict]:
+def _match_past(past: list[dict], items: list[dict]) -> None:
+    """이름 없는 줄을 앞선 품목과 잇는다(제자리). "남은 게 한 줄씩"(only)이라는 이유만으로는 같은
+    품목으로 보지 않는다 — 벤더의 답과 달리 재요청에는 새 품목이 얼마든지 섞인다."""
+    for m in stamp_doc_line_ids(past, items)["matches"]:
+        if m["how"] == "only":
+            items[m["index"]]["lid"] = ""
+
+
+def _line_up_items(s, rfq, items: list[dict], extra_reserved=(), match: bool = True) -> list[dict]:
     """이 딜의 품목 줄에 이름(lid)을 단다 — 재요청이면 앞선 RFQ 의 같은 품목 이름을 이어받는다."""
     past = _past_items(rfq)
-    if past:
-        # "남은 게 한 줄씩"(only)이라는 이유만으로는 같은 품목으로 보지 않는다 — 벤더의 답과 달리
-        # 재요청에는 새 품목이 얼마든지 섞인다.
-        for m in stamp_doc_line_ids(past, items)["matches"]:
-            if m["how"] == "only":
-                items[m["index"]]["lid"] = ""
+    if past and match:
+        _match_past(past, items)
     reserved = deal_used_line_ids(s, rfq.id) | {line_id_of(it) for it in past} | set(extra_reserved)
     return assign_line_ids(items, reserved=reserved)
 
@@ -455,6 +461,31 @@ def _rounds_view(s, rfq) -> list[dict]:
     return out
 
 
+class RoundMatchIn(BaseModel):
+    items: list[RfqItemIn] = []
+
+
+@app.post("/api/admin/rfq/{rfq_id}/rounds/match", dependencies=[Depends(require_token)])
+def match_rfq_round_items(rfq_id: int, body: RoundMatchIn):
+    """새로 받은 RFQ 문서의 줄이 이 딜의 어느 품목인가 — 저장하지 않고 lid 만 돌려준다.
+    후보는 지금 RFQ 의 품목, 그다음 앞선 RFQ 들에만 있던 품목."""
+    s = get_session()
+    try:
+        rfq = s.query(RFQ).filter_by(id=rfq_id).first()
+        if not rfq:
+            raise HTTPException(status_code=404, detail="RFQ를 찾을 수 없습니다.")
+        base = [it for it in (rfq.items or []) if line_id_of(it)]
+        have = {line_id_of(it) for it in base}
+        base += [it for it in _past_items(rfq) if line_id_of(it) not in have]
+        items = [{"part_no": (i.part_no or "").strip(), "description": (i.description or "").strip(),
+                  "type": (i.type or "").strip(), "serial_no": (i.serial_no or "").strip(),
+                  "qty": i.qty, "lid": ""} for i in body.items]
+        _match_past(base, items)
+        return {"lids": [line_id_of(it) for it in items]}
+    finally:
+        s.close()
+
+
 @app.post("/api/admin/rfq/{rfq_id}/rounds", dependencies=[Depends(require_token)])
 def add_rfq_round(rfq_id: int, body: RfqRoundAdd, user: dict = Depends(get_current_user)):
     """같은 딜에 RFQ 를 하나 더 — 지금 RFQ 를 이력으로 넘기고 새 RFQ 가 그 자리에 선다.
@@ -472,6 +503,11 @@ def add_rfq_round(rfq_id: int, body: RfqRoundAdd, user: dict = Depends(get_curre
         items = _rfq_items_in(body.items)
         at = _check_round_at((body.received_at or "").strip()[:16] or _kst_iso(datetime.utcnow()))
         prev_at = rfq_round_at(rfq)
+        # 이름(lid)이 없던 옛 딜 — 이력으로 넘기기 전에 붙여야 새 RFQ 와 견줄 수 있다.
+        prev_items = [dict(it) for it in (rfq.items or [])]
+        unnamed = any(not line_id_of(it) for it in prev_items if not is_option_row(it))
+        if unnamed:
+            assign_line_ids(prev_items, reserved=deal_used_line_ids(s, rfq_id))
         if at <= prev_at:
             raise HTTPException(status_code=400,
                 detail=f"새 RFQ 의 수신 일시는 앞선 RFQ({prev_at.replace('T', ' ')})보다 뒤여야 합니다.")
@@ -487,7 +523,7 @@ def add_rfq_round(rfq_id: int, body: RfqRoundAdd, user: dict = Depends(get_curre
             "cc_contact_ids": rfq.cc_contact_ids or [],
             "request_channel": rfq.request_channel or "",
             "notes": rfq.notes or "",
-            "items": [dict(it) for it in (rfq.items or [])],
+            "items": prev_items,
             "source_files": rfq.source_files or [],
             # 앞선 RFQ 에서 손으로 찍은 1~4단계 완료일 — 새 RFQ 의 단계가 끝난 것으로 보이지 않게.
             "stage_dates": {k: dates.pop(k) for k in ("1", "2", "3", "4") if k in dates},
@@ -501,7 +537,7 @@ def add_rfq_round(rfq_id: int, body: RfqRoundAdd, user: dict = Depends(get_curre
         rfq.customer_rfq_no = (body.customer_rfq_no or "").strip() or None
         rfq.request_channel = (body.request_channel or "").strip() or None
         rfq.notes = (body.notes or "").strip() or None
-        rfq.source_files = []
+        rfq.source_files = _clean_source_files(body.source_files)
         if body.customer_id and body.customer_id != rfq.customer_id:
             cust = s.query(Customer).filter_by(id=body.customer_id).first()
             if not cust:
@@ -509,7 +545,8 @@ def add_rfq_round(rfq_id: int, body: RfqRoundAdd, user: dict = Depends(get_curre
             rfq.customer_id = cust.id
             rfq.contact_person = cust.contact or None
             rfq.cc_contact_ids = _clean_cc_ids(s, cust.id, rfq.cc_contact_ids)
-        rfq.items = _line_up_items(s, rfq, items, {a.lid for a in awards if a.lid})
+        # 줄마다 같은 품목인지는 추가 창에서 사람이 정했다 — 옛 딜(이름 없음)만 여기서 잇는다.
+        rfq.items = _line_up_items(s, rfq, items, {a.lid for a in awards if a.lid}, match=unnamed)
         apply_line_categories(s, rfq.items)
         for a in awards:
             s.delete(a)
@@ -907,7 +944,7 @@ def update_rfq(rfq_id: int, body: RfqUpdate):
             # 이름이 그 문서들에 남아 있으면 되살리면 안 된다. 아무 데도 안 쓰인 이름은
             # 비워 준다(품목을 통째로 다시 넣었을 때 L51 이 아니라 L01 부터 서게).
             # 재요청 RFQ 면 앞선 RFQ 의 같은 품목 이름을 이어받는다(_line_up_items).
-            rfq.items = _line_up_items(s, rfq, _rfq_items_in(body.items))
+            rfq.items = _line_up_items(s, rfq, _rfq_items_in(body.items), match=body.match_lines)
             apply_line_categories(s, rfq.items)
         if body.source_files is not None:
             # 프론트가 현재 전체 목록을 보내므로 통째로 교체.

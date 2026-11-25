@@ -23083,7 +23083,21 @@ table.frt-table { min-width: 720px; }
 .rfq-round-mode label { display: inline-flex; align-items: center; gap: 5px; }
 .rfq-round-off td { opacity: 0.45; }
 .rfq-round-off td:first-child { opacity: 1; }
-input.rfq-round-qty { width: 80px; text-align: right; }
-input.rfq-round-qty.changed { border-color: #d08a00; background: #fffaf0; font-weight: 600; }
+table.mini.items-edit.rre-table { min-width: 1060px; }
+table.mini.items-edit.rre-table textarea { width: 100%; min-height: 30px; height: auto; padding: 5px 8px; border: 1px solid #d7e2ee; border-radius: 6px; font: inherit; font-size: 13px; box-sizing: border-box; resize: none; field-sizing: content; }
+table.mini.items-edit.rre-table .changed { border-color: #d08a00; background: #fffaf0; }
+table.mini.items-edit.rre-table tr.off td { background: #f6f7f9; }
+table.mini.items-edit.rre-table tr.off textarea, table.mini.items-edit.rre-table tr.off input:not([type=checkbox]) { text-decoration: line-through; color: #8a94a3; background: #f6f7f9; }
+table.mini.items-edit.rre-table input[type=checkbox] { width: auto; height: auto; min-width: 0; }
+table.mini.items-edit.rre-table td.rre-prev { text-align: right; color: var(--muted); }
+table.mini.items-edit.rre-table td.rre-st { text-align: left; }
+table.mini.items-edit.rre-table td.rre-st select { width: 100%; height: 28px; border: 1px solid #d7e2ee; border-radius: 6px; font: inherit; font-size: 12.5px; background: #fff; }
+.rre-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; background: #eef1f5; color: #5b6676; }
+.rre-chip.new { background: #e3f5ea; color: #16794a; }
+.rre-chip.chg { background: #fff0cf; color: #7a5200; }
+.rre-chip.off { background: #fbe6e2; color: #a33b2c; }
+.rre-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.rre-sum { margin-right: auto; font-size: 13px; color: var(--muted); }
+.form-field.rre-notes textarea { min-height: 64px; }
 .lb-v.old { opacity: 0.72; }
 @media (max-width: 720px) { .rfq-round-bar { flex-wrap: wrap; } }

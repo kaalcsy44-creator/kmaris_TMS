@@ -527,9 +527,15 @@ export function addRfqRound(rfqId: number, body: {
   request_channel?: string;
   customer_id?: number;
   notes?: string;
-  items: { part_no: string; description: string; type?: string; serial_no?: string; maker?: string; grade?: string; qty: number; unit?: string; remark?: string; category_id?: number | null; applied_to?: number | null; row_kind?: string; lid?: string }[];
+  items: RfqItemBody[];
+  source_files?: { name: string; media_type?: string; item_count: number; at?: string }[];
 }): Promise<{ ok: boolean; round_no: number }> {
   return post(`/api/admin/rfq/${rfqId}/rounds`, body);
+}
+export type RfqItemBody = { part_no: string; description: string; type?: string; serial_no?: string; maker?: string; grade?: string; qty: number; unit?: string; remark?: string; category_id?: number | null; applied_to?: number | null; row_kind?: string; lid?: string };
+/** 새로 받은 RFQ 문서의 줄 → 이 딜의 같은 품목 이름(lid). 못 찾은 줄은 "". 저장하지 않는다. */
+export function matchRfqRoundItems(rfqId: number, items: { part_no: string; description: string; type?: string; serial_no?: string; qty: number }[]): Promise<{ lids: string[] }> {
+  return post(`/api/admin/rfq/${rfqId}/rounds/match`, { items });
 }
 /** 마지막 RFQ 를 지우고 앞선 RFQ 로 되돌린다(roundNo 는 지금 RFQ 여야 한다). */
 export function removeRfqRound(rfqId: number, roundNo: number): Promise<{ ok: boolean; round_no: number }> {
@@ -557,6 +563,8 @@ export function updateRfq(
     assignee_id?: number;
     // lid = 라인 ID(위 createRfq 주석 참고). 받은 값을 그대로 돌려보낸다.
     items?: { part_no: string; description: string; type?: string; serial_no?: string; qty: number; remark?: string; category_id?: number | null; row_kind?: string; lid?: string }[];
+    /** false = 이름 없는 줄을 앞선 RFQ 품목과 자동으로 잇지 않는다(줄마다 정해서 보낼 때). */
+    match_lines?: boolean;
     source_files?: { name: string; media_type?: string; item_count: number; at?: string }[];
   }
 ): Promise<{ ok: boolean; id: number }> {

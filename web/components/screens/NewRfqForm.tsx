@@ -11,6 +11,7 @@ import {
   fetchRfqDetail,
   deleteRfq,
   removeRfqRound,
+  matchRfqRoundItems,
   parseRfqPdf,
   createSettingsCustomer,
   createSettingsVessel,
@@ -29,7 +30,8 @@ import { imageFromClipboard } from "@/lib/imagePaste";
 import { orCancelled, useScanCancel } from "@/lib/useScanCancel";
 import { useEditGate } from "@/lib/viewMode";
 import CustomerSelect from "@/components/common/CustomerSelect";
-import { AddRfqRoundModal, PastRfqView, RfqRoundBar, RoundDiff } from "@/components/common/RfqRounds";
+import { PastRfqView, RfqRoundBar, RoundDiff } from "@/components/common/RfqRounds";
+import RfqRoundEditor from "@/components/common/RfqRoundEditor";
 import ContactMultiSelect from "@/components/common/ContactMultiSelect";
 import VesselOwnerRow from "@/components/common/VesselOwnerRow";
 import PrintListButton from "@/components/common/PrintListModal";
@@ -207,7 +209,7 @@ export default function NewRfqForm({
   const [rounds, setRounds] = useState<RfqRound[]>([]);
   const [viewRound, setViewRound] = useState(0);   // 0 = 지금 RFQ
   const [hasOrder, setHasOrder] = useState(false);
-  const [addRound, setAddRound] = useState(false);
+  const [addRound, setAddRound] = useState<"" | "add" | "edit">("");
   // 품목 표 컬럼 폭(헤더 경계 드래그로 조절, localStorage 유지).
   const itemCols = useColumnLayout("rfq-item-cols", RFQ_ITEM_COLS);
   const itemColW = (k: string) => itemCols.widths[k] ?? RFQ_ITEM_DEFAULT_W[k];
@@ -436,6 +438,30 @@ export default function NewRfqForm({
       }
       if (sig.aborted && !ok) {
         setOcrMsg("Cancelled — nothing was filled.");
+        return;
+      }
+      // 재요청 RFQ(#2~) — 같은 품목은 줄을 더하지 않고 그 줄을 고친다(수량·내용). 못 찾은 줄만 뒤에 선다.
+      if (editId && rounds.length > 1 && collected.length) {
+        const { lids } = await matchRfqRoundItems(editId, collected.map((c) => ({ ...c, qty: Number(c.qty) || 1 })));
+        const byLid = new Map(lids.map((l, i) => [l, i] as const).filter(([l]) => l));
+        const here = new Set(items.map((it) => it.lid).filter(Boolean));
+        const missing = items.filter((it) => it.lid && (it.part_no.trim() || it.description.trim()) && !byLid.has(it.lid)).length;
+        setItems((prev) => [
+          ...prev.filter((it) => it.part_no.trim() || it.description.trim()).map((it) => {
+            const i = it.lid ? byLid.get(it.lid) : undefined;
+            if (i === undefined) return it;
+            const c = collected[i];
+            return { ...it, part_no: c.part_no || it.part_no, description: c.description || it.description, type: c.type || it.type,
+                     serial_no: c.serial_no || it.serial_no, maker: c.maker || it.maker, qty: c.qty, unit: c.unit || it.unit, remark: c.remark || it.remark };
+          }),
+          // 앞선 RFQ 에만 있던 품목이면 그 이름(lid)을 달고 선다.
+          ...collected.map((c, i) => ({ ...c, lid: lids[i] || "" })).filter((c) => !c.lid || !here.has(c.lid)),
+        ]);
+        if (newFiles.length) setOcrFiles((prev) => [...prev, ...newFiles]);
+        if (driveOn) setIntake((v) => ({ ...v, files: [...v.files, ...files.slice(0, ok)] }));
+        const hit = lids.filter((l) => l && here.has(l)).length;
+        setOcrMsg(`${sig.aborted ? "Cancelled · " : ""}${hit} line(s) updated · ${collected.length - hit} added` +
+          (missing ? ` · ${missing} line(s) not in this document — delete them if no longer requested` : ""));
         return;
       }
       // 기존 아이템(빈 placeholder 행 제외)에 이번 추출분을 누적.
@@ -953,7 +979,8 @@ export default function NewRfqForm({
           onView={(no) => setViewRound(no === lastRound?.no ? 0 : no)}
           canAdd={canEditThis && rounds.length > 0}
           addBlocked={hasOrder ? "This project already has a customer P/O — use “Copy as new” for a new enquiry." : ""}
-          onAdd={() => setAddRound(true)}
+          onAdd={() => setAddRound("add")}
+          onRevise={() => setAddRound("edit")}
           onRemove={hasOrder || !canDeleteThis ? undefined : removeRound}
           busy={busy}
         />
@@ -1451,15 +1478,17 @@ export default function NewRfqForm({
       </div>
 
       {addRound && editId ? (
-        <AddRfqRoundModal
+        <RfqRoundEditor
           rfqId={editId}
+          mode={addRound}
           contacts={companyContacts}
           contactId={customerId}
-          onClose={() => setAddRound(false)}
-          onAdded={async (no) => {
-            setAddRound(false);
+          driveOn={driveOn}
+          onClose={() => setAddRound("")}
+          onDone={async (text) => {
+            setAddRound("");
             await loadRfq(editId);
-            setMsg(`RFQ #${no} added — stages 2–4 start again for this RFQ`);
+            setMsg(text);
             onCreated?.(""); // 목록·단계 막대 새로고침
           }}
         />
