@@ -759,7 +759,8 @@ export default function LineBoard({
                   ) : (
                     <span className={"lb-chip s-" + l.state}>{STATE_LABEL[l.state]}</span>
                   )}
-                  {l.mixed_currency ? (
+                  {/* 비교 통화로 환산해 최저가를 매겼으면 "직접 비교하라"는 표시는 소음이다. */}
+                  {l.mixed_currency && !(cmpCur && cmpBest.has(l.lid)) ? (
                     <span className="lb-mixed" title="Quotes for this line are in different currencies — compare them yourself">
                       mixed ccy
                     </span>
