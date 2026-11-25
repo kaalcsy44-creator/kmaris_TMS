@@ -579,6 +579,13 @@ export default function LineBoard({
       style={!full && fitH ? { maxHeight: fitH } : undefined}
     >
       <div className="lb-bar">
+        {/* 전체 화면은 딜 화면 머리를 가린다 — 어느 딜의 표인지 왼쪽 위에 다시 적는다. */}
+        {full && (data.meta?.project_no || data.meta?.project_title) ? (
+          <div className="lb-full-title">
+            {data.meta?.project_no ? <b>{data.meta.project_no}</b> : null}
+            {data.meta?.project_title ? <span>{data.meta.project_title}</span> : null}
+          </div>
+        ) : null}
         <div className="lb-counts">
           <Badge n={s.not_sourced} label="not sourced" tone="warn" />
           <Badge n={s.sourcing} label="waiting" tone="idle" />
