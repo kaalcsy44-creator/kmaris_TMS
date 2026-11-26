@@ -4204,32 +4204,49 @@ function PayeesTab() {
         {msg ? <span className="hint-inline">{msg}</span> : null}
         {canEdit ? <button className="btn primary sm" onClick={() => setEdit({ id: 0, form: { ...EMPTY_PAYEE } })}>＋ Add payee</button> : null}
       </div>
-      <p className="hint-inline">
-        Landlord, tax agency, insurance, tax office, payroll — anyone we pay outside of a deal. Pick the name on an Outflow
-        payment and this account is used; change it here once and every payment to them follows. Vendors keep their
-        account in Data › Partners, introducers in Settings › Consultants.
+      <p className="hint-inline fin-pe-hint">
+        Who we pay outside of deals. Pick the name on an Outflow payment and this account is used — change it here once and
+        every payment follows. Vendors keep theirs in Data › Partners.
       </p>
       {error ? <div className="state error">{String(error)}</div> : loading && !data ? <div className="state">Loading…</div> : (
-        <div className="table-wrap">
-          <table className="data-table fin-payees-tbl">
+        <section className="fin-sec">
+          <table className="mini fin-ledger fin-payees-tbl">
             <thead>
-              <tr><th>Payee</th><th>Category</th><th>Bank</th><th>Account no.</th><th>Holder</th><th>Biz no. · Contact</th><th className="num">Payments</th><th /></tr>
+              <tr>
+                <th className="fin-pe-name">Payee</th>
+                <th className="fin-pe-cat">Category</th>
+                <th className="fin-pe-acc">Account</th>
+                <th className="fin-pe-holder">Holder</th>
+                <th>Biz no. · Contact</th>
+                <th className="num fin-pe-pay">Payments</th>
+                <th className="fin-pe-act" />
+              </tr>
             </thead>
             <tbody>
               {rows.map((p) => (
                 <tr key={p.id}>
-                  <td><b>{p.name}</b>{p.notes ? <div className="muted">{p.notes}</div> : null}</td>
-                  <td>{p.category || "—"}</td>
-                  <td>{p.bank_name || <span className="dash">—</span>}</td>
-                  <td>{p.bank_account || <span className="hint-inline">No account</span>}{p.swift ? <div className="muted">SWIFT {p.swift}</div> : null}</td>
-                  <td>{p.bank_holder || "—"}</td>
-                  <td>{[p.biz_no, p.contact].filter(Boolean).join(" · ") || "—"}</td>
-                  <td className="num">
-                    {p.payments}
-                    {p.last_due ? <div className="muted">last {p.last_due}</div> : null}
-                    {p.overrides ? <div className="hint-inline" title="Payments with their own account — they don't follow this one">{p.overrides} own acct</div> : null}
+                  <td className="fin-pe-name">
+                    <b>{p.name}</b>
+                    {p.notes ? <div className="muted fin-pe-note">{p.notes}</div> : null}
                   </td>
-                  <td className="fin-payees-act">
+                  <td>{p.category || <span className="dash">—</span>}</td>
+                  <td>
+                    {p.bank_account || p.bank_name ? (
+                      <span className="fin-pe-bank">
+                        {p.bank_name ? <span className="muted">{p.bank_name}</span> : null}
+                        <span className="fin-pe-no">{p.bank_account}</span>
+                        {p.swift ? <span className="muted">SWIFT {p.swift}</span> : null}
+                      </span>
+                    ) : <span className="fin-pe-none">No account</span>}
+                  </td>
+                  <td>{p.bank_holder || <span className="dash">—</span>}</td>
+                  <td>{[p.biz_no, p.contact].filter(Boolean).join(" · ") || <span className="dash">—</span>}</td>
+                  <td className="num">
+                    <b>{p.payments}</b>
+                    {p.last_due ? <span className="muted"> · last {p.last_due}</span> : null}
+                    {p.overrides ? <div className="hint-inline" title="Payments with their own account — they don't follow this one">{p.overrides} with own account</div> : null}
+                  </td>
+                  <td className="fin-pe-act">
                     {canEdit ? (
                       <>
                         <button className="btn xs" onClick={() => setEdit({ id: p.id, form: {
@@ -4241,10 +4258,10 @@ function PayeesTab() {
                   </td>
                 </tr>
               ))}
-              {!rows.length ? <tr><td colSpan={8} className="muted">{q ? "No match." : "No payees yet — add one, or just save an Outflow payment with a new name."}</td></tr> : null}
+              {!rows.length ? <tr><td colSpan={7} className="muted">{q ? "No match." : "No payees yet — add one, or just save an Outflow payment with a new name."}</td></tr> : null}
             </tbody>
           </table>
-        </div>
+        </section>
       )}
       {edit ? (
         <PayeeForm initial={edit.form} id={edit.id} onClose={() => setEdit(null)}
