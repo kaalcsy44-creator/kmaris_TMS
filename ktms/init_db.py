@@ -1668,6 +1668,29 @@ def migrate_seed_project_codes():
         s.close()
 
 
+def migrate_seed_finance_payees():
+    """1회성: 지금까지의 지급 기록(거래선·소개자 아닌 수취인)에서 지급처 명부를 채운다.
+    계좌는 가장 최근 지급의 것을 지급처로 옮긴다(routers/payees.sync_payee_from_payable)."""
+    eng = get_engine()
+    if not inspect(eng).has_table("finance_payees"):
+        return
+    from db.models import AppSetting, FinancePayable
+    s = get_session()
+    try:
+        if s.query(AppSetting).filter_by(key="finance_payees_seeded").first():
+            return
+        from routers.payees import sync_payee_from_payable
+        n = 0
+        for p in s.query(FinancePayable).order_by(FinancePayable.id.desc()).all():
+            if sync_payee_from_payable(s, p):
+                n += 1
+        s.add(AppSetting(key="finance_payees_seeded", value={"done": True, "linked": n}))
+        s.commit()
+        print(f"[OK] finance_payees seeded from {n} payable(s).")
+    finally:
+        s.close()
+
+
 def migrate_seed_vendor_profiles():
     """1회성: 거래선의 취급품목(specialization)과 회사 소개(note)를 초기 시드.
 

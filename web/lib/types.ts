@@ -3232,7 +3232,7 @@ export type FinanceCalendarItem = {
   project_title?: string;
   account: BankAccount | null;
   account_from: "" | "payable" | "vendor" | "consultant" | "company";
-  account_edit: { kind: "payable"; id: number } | { kind: "vendor"; name: string } | null;
+  account_edit: { kind: "payable"; id: number } | { kind: "vendor"; name: string } | { kind: "payee"; id: number; name: string } | null;
 };
 
 /** 프로젝트 요약(GET /finance/project-summary/{rfq_id}) — Finance 상세 창의 Summary. */

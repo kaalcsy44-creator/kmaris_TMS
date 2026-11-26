@@ -1494,6 +1494,31 @@ export function saveFinancePayableBank(
 ): Promise<{ ok: boolean }> {
   return put(`/api/admin/finance/payables/${id}/bank`, bank);
 }
+// ── 지급처 명부(Payees) — ktms/routers/payees.py ──────────────────────────────
+/** 딜 밖의 수취인(임대인·세무대리인·공단·국세청·급여 등)과 그 계좌. 지급과는 이름으로 잇는다. */
+export type Payee = {
+  id: number; name: string; category: string;
+  bank_name: string; bank_account: string; bank_holder: string; swift: string;
+  biz_no: string; contact: string; notes: string;
+  /** 이 이름으로 등록된 지급 수 · 가장 최근 예정일 · 이번만 다른 계좌를 적은 지급 수. */
+  payments: number; last_due: string; overrides: number;
+};
+export type PayeeSave = Omit<Payee, "id" | "payments" | "last_due" | "overrides">;
+export function fetchPayees(): Promise<{ rows: Payee[] }> {
+  return get("/api/admin/finance/payees");
+}
+export function createPayee(body: PayeeSave): Promise<{ ok: boolean; id: number }> {
+  return post("/api/admin/finance/payees", body);
+}
+export function updatePayee(id: number, body: PayeeSave): Promise<{ ok: boolean; renamed_payments: number }> {
+  return put(`/api/admin/finance/payees/${id}`, body);
+}
+export function deletePayee(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/finance/payees/${id}`);
+}
+export function savePayeeBank(id: number, bank: import("./types").BankAccount): Promise<{ ok: boolean }> {
+  return put(`/api/admin/finance/payees/${id}/bank`, bank);
+}
 export function saveVendorBank(
   name: string, bank: import("./types").BankAccount,
 ): Promise<{ ok: boolean; updated: number }> {

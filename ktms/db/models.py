@@ -1079,6 +1079,27 @@ class FinancePayable(Base):
     created_at   = Column(DateTime, default=datetime.utcnow)
 
 
+class FinancePayee(Base):
+    """지급처 명부 — 딜 밖의 돈을 받는 곳(임대인·세무대리인·4대보험공단·국세청·직원 급여 등).
+
+    거래선(Vendor)·소개자(Consultant)는 각자 명부가 있다. 그 밖의 수취인은 지급 건마다 계좌를
+    따로 적어 같은 곳으로 새 지급을 만들 때마다 다시 적어야 했다. 여기 한 번 적으면 이름이
+    같은 지급(FinancePayable.counterparty)이 이 계좌를 쓴다. 지급 건 자신의 계좌 칸은 '이번만
+    다른 계좌'일 때만 채운다(routers/payees.py)."""
+    __tablename__ = "finance_payees"
+    id           = Column(Integer, primary_key=True)
+    name         = Column(String(200), nullable=False)   # 지급 건의 counterparty 와 같은 이름
+    category     = Column(String(40))     # 기본 분류(임차료·세금·급여·공과금·기타) — 새 지급에 미리 채운다
+    bank_name    = Column(String(120))
+    bank_account = Column(String(120))
+    bank_holder  = Column(String(120))
+    swift        = Column(String(40))
+    biz_no       = Column(String(60))     # 사업자등록번호
+    contact      = Column(String(200))    # 담당자·전화·이메일(자유)
+    notes        = Column(Text)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+
 class FinanceIncome(Base):
     """수입대장(프로젝트 매출 외 기타 수입) — FinancePayable 의 수입측 대응.
 

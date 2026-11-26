@@ -12,6 +12,13 @@ import {
   fetchFinanceCalendarItem,
   saveFinancePayableBank,
   saveVendorBank,
+  savePayeeBank,
+  fetchPayees,
+  createPayee,
+  updatePayee,
+  deletePayee,
+  type Payee,
+  type PayeeSave,
   fetchFinanceClaims,
   fetchFinanceClosing,
   fetchFinanceConsulting,
@@ -153,9 +160,12 @@ function addDays(iso: string, n: number): string {
 // 그 뒤다(신고를 위해 한 기간을 다시 세로로 파는 화면이라 성격이 다르다).
 // Claims 는 Outflow 다음에 선다 — 클레임은 나간 돈(현금 부담)과 깎아 준 매출(상계)이
 // 한 사건에 함께 있어, 어느 한쪽 목록에만 두면 나머지 절반이 보이지 않는다.
-type Tab = "overview" | "inflow" | "outflow" | "claims" | "profit" | "closing" | "calendar";
+// Inflow · Outflow · Payees 는 한 탭("Inflow · Outflow") 안의 하위 탭이다(2026-11-26). 주소는
+// 예전 그대로 tab=inflow / tab=outflow / tab=payees 라 알림·딥링크가 그대로 산다.
+type Tab = "overview" | "inflow" | "outflow" | "payees" | "claims" | "profit" | "closing" | "calendar";
 
-const TABS: Tab[] = ["overview", "inflow", "outflow", "claims", "profit", "closing", "calendar"];
+const TABS: Tab[] = ["overview", "inflow", "outflow", "payees", "claims", "profit", "closing", "calendar"];
+const FLOW_TABS: Tab[] = ["inflow", "outflow", "payees"];
 /** 이름을 바꾸기 전 주소로 들어오는 링크 — 같은 자리로 보낸다. */
 const TAB_ALIAS: Record<string, Tab> = { receivables: "inflow", payables: "outflow" };
 
@@ -227,8 +237,7 @@ export default function FinanceScreen() {
     <div className="action-tabs">
       <div className="page-tabs">
         <button className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>Overview</button>
-        <button className={tab === "inflow" ? "on" : ""} onClick={() => setTab("inflow")}>Inflow</button>
-        <button className={tab === "outflow" ? "on" : ""} onClick={() => setTab("outflow")}>Outflow</button>
+        <button className={FLOW_TABS.includes(tab) ? "on" : ""} onClick={() => setTab("inflow")}>Inflow · Outflow</button>
         <button className={tab === "claims" ? "on" : ""} onClick={() => setTab("claims")}>Claims</button>
         <button className={tab === "profit" ? "on" : ""} onClick={() => setTab("profit")}>Profit</button>
         <button className={tab === "closing" ? "on" : ""} onClick={() => setTab("closing")}>Closing · VAT</button>
@@ -236,8 +245,17 @@ export default function FinanceScreen() {
       </div>
 
       {tab === "overview" && <OverviewTab />}
+      {FLOW_TABS.includes(tab) && (
+        <div className="fin-subtabs" role="tablist" aria-label="Inflow · Outflow">
+          <button role="tab" aria-selected={tab === "inflow"} className={tab === "inflow" ? "on" : ""} onClick={() => setTab("inflow")}>Inflow</button>
+          <button role="tab" aria-selected={tab === "outflow"} className={tab === "outflow" ? "on" : ""} onClick={() => setTab("outflow")}>Outflow</button>
+          <button role="tab" aria-selected={tab === "payees"} className={tab === "payees" ? "on" : ""} onClick={() => setTab("payees")}
+                  title="Who we pay outside of deals — landlord, tax agency, insurance, payroll — and their accounts">Payees</button>
+        </div>
+      )}
       {tab === "inflow" && <InflowTab />}
       {tab === "outflow" && <OutflowTab />}
+      {tab === "payees" && <PayeesTab />}
       {tab === "claims" && <ClaimsTab />}
       {tab === "profit" && <FinanceProfitTab />}
       {tab === "closing" && <ClosingTab />}
@@ -2487,6 +2505,15 @@ function PayableForm({
     return s > 0 && Math.abs(v - Math.round(s * 0.1)) <= 1 ? "0.1" : "custom";
   });
   const { data: vendors } = useCachedData("settings:vendors-opt", fetchVendors);
+  // 지급처 명부 — 수취인 칸에서 골라 쓰고, 고른 지급처의 계좌를 그대로 보여 준다.
+  const { data: payeeData } = useCachedData("finance:payees", fetchPayees);
+  const payees = payeeData?.rows ?? [];
+  const payee = useMemo(() => {
+    const k = (form.counterparty || "").trim().toLowerCase().replace(/\s+/g, " ");
+    return k ? payees.find((p) => p.name.trim().toLowerCase().replace(/\s+/g, " ") === k) ?? null : null;
+  }, [payees, form.counterparty]);
+  const ownBank = !!(form.bank_name || form.bank_account || form.bank_holder);
+  const [overrideBank, setOverrideBank] = useState(false);
   // 소개 수수료일 때만 필요한 목록 — 프로젝트를 고르면 소개자·금액이 함께 따라온다.
   // (분류를 바꿔 가며 열어 볼 수 있어 조건 없이 걸어 둔다 — 캐시라 왕복은 한 번뿐이다.)
   const { data: consulting } = useCachedData<{ rows: FinanceConsultingRow[]; usd_krw: number }>(
@@ -2695,6 +2722,7 @@ ${b.notes}` : b.notes) : f.notes,
       if (rowId) await updateFinancePayable(rowId, form);
       else await createFinancePayable(form);
       // 저장한 분류를 함께 알려 준다 — 목록이 이 항목이 들어간 갈래로 옮겨 갈 수 있게.
+      invalidateCache("finance:payees");   // 새 이름이면 지급처가 생겼다
       onSaved(form.category || "");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
@@ -2812,9 +2840,20 @@ ${b.notes}` : b.notes) : f.notes,
           <span>{isConsulting ? "Consultant" : "Vendor / payee"}</span>
           <input
             value={form.counterparty}
-            onChange={(e) => set("counterparty", e.target.value)}
-            placeholder={isConsulting ? "Filled in from the project" : "e.g. Landlord / Payroll"}
+            list={isConsulting || isVendorPay ? undefined : "fin-payee-list"}
+            onChange={(e) => {
+              const v = e.target.value;
+              const hit = payees.find((p) => p.name === v);
+              // 새 지급에서 지급처를 고르면 그 지급처의 기본 분류를 따라간다.
+              setForm((f) => ({ ...f, counterparty: v, ...(hit && !rowId && hit.category ? { category: hit.category } : {}) }));
+            }}
+            placeholder={isConsulting ? "Filled in from the project" : "Pick from Payees or type a new name"}
           />
+          {isConsulting || isVendorPay ? null : (
+            <datalist id="fin-payee-list">
+              {payees.map((p) => <option key={p.id} value={p.name}>{p.category}</option>)}
+            </datalist>
+          )}
         </label>
         <label className="form-field">
           <span>Description</span>
@@ -2968,10 +3007,23 @@ ${b.notes}` : b.notes) : f.notes,
             </span>
           </div>
         ) : null}
-        {/* 보낼 계좌 — 세금 가상계좌·임대인 계좌처럼 거래선 명부에 없는 곳이 대부분이라
-            지급 건에 직접 둔다. 비워 두면 연결 거래선의 계좌를 쓴다. */}
+        {/* 보낼 계좌 — 지급처 명부(Payees)에 있는 수취인이면 그 계좌를 쓴다(지급처 한 곳에서 고친다).
+            이번 지급만 다른 계좌일 때만 아래 칸에 적는다. 명부에 없는 이름이면 여기 적은 계좌가
+            저장할 때 그 이름의 지급처로 옮겨진다(routers/payees.py). */}
+        {payee && !ownBank && !overrideBank ? (
+          <div className="form-field fin-payee-acc" style={{ gridColumn: "1 / -1" }}>
+            <span>Pay to — from Payees</span>
+            <div>
+              {payee.bank_account || payee.bank_name
+                ? <b>{[payee.bank_name, payee.bank_account].filter(Boolean).join(" ")}{payee.bank_holder ? ` (${payee.bank_holder})` : ""}</b>
+                : <span className="muted">No account saved for this payee yet — add it in Payees.</span>}
+              <button type="button" className="btn xs" onClick={() => setOverrideBank(true)}>Different account for this payment</button>
+            </div>
+          </div>
+        ) : null}
+        {payee && !ownBank && !overrideBank ? null : (<>
         <label className="form-field">
-          <span>Bank (optional)</span>
+          <span>{payee ? "Bank — this payment only" : "Bank (optional)"}</span>
           <input value={form.bank_name || ""} onChange={(e) => set("bank_name", e.target.value)} placeholder="e.g. 신한은행" />
         </label>
         <label className="form-field">
@@ -2987,6 +3039,12 @@ ${b.notes}` : b.notes) : f.notes,
           <span>Account holder (optional)</span>
           <input value={form.bank_holder || ""} onChange={(e) => set("bank_holder", e.target.value)} placeholder="예금주" />
         </label>
+        {!payee && !isConsulting && !isVendorPay && !form.vendor_id && (form.counterparty || "").trim() ? (
+          <span className="hint-inline" style={{ gridColumn: "1 / -1" }}>
+            “{(form.counterparty || "").trim()}” will be added to Payees with this account — next time just pick the name.
+          </span>
+        ) : null}
+        </>)}
       </div>
       <label className="form-field" style={{ marginTop: 10 }}>
         <span>Notes</span>
@@ -3641,7 +3699,8 @@ function buildMonthGrid(y: number, m: number) {
 // 읽는다. 계좌 출처를 함께 적는다 — 거래선 계좌를 고치면 그 거래선의 모든 청구에 따라가고,
 // 지급 건 계좌는 그 건(반복이면 모든 회차)에만 붙는다.
 const ACCOUNT_FROM: Record<string, string> = {
-  payable: "Saved on this payment",
+  payable: "Saved on this payment only",
+  payee: "From Payees — used for every payment to this payee",
   vendor: "From the vendor record — used for every bill from this vendor",
   consultant: "From the consultant record (Settings › Consultants)",
   company: "Our account — Settings › Company",
@@ -3869,7 +3928,9 @@ function CalendarItemModal({ ev, onClose, onChanged }: {
     setBusy(true);
     try {
       if (item.account_edit.kind === "vendor") await saveVendorBank(item.account_edit.name, bank);
+      else if (item.account_edit.kind === "payee") await savePayeeBank(item.account_edit.id, bank);
       else await saveFinancePayableBank(item.account_edit.id, bank);
+      invalidateCache("finance:payees");
       setEditing(false);
       await load();
     } catch (e) {
@@ -4012,6 +4073,8 @@ function CalendarItemModal({ ev, onClose, onChanged }: {
               <div className="hint-inline">
                 {item.account_edit?.kind === "vendor"
                   ? `Saved on vendor “${item.account_edit.name}” — every bill from this vendor will show it.`
+                  : item.account_edit?.kind === "payee"
+                  ? `Saved on payee “${item.account_edit.name}” (Payees) — every payment to them will show it.`
                   : item.recurrence && item.recurrence !== "none"
                     ? "Saved on this payment — all its recurring occurrences use it."
                     : "Saved on this payment."}
@@ -4104,5 +4167,150 @@ function CalendarItemModal({ ev, onClose, onChanged }: {
       <ProjectSummaryModal rfqId={item.rfq_id} onClose={() => setSummaryOpen(false)} />
     ) : null}
     </>
+  );
+}
+
+
+// ── Payees — 딜 밖의 수취인과 계좌(ktms/routers/payees.py) ──────────────────────
+// 거래선(Data › Partners)·소개자(Settings › Consultants)는 각자 명부가 계좌를 갖는다. 임대인·
+// 세무대리인·공단·국세청·급여처럼 그 밖의 수취인을 여기 둔다. Outflow 의 지급과는 이름으로 잇는다.
+const PAYEE_CATS = ["임차료", "급여", "세금", "공과금", "기타"];
+const EMPTY_PAYEE: PayeeSave = { name: "", category: "기타", bank_name: "", bank_account: "", bank_holder: "", swift: "", biz_no: "", contact: "", notes: "" };
+
+function PayeesTab() {
+  const { data, loading, error, refresh: reload } = useCachedData("finance:payees", fetchPayees);
+  const [edit, setEdit] = useState<{ id: number; form: PayeeSave } | null>(null);
+  const [q, setQ] = useState("");
+  const [msg, setMsg] = useState("");
+  const canEdit = can("finance", "create") || can("finance", "edit");
+  const rows = (data?.rows ?? []).filter((p) => {
+    const k = q.trim().toLowerCase();
+    return !k || [p.name, p.category, p.bank_name, p.bank_account, p.bank_holder, p.contact].join(" ").toLowerCase().includes(k);
+  });
+  async function remove(p: Payee) {
+    if (!confirm(`Remove “${p.name}” from Payees?\nPast payments keep the name${p.bank_account ? " and get this account copied onto them" : ""}.`)) return;
+    try {
+      await deletePayee(p.id);
+      invalidateCache("finance:");
+      await reload();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Delete failed");
+    }
+  }
+  return (
+    <div className="fin-payees">
+      <div className="fin-payees-bar">
+        <input className="fin-payees-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, bank, account…" />
+        {msg ? <span className="hint-inline">{msg}</span> : null}
+        {canEdit ? <button className="btn primary sm" onClick={() => setEdit({ id: 0, form: { ...EMPTY_PAYEE } })}>＋ Add payee</button> : null}
+      </div>
+      <p className="hint-inline">
+        Landlord, tax agency, insurance, tax office, payroll — anyone we pay outside of a deal. Pick the name on an Outflow
+        payment and this account is used; change it here once and every payment to them follows. Vendors keep their
+        account in Data › Partners, introducers in Settings › Consultants.
+      </p>
+      {error ? <div className="state error">{String(error)}</div> : loading && !data ? <div className="state">Loading…</div> : (
+        <div className="table-wrap">
+          <table className="data-table fin-payees-tbl">
+            <thead>
+              <tr><th>Payee</th><th>Category</th><th>Bank</th><th>Account no.</th><th>Holder</th><th>Biz no. · Contact</th><th className="num">Payments</th><th /></tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => (
+                <tr key={p.id}>
+                  <td><b>{p.name}</b>{p.notes ? <div className="muted">{p.notes}</div> : null}</td>
+                  <td>{p.category || "—"}</td>
+                  <td>{p.bank_name || <span className="dash">—</span>}</td>
+                  <td>{p.bank_account || <span className="hint-inline">No account</span>}{p.swift ? <div className="muted">SWIFT {p.swift}</div> : null}</td>
+                  <td>{p.bank_holder || "—"}</td>
+                  <td>{[p.biz_no, p.contact].filter(Boolean).join(" · ") || "—"}</td>
+                  <td className="num">
+                    {p.payments}
+                    {p.last_due ? <div className="muted">last {p.last_due}</div> : null}
+                    {p.overrides ? <div className="hint-inline" title="Payments with their own account — they don't follow this one">{p.overrides} own acct</div> : null}
+                  </td>
+                  <td className="fin-payees-act">
+                    {canEdit ? (
+                      <>
+                        <button className="btn xs" onClick={() => setEdit({ id: p.id, form: {
+                          name: p.name, category: p.category, bank_name: p.bank_name, bank_account: p.bank_account,
+                          bank_holder: p.bank_holder, swift: p.swift, biz_no: p.biz_no, contact: p.contact, notes: p.notes } })}>Edit</button>
+                        <button className="btn xs danger" onClick={() => void remove(p)}>Delete</button>
+                      </>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+              {!rows.length ? <tr><td colSpan={8} className="muted">{q ? "No match." : "No payees yet — add one, or just save an Outflow payment with a new name."}</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {edit ? (
+        <PayeeForm initial={edit.form} id={edit.id} onClose={() => setEdit(null)}
+                   onSaved={async (m) => { setEdit(null); setMsg(m); invalidateCache("finance:"); await reload(); }} />
+      ) : null}
+    </div>
+  );
+}
+
+function PayeeForm({ initial, id, onClose, onSaved }: {
+  initial: PayeeSave; id: number; onClose: () => void; onSaved: (msg: string) => void | Promise<void>;
+}) {
+  const [f, setF] = useState<PayeeSave>(initial);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const set = (k: keyof PayeeSave, v: string) => setF((x) => ({ ...x, [k]: v }));
+  async function save() {
+    if (!f.name.trim()) { setErr("Enter the payee name."); return; }
+    setBusy(true);
+    setErr("");
+    try {
+      if (id) {
+        const r = await updatePayee(id, f);
+        await onSaved(r.renamed_payments ? `Saved ✓ — renamed on ${r.renamed_payments} payment(s)` : "Saved ✓");
+      } else {
+        await createPayee(f);
+        await onSaved("Added ✓");
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Modal title={id ? "Edit payee" : "Add payee"} onClose={onClose} form maxWidth={560}>
+      <div className="form-grid">
+        <label className="form-field"><span>Name *</span>
+          <input value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Landlord · 국민건강보험공단" autoFocus /></label>
+        <label className="form-field"><span>Default category</span>
+          <select value={f.category} onChange={(e) => set("category", e.target.value)}>
+            {[...new Set([...PAYEE_CATS, f.category].filter(Boolean))].map((c) => <option key={c} value={c}>{c}</option>)}
+          </select></label>
+        <label className="form-field"><span>Bank</span>
+          <input value={f.bank_name} onChange={(e) => set("bank_name", e.target.value)} placeholder="e.g. 신한은행" /></label>
+        <label className="form-field"><span>Account no.</span>
+          <input value={f.bank_account} onChange={(e) => set("bank_account", e.target.value)} placeholder="000-000-000000" inputMode="numeric" /></label>
+        <label className="form-field"><span>Account holder</span>
+          <input value={f.bank_holder} onChange={(e) => set("bank_holder", e.target.value)} placeholder="예금주" /></label>
+        <label className="form-field"><span>SWIFT (overseas)</span>
+          <input value={f.swift} onChange={(e) => set("swift", e.target.value)} /></label>
+        <label className="form-field"><span>Business reg. no.</span>
+          <input value={f.biz_no} onChange={(e) => set("biz_no", e.target.value)} placeholder="000-00-00000" /></label>
+        <label className="form-field"><span>Contact</span>
+          <input value={f.contact} onChange={(e) => set("contact", e.target.value)} placeholder="Name · phone · email" /></label>
+      </div>
+      <label className="form-field" style={{ marginTop: 10 }}><span>Notes</span>
+        <textarea rows={2} value={f.notes} onChange={(e) => set("notes", e.target.value)} /></label>
+      {id && initial.name && f.name.trim() !== initial.name ? (
+        <p className="hint-inline">Renaming also renames the payee on its past payments.</p>
+      ) : null}
+      {err ? <div className="state error">{err}</div> : null}
+      <div className="form-actions">
+        <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+        <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+      </div>
+    </Modal>
   );
 }

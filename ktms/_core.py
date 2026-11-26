@@ -290,7 +290,7 @@ def _sync_schema() -> None:
             migrate_columns, migrate_normalize_incoterms, migrate_backfill_price_history,
             migrate_reset_mail_sync_cursor, migrate_seed_mail_groups,
             migrate_split_stage_dates_to_orders, migrate_seed_line_ids,
-            migrate_merge_tax_stage, migrate_seed_project_codes,
+            migrate_merge_tax_stage, migrate_seed_project_codes, migrate_seed_finance_payees,
         )
 
         Base.metadata.create_all(bind=get_engine())
@@ -303,6 +303,7 @@ def _sync_schema() -> None:
         migrate_seed_mail_groups()  # 한 문의에서 갈라진 형제 딜을 메일 묶음으로 연결
         migrate_seed_line_ids()  # 기존 딜 품목 줄에 라인 ID 부여 + 벤더 문서에 물려주기
         migrate_seed_project_codes()  # 프로젝트 번호 고정 — 번호 없는 딜만 채운다(멱등)
+        migrate_seed_finance_payees()  # 지급처 명부 1회 시드(지난 지급 기록에서)
     except Exception as exc:  # 스키마 동기화 실패가 앱 기동을 막지 않도록 로그만 남긴다.
         print(f"[WARN] startup schema sync skipped: {exc}", file=sys.stderr)
     try:

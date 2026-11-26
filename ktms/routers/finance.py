@@ -1459,6 +1459,10 @@ def create_finance_payable(body: FinancePayableIn, user: dict = Depends(get_curr
         )
         _apply_payable_bank(p, body)
         s.add(p)
+        s.flush()
+        # 딜 밖 수취인이면 지급처 명부에 잇고, 적은 계좌는 지급처로 옮긴다(routers/payees.py).
+        from routers.payees import sync_payee_from_payable
+        sync_payee_from_payable(s, p)
         s.commit()
         return {"ok": True, "id": p.id}
     finally:
@@ -1492,6 +1496,8 @@ def update_finance_payable(row_id: int, body: FinancePayableIn):
         p.accrual_to = (body.accrual_to or "").strip()[:7] or None
         p.notes = body.notes or ""
         _apply_payable_bank(p, body)
+        from routers.payees import sync_payee_from_payable
+        sync_payee_from_payable(s, p)
         s.commit()
         return {"ok": True, "id": p.id}
     finally:
@@ -3402,6 +3408,10 @@ def finance_calendar_item(source: str, ref_id: int, occurrence: str = ""):
                 if not bank and p.vendor_id:
                     _, bank = _vendor_company(s, vendor_id=p.vendor_id)
                     frm = "vendor"
+                from routers.payees import payee_account
+                payee, pbank = payee_account(s, p.counterparty) if not p.vendor_id else (None, None)
+                if not bank and pbank:
+                    bank, frm = pbank, "payee"
                 if not bank:
                     c = next((c for c in s.query(Consultant).all()
                               if _same_name(c.name, p.counterparty)), None)
@@ -3419,7 +3429,10 @@ def finance_calendar_item(source: str, ref_id: int, occurrence: str = ""):
                     "account": bank, "account_from": frm if bank else "",
                     # 고치는 곳은 지금 보이는 계좌의 출처 — 지급 건 자체의 계좌가 기본이다.
                     # 소개자 명부에서 온 계좌라도 이 지급 건에 따로 적어 덮어쓸 수 있다.
+                    # 지급처 명부에 있는 수취인이면 계좌는 지급처에서 고친다(이번만 다른 계좌가 아니라면).
                     "account_edit": ({"kind": "vendor", "name": vname} if bank and frm == "vendor"
+                                     else {"kind": "payee", "id": payee.id, "name": payee.name}
+                                     if payee is not None and frm != "payable"
                                      else {"kind": "payable", "id": p.id}),
                 })
             else:
@@ -3477,6 +3490,8 @@ def save_payable_bank(row_id: int, body: BankIn):
         p.bank_name = (body.bank_name or "").strip()
         p.bank_account = (body.bank_account or "").strip()
         p.bank_holder = (body.bank_holder or "").strip()
+        from routers.payees import sync_payee_from_payable
+        sync_payee_from_payable(s, p)
         s.commit()
         return {"ok": True}
     finally:

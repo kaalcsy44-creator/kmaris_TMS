@@ -27,4 +27,5 @@ from routers import (  # noqa: F401  (import side effect: registers routes)
     rfq_intake,
     freight,
     carry_over,
+    payees,
 )

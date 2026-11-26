@@ -23157,3 +23157,18 @@ table.mini.items-edit.rre-table td.rre-st select { width: 100%; height: 28px; bo
 .frt-gate span.ok { color: #1f7a3d; }
 .frt-gate.ok { border-color: #bfe3cb; background: #f1faf4; color: #1f7a3d; }
 .frt-gate.ok b { color: #1f7a3d; }
+/* Finance 지급 폼 — 지급처 계좌 줄 */
+.fin-payee-acc > div { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 34px;
+  padding: 6px 10px; border: 1px solid #dbe5f1; border-radius: 6px; background: #f7f9fc; }
+/* Finance — Inflow · Outflow 탭 안의 하위 탭 */
+.fin-subtabs { display: inline-flex; gap: 2px; margin: 0 0 12px; padding: 3px; border: 1px solid #dbe5f1;
+  border-radius: 8px; background: #f4f7fb; }
+.fin-subtabs button { border: 0; background: transparent; padding: 6px 16px; border-radius: 6px; font: inherit;
+  font-size: 13px; font-weight: 600; color: #4a5b73; cursor: pointer; }
+.fin-subtabs button.on { background: #fff; color: var(--navy); box-shadow: 0 1px 2px rgba(15, 35, 70, .12); }
+/* Payees */
+.fin-payees-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.fin-payees-q { width: 280px; height: 32px; padding: 4px 10px; border: 1px solid #cdd9e8; border-radius: 6px; font: inherit; font-size: 13px; }
+.fin-payees-bar .btn.primary { margin-left: auto; }
+.fin-payees-act { white-space: nowrap; text-align: right; }
+.fin-payees-act .btn + .btn { margin-left: 4px; }
