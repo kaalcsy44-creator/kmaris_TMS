@@ -827,12 +827,15 @@ function PermissionsTab() {
     }
   }
 
-  function RoleCard({ row }: { row: RolePermRow }) {
+  // 컴포넌트(<RoleCard/>)가 아니라 렌더 함수로 부른다 — 이 안에서 정의한 컴포넌트는
+  // 렌더마다 새 타입이 되어 체크 한 번에 카드 전체가 지워졌다 다시 그려지고, 그 순간
+  // 페이지 높이가 줄었다 늘며 스크롤이 튀었다.
+  function renderRoleCard(row: RolePermRow) {
     const editable = row.editable;
     const state = editable ? draft[row.role] : { perms: row.perms, scope: row.scope };
     if (!state) return null;
     return (
-      <div className="perm-card">
+      <div className="perm-card" key={row.role}>
         <div className={`perm-card-head role-${row.role}`}>
           <span>{PERM_ROLE_LABEL[row.role] ?? row.role}</span>
           {!editable ? <span className="perm-locked">always full access</span> : null}
@@ -939,7 +942,7 @@ function PermissionsTab() {
       {err ? <div className="action-err" style={{ marginBottom: 10 }}>{err}</div> : null}
       <div className="perm-cards">
         {cfg.roles.map((r) => (
-          <RoleCard key={r.role} row={r} />
+          renderRoleCard(r)
         ))}
       </div>
     </div>
