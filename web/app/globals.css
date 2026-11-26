@@ -23182,3 +23182,40 @@ table.mini.items-edit.rre-table td.rre-st select { width: 100%; height: 28px; bo
 .fin-ledger .fin-pe-w-act { width: 84px; }
 .fin-pe-no { font-variant-numeric: tabular-nums; }
 .fin-pe-none { color: #b45309; }
+/* Finance — Expenses(경비 청구) */
+.fin-exp-month { height: 32px; padding: 3px 8px; border: 1px solid #cdd9e8; border-radius: 6px; font: inherit; font-size: 13px; }
+.fin-exp-row { cursor: pointer; }
+.fin-ledger .fin-ex-w-who { width: 170px; }
+.fin-ledger .fin-ex-w-month { width: 96px; }
+.fin-ledger .fin-ex-w-n { width: 70px; }
+.fin-ledger .fin-ex-w-money { width: 130px; }
+.fin-ledger .fin-ex-w-st { width: 116px; }
+.fin-ledger .fin-ex-w-date { width: 112px; }
+.fin-ledger .fin-ex-w-pay { width: 150px; }
+.fin-ledger .fin-ex-w-act { width: 84px; }
+.fin-exp-st { display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 12px; font-weight: 600;
+  background: #eef1f5; color: #4a5b73; }
+.fin-exp-st.st-submitted { background: #fff4e0; color: #8a5a00; }
+.fin-exp-st.st-approved { background: #eef4ff; color: #1d4ed8; }
+.fin-exp-st.st-paid { background: #e8f6ee; color: #1f7a3d; }
+.fin-exp-st.st-rejected { background: #fdecec; color: #b42318; }
+.fin-exp-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; margin-bottom: 10px; font-size: 13px; }
+.fin-exp-head small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+.fin-exp-reject { margin: 0 0 10px; padding: 8px 12px; border-radius: 6px; background: #fdecec; color: #b42318; font-size: 13px; }
+.fin-exp-lines { margin-top: 10px; overflow-x: auto; }
+.fin-exp-lines table { min-width: 1080px; }
+.fin-exp-lines td input, .fin-exp-lines td select { width: 100%; height: 30px; padding: 3px 6px;
+  border: 1px solid #cdd9e8; border-radius: 6px; font: inherit; font-size: 12.5px; }
+.fin-exp-lines .fin-el-date { width: 132px; }
+.fin-exp-lines .fin-el-cat { width: 130px; }
+.fin-exp-lines .fin-el-place { width: 140px; }
+.fin-exp-lines .fin-el-proj { width: 170px; }
+.fin-exp-lines .fin-el-money { width: 116px; }
+.fin-exp-lines .fin-el-vat { width: 100px; }
+.fin-exp-lines .fin-el-rc { width: 74px; }
+.fin-exp-lines .fin-el-x { width: 40px; }
+.fin-exp-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fin-exp-due { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.fin-exp-due input { height: 32px; padding: 3px 8px; border: 1px solid #cdd9e8; border-radius: 6px; font: inherit; }
+.trip-exp-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.trip-exp-msg { color: #1d4ed8; }

@@ -28,7 +28,17 @@ export const CATEGORY_LABEL: Record<string, string> = {
   공과금: "Utilities",
   수수료: "Bank fee",
   세금: "Tax",
+  경비정산: "Expense claim",
   기타: "Other",
+  // 경비 청구 분류 — 손익의 운영비 줄(경비:<분류>)과 경비 청구 화면이 함께 쓴다.
+  "경비:식대": "Expenses · Meals",
+  "경비:교통비": "Expenses · Transport",
+  "경비:주차·통행료": "Expenses · Parking & tolls",
+  "경비:숙박": "Expenses · Lodging",
+  "경비:통신비": "Expenses · Phone & internet",
+  "경비:사무용품": "Expenses · Office supplies",
+  "경비:접대비": "Expenses · Entertainment",
+  "경비:기타": "Expenses · Other",
 };
 
 /** 열두 칸짜리 줄의 합계 — 월별 장표의 Total 칸은 전부 이 한 가지 모양이다. */

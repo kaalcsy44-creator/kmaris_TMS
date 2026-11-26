@@ -20,6 +20,16 @@ import {
   deletePayee,
   type Payee,
   type PayeeSave,
+  fetchExpenseClaims,
+  createExpenseClaim,
+  saveExpenseClaim,
+  deleteExpenseClaim,
+  expenseClaimAction,
+  uploadExpenseReceipt,
+  fetchExpenseReceipt,
+  type ExpenseClaim,
+  type ExpenseClaimStatus,
+  type ExpenseLine,
   fetchFinanceClaims,
   fetchFinanceClosing,
   fetchFinanceConsulting,
@@ -87,7 +97,7 @@ import {
 // 통화·달 이름·KPI 타일·문서번호 링크는 Finance 화면들이 함께 쓰므로 financeShared 에 있다
 // (위 import 참고). 여기 남은 것들은 이 화면에서만 쓰는 목록·폼용 표기다.
 // Category codes are stored values (do not translate); labels below are display-only.
-const CATEGORIES = ["거래선지급", "컨설팅비", "임차료", "급여", "공과금", "수수료", "세금", "기타"];
+const CATEGORIES = ["거래선지급", "컨설팅비", "임차료", "급여", "공과금", "수수료", "세금", "경비정산", "기타"];
 /** 소개 수수료 분류 — 금액이 프로젝트 매출에서 계산되는 유일한 지급이라 이름을 상수로 둔다. */
 const CONSULTING = "컨설팅비";
 /** 거래선 지급 — 벤더에게 나가는 돈. 딜을 지목하면 그 딜의 매입 원가로 집계된다
@@ -164,10 +174,10 @@ function addDays(iso: string, n: number): string {
 // 한 사건에 함께 있어, 어느 한쪽 목록에만 두면 나머지 절반이 보이지 않는다.
 // Inflow · Outflow · Payees 는 한 탭("Inflow · Outflow") 안의 하위 탭이다(2026-11-26). 주소는
 // 예전 그대로 tab=inflow / tab=outflow / tab=payees 라 알림·딥링크가 그대로 산다.
-type Tab = "overview" | "inflow" | "outflow" | "payees" | "claims" | "profit" | "closing" | "calendar";
+type Tab = "overview" | "inflow" | "outflow" | "expenses" | "payees" | "claims" | "profit" | "closing" | "calendar";
 
-const TABS: Tab[] = ["overview", "inflow", "outflow", "payees", "claims", "profit", "closing", "calendar"];
-const FLOW_TABS: Tab[] = ["inflow", "outflow", "payees"];
+const TABS: Tab[] = ["overview", "inflow", "outflow", "expenses", "payees", "claims", "profit", "closing", "calendar"];
+const FLOW_TABS: Tab[] = ["inflow", "outflow", "expenses", "payees"];
 /** 이름을 바꾸기 전 주소로 들어오는 링크 — 같은 자리로 보낸다. */
 const TAB_ALIAS: Record<string, Tab> = { receivables: "inflow", payables: "outflow" };
 
@@ -251,12 +261,15 @@ export default function FinanceScreen() {
         <div className="fin-subtabs" role="tablist" aria-label="Inflow · Outflow">
           <button role="tab" aria-selected={tab === "inflow"} className={tab === "inflow" ? "on" : ""} onClick={() => setTab("inflow")}>Inflow</button>
           <button role="tab" aria-selected={tab === "outflow"} className={tab === "outflow" ? "on" : ""} onClick={() => setTab("outflow")}>Outflow</button>
+          <button role="tab" aria-selected={tab === "expenses"} className={tab === "expenses" ? "on" : ""} onClick={() => setTab("expenses")}
+                  title="Expense claims — business costs paid with your own card or cash">Expenses</button>
           <button role="tab" aria-selected={tab === "payees"} className={tab === "payees" ? "on" : ""} onClick={() => setTab("payees")}
                   title="Who we pay outside of deals — landlord, tax agency, insurance, payroll — and their accounts">Payees</button>
         </div>
       )}
       {tab === "inflow" && <InflowTab />}
       {tab === "outflow" && <OutflowTab />}
+      {tab === "expenses" && <ExpensesTab />}
       {tab === "payees" && <PayeesTab />}
       {tab === "claims" && <ClaimsTab />}
       {tab === "profit" && <FinanceProfitTab />}
@@ -4418,6 +4431,385 @@ function PayeeForm({ initial, id, onClose, onSaved }: {
         <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
         <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
       </div>
+      </div>
+    </Modal>
+  );
+}
+
+
+// ── Expenses — 경비 청구(ktms/routers/expenses.py) ─────────────────────────────
+// 직원이 개인 돈(개인카드·현금)으로 쓴 업무 경비를 돌려받는 청구서. 1명 × 한 달 1장.
+// 작성 → 제출 → 승인(Outflow 에 지급 1건) / 반려. 법인카드 사용분은 넣지 않는다.
+const EXP_STATUS: Record<ExpenseClaimStatus, string> = {
+  draft: "Draft", submitted: "Submitted", approved: "Approved", rejected: "Returned",
+};
+const expLabel = (c: string) => (CATEGORY_LABEL[`경비:${c}`] || c).replace(/^Expenses · /, "");
+const thisMonth = () => localDayStr().slice(0, 7);
+
+function ExpenseStatusChip({ c }: { c: ExpenseClaim }) {
+  const paid = c.status === "approved" && c.paid;
+  return (
+    <span className={`fin-exp-st st-${paid ? "paid" : c.status}`}>
+      {paid ? "Paid" : EXP_STATUS[c.status] ?? c.status}
+    </span>
+  );
+}
+
+function ExpensesTab() {
+  const canAll = can("finance", "view");
+  const [scope, setScope] = useState<"mine" | "all">(canAll ? "all" : "mine");
+  const { data, error, refresh } = useCachedData(`finance:expenses:${scope}`, () => fetchExpenseClaims(scope));
+  const [open, setOpen] = useState<ExpenseClaim | null>(null);
+  const [month, setMonth] = useState(thisMonth());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const rows = data?.rows ?? [];
+
+  const headCols = useMemo<HeadCol<ExpenseClaim>[]>(() => [
+    { key: "claimant", text: (c) => c.claimant, filter: "facet" },
+    { key: "month", text: (c) => c.month, filter: "facet" },
+    { key: "count", text: (c) => String(c.count), sortValue: (c) => c.count },
+    { key: "total", text: (c) => String(c.total), sortValue: (c) => c.total },
+    { key: "vat", text: (c) => String(c.vat), sortValue: (c) => c.vat },
+    { key: "status", text: (c) => (c.status === "approved" && c.paid ? "Paid" : EXP_STATUS[c.status]), filter: "facet" },
+    { key: "submitted", text: (c) => c.submitted_at.slice(0, 10), filter: "date" },
+    { key: "approved", text: (c) => c.approved_at.slice(0, 10), filter: "date" },
+  ], []);
+  const head = useHeadMenu(headCols, `expenses-${scope}`);
+  const shown = head.apply(rows);
+  const totalShown = shown.reduce((s, c) => s + c.total, 0);
+
+  async function create() {
+    setBusy(true); setErr("");
+    try {
+      const c = await createExpenseClaim(month);
+      await refresh();
+      setOpen(c);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not create the claim");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function remove(c: ExpenseClaim) {
+    if (!confirm(`Delete the ${c.month} expense claim of ${c.claimant}? Its receipts are deleted too.`)) return;
+    try {
+      await deleteExpenseClaim(c.id);
+      await refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Delete failed");
+    }
+  }
+
+  if (error && !data) return <div className="state error">API error: {error.message}</div>;
+  if (!data) return <div className="state">Loading…</div>;
+  return (
+    <div className="panel">
+      <div className="items-head">
+        <h3 className="form-title fin-page-title" style={{ margin: 0 }}>Expenses</h3>
+        <div className="items-head-actions">
+          {canAll ? (
+            <div className="seg-toggle" role="group" aria-label="Whose claims">
+              <button type="button" className={scope === "all" ? "on" : ""} onClick={() => setScope("all")}>All claims</button>
+              <button type="button" className={scope === "mine" ? "on" : ""} onClick={() => setScope("mine")}>Mine</button>
+            </div>
+          ) : null}
+          <input type="month" className="fin-exp-month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Claim month" />
+          <button className="btn primary sm" disabled={busy || !month} onClick={create}>+ New claim</button>
+        </div>
+      </div>
+      <p className="hint-inline fin-pe-hint">
+        Business expenses paid with your own card or cash — one claim per person per month. Corporate-card spending is not
+        claimed here. Once approved it becomes one payment in Outflow; Profit shows it by category (meals, transport …).
+      </p>
+      {err ? <div className="state error">{err}</div> : null}
+      {head.filtersActive ? (
+        <div className="fin-head-filter-bar">
+          <span className="pl-search-count">{shown.length} / {rows.length}</span>
+          <button type="button" className="pl-filter-reset" onClick={head.resetFilters}>Reset column filters</button>
+        </div>
+      ) : null}
+      <section className="fin-sec">
+        <table className="mini fin-ledger fin-exp-tbl">
+          <thead>
+            <tr>
+              <HeadTh menu={head} col="claimant" className="fin-ex-w-who">Claimant</HeadTh>
+              <HeadTh menu={head} col="month" className="fin-ex-w-month">Month</HeadTh>
+              <HeadTh menu={head} col="count" className="num fin-ex-w-n" numeric>Lines</HeadTh>
+              <HeadTh menu={head} col="total" className="num fin-ex-w-money" numeric>Total</HeadTh>
+              <HeadTh menu={head} col="vat" className="num fin-ex-w-money" numeric>VAT</HeadTh>
+              <HeadTh menu={head} col="status" className="fin-ex-w-st">Status</HeadTh>
+              <HeadTh menu={head} col="submitted" className="fin-ex-w-date">Submitted</HeadTh>
+              <HeadTh menu={head} col="approved" className="fin-ex-w-date">Approved</HeadTh>
+              <th className="fin-ex-w-pay">Payment</th>
+              <th className="fin-ex-w-act" />
+            </tr>
+          </thead>
+          <tbody>
+            {shown.length === 0 ? (
+              <tr><td colSpan={10} className="mini-empty">{
+                head.filtersActive ? "No claim matches the column filters." : "No expense claims yet — pick a month and press + New claim."}</td></tr>
+            ) : null}
+            {shown.map((c) => (
+              <tr key={c.id} className="fin-exp-row" onClick={() => setOpen(c)}>
+                <td className="fin-c-title">{c.claimant || "—"}</td>
+                <td>{c.month}</td>
+                <td className="num">{c.count}</td>
+                <td className="num">{money(c.total, "KRW")}</td>
+                <td className="num">{c.vat ? money(c.vat, "KRW") : "—"}</td>
+                <td><ExpenseStatusChip c={c} /></td>
+                <td>{c.submitted_at ? c.submitted_at.slice(0, 10) : "—"}</td>
+                <td>{c.approved_at ? c.approved_at.slice(0, 10) : "—"}</td>
+                <td>{c.status !== "approved" ? "—" : c.paid ? `Paid ${c.paid_date}` : `Due ${c.due_date || "—"}`}</td>
+                <td className="fin-c-act" onClick={(e) => e.stopPropagation()}>
+                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                    <button className="btn tiny" title="Open" aria-label="Open" onClick={() => setOpen(c)}>✎</button>
+                    {c.mine && c.status !== "approved" ? (
+                      <button className="btn tiny danger" title="Delete" aria-label="Delete" onClick={() => void remove(c)}>×</button>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          {shown.length ? (
+            <tfoot>
+              <tr className="foot-grand fin-foot-total">
+                <td className="total-label fin-foot-name" colSpan={3}>Total</td>
+                <td className="num total-value">{money(totalShown, "KRW")}</td>
+                <td colSpan={6} />
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
+      </section>
+      {head.renderMenu()}
+      {open ? (
+        <ExpenseClaimEditor
+          claim={open}
+          categories={data.categories}
+          onClose={() => setOpen(null)}
+          onChanged={async (c) => {
+            invalidateCache("finance:");
+            await refresh();
+            if (c) setOpen(c); else setOpen(null);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ExpenseClaimEditor({ claim, categories, onClose, onChanged }: {
+  claim: ExpenseClaim; categories: string[]; onClose: () => void;
+  onChanged: (c: ExpenseClaim | null) => void | Promise<void>;
+}) {
+  const [lines, setLines] = useState<ExpenseLine[]>(claim.lines);
+  const [note, setNote] = useState(claim.note);
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+  const [warn, setWarn] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const [due, setDue] = useState(localDayStr());
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const edit = claim.can_edit;
+  const dirty = JSON.stringify(lines) !== JSON.stringify(claim.lines) || note !== claim.note;
+  const { data: pipeline } = useCachedData("pipeline", () => fetchPipeline());
+  const deals = useMemo(
+    () => [...(pipeline?.rows ?? [])]
+      .sort((a, b) => (b.project_no || "").localeCompare(a.project_no || ""))
+      .map((r) => ({ id: r.rfq_id, label: `${r.project_no || `#${r.rfq_id}`} · ${r.customer}` })),
+    [pipeline],
+  );
+  const total = lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+  const vat = lines.reduce((s, l) => s + (Number(l.vat) || 0), 0);
+  const blank = (): ExpenseLine => ({
+    id: Math.random().toString(36).slice(2, 12), date: localDayStr().slice(0, 7) === claim.month ? localDayStr() : `${claim.month}-01`,
+    category: "식대", detail: "", place: "", amount: 0, vat: 0, rfq_id: null, receipt_id: null, note: "",
+  });
+  const setLine = (id: string, patch: Partial<ExpenseLine>) =>
+    setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+
+  async function run(label: string, fn: () => Promise<ExpenseClaim | null>) {
+    setBusy(label); setErr("");
+    try {
+      const c = await fn();
+      await onChanged(c);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy("");
+    }
+  }
+  const save = () => saveExpenseClaim(claim.id, { lines, note });
+
+  async function addReceipt(file: File | null) {
+    if (!file || busy) return;
+    setBusy("receipt"); setErr(""); setWarn("");
+    try {
+      const r = await uploadExpenseReceipt(claim.id, await downscaleImageFile(file, 2000));
+      const f = r.fields || {};
+      setLines((ls) => [...ls, {
+        ...blank(),
+        date: (f.date || "").slice(0, 10) || blank().date,
+        category: f.category && categories.includes(f.category) ? f.category : "기타",
+        detail: f.detail || "", place: f.place || "",
+        amount: Number(f.amount) || 0, vat: Number(f.vat) || 0, receipt_id: r.receipt_id,
+      }]);
+      setWarn(r.warning || `Added from ${r.filename} — check the line, then Save.`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not read the receipt");
+    } finally {
+      setBusy("");
+    }
+  }
+  async function viewReceipt(id: number) {
+    try {
+      const b = await fetchExpenseReceipt(id);
+      window.open(URL.createObjectURL(b), "_blank", "noopener");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not open the receipt");
+    }
+  }
+
+  return (
+    <Modal title={`Expense claim · ${claim.claimant} · ${claim.month}`} onClose={onClose} form maxWidth={1180}>
+      <div onPaste={(e) => { if (!edit) return; const f = imageFromClipboard(e); if (f) { e.preventDefault(); void addReceipt(f); } }}>
+        <div className="fin-exp-head">
+          <ExpenseStatusChip c={claim} />
+          <span><small>Total</small> <b>{money(total, "KRW")}</b></span>
+          <span><small>VAT</small> {money(vat, "KRW")}</span>
+          {claim.submitted_at ? <span className="muted">Submitted {claim.submitted_at.replace("T", " ")}</span> : null}
+          {claim.approved_at ? <span className="muted">Approved {claim.approved_at.replace("T", " ")} by {claim.approver}</span> : null}
+          {claim.status === "approved" ? (
+            <span className="muted">Outflow payment · {claim.paid ? `paid ${claim.paid_date}` : `due ${claim.due_date}`}</span>
+          ) : null}
+        </div>
+        {claim.status === "rejected" && claim.reject_note ? (
+          <div className="fin-exp-reject">Returned: {claim.reject_note}</div>
+        ) : null}
+        {edit ? (
+          <>
+            <input ref={fileRef} type="file" hidden accept="image/png,image/jpeg,image/webp,application/pdf"
+                   onChange={(e) => { void addReceipt(e.target.files?.[0] ?? null); e.target.value = ""; }} />
+            <button
+              type="button"
+              className={`fin-bill-drop${dragOver ? " over" : ""}`}
+              disabled={!!busy}
+              onClick={() => fileRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => { e.preventDefault(); setDragOver(false); void addReceipt(e.dataTransfer.files?.[0] ?? null); }}
+            >
+              {busy === "receipt" ? <b>📄 Reading the receipt…</b> : (
+                <>
+                  <b>📄 Add from receipt</b>
+                  <span>Upload, drop or paste (Ctrl+V) a receipt photo or PDF — one line is added and the receipt is kept</span>
+                </>
+              )}
+            </button>
+          </>
+        ) : null}
+        {warn ? <p className="hint-inline fin-bill-note">{warn}</p> : null}
+
+        <div className="fin-exp-lines">
+          <table className="mini fin-ledger">
+            <thead>
+              <tr>
+                <th className="fin-el-date">Date</th>
+                <th className="fin-el-cat">Category</th>
+                <th>Detail</th>
+                <th className="fin-el-place">Place</th>
+                <th className="fin-el-proj">Project</th>
+                <th className="num fin-el-money">Amount</th>
+                <th className="num fin-el-vat">VAT</th>
+                <th className="fin-el-rc">Receipt</th>
+                {edit ? <th className="fin-el-x" /> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {lines.length === 0 ? (
+                <tr><td colSpan={edit ? 9 : 8} className="mini-empty">No expenses yet — add a receipt or a line.</td></tr>
+              ) : null}
+              {lines.map((l) => (
+                <tr key={l.id}>
+                  <td>{edit ? <input type="date" value={l.date} onChange={(e) => setLine(l.id, { date: e.target.value })} /> : l.date}</td>
+                  <td>
+                    {edit ? (
+                      <select value={l.category} onChange={(e) => setLine(l.id, { category: e.target.value })}>
+                        {categories.map((c) => <option key={c} value={c}>{expLabel(c)}</option>)}
+                      </select>
+                    ) : expLabel(l.category)}
+                  </td>
+                  <td>
+                    {edit ? <input value={l.detail} onChange={(e) => setLine(l.id, { detail: e.target.value })} placeholder="e.g. Lunch with customer" /> : l.detail || "—"}
+                    {l.trip_title ? <div className="muted">Trip · {l.trip_title}</div> : null}
+                  </td>
+                  <td>{edit ? <input value={l.place} onChange={(e) => setLine(l.id, { place: e.target.value })} /> : l.place || "—"}</td>
+                  <td>
+                    {edit ? (
+                      <select value={l.rfq_id ?? ""} onChange={(e) => setLine(l.id, { rfq_id: e.target.value ? Number(e.target.value) : null })}>
+                        <option value="">—</option>
+                        {deals.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+                      </select>
+                    ) : l.project_no || "—"}
+                  </td>
+                  <td className="num">
+                    {edit ? <AmountInput className="num" inputMode="decimal" value={l.amount} onChange={(v) => setLine(l.id, { amount: Number(v) || 0 })} /> : money(l.amount, "KRW")}
+                  </td>
+                  <td className="num">
+                    {edit ? <AmountInput className="num" inputMode="decimal" value={l.vat} onChange={(v) => setLine(l.id, { vat: Number(v) || 0 })} /> : l.vat ? money(l.vat, "KRW") : "—"}
+                  </td>
+                  <td>{l.receipt_id ? <button type="button" className="btn xs" onClick={() => void viewReceipt(l.receipt_id!)}>View</button> : <span className="fin-pe-none">None</span>}</td>
+                  {edit ? (
+                    <td><button type="button" className="btn tiny danger" aria-label="Remove line" onClick={() => setLines((ls) => ls.filter((x) => x.id !== l.id))}>×</button></td>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {edit ? <button type="button" className="btn sm" style={{ marginTop: 8 }} onClick={() => setLines((ls) => [...ls, blank()])}>+ Add line</button> : null}
+        </div>
+
+        <label className="form-field" style={{ marginTop: 10 }}>
+          <span>Note</span>
+          <textarea rows={2} style={{ minHeight: 0, height: 56 }} value={note} disabled={!edit} onChange={(e) => setNote(e.target.value)} />
+        </label>
+        {err ? <div className="state error">{err}</div> : null}
+
+        <div className="form-actions fin-exp-actions">
+          {edit ? (
+            <>
+              <button className="btn" disabled={!!busy || !dirty} onClick={() => run("save", save)}>Save</button>
+              <button className="btn primary" disabled={!!busy || !lines.length}
+                      onClick={() => run("submit", async () => { if (dirty) await save(); return expenseClaimAction(claim.id, "submit"); })}>
+                {busy === "submit" ? "Submitting…" : "Submit for approval"}
+              </button>
+            </>
+          ) : null}
+          {claim.status === "submitted" && claim.can_approve ? (
+            <>
+              <button className="btn" disabled={!!busy}
+                      onClick={() => { const why = prompt("Why is it returned? (shown to the claimant)"); if (why !== null) void run("reject", () => expenseClaimAction(claim.id, "reject", { note: why })); }}>
+                Return
+              </button>
+              <label className="fin-exp-due"><span>Pay by</span>
+                <input type="date" value={due} onChange={(e) => setDue(e.target.value)} /></label>
+              <button className="btn primary" disabled={!!busy || !due}
+                      onClick={() => run("approve", () => expenseClaimAction(claim.id, "approve", { due_date: due }))}>
+                {busy === "approve" ? "Approving…" : "Approve → Outflow"}
+              </button>
+            </>
+          ) : null}
+          {claim.status === "submitted" && claim.mine && !claim.can_approve ? (
+            <span className="hint-inline">Waiting for approval by someone with Finance edit rights.</span>
+          ) : null}
+          {claim.status === "approved" && can("finance", "edit") && !claim.paid ? (
+            <button className="btn" disabled={!!busy} onClick={() => run("reopen", () => expenseClaimAction(claim.id, "reopen"))}
+                    title="Cancel the approval and remove its Outflow payment">Reopen</button>
+          ) : null}
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
       </div>
     </Modal>
   );

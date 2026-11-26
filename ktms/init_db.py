@@ -277,6 +277,8 @@ _MIGRATIONS = {
         "kind":            "VARCHAR(10) DEFAULT 'main'",
     },
     "finance_payables": {
+        # 경비 청구서 승인으로 만든 지급(손익이 청구서 줄로 풀어 싣는다).
+        "expense_claim_id": "INTEGER",
         # 이 지급을 보낼 계좌(수취인 은행·계좌·예금주) — Finance 캘린더 상세 창에서 편집.
         "bank_name":       "VARCHAR(120)",
         "bank_account":    "VARCHAR(120)",

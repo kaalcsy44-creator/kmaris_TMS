@@ -276,6 +276,8 @@ def _by_currency_sort_key(per: dict) -> tuple:
 # (실현 환차손익)만 남긴다. 따로 떼인 수수료는 그 통화 계좌의 유출이자 운영비다.
 
 TRANSFER_FEE_CATEGORY = "수수료"
+# 경비 청구 분류 순서(routers/expenses.EXPENSE_CATEGORIES 와 같다) — 손익 줄 순서용.
+_EXP_ORDER = ["식대", "교통비", "주차·통행료", "숙박", "통신비", "사무용품", "접대비", "기타"]
 
 
 def _fmt_money(amount: float, cur: str) -> str:
@@ -2233,10 +2235,31 @@ def finance_profit(year: int = 0, detail: str = ""):
         # (딜을 지목한 건만 예외 — 그것은 매입 원가다. _is_deal_purchase).
         operating: dict[str, list[float]] = {}
         tax_payments, input_vat_other, vendor_manual, consulting_booked = z(), z(), z(), z()
+        from db.models import ExpenseClaim
+        claims_by_id = {c.id: c for c in s.query(ExpenseClaim).all()}
         for p in s.query(FinancePayable).all():
             amount = float(p.amount or 0.0)
             vat = float(getattr(p, "vat_amount", None) or 0.0)
             cat = p.category or "기타"
+            # 경비 청구로 만든 지급 — 청구서 줄로 풀어 사용일의 달에, 분류별 운영비(경비:식대 …)로
+            # 싣는다. 프로젝트를 지목한 줄은 그 번호를 이름 앞에 세운다(어느 딜에서 쓴 돈인지).
+            claim = claims_by_id.get(getattr(p, "expense_claim_id", None) or 0)
+            if claim is not None:
+                for ln in claim.lines or []:
+                    day = str(ln.get("date") or "")[:10]
+                    if not (ys <= day <= ye):
+                        continue
+                    i = int(day[5:7]) - 1
+                    a, v = float(ln.get("amount") or 0), float(ln.get("vat") or 0)
+                    key = f"경비:{ln.get('category') or '기타'}"
+                    who = named_rfq(int(ln.get("rfq_id") or 0),
+                                    f"{claim.claimant or ''} · {ln.get('detail') or ln.get('place') or ''}".strip(" ·"))
+                    operating.setdefault(key, z())[i] += a - v
+                    note(f"op:{key}", i, who, a - v)
+                    if v:
+                        input_vat_other[i] += v
+                        note("vat", i, who, -v)
+                continue
             # 요율이 걸린 딜의 수수료 지급은 위에서 이미 매출월에 세었다 — 여기서는
             # 정산분으로만 적는다. 근거가 될 딜이 없는 수수료(소개자를 지운 뒤 등록한 건 등)는
             # 아무 데서도 안 세게 되므로 그때만 제 날짜로 비용에 넣는다.
@@ -2388,6 +2411,11 @@ def finance_profit(year: int = 0, detail: str = ""):
                 "operating": [
                     {"key": cat, "values": r12(operating[cat])}
                     for cat in FINANCE_CATEGORIES if cat in operating
+                ] + [
+                    # 경비 청구의 분류별 줄(경비:식대 …) — 분류 목록 순서로.
+                    {"key": k, "values": r12(operating[k])}
+                    for k in sorted((k for k in operating if k.startswith("경비:")),
+                                    key=lambda k: (_EXP_ORDER.index(k[3:]) if k[3:] in _EXP_ORDER else 99, k))
                 ],
                 "vendor_manual": r12(vendor_manual),
             },

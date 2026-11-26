@@ -1076,7 +1076,45 @@ class FinancePayable(Base):
     bank_holder  = Column(String(120))
     notes        = Column(Text)
     owner_id     = Column(Integer, ForeignKey("users.id"), nullable=True)  # 등록자
+    # 경비 청구서를 승인해 만든 지급이면 그 청구서 — 손익이 이 지급을 청구서 줄로 풀어 싣는다.
+    expense_claim_id = Column(Integer, nullable=True)
     created_at   = Column(DateTime, default=datetime.utcnow)
+
+
+class ExpenseClaim(Base):
+    """경비 청구서 — 직원 1명 × 한 달 1장. 개인 돈(개인카드·현금)으로 쓴 업무 경비만 담는다
+    (법인카드는 카드 대금이 따로 나가므로 여기 넣지 않는다).
+
+    작성(draft) → 제출(submitted) → 승인(approved: Outflow 지급 1건이 생긴다) / 반려(rejected).
+    지급 여부는 그 지급(FinancePayable.expense_claim_id)에서 읽는다. 손익은 그 지급을 이
+    청구서의 줄로 풀어 분류(식대·교통비…)·사용일 기준으로 싣는다(routers/expenses.py)."""
+    __tablename__ = "expense_claims"
+    id           = Column(Integer, primary_key=True)
+    user_id      = Column(Integer, ForeignKey("users.id"), nullable=True)   # 청구자
+    claimant     = Column(String(120))    # 청구자 이름(지급 수취인 이름이 된다)
+    month        = Column(String(7))      # 'YYYY-MM'
+    status       = Column(String(12), default="draft")   # draft/submitted/approved/rejected
+    # 사용 건 [{id, date, category, detail, place, amount(부가세 포함), vat, rfq_id, receipt_id,
+    #          trip_key, trip_title, note}]
+    lines        = Column(JSON, default=list)
+    note         = Column(Text)
+    submitted_at = Column(String(16))
+    approved_at  = Column(String(16))
+    approver     = Column(String(120))
+    reject_note  = Column(Text)
+    payable_id   = Column(Integer)        # 승인 때 만든 지급(FinancePayable.id)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+
+class ExpenseReceipt(Base):
+    """경비 청구 줄의 영수증 원본(사진·PDF)."""
+    __tablename__ = "expense_receipts"
+    id         = Column(Integer, primary_key=True)
+    claim_id   = Column(Integer, index=True)
+    filename   = Column(String(255))
+    mime       = Column(String(120))
+    data       = Column(LargeBinary)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class FinancePayee(Base):

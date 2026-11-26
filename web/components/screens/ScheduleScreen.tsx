@@ -819,7 +819,7 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
     tripTab === "itinerary" ? (
       <TripItineraryTab trip={trip} setTrip={setTrip} />
     ) : tripTab === "expenses" ? (
-      <TripExpensesTab trip={trip} setTrip={setTrip} />
+      <TripExpensesTab trip={trip} setTrip={setTrip} eventId={row?.id ?? 0} />
     ) : tripTab === "memos" ? (
       <TripMemosTab trip={trip} setTrip={setTrip} />
     ) : (

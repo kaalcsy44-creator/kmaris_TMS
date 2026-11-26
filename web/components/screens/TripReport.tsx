@@ -3,6 +3,8 @@
 /* 출장(Business trip) 일정의 보고서 — 엑셀 '출장결과보고서' 양식과 같은 네 장(탭).
    결과보고서 · 출장일정 · 출장경비 · 업체별 미팅메모. 인쇄본도 같은 네 장으로 나온다. */
 
+import { useState } from "react";
+import { expensesFromTrip } from "@/lib/api";
 import ComboBox from "@/components/common/ComboBox";
 import type { ScheduleAgendaItem, TripAction, TripExpense, TripMemo, TripReport, TripStop } from "@/lib/types";
 
@@ -251,11 +253,42 @@ export function TripItineraryTab({ trip, setTrip }: { trip: TripReport; setTrip:
   );
 }
 
-export function TripExpensesTab({ trip, setTrip }: { trip: TripReport; setTrip: (t: TripReport) => void }) {
+export function TripExpensesTab({ trip, setTrip, eventId = 0 }: { trip: TripReport; setTrip: (t: TripReport) => void; eventId?: number }) {
   const byUser = expenseGroups(trip.expenses);
+  const [sendMsg, setSendMsg] = useState("");
+  const [sending, setSending] = useState(false);
+  // 개인 결제분(개인카드·현금)을 내 경비 청구서(사용일의 달)로 — 돈은 Finance › Expenses 한 곳에서 센다.
+  // 저장된 보고서를 읽으므로 먼저 저장해야 한다(저장 전 줄은 서버에 없다).
+  async function sendToClaim() {
+    if (!eventId) return;
+    setSending(true); setSendMsg("");
+    try {
+      const r = await expensesFromTrip(eventId);
+      const bits = [
+        r.added ? `${r.added} line(s) added to your ${r.months.join(", ")} expense claim` : "Nothing new to send",
+        r.skipped_already ? `${r.skipped_already} already sent` : "",
+        r.skipped_corporate ? `${r.skipped_corporate} skipped (corporate card / no personal payment)` : "",
+        r.skipped_submitted ? `${r.skipped_submitted} wait — that month's claim is already submitted` : "",
+      ].filter(Boolean);
+      setSendMsg(bits.join(" · ") + (r.added ? " — open Finance › Expenses to check and submit." : "."));
+    } catch (e) {
+      setSendMsg(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setSending(false);
+    }
+  }
   return (
     <>
-      <p className="trip-hint">Enter amounts in KRW · convert foreign payments at the applied exchange rate.</p>
+      <div className="trip-exp-bar">
+        <p className="trip-hint" style={{ margin: 0 }}>Enter amounts in KRW · convert foreign payments at the applied exchange rate.</p>
+        {eventId ? (
+          <button type="button" className="btn sm" disabled={sending} onClick={() => void sendToClaim()}
+                  title="Send personal-card and cash lines of the saved report to your monthly expense claim (Finance › Expenses). Corporate-card lines stay here.">
+            {sending ? "Sending…" : "→ Send to expense claim"}
+          </button>
+        ) : null}
+      </div>
+      {sendMsg ? <p className="trip-hint trip-exp-msg">{sendMsg}</p> : null}
       <RowTable<TripExpense>
         list={trip.expenses}
         onChange={(expenses) => setTrip({ ...trip, expenses })}

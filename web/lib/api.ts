@@ -3588,3 +3588,52 @@ export function assignMail(
     ids,
   });
 }
+
+// ── 경비 청구(Expense claims) — ktms/routers/expenses.py ─────────────────────────
+/** 경비 청구 줄 — 개인 돈으로 쓴 사용 건 하나. amount 는 부가세 포함. */
+export type ExpenseLine = {
+  id: string; date: string; category: string; detail: string; place: string;
+  amount: number; vat: number; rfq_id: number | null; receipt_id: number | null;
+  trip_key?: string; trip_title?: string; note: string; project_no?: string;
+};
+export type ExpenseClaimStatus = "draft" | "submitted" | "approved" | "rejected";
+export type ExpenseClaim = {
+  id: number; user_id: number; claimant: string; month: string; status: ExpenseClaimStatus; note: string;
+  lines: ExpenseLine[]; total: number; vat: number; count: number;
+  submitted_at: string; approved_at: string; approver: string; reject_note: string;
+  payable_id: number; paid: boolean; paid_date: string; due_date: string;
+  mine: boolean; can_edit: boolean; can_approve: boolean;
+};
+export function fetchExpenseClaims(scope: "mine" | "all"): Promise<{ rows: ExpenseClaim[]; categories: string[]; can_approve: boolean }> {
+  return get(`/api/admin/expenses?scope=${scope}`);
+}
+export function createExpenseClaim(month: string): Promise<ExpenseClaim> {
+  return post("/api/admin/expenses", { month });
+}
+export function saveExpenseClaim(id: number, body: { lines: ExpenseLine[]; note: string; claimant?: string }): Promise<ExpenseClaim> {
+  return put(`/api/admin/expenses/${id}`, body);
+}
+export function deleteExpenseClaim(id: number): Promise<{ ok: boolean }> {
+  return del(`/api/admin/expenses/${id}`);
+}
+export function expenseClaimAction(id: number, action: "submit" | "approve" | "reject" | "reopen", body: Record<string, string> = {}): Promise<ExpenseClaim> {
+  return post(`/api/admin/expenses/${id}/${action}`, body);
+}
+/** 영수증을 청구서에 붙이고 읽어 낸 줄 초안을 받는다(줄 저장은 화면이 한다). */
+export function uploadExpenseReceipt(claimId: number, file: File, read = true): Promise<{
+  receipt_id: number; filename: string; warning: string;
+  fields: { date?: string | null; place?: string | null; detail?: string | null; category?: string; amount?: number | null; vat?: number | null; currency?: string | null };
+}> {
+  const fd = new FormData();
+  fd.append("file", file);
+  return postForm(`/api/admin/expenses/${claimId}/receipts?read=${read ? 1 : 0}`, fd);
+}
+export function fetchExpenseReceipt(receiptId: number): Promise<Blob> {
+  return getBlob(`/api/admin/expenses/receipts/${receiptId}`);
+}
+/** 출장 보고서 경비 시트의 개인 결제분 → 내 경비 청구서(사용일의 달). */
+export function expensesFromTrip(eventId: number): Promise<{
+  ok: boolean; added: number; skipped_corporate: number; skipped_already: number; skipped_submitted: number; months: string[];
+}> {
+  return post(`/api/admin/expenses/from-trip/${eventId}`, {});
+}
