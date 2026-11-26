@@ -58,6 +58,7 @@ import type {
 } from "@/lib/types";
 import { can } from "@/lib/auth";
 import Modal from "@/components/common/Modal";
+import ComboBox from "@/components/common/ComboBox";
 import ProjectSummaryModal from "@/components/common/ProjectSummaryModal";
 import CurrencyToggle from "@/components/common/CurrencyToggle";
 import { HeadTh, useHeadMenu, type HeadCol } from "@/components/common/tableHeadMenu";
@@ -2512,6 +2513,14 @@ function PayableForm({
     const k = (form.counterparty || "").trim().toLowerCase().replace(/\s+/g, " ");
     return k ? payees.find((p) => p.name.trim().toLowerCase().replace(/\s+/g, " ") === k) ?? null : null;
   }, [payees, form.counterparty]);
+  const payeeSections = useMemo(() => {
+    const by = new Map<string, string[]>();
+    for (const p of payees) {
+      const c = CATEGORY_LABEL[p.category] || p.category || "Other";
+      by.set(c, [...(by.get(c) ?? []), p.name]);
+    }
+    return [...by.entries()].map(([label, options]) => ({ label, options }));
+  }, [payees]);
   const ownBank = !!(form.bank_name || form.bank_account || form.bank_holder);
   const [overrideBank, setOverrideBank] = useState(false);
   // 소개 수수료일 때만 필요한 목록 — 프로젝트를 고르면 소개자·금액이 함께 따라온다.
@@ -2838,21 +2847,24 @@ ${b.notes}` : b.notes) : f.notes,
         ) : null}
         <label className="form-field">
           <span>{isConsulting ? "Consultant" : "Vendor / payee"}</span>
-          <input
-            value={form.counterparty}
-            list={isConsulting || isVendorPay ? undefined : "fin-payee-list"}
-            onChange={(e) => {
-              const v = e.target.value;
-              const hit = payees.find((p) => p.name === v);
-              // 새 지급에서 지급처를 고르면 그 지급처의 기본 분류를 따라간다.
-              setForm((f) => ({ ...f, counterparty: v, ...(hit && !rowId && hit.category ? { category: hit.category } : {}) }));
-            }}
-            placeholder={isConsulting ? "Filled in from the project" : "Pick from Payees or type a new name"}
-          />
-          {isConsulting || isVendorPay ? null : (
-            <datalist id="fin-payee-list">
-              {payees.map((p) => <option key={p.id} value={p.name}>{p.category}</option>)}
-            </datalist>
+          {isConsulting || isVendorPay ? (
+            <input
+              value={form.counterparty}
+              onChange={(e) => set("counterparty", e.target.value)}
+              placeholder={isConsulting ? "Filled in from the project" : "e.g. vendor name"}
+            />
+          ) : (
+            // 지급처 명부에서 고르거나 새 이름을 적는다(공용 ComboBox — 분류별 묶음).
+            <ComboBox
+              value={form.counterparty || ""}
+              sections={payeeSections}
+              placeholder="Pick from Payees or type a new name"
+              onChange={(v) => {
+                const hit = payees.find((p) => p.name === v);
+                // 새 지급에서 지급처를 고르면 그 지급처의 기본 분류를 따라간다.
+                setForm((f) => ({ ...f, counterparty: v, ...(hit && !rowId && hit.category ? { category: hit.category } : {}) }));
+              }}
+            />
           )}
         </label>
         <label className="form-field">
