@@ -227,6 +227,24 @@ export default function FreightPanel({
         ) : null}
       </div>
 
+      {/* 7단계 완료 조건 — 운송을 우리가 맡았으면 배송비 일까지 끝나야 7단계가 끝난다
+          (서버 _core._freight_todo 와 같은 규칙: 쓴 견적 고르기 → Finance 등록 → 청구서 파일). */}
+      {payer === "rebill" || payer === "included" ? (() => {
+        const used = d.rows.filter((r) => r.awarded);
+        const steps = [
+          { ok: used.length > 0, label: "Freight quote chosen (Use ✓)" },
+          { ok: used.length > 0 && used.every((r) => !!r.payable), label: "Actual cost registered in Finance" },
+          { ok: used.length > 0 && used.every((r) => !!r.filename), label: "Freight bill file uploaded" },
+        ];
+        const all = steps.every((x) => x.ok);
+        return (
+          <div className={`frt-gate${all ? " ok" : ""}`}>
+            <b>{all ? "✓ Freight done — stage 7 can complete" : "Stage 7 completes after the freight is done"}</b>
+            {steps.map((x) => <span key={x.label} className={x.ok ? "ok" : ""}>{x.ok ? "✓" : "○"} {x.label}</span>)}
+          </div>
+        );
+      })() : null}
+
       {/* ② 한눈에 — 쓴 돈과 받은 돈 */}
       <div className="frt-kpis">
         <Kpi label={unpaid.length || !active.length ? "Freight cost" : "Freight cost (paid)"} krw={t.cost_krw} cur={cur} v={inCur(t.cost_krw)} />

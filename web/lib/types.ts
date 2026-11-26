@@ -2329,6 +2329,8 @@ export type PipelineRow = {
   prepaid?: boolean;
   /** 9·10단계의 매출(AR)·매입(AP) 쪽별 완료 — 둘 다 끝나야 단계 완료라, 한쪽만 끝난
    *  것을 단계 카드가 반쯤 채워 보인다. ap_na = 벤더 P/O 가 없어 매입측 해당 없음. */
+  /** 7단계를 막고 있는 배송비 일(운송을 우리가 맡은 딜 — 견적 고르기·Finance 등록·청구서 파일). */
+  freight_todo?: string;
   money_split?: {
     "9": { ar: boolean; ap: boolean };
     "10": { ar: boolean; ap: boolean };

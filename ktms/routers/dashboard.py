@@ -758,6 +758,8 @@ def pipeline_overview(customer_id: int | None = None, work_type: str | None = No
                 "stage_done": _done["done"],
                 "prepaid": _done["prepaid"],
                 "money_split": _done.get("money_split"),
+                # 7단계를 막고 있는 배송비 일(운송을 우리가 맡은 딜) — 빈 값이면 없음.
+                "freight_todo": _done.get("freight_todo") or "",
                 "advance_terms": _done["advance_terms"],
                 "status": _status_label(stage, r.work_type),
                 # 종결(취소/실주) 여부 — 보드에서 진행 컬럼 대신 Cancelled 존으로 분류한다.

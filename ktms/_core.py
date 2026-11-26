@@ -88,6 +88,7 @@ from db.models import (
     RFQStatus, OrderStatus, ARStatus, WorkType, MarketingActivity, ScheduleEvent,
     MarketingAsset, FinancePayable, FinanceIncome, Consultant, Maker,
     Claim, CreditNote, DealLineAward,
+    FreightQuote,
 )
 
 # ── App / CORS ────────────────────────────────────────────────────────────────
@@ -981,6 +982,14 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
     for k in (("7", "8") if is_service else ("8",)):
         if sd.get(k):
             stage = max(stage, int(k))
+    # 7) 운송을 우리가 맡은 딜(배송비 우리가 내고 청구 / 값에 포함)은 배송비 일까지 끝나야
+    # 7단계가 끝난다 — 쓸 운송 견적을 고르고, 실제 비용을 Finance 에 올리고, 청구서 파일을 붙인다.
+    # 그전엔 POD 가 와도 7·8 을 완료로 치지 않는다(단계는 순서대로 끝낸 마지막 자리).
+    freight_todo = ""
+    if order is not None and not is_service and (getattr(order, "trade_type", "수출") or "수출") != "내수":
+        freight_todo = _freight_todo(s, rfq, order)
+        if freight_todo and stage >= 7:
+            stage = 6
 
     # ── 9~11(돈) 은 7·8(물건) 과 따로 판정한다 ─────────────────────────────────
     # 예전엔 단계가 숫자 하나(도달한 최고 단계)라, 9단계가 끝나면 7·8 도 끝난 것으로 쳤다.
@@ -1084,8 +1093,35 @@ def _deal_progress(s, rfq, order) -> tuple[int, dict[str, str]]:
     if _dd is None:
         _dd = s._deal_done_cache = {}
     _dd[_dp_key] = {"done": done, "prepaid": prepaid, "advance_terms": advance_terms,
-                    "legacy_stage": legacy_stage, "money_split": money_split}
+                    "legacy_stage": legacy_stage, "money_split": money_split,
+                    # 7단계를 막고 있는 배송비 일(빈 값 = 없음) — 단계 카드가 그대로 보여 준다.
+                    "freight_todo": freight_todo}
     return result
+
+
+def _freight_todo(s, rfq, order) -> str:
+    """운송을 우리가 맡은 딜에서 7단계 완료 전에 남은 배송비 일. 없으면 "".
+
+    대상: rfqs.freight_info.payer 가 rebill(우리가 내고 청구)·included(값에 포함). 비었거나
+    buyer(고객 운송) 면 따지지 않는다 — 옛 딜은 그대로다.
+    이 오더의 선적(order_id 가 이 오더이거나 비어 있는 줄) 중 '쓴다'로 고른 견적마다
+    실제 비용이 Finance 에 올라 있고(payable) 청구서 파일이 붙어 있어야 끝난다."""
+    payer = ((getattr(rfq, "freight_info", None) or {}).get("payer") or "")
+    if payer not in ("rebill", "included"):
+        return ""
+    from sqlalchemy.orm import defer
+    rows = [r for r in (s.query(FreightQuote).options(defer(FreightQuote.data))
+                        .filter(FreightQuote.rfq_id == rfq.id).all())
+            if r.awarded and (not r.order_id or r.order_id == order.id)]
+    if not rows:
+        return "Choose the freight quote you used"
+    pids = [r.payable_id for r in rows if r.payable_id]
+    have = {p for (p,) in s.query(FinancePayable.id).filter(FinancePayable.id.in_(pids)).all()} if pids else set()
+    if any(r.payable_id not in have for r in rows):
+        return "Register the freight bill in Finance"
+    if any(not r.filename for r in rows):
+        return "Upload the freight bill file"
+    return ""
 
 
 # 결제조건 문구에서 '선금' 을 알아본다 — 견적·고객 P/O 의 Payment Terms 칸(자유 입력).

@@ -3348,7 +3348,8 @@ export function PipelineModal({
                 className={cls}
                 aria-pressed={selectedStage === no}
                 onClick={() => setSelectedStage(no)}
-                title={c.value ? `${c.label} — ${c.value}` : c.label}
+                title={[c.value ? `${c.label} — ${c.value}` : c.label,
+                        no === 7 && r.freight_todo ? `Freight: ${r.freight_todo} (Freight tab)` : ""].filter(Boolean).join("\n")}
               >
                 <span className="st-head">
                   <span className="st-no">{no}</span>
