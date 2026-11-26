@@ -2879,6 +2879,40 @@ table.perm-matrix th:first-child,
 table.perm-matrix td.perm-mod {
   text-align: left;
   font-weight: 600;
+  min-width: 240px;
+}
+/* 세 역할을 한 표에 — 역할 머리칸은 역할 색, 역할마다 첫 칸에 세로 구분선 */
+table.perm-matrix th.perm-role {
+  font-size: 13px;
+  font-weight: 800;
+  border-bottom: 1px solid var(--line);
+}
+table.perm-matrix th.perm-role.role-admin { background: #f3eefb; color: #6b3fa3; }
+table.perm-matrix th.perm-role.role-sales { background: #eef4fc; color: #245fa8; }
+table.perm-matrix th.perm-role.role-viewer { background: #f4f6f9; color: #5c6b7d; }
+table.perm-matrix th.perm-role,
+table.perm-matrix .perm-role-start {
+  border-left: 1px solid var(--line);
+}
+table.perm-matrix thead th {
+  white-space: nowrap;
+}
+.perm-scope-row td {
+  border-top: 1px solid var(--line);
+}
+.perm-scope-opts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 12.5px;
+  padding-left: 6px;
+}
+.perm-scope-opts label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
   white-space: nowrap;
 }
 /* 권한표 구분 머리글(상단 메뉴 / 단계별 작업) */
@@ -2932,7 +2966,8 @@ table.perm-matrix tr.perm-group:first-child td {
   cursor: pointer;
 }
 .perm-card .form-actions {
-  padding: 0 14px 14px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line);
 }
 
 /* Settings 회사 정보 — 정리된 읽기 화면 */

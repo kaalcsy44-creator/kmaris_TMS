@@ -766,7 +766,7 @@ function clonePerms(p: PermGrid): PermGrid {
 function PermissionsTab() {
   const [cfg, setCfg] = useState<PermissionsConfig | null>(null);
   const [draft, setDraft] = useState<Record<string, { perms: PermGrid; scope: string }>>({});
-  const [savingRole, setSavingRole] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
@@ -815,123 +815,38 @@ function PermissionsTab() {
     setMsg("");
   }
 
-  async function save(role: string) {
-    const d = draft[role];
-    if (!d) return;
-    setSavingRole(role);
+  // 편집 가능한 역할(sales·viewer)을 한 번에 저장한다 — 표가 하나라 저장 버튼도 하나.
+  async function saveAll() {
+    const roleKeys = Object.keys(draft);
+    if (!roleKeys.length || !cfg) return;
+    setSaving(true);
     setErr("");
     setMsg("");
     try {
-      await updateRolePermissions({ role, perms: d.perms, scope: d.scope });
-      setMsg(`${PERM_ROLE_LABEL[role] ?? role} permissions saved.`);
+      for (const role of roleKeys) {
+        const d = draft[role];
+        await updateRolePermissions({ role, perms: d.perms, scope: d.scope });
+      }
+      // Reset 이 방금 저장한 값으로 돌아가게 기준값도 갱신.
+      setCfg({
+        ...cfg,
+        roles: cfg.roles.map((r) =>
+          draft[r.role] ? { ...r, perms: clonePerms(draft[r.role].perms), scope: draft[r.role].scope as RolePermRow["scope"] } : r
+        ),
+      });
+      setMsg("Permissions saved.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
     } finally {
-      setSavingRole(null);
+      setSaving(false);
     }
   }
 
-  // 컴포넌트(<RoleCard/>)가 아니라 렌더 함수로 부른다 — 이 안에서 정의한 컴포넌트는
-  // 렌더마다 새 타입이 되어 체크 한 번에 카드 전체가 지워졌다 다시 그려지고, 그 순간
-  // 페이지 높이가 줄었다 늘며 스크롤이 튀었다.
-  function renderRoleCard(row: RolePermRow) {
-    const editable = row.editable;
-    const state = editable ? draft[row.role] : { perms: row.perms, scope: row.scope };
-    if (!state) return null;
-    return (
-      <div className="perm-card" key={row.role}>
-        <div className={`perm-card-head role-${row.role}`}>
-          <span>{PERM_ROLE_LABEL[row.role] ?? row.role}</span>
-          {!editable ? <span className="perm-locked">always full access</span> : null}
-        </div>
-        <div className="table-wrap">
-          <table className="mini perm-matrix">
-            <thead>
-              <tr>
-                <th>Page</th>
-                {cfg!.actions.map((a) => (
-                  <th key={a}>{ACTION_LABEL[a] ?? a}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {groupModules(cfg!.modules).map((g) => (
-                <Fragment key={g.title}>
-                  <tr className="perm-group">
-                    <td colSpan={1 + cfg!.actions.length}>{g.title}</td>
-                  </tr>
-                  {g.modules.map((m) => (
-                    <tr key={m}>
-                      <td className="perm-mod">
-                        {MODULE_LABEL[m] ?? m}
-                        {MODULE_HINT[m] ? (
-                          <span className="perm-mod-hint">{MODULE_HINT[m]}</span>
-                        ) : null}
-                      </td>
-                      {cfg!.actions.map((a) => {
-                        const na = viewOnly.has(m) && a !== "view";
-                        return (
-                          <td key={a} className="perm-cell">
-                            {na ? (
-                              <span className="perm-na">—</span>
-                            ) : (
-                              <input
-                                type="checkbox"
-                                checked={!!state.perms[m]?.[a]}
-                                disabled={!editable}
-                                onChange={() => toggle(row.role, m, a)}
-                              />
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="perm-scope">
-          <span className="perm-scope-label">Data scope:</span>
-          <label>
-            <input
-              type="radio"
-              name={`scope-${row.role}`}
-              checked={state.scope === "all"}
-              disabled={!editable}
-              onChange={() => setScope(row.role, "all")}
-            />
-            All deals
-          </label>
-          <label>
-            <input
-              type="radio"
-              name={`scope-${row.role}`}
-              checked={state.scope === "own"}
-              disabled={!editable}
-              onChange={() => setScope(row.role, "own")}
-            />
-            Own deals only
-          </label>
-        </div>
-        {editable ? (
-          <div className="form-actions">
-            <button
-              className="btn primary"
-              onClick={() => save(row.role)}
-              disabled={savingRole === row.role}
-            >
-              {savingRole === row.role ? "Saving…" : "Save"}
-            </button>
-            <button className="btn" onClick={() => loadInto(cfg!)} disabled={savingRole === row.role}>
-              Reset
-            </button>
-          </div>
-        ) : null}
-      </div>
-    );
-  }
+  // 역할별 현재 값 — 편집 가능한 역할은 초안, admin 은 서버 값(항상 전체).
+  const roleState = (row: RolePermRow) =>
+    row.editable ? draft[row.role] : { perms: row.perms, scope: row.scope };
+  const roles = cfg.roles.filter((r) => roleState(r));
+  const nAct = cfg.actions.length;
 
   return (
     <div className="panel">
@@ -944,10 +859,117 @@ function PermissionsTab() {
       </p>
       {msg ? <div className="action-ok" style={{ marginBottom: 10 }}>{msg}</div> : null}
       {err ? <div className="action-err" style={{ marginBottom: 10 }}>{err}</div> : null}
-      <div className="perm-cards">
-        {cfg.roles.map((r) => (
-          renderRoleCard(r)
-        ))}
+      <div className="perm-card">
+        <div className="table-wrap">
+          <table className="mini perm-matrix">
+            <thead>
+              <tr>
+                <th rowSpan={2}>Page</th>
+                {roles.map((r) => (
+                  <th key={r.role} colSpan={nAct} className={`perm-role role-${r.role}`}>
+                    {PERM_ROLE_LABEL[r.role] ?? r.role}
+                    {!r.editable ? <span className="perm-locked"> · always full access</span> : null}
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                {roles.map((r) =>
+                  cfg.actions.map((a, i) => (
+                    <th key={`${r.role}-${a}`} className={i === 0 ? "perm-role-start" : undefined}>
+                      {ACTION_LABEL[a] ?? a}
+                    </th>
+                  ))
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {groupModules(cfg.modules).map((g) => (
+                <Fragment key={g.title}>
+                  <tr className="perm-group">
+                    <td colSpan={1 + nAct * roles.length}>{g.title}</td>
+                  </tr>
+                  {g.modules.map((m) => (
+                    <tr key={m}>
+                      <td className="perm-mod">
+                        {MODULE_LABEL[m] ?? m}
+                        {MODULE_HINT[m] ? (
+                          <span className="perm-mod-hint">{MODULE_HINT[m]}</span>
+                        ) : null}
+                      </td>
+                      {roles.map((r) => {
+                        const st = roleState(r)!;
+                        return cfg.actions.map((a, i) => {
+                          const na = viewOnly.has(m) && a !== "view";
+                          return (
+                            <td
+                              key={`${r.role}-${a}`}
+                              className={`perm-cell${i === 0 ? " perm-role-start" : ""}`}
+                            >
+                              {na ? (
+                                <span className="perm-na">—</span>
+                              ) : (
+                                <input
+                                  type="checkbox"
+                                  checked={!!st.perms[m]?.[a]}
+                                  disabled={!r.editable}
+                                  onChange={() => toggle(r.role, m, a)}
+                                  aria-label={`${PERM_ROLE_LABEL[r.role] ?? r.role} ${MODULE_LABEL[m] ?? m} ${ACTION_LABEL[a] ?? a}`}
+                                />
+                              )}
+                            </td>
+                          );
+                        });
+                      })}
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+              <tr className="perm-scope-row">
+                <td className="perm-mod">
+                  Data scope
+                  <span className="perm-mod-hint">Which deals they see</span>
+                </td>
+                {roles.map((r) => {
+                  const st = roleState(r)!;
+                  return (
+                    <td key={r.role} colSpan={nAct} className="perm-role-start">
+                      <div className="perm-scope-opts">
+                        <label>
+                          <input
+                            type="radio"
+                            name={`scope-${r.role}`}
+                            checked={st.scope === "all"}
+                            disabled={!r.editable}
+                            onChange={() => setScope(r.role, "all")}
+                          />
+                          All deals
+                        </label>
+                        <label>
+                          <input
+                            type="radio"
+                            name={`scope-${r.role}`}
+                            checked={st.scope === "own"}
+                            disabled={!r.editable}
+                            onChange={() => setScope(r.role, "own")}
+                          />
+                          Own deals only
+                        </label>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="form-actions">
+          <button className="btn primary" onClick={saveAll} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <button className="btn" onClick={() => loadInto(cfg)} disabled={saving}>
+            Reset
+          </button>
+        </div>
       </div>
     </div>
   );
