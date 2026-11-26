@@ -231,7 +231,7 @@ function quotationDriveRequest(
     rfqId: q.rfqId,
     ref: `qtn:${q.id}`,
     title: `Save ${q.no || "this quotation"} to Google Drive?`,
-    files: [file("pdf", true), file("xlsx", false)],
+    files: [file("pdf", true), file("xlsx", true)],
     note,
   };
 }
