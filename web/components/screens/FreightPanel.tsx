@@ -867,6 +867,7 @@ function ChargeRow({ doc, bill, suggest, editable, busy, onPick, onRegister, onS
   const extra: ReactNode = doc.packing || doc.insurance ? fmt(doc.packing + doc.insurance, doc.currency) : "—";
   const tip = Math.round(suggest * 100) / 100;
   return (
+    <>
     <tr>
       <td>
         <input type="checkbox" checked={doc.counted && !!doc.freight} disabled={!editable || busy || !doc.freight}
@@ -882,19 +883,11 @@ function ChargeRow({ doc, bill, suggest, editable, busy, onPick, onRegister, onS
           : bill.unbilled > 0 ? (
             <span className="frt-reg">
               <span className="ar-badge overdue">Not in AR · {fmt(bill.unbilled, bill.currency)}</span>
-              {!editable || !bill.order_id ? null : reg ? (
-                <span className="frt-paydate">
-                  <span>Due</span>
-                  <input type="date" value={due} aria-label="Due date" onChange={(e) => setDue(e.target.value)} />
-                  <label className="frt-carry-chk" title="The customer will pay this with their next order — it shows on their next PI / CI instead of due-date alerts">
-                    <input type="checkbox" checked={carry} onChange={(e) => setCarry(e.target.checked)} /> Collect with next order
-                  </label>
-                  {carry ? <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" style={{ width: 160 }} /> : null}
-                  <button type="button" className="btn sm primary" disabled={busy || !due} onClick={async () => { if (await onRegister(bill.unbilled, due, carry ? { note } : undefined)) setReg(false); }}>Register</button>
-                  <button type="button" className="btn sm" onClick={() => setReg(false)}>Cancel</button>
-                </span>
-              ) : (
-                <button type="button" className="btn sm primary" disabled={busy} onClick={() => { setDue(today()); setReg(true); }}>＋ Register in AR</button>
+              {/* 등록 폼은 이 칸이 아니라 바로 아래 한 줄(frt-reg-row)에 연다 — 칸 안에서 펼치면
+                  표 열 폭이 통째로 다시 잡혀 화면이 크게 흔들린다. 버튼 자리는 그대로 둔다. */}
+              {!editable || !bill.order_id ? null : (
+                <button type="button" className={`btn sm${reg ? "" : " primary"}`} disabled={busy || reg}
+                        onClick={() => { setDue(today()); setCarry(false); setNote(""); setReg(true); }}>＋ Register in AR</button>
               )}
             </span>
           ) : bill.has_main ? <span className="ar-badge">In AR ✓</span> : <span className="muted">No AR invoice yet</span>}
@@ -913,6 +906,32 @@ function ChargeRow({ doc, bill, suggest, editable, busy, onPick, onRegister, onS
         )}
       </td>
     </tr>
+    {reg && bill && bill.unbilled > 0 ? (
+      <tr className="frt-reg-row">
+        <td colSpan={7}>
+          <div className="frt-reg-form">
+            <b>Register {fmt(bill.unbilled, bill.currency)} in AR</b>
+            <label className="frt-reg-f">
+              <span>Due</span>
+              <input type="date" value={due} aria-label="Due date" onChange={(e) => setDue(e.target.value)} />
+            </label>
+            <label className="frt-carry-chk" title="The customer will pay this with their next order — it shows on their next PI / CI instead of due-date alerts">
+              <input type="checkbox" checked={carry} onChange={(e) => setCarry(e.target.checked)} />
+              Collect with next order
+            </label>
+            {/* 메모 칸은 늘 자리를 잡아 둔다 — 체크할 때 칸이 생겼다 사라지면 줄이 흔들린다. */}
+            <input className="frt-reg-note" value={note} disabled={!carry} onChange={(e) => setNote(e.target.value)}
+                   placeholder={carry ? "Note — who agreed, when (optional)" : "Note (with next order only)"} />
+            <span className="frt-reg-act">
+              <button type="button" className="btn sm primary" disabled={busy || !due}
+                      onClick={async () => { if (await onRegister(bill.unbilled, due, carry ? { note } : undefined)) setReg(false); }}>Register</button>
+              <button type="button" className="btn sm" onClick={() => setReg(false)}>Cancel</button>
+            </span>
+          </div>
+        </td>
+      </tr>
+    ) : null}
+    </>
   );
 }
 
