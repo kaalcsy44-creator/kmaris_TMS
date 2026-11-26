@@ -794,6 +794,12 @@ class ARRecord(Base):
     # 라 추가 건만 완납돼도 11단계가 완료로 보인다. 그래서 그쪽은 kind != "extra" 로 세고,
     # 추가 청구의 미수는 딜 카드의 배지로 따로 알린다.
     kind           = Column(String(10), default="main")   # main | extra
+    # 다음 오더 때 받기 — 고객이 "다음 발주 때 함께 결제"하기로 한 받을 돈(예: P-084 운임 USD 200).
+    # 미수는 이 청구서에 그대로 남고(매출·손익은 원래 딜 것), 연체 알림 대신 "다음 오더 때 받을 돈"
+    # 알림으로 돌며, 같은 고객사의 다음 딜 PI·CI 편집기가 한 줄로 얹으라고 띄운다.
+    # 얹은 줄은 그 문서 품목에 carry_ar_id 표식을 달고 들어간다(어디에 실렸는지는 그 표식으로 찾는다).
+    carry_next     = Column(Boolean, default=False)
+    carry_note     = Column(String(300))
     created_at     = Column(DateTime, default=datetime.utcnow)
 
 

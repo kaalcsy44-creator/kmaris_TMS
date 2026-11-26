@@ -23121,3 +23121,15 @@ table.mini.items-edit.rre-table td.rre-st select { width: 100%; height: 28px; bo
 .lb-full-title span { font-size: 15px; font-weight: 600; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw; }
 .lb-full-title + .lb-counts { margin-right: auto; }
+
+/* 다음 오더 때 받기(Carry-over) — Freight AR 표 칸, PI·CI 편집기 띠 */
+.ar-badge.carry { background: #eef4ff; color: #1d4ed8; border-color: #c7d7fb; }
+.frt-carry { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.carry-banner { margin: 10px 0; padding: 10px 12px; border: 1px solid #c7d7fb; border-radius: 8px;
+  background: #f5f8ff; font-size: 13px; }
+.carry-banner-h { font-weight: 700; color: #1d3f8f; margin-bottom: 6px; }
+.carry-banner ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.carry-banner li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.carry-banner .carry-amt { font-weight: 700; font-variant-numeric: tabular-nums; }
+.carry-row-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 8px;
+  background: #eef4ff; color: #1d4ed8; font-size: 11px; font-weight: 600; }

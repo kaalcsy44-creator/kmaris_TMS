@@ -1601,7 +1601,8 @@ function vendorQuoteItemsToTax(items: VendorQuoteItem[] | undefined | null): Tax
 }
 
 function workItemsToTax(items: DocumentWorkItem[] | undefined | null): TaxInvoiceItem[] {
-  return (items ?? []).map((it) => {
+  // 다음 오더 때 받기로 얹은 줄(carry_ar_id)은 원래 딜의 받을 돈이다 — 이 딜 청구에서 뺀다.
+  return (items ?? []).filter((it) => !it.carry_ar_id).map((it) => {
     const qty = num(it.qty);
     const unit_price = num(it.unit_price);
     return {

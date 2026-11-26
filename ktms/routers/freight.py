@@ -284,13 +284,24 @@ def project_freight(rfq_id: int):
                                 else round(_num((a.charges or {}).get("freight")), 2),
                                 "paid_amount": round(a.paid_amount or 0, 2),
                                 "outstanding": round(_ar_outstanding(a), 2),
-                                "paid": _enum_val(a.status) == "완납", "paid_date": a.paid_date or ""})
+                                "paid": _enum_val(a.status) == "완납", "paid_date": a.paid_date or "",
+                                # 다음 오더 때 받기(고객과 합의) — 같은 고객사 다음 PI·CI 에 한 줄로 얹는다.
+                                "carry_next": bool(getattr(a, "carry_next", False)),
+                                "carry_note": getattr(a, "carry_note", None) or "",
+                                "carried_in": []})
                 if freight_only:
                     # 배송비 청구서는 전부 청구액이다 — 고른 문서의 운임 중 이것이 덮은 몫(sp["extra"])은
                     # 위에서 더하지 않았다.
                     k = _krw_in(a.invoice_amount or 0, a.currency or "USD", _ym(a.invoice_date))
                     charged_krw += k
                     collected_krw += k if _enum_val(a.status) == "완납" else 0.0
+
+        # 이월 청구서가 어느 PI·CI 에 실렸는지(같은 고객사 다음 딜).
+        if any(r["carry_next"] for r in ar_rows):
+            from routers.carry_over import _carried_in
+            put = _carried_in(s, {r["id"] for r in ar_rows if r["carry_next"]})
+            for r in ar_rows:
+                r["carried_in"] = put.get(r["id"], [])
 
         cur = next((d["currency"] for d in docs), "") or next(
             ((o.currency or "").upper() for o in orders if o.currency), "") or "USD"

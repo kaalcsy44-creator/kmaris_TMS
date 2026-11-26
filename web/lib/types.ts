@@ -1162,6 +1162,9 @@ export type DocumentWorkItem = {
    *  다시 찾을 수 없어서다(web/lib/deal.ts makeItemMatcher). 편집기는 받은 값을
    *  그대로 돌려보내기만 하면 된다 — 새 줄이면 비워 두고 서버가 붙인다. */
   lid?: string;
+  /** 다음 오더 때 받기로 얹은 줄 — 원래 딜의 청구서(ARRecord) id. 문서 합계엔 들지만 이 딜의
+   *  받을 돈(AR)·세금계산서·포장명세에선 빠진다(ktms/routers/carry_over.py). */
+  carry_ar_id?: number;
 };
 
 export type DocumentDetail = {

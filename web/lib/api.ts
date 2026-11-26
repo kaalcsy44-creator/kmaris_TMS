@@ -1234,6 +1234,8 @@ export type Freight = {
   ar: {
     id: number; order_id: number; kind: string; freight_only: boolean; invoice_no: string; date: string; due_date: string;
     currency: string; amount: number; freight: number; paid_amount: number; outstanding: number; paid: boolean; paid_date: string;
+    /** 다음 오더 때 받기(고객과 합의) — 같은 고객사 다음 PI·CI 에 한 줄로 얹는다. */
+    carry_next?: boolean; carry_note?: string; carried_in?: CarryPlace[];
   }[];
   /** 이 딜에 직접 등록됐지만 배송비 줄에 안 걸린 지급 — 이중 등록 방지용. */
   other_payables: FreightPayable[];
@@ -1308,6 +1310,21 @@ export function chargeFreight(
   body: { target: "pi" | "ci" | "invoice"; doc_id?: number; order_id?: number; amount: number; currency?: string; due_date?: string; description?: string }
 ): Promise<{ ok: boolean; ar_updated?: boolean; ar_manual?: boolean; invoice_no?: string }> {
   return post(`/api/admin/projects/${rfqId}/freight-charge`, body);
+}
+
+// ── 다음 오더 때 받기(Carry-over) — ktms/routers/carry_over.py ──────────────────
+/** 이월 줄이 실린 PI·CI 한 장. */
+export type CarryPlace = { kind: "pi" | "ci"; id: number; no: string; rfq_id: number; project_no: string; amount: number | null; currency: string };
+/** 아직 받지 못한 '다음 오더 때 받기' 청구서. */
+export type CarryOver = {
+  ar_id: number; rfq_id: number; project_no: string; project_title: string; invoice_no: string; kind: string;
+  description: string; currency: string; outstanding: number; note: string; customer?: string; carried_in: CarryPlace[];
+};
+export function setCarryNext(arId: number, on: boolean, note = ""): Promise<{ ok: boolean; carry_next: boolean; carry_note: string }> {
+  return post(`/api/admin/ar/${arId}/carry-next`, { on, note });
+}
+export function fetchCarryOvers(rfqId: number): Promise<{ items: CarryOver[] }> {
+  return get(`/api/admin/projects/${rfqId}/carry-overs`);
 }
 
 // ── 9) POD(인도 증빙) 파일 + 단계 완료 콜 ─────────────────────────────────────

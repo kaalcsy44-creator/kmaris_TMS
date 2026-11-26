@@ -1166,7 +1166,9 @@ def save_tax_invoice(order_id: int, body: TaxInvoiceSave):
         elif body.tax_no is not None:
             tax.tax_no = _manual_doc_no(s, TaxInvoiceData, "tax_no", body.tax_no, tax.id)
         tax.date = body.date or tax.date or date.today().isoformat()
-        tax.items = body.items or ci.items or []
+        # 다음 오더 때 받기로 얹은 줄은 원래 딜의 청구분이다 — 이 딜 청구에서 뺀다.
+        tax.items = body.items or [it for it in (ci.items or [])
+                                   if not (isinstance(it, dict) and it.get("carry_ar_id"))]
 
         ar = (s.query(ARRecord).filter_by(order_id=order.id, ci_no=ci.ci_no)
               .filter(ARRecord.kind != "extra").first())

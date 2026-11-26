@@ -265,6 +265,9 @@ _MIGRATIONS = {
         "credit_amount":   "FLOAT DEFAULT 0",
         # 본 계약 청구(main)인가 추가비용 청구(extra)인가. 기존 행은 전부 본 계약 건이다.
         "kind":            "VARCHAR(10) DEFAULT 'main'",
+        # 다음 오더 때 받기(고객과 합의) + 메모 — ARRecord.carry_next 주석.
+        "carry_next":      "BOOLEAN DEFAULT FALSE",
+        "carry_note":      "VARCHAR(300)",
     },
     "ap_records": {
         "charges":         "JSON",

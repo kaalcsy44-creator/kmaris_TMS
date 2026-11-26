@@ -35,7 +35,7 @@ import { getToken, can, canEditDeal, editBlockReason } from "@/lib/auth";
 import { useResizable } from "@/lib/useResizable";
 import type { DocTarget } from "@/lib/api";
 import type { DocRow, DocumentDetail, DocumentWorkItem } from "@/lib/types";
-import { fetchDocumentsOverview } from "@/lib/api";
+import { fetchDocumentsOverview, fetchCarryOvers, type CarryOver } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
 import { tr } from "@/lib/labels";
 import Modal from "@/components/common/Modal";
@@ -1356,7 +1356,7 @@ function ProformaInvoiceTab({
     setBusy(true);
     try {
       // 줄에 적은 HS Code 가 우선, 빈 줄은 문서 기본값.
-      const outItems = items.map((it) => ({ ...it, hs_code: it.hs_code || shipping.hs_code || "" }));
+      const outItems = items.map((it) => ({ ...it, hs_code: it.carry_ar_id ? "" : it.hs_code || shipping.hs_code || "" }));
       const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
       const outTerms = { ...terms, discount, freight, packing, insurance };
       await saveProformaInvoice(target, { pi_no: piNo, date, currency, vat_rate: vatRate, items: outItems, shipping: outShipping, terms: outTerms });
@@ -1443,6 +1443,7 @@ function ProformaInvoiceTab({
       <DocDefaultsHint order={data.order} />
       </div>
       </div>
+      <CarryOverBanner rfqId={data.order.rfq_id} items={items} setItems={setItems} currency={currency} editable={editable} />
       <ItemEditor
         items={items}
         setItems={setItems}
@@ -1944,7 +1945,7 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
     setBusy(true);
     try {
       // 줄에 적은 HS Code 가 우선, 빈 줄은 문서 기본값.
-      const outItems = items.map((it) => ({ ...it, hs_code: it.hs_code || shipping.hs_code || "" }));
+      const outItems = items.map((it) => ({ ...it, hs_code: it.carry_ar_id ? "" : it.hs_code || shipping.hs_code || "" }));
       // 구조화 Shipping Mark → PDF 출력용 문자열로 합성해 함께 저장.
       const outShipping = { ...shipping, shipping_marks: composeShippingMarks(shipping) };
       const outTerms = { ...terms, discount, freight, packing, insurance };
@@ -2033,6 +2034,7 @@ function CommercialInvoiceTab({ data, pkg, onChanged }: { data: DocumentDetail; 
       <DocDefaultsHint order={data.order} />
       </div>
       </div>
+      <CarryOverBanner rfqId={data.order.rfq_id} items={items} setItems={setItems} currency={currency} editable={editable} />
       <ItemEditor
         items={items}
         setItems={setItems}
@@ -2201,7 +2203,8 @@ function PackingListTab({ data, pkg, onChanged }: { data: DocumentDetail; pkg: P
   const [packingInfo, setPackingInfo] = useState(data.pl?.packing_info || "");
   // 품목은 CI 를 따른다 — CI 에서 '제외'한 줄(다른 포장으로 가는 것)은 PL 에 싣지 않는다.
   // 저장된 PL 은 서버가 이미 CI 에 맞춰 준다(품목·수량은 CI, 포장 실측만 PL).
-  const ciShipItems = (data.ci?.items || []).filter((i) => !i.excluded);
+  // 다음 오더 때 받기로 얹은 줄은 돈일 뿐 실어 보내는 물건이 아니다 — 포장명세에서 뺀다.
+  const ciShipItems = (data.ci?.items || []).filter((i) => !i.excluded && !i.carry_ar_id);
   const seed = data.pl?.items || (data.ci ? ciShipItems : data.order.items);
   const [items, setItems] = useState<DocumentWorkItem[]>(normalizeItems(seed, true));
   // 선적정보·Shipping Mark — CI 값을 기본 상속하고, PL 이 저장한 값이 있으면 그것을 우선.
@@ -4199,4 +4202,83 @@ function emptyDocDetail(): DocumentDetail {
     pi: null, ci: null, pl: null, sa: null, tax: null,
     smtp_configured: false,
   };
+}
+
+
+/** PI·CI 편집기 위의 띠 — 이 고객사가 지난 딜에서 "다음 오더 때" 내기로 한 돈(예: P-084 운임 USD 200).
+ *  "Add to this invoice" 를 누르면 품목 한 줄(carry_ar_id 표식)로 들어간다. 문서 합계·PDF·Excel 엔 실리고,
+ *  이 딜의 받을 돈(AR)에서는 빠진다 — 돈은 원래 딜 청구서에 남아 있으므로, 고객이 이 청구서대로 내면
+ *  그중 이 몫은 원래 딜(9단계 AR)에 수금으로 적는다. 통화는 원래 청구서 통화 그대로만 얹는다. */
+function CarryOverBanner({ rfqId, items, setItems, currency, editable }: {
+  rfqId: number; items: DocumentWorkItem[]; setItems: (v: DocumentWorkItem[]) => void;
+  currency: string; editable: boolean;
+}) {
+  const [list, setList] = useState<CarryOver[]>([]);
+  useEffect(() => {
+    if (!rfqId) return;
+    let alive = true;
+    fetchCarryOvers(rfqId).then((r) => { if (alive) setList(r.items); }).catch(() => { /* 띠만 안 뜬다 */ });
+    return () => { alive = false; };
+  }, [rfqId]);
+  const here = new Set(items.map((it) => Number(it.carry_ar_id || 0)).filter(Boolean));
+  // 이 문서에 이미 실린 줄인데 목록에서 사라진(다 받은) 것도 표식은 남는다 — 띠는 열린 것만 다룬다.
+  if (!list.length) return null;
+  const money = (n: number, cur: string) =>
+    `${cur} ${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  const add = (c: CarryOver) => {
+    const what = c.description || "Charge";
+    setItems([...items, {
+      part_no: "",
+      description: `${what} — carried over from ${c.project_no || "previous order"}${c.invoice_no ? ` (Inv. ${c.invoice_no})` : ""}`,
+      qty: 1,
+      unit: "LOT",
+      unit_price: c.outstanding,
+      amount: c.outstanding,
+      remark: "",
+      carry_ar_id: c.ar_id,
+    }]);
+  };
+  const remove = (c: CarryOver) => setItems(items.filter((it) => Number(it.carry_ar_id || 0) !== c.ar_id));
+  return (
+    <div className="carry-banner">
+      <div className="carry-banner-h">⇢ This customer agreed to pay these with their next order</div>
+      <ul>
+        {list.map((c) => {
+          const on = here.has(c.ar_id);
+          const elsewhere = c.carried_in.filter((p) => !(on && p.rfq_id === rfqId));
+          const sameCur = c.currency.toUpperCase() === (currency || "").toUpperCase();
+          return (
+            <li key={c.ar_id}>
+              <span className="carry-amt">{money(c.outstanding, c.currency)}</span>
+              <span>{c.description || "Charge"}</span>
+              <a href={`/project?rfq=${c.rfq_id}&stage=9`} className="muted">{[c.project_no, c.invoice_no].filter(Boolean).join(" · ")}</a>
+              {c.note ? <span className="hint-inline">“{c.note}”</span> : null}
+              {elsewhere.length && !on ? (
+                <span className="hint-inline">already on {elsewhere.map((p) => [p.project_no, p.no].filter(Boolean).join(" ")).join(", ")}</span>
+              ) : null}
+              {on ? (
+                <>
+                  <span className="ar-badge carry">✓ On this invoice</span>
+                  {editable ? <button type="button" className="btn xs" onClick={() => remove(c)}>Remove</button> : null}
+                </>
+              ) : editable ? (
+                <button type="button" className="btn sm primary" disabled={!sameCur} onClick={() => add(c)}
+                        title={sameCur ? "Add one line for this amount to the invoice below (save to keep it)"
+                          : `This invoice is in ${currency} — the carried amount is in ${c.currency}. Switch the invoice currency to ${c.currency} to add it as is.`}>
+                  ＋ Add to this invoice
+                </button>
+              ) : null}
+              {!sameCur && !on && editable ? <span className="hint-inline">{c.currency} only — this invoice is {currency}</span> : null}
+            </li>
+          );
+        })}
+      </ul>
+      {here.size ? (
+        <p className="hint-inline" style={{ margin: "6px 0 0" }}>
+          The added line counts in this document&apos;s total but not in this deal&apos;s receivable — when the customer pays,
+          record that part as received on the original deal&apos;s invoice (stage 9).
+        </p>
+      ) : null}
+    </div>
+  );
 }

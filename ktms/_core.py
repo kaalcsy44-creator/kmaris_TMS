@@ -3796,7 +3796,8 @@ def ar_from_pi(session, order, pi):
     rfq = _rfq_for_order(session, order)
     if rfq is not None and getattr(rfq, "closed_at", None):
         return None   # 종결(취소·실주)한 딜에는 받을 돈을 세우지 않는다
-    items = [it for it in (pi.items or []) if isinstance(it, dict)]
+    # 다음 오더 때 받기로 얹은 줄(carry_ar_id)은 원래 딜의 받을 돈이다 — 여기 미수로 또 세우지 않는다.
+    items = [it for it in (pi.items or []) if isinstance(it, dict) and not it.get("carry_ar_id")]
     subtotal = _total_amount(items)
     if not subtotal and not items:
         return None
@@ -4544,6 +4545,8 @@ def _finance_receivable_rows(s) -> list[dict]:
             "credit_amount": credit,
             "status": status,
             "overdue": bool(overdue),
+            # 고객과 "다음 오더 때 받기"로 합의한 청구서 — 연체 알림 대신 이월 알림으로 돈다.
+            "carry_next": bool(getattr(r, "carry_next", False)),
         })
     return rows
 

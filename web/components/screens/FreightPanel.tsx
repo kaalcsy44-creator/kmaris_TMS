@@ -20,6 +20,7 @@ import {
   saveFreight,
   saveFreightInfo,
   saveFreightPayable,
+  setCarryNext,
   uploadFreightFile,
   type Freight,
   type FreightParse,
@@ -461,7 +462,7 @@ export default function FreightPanel({
         {d.ar.length ? (
           <div className="table-wrap pod-table-wrap" style={{ marginTop: 10 }}>
             <table className="pod-table frt-table">
-              <thead><tr><th>Invoice (AR)</th><th>Due</th><th className="num">Invoice</th><th className="num">of which freight</th><th>Collection</th></tr></thead>
+              <thead><tr><th>Invoice (AR)</th><th>Due</th><th className="num">Invoice</th><th className="num">of which freight</th><th>Collection</th><th>Next order</th></tr></thead>
               <tbody>
                 {d.ar.map((a) => (
                   <tr key={a.id}>
@@ -469,7 +470,14 @@ export default function FreightPanel({
                     <td>{a.due_date || "—"}</td>
                     <td className="num">{fmt(a.amount, a.currency)}</td>
                     <td className="num">{a.freight ? fmt(a.freight, a.currency) : "—"}</td>
-                    <td><span className={`ar-badge${a.paid ? "" : " overdue"}`}>{a.paid ? `Collected${a.paid_date ? ` ${a.paid_date}` : ""}` : `Outstanding ${fmt(a.outstanding, a.currency)}`}</span></td>
+                    <td><span className={`ar-badge${a.paid ? "" : a.carry_next ? " carry" : " overdue"}`}>{a.paid ? `Collected${a.paid_date ? ` ${a.paid_date}` : ""}` : `Outstanding ${fmt(a.outstanding, a.currency)}`}</span></td>
+                    <td>
+                      <CarryCell a={a} editable={editable} busy={!!busy}
+                                 onSave={(on, note) => run("carry", async () => {
+                                   await setCarryNext(a.id, on, note);
+                                   return on ? "Marked — it will show on this customer's next PI / CI." : "Cleared.";
+                                 })} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -938,5 +946,51 @@ function SeparateInvoice({ d, orderId, suggest, defaultDesc, busy, onCreate }: {
         </button>
       </div>
     </div>
+  );
+}
+
+
+/** 청구서 한 장의 "다음 오더 때 받기" 칸 — 고객이 다음 발주 때 함께 내기로 한 돈.
+ *  켜면 연체 알림 대신 이월 알림으로 돌고, 같은 고객사 다음 딜의 PI·CI 편집기가 한 줄로 얹으라고 띄운다. */
+function CarryCell({ a, editable, busy, onSave }: {
+  a: Freight["ar"][number]; editable: boolean; busy: boolean;
+  onSave: (on: boolean, note: string) => Promise<boolean>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  if (a.paid) return <span className="muted">—</span>;
+  const put = a.carried_in ?? [];
+  if (a.carry_next) {
+    return (
+      <span className="frt-carry">
+        <span className="ar-badge carry" title={a.carry_note || undefined}>⇢ Collect with next order</span>
+        {put.length ? (
+          <span className="hint-inline">
+            Added to {put.map((p) => (
+              <a key={`${p.kind}${p.id}`} href={`/project?rfq=${p.rfq_id}&stage=7`}>{[p.project_no, p.no].filter(Boolean).join(" ")}</a>
+            )).reduce<ReactNode[]>((acc, el, i) => (i ? [...acc, ", ", el] : [el]), [])}
+          </span>
+        ) : <span className="hint-inline">Not on a later PI / CI yet</span>}
+        {a.carry_note ? <span className="hint-inline">“{a.carry_note}”</span> : null}
+        {editable ? (
+          <button type="button" className="btn xs" disabled={busy} onClick={() => void onSave(false, "")}
+                  title="Collect this on its own again (back to normal due-date alerts)">Undo</button>
+        ) : null}
+      </span>
+    );
+  }
+  if (!editable) return <span className="muted">—</span>;
+  return open ? (
+    <span className="frt-carry">
+      <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note — who agreed, when (optional)" style={{ minWidth: 220 }} />
+      <button type="button" className="btn sm primary" disabled={busy}
+              onClick={async () => { if (await onSave(true, note)) setOpen(false); }}>Save</button>
+      <button type="button" className="btn sm" onClick={() => setOpen(false)}>Cancel</button>
+    </span>
+  ) : (
+    <button type="button" className="btn sm" disabled={busy} onClick={() => { setNote(""); setOpen(true); }}
+            title="The customer will pay this with their next order — remind me on their next PI / CI">
+      ⇢ Collect with next order
+    </button>
   );
 }

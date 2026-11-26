@@ -99,7 +99,8 @@ def _finance_alerts(s, today: date) -> list[dict]:
 
     # 받을 돈 — 프로젝트 매출(AR)
     for r in _finance_receivable_rows(s):
-        if r["outstanding"] <= 0 or not r["due_date"]:
+        # 다음 오더 때 받기로 한 돈은 기일이 지나도 연체가 아니다 — 아래 이월 알림으로 돈다.
+        if r["outstanding"] <= 0 or not r["due_date"] or r.get("carry_next"):
             continue
         a = _due_alert("receivable", f"ar{r['id']}", r["due_date"], today,
                        title=r["customer"] + (f" · {r['invoice_no']}" if r["invoice_no"] else ""),
@@ -107,6 +108,26 @@ def _finance_alerts(s, today: date) -> list[dict]:
                        href="/finance?tab=inflow", project_no=pno.get(r["rfq_id"], ""))
         if a:
             out.append(a)
+    # 받을 돈 — 다음 오더 때 받기로 한 것. 같은 고객사의 다음 PI·CI 에 얹을 때까지 늘 떠 있다
+    # (얹었으면 "그 청구서로 받는 중"으로 낮춰 보인다).
+    from routers.carry_over import open_carry_overs
+    for c in open_carry_overs(s):
+        put = c["carried_in"]
+        where = ", ".join(f"{x['project_no'] or ''} {x['no']}".strip() for x in put)
+        out.append({
+            "id": f"carry:ar{c['ar_id']}",
+            "type": "receivable",   # Finance 묶음에 함께 보인다
+            "level": "info",
+            "title": f"Added to {where} · collect with it" if put else "Collect with next order",
+            "detail": c["customer"] + (f" · {c['description']}" if c["description"] else "")
+                      + (f" · {c['invoice_no']}" if c["invoice_no"] else ""),
+            "project_no": c["project_no"],
+            "amount": c["outstanding"],
+            "currency": c["currency"],
+            "date": "",
+            "days": 0,
+            "href": f"/project?rfq={c['rfq_id']}&stage=7" if c["rfq_id"] else "/finance?tab=inflow",
+        })
     # 받을 돈 — 기타 수입(수동 등록, 반복 회차 포함)
     cust = {c.id: c.name for c in s.query(Customer).all()}
     for r in s.query(FinanceIncome).all():
