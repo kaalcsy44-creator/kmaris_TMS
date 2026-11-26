@@ -439,11 +439,15 @@ export default function FreightPanel({
                   return (
                     <ChargeRow key={`${x.kind}${x.id}`} doc={x} bill={bill}
                                onPick={(include) => void run("charge", async () => { await pickFreightDoc(rfqId, { kind: x.kind, doc_id: x.id, include }); })}
-                               onRegister={(amount, due) => run("charge", async () => {
+                               onRegister={(amount, due, carry) => run("charge", async () => {
                                  const r = await chargeFreight(rfqId, {
                                    target: "invoice", order_id: x.order_id, amount, currency: x.currency, due_date: due,
                                    description: `Freight charge — ${x.no}`,
                                  });
+                                 if (carry && r.ar_id) {
+                                   await setCarryNext(r.ar_id, true, carry.note);
+                                   return `Invoice ${r.invoice_no} registered — it will show on this customer's next PI / CI.`;
+                                 }
                                  return `Invoice ${r.invoice_no} registered — print and collect it in stage 9 (AR).`;
                                })} suggest={d.krw_per ? base / d.krw_per : 0} editable={editable} busy={!!busy}
                                onSet={(amount) => run("charge", async () => {
@@ -846,7 +850,8 @@ function ChargeRow({ doc, bill, suggest, editable, busy, onPick, onRegister, onS
   /** 고른 운임이 매출채권에 선 상태(P/O 의 첫 줄에만). */
   bill?: Freight["billing"][number];
   onPick: (include: boolean) => void;
-  onRegister: (amount: number, due: string) => Promise<boolean>;
+  /** carry — 고객이 다음 오더 때 함께 내기로 했으면 그 표시(메모)까지 한 번에. */
+  onRegister: (amount: number, due: string, carry?: { note: string }) => Promise<boolean>;
   /** 이 문서에 실을 만한 금액(실제 비용을 문서 통화로) — 0 이면 제안하지 않는다. */
   suggest: number;
   editable: boolean;
@@ -857,6 +862,8 @@ function ChargeRow({ doc, bill, suggest, editable, busy, onPick, onRegister, onS
   const [v, setV] = useState(0);
   const [reg, setReg] = useState(false);
   const [due, setDue] = useState(today());
+  const [carry, setCarry] = useState(false);
+  const [note, setNote] = useState("");
   const extra: ReactNode = doc.packing || doc.insurance ? fmt(doc.packing + doc.insurance, doc.currency) : "—";
   const tip = Math.round(suggest * 100) / 100;
   return (
@@ -879,7 +886,11 @@ function ChargeRow({ doc, bill, suggest, editable, busy, onPick, onRegister, onS
                 <span className="frt-paydate">
                   <span>Due</span>
                   <input type="date" value={due} aria-label="Due date" onChange={(e) => setDue(e.target.value)} />
-                  <button type="button" className="btn sm primary" disabled={busy || !due} onClick={async () => { if (await onRegister(bill.unbilled, due)) setReg(false); }}>Register</button>
+                  <label className="frt-carry-chk" title="The customer will pay this with their next order — it shows on their next PI / CI instead of due-date alerts">
+                    <input type="checkbox" checked={carry} onChange={(e) => setCarry(e.target.checked)} /> Collect with next order
+                  </label>
+                  {carry ? <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" style={{ width: 160 }} /> : null}
+                  <button type="button" className="btn sm primary" disabled={busy || !due} onClick={async () => { if (await onRegister(bill.unbilled, due, carry ? { note } : undefined)) setReg(false); }}>Register</button>
                   <button type="button" className="btn sm" onClick={() => setReg(false)}>Cancel</button>
                 </span>
               ) : (

@@ -1308,7 +1308,7 @@ export function pickFreightDoc(rfqId: number, body: { kind: "pi" | "ci"; doc_id:
 export function chargeFreight(
   rfqId: number,
   body: { target: "pi" | "ci" | "invoice"; doc_id?: number; order_id?: number; amount: number; currency?: string; due_date?: string; description?: string }
-): Promise<{ ok: boolean; ar_updated?: boolean; ar_manual?: boolean; invoice_no?: string }> {
+): Promise<{ ok: boolean; ar_updated?: boolean; ar_manual?: boolean; invoice_no?: string; ar_id?: number }> {
   return post(`/api/admin/projects/${rfqId}/freight-charge`, body);
 }
 
