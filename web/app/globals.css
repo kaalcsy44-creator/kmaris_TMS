@@ -22531,6 +22531,11 @@ body:has(.pl-modal-backdrop) .pl-board { overflow-x: hidden; }
 }
 /* sub-h 안에 보조 설명을 함께 둔 경우(PI·CI "Optional …")는 띠 안에서 한 줄로 */
 .project-stage-pane .sub-h[style*="flex"] { display: flex !important; }
+/* PI 선택 블록(REMARK · PACKING) 제목띠 — 제목 왼쪽, Include 체크박스는 띠 오른쪽 끝 세로 가운데.
+   위의 L2 띠 규칙(display:block)이 flex 를 덮어 체크박스가 제목에 붙고 높이가 어긋났다. */
+.project-stage-pane .sub-h.pi-sec-head { display: flex !important; align-items: center; justify-content: space-between; }
+.pi-sec-head .pi-sec-check { font-size: 12.5px; font-weight: 600; line-height: 1; }
+.pi-sec-head .pi-sec-check input { width: 15px; height: 15px; margin: 0; flex: none; }
 /* L2 — 버튼을 함께 가진 머리줄(제목 + 도구)은 머리줄 자체가 띠 */
 .project-stage-pane :is(.items-head, .embedded-add-head, .vbill-bank-head):has(> :is(.sub-h, .form-section-title)) {
   margin: var(--st-sec-gap) 0 10px !important;
