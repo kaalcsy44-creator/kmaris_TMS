@@ -1516,6 +1516,12 @@ export function updatePayee(id: number, body: PayeeSave): Promise<{ ok: boolean;
 export function deletePayee(id: number): Promise<{ ok: boolean }> {
   return del(`/api/admin/finance/payees/${id}`);
 }
+/** 통장 사본·사업자등록증·고지서·명함(사진·PDF) → Add payee 폼 초안(저장 안 함). */
+export function parsePayeeDoc(file: File): Promise<Omit<PayeeSave, never>> {
+  const fd = new FormData();
+  fd.append("file", file);
+  return postForm("/api/admin/finance/payees/ocr", fd);
+}
 export function savePayeeBank(id: number, bank: import("./types").BankAccount): Promise<{ ok: boolean }> {
   return put(`/api/admin/finance/payees/${id}/bank`, bank);
 }

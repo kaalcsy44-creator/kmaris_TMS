@@ -15,6 +15,9 @@ from pydantic import BaseModel
 from _core import (
     Consultant,
     Depends,
+    File,
+    UploadFile,
+    _ocr_image_media_type,
     FinancePayable,
     HTTPException,
     Vendor,
@@ -229,3 +232,30 @@ def save_payee_bank(payee_id: int, body: PayeeBankIn):
         return {"ok": True}
     finally:
         s.close()
+
+
+@app.post("/api/admin/finance/payees/ocr", dependencies=[Depends(require_token)])
+def ocr_payee_doc(file: UploadFile = File(...)):
+    """지급처 자동 입력 — 통장 사본·사업자등록증·고지서·명함 사진/PDF 에서 이름·분류·계좌·사업자번호·
+    연락처를 읽어 준다(Add payee 폼용, 저장은 안 한다)."""
+    from services.pdf_parser import parse_payee_doc_image, parse_payee_doc_pdf_document
+    fname = (file.filename or "").lower()
+    img_media = _ocr_image_media_type(file)
+    try:
+        file.file.seek(0)
+        if img_media:
+            data = parse_payee_doc_image(file.file.read(), img_media)
+        elif fname.endswith(".pdf"):
+            data = parse_payee_doc_pdf_document(file.file.read())
+        else:
+            raise HTTPException(status_code=400, detail="이미지(PNG·JPG·WEBP) 또는 PDF 파일만 업로드할 수 있습니다.")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"문서 인식 실패: {exc}") from exc
+
+    def t(key: str) -> str:
+        v = data.get(key)
+        return str(v).strip() if v not in (None, "") else ""
+    return {k: t(k) for k in ("name", "category", "bank_name", "bank_account", "bank_holder",
+                              "swift", "biz_no", "contact", "notes")}

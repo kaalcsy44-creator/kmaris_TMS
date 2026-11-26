@@ -638,6 +638,44 @@ def parse_payable_bill_pdf_document(pdf_bytes: bytes) -> dict:
                        _BILL_SCHEMA)
 
 
+# ── 지급처(Finance › Payees › Add payee 자동 입력) ──────────────────────────────
+# 통장 사본·사업자등록증·고지서·명함·계좌 안내 캡처 한 장에서 '돈을 받는 쪽'의 이름과 계좌를 읽는다.
+_PAYEE_CATEGORIES = ("임차료", "급여", "세금", "공과금", "수수료", "기타")
+_PAYEE_HEAD = {
+    "category": {"type": "string", "enum": list(_PAYEE_CATEGORIES)},
+    **_nullable_str("name", "bank_name", "bank_account", "bank_holder", "swift", "biz_no",
+                    "contact", "notes"),
+}
+_PAYEE_SCHEMA = {"type": "object", "properties": _PAYEE_HEAD, "required": list(_PAYEE_HEAD),
+                 "additionalProperties": False}
+_PAYEE_INSTRUCTIONS = (
+    "The attached file shows a payee we pay outside of trading deals — a bank-book copy (통장 사본), "
+    "a business registration certificate (사업자등록증), a tax/insurance/utility notice (고지서), a rent "
+    "invoice, a business card or a screenshot with account details. Extract the PAYEE (who receives "
+    "the money), never our own company (K-MARIS / 케이마리스).\n"
+    "name = the payee's name as people would call it (company name without address, or the agency such as "
+    "'국민연금공단', '국세청', '서울특별시'). category = one of 임차료 (landlord, rent, management fee), 급여 "
+    "(an employee / payroll), 세금 (tax office, local government tax), 공과금 (4대보험 agencies, utilities, "
+    "telecom), 수수료 (bank, accountant or service fees), 기타 (anything else).\n"
+    "bank_name / bank_account / bank_holder = the account to pay into (입금계좌·가상계좌 and 예금주), account "
+    "number exactly as printed with hyphens. swift = SWIFT/BIC if printed. biz_no = 사업자등록번호 "
+    "(000-00-00000) if printed. contact = person, phone, email printed for this payee, ' · ' separated. "
+    "notes = other useful reference numbers (납부자번호, 고객번호, 계약번호), one line, ' · ' separated.\n"
+    "Use null for anything not printed. Do NOT invent values or infer them from outside knowledge."
+)
+
+
+def parse_payee_doc_image(image_bytes: bytes, media_type: str) -> dict:
+    """통장 사본·사업자등록증·고지서 사진/캡쳐에서 지급처 필드를 추출."""
+    return _parse_image(image_bytes, media_type, _PAYEE_INSTRUCTIONS, _PAYEE_SCHEMA)
+
+
+def parse_payee_doc_pdf_document(pdf_bytes: bytes) -> dict:
+    """지급처 문서 PDF(스캔본 포함)에서 지급처 필드를 추출."""
+    return _ask_claude([_pdf_document_block(pdf_bytes), {"type": "text", "text": _PAYEE_INSTRUCTIONS}],
+                       _PAYEE_SCHEMA)
+
+
 # ── 공급사 거래명세서·청구서(프로젝트 9단계 Payable · Vendor (AP) 자동 입력) ─────────
 # Finance 의 고지서 읽기와 달리 품목표까지 받는다 — 화면이 그 품목을 벤더 P/O·공급사
 # 견적과 줄마다 맞대어 보이기 때문이다. 계좌는 거래선 회사 계좌로 들어간다.

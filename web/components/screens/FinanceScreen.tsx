@@ -13,6 +13,7 @@ import {
   saveFinancePayableBank,
   saveVendorBank,
   savePayeeBank,
+  parsePayeeDoc,
   fetchPayees,
   createPayee,
   updatePayee,
@@ -4319,6 +4320,33 @@ function PayeeForm({ initial, id, onClose, onSaved }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const set = (k: keyof PayeeSave, v: string) => setF((x) => ({ ...x, [k]: v }));
+  // 자동 입력 — 통장 사본·사업자등록증·고지서·명함 사진/PDF 를 올리거나 끌어 놓거나 붙여 넣으면
+  // 읽어 낸 칸만 채운다(못 읽은 칸은 적어 둔 값 그대로). 저장은 사람이 확인하고 누른다.
+  const docRef = useRef<HTMLInputElement | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  async function scanDoc(file: File | null) {
+    if (!file || scanning) return;
+    setScanning(true); setErr(""); setScanNote("");
+    try {
+      const r = await parsePayeeDoc(await downscaleImageFile(file, 2000));
+      setF((x) => {
+        const out = { ...x };
+        for (const k of Object.keys(out) as (keyof PayeeSave)[]) {
+          const v = (r[k] || "").trim();
+          if (!v) continue;
+          out[k] = k === "notes" && x.notes ? `${x.notes}\n${v}` : v;
+        }
+        return out;
+      });
+      setScanNote(`Filled from ${file.name || "the image"} — check the values before saving.`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not read the document");
+    } finally {
+      setScanning(false);
+    }
+  }
   async function save() {
     if (!f.name.trim()) { setErr("Enter the payee name."); return; }
     setBusy(true);
@@ -4339,6 +4367,27 @@ function PayeeForm({ initial, id, onClose, onSaved }: {
   }
   return (
     <Modal title={id ? "Edit payee" : "Add payee"} onClose={onClose} form maxWidth={560}>
+      <div onPaste={(e) => { const file = imageFromClipboard(e); if (file) { e.preventDefault(); void scanDoc(file); } }}>
+      <input ref={docRef} type="file" hidden accept="image/png,image/jpeg,image/webp,application/pdf"
+             onChange={(e) => { void scanDoc(e.target.files?.[0] ?? null); e.target.value = ""; }} />
+      <button
+        type="button"
+        className={`fin-bill-drop${dragOver ? " over" : ""}`}
+        disabled={scanning}
+        onClick={() => docRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); void scanDoc(e.dataTransfer.files?.[0] ?? null); }}
+        title="Photo, screenshot or PDF of a bank-book copy, business registration, notice or business card"
+      >
+        {scanning ? <b>📄 Reading…</b> : (
+          <>
+            <b>📄 Auto-fill</b>
+            <span>Upload, drop or paste (Ctrl+V) a 통장 사본 · 사업자등록증 · 고지서 · business card</span>
+          </>
+        )}
+      </button>
+      {scanNote ? <p className="hint-inline fin-bill-note">{scanNote}</p> : null}
       <div className="form-grid">
         <label className="form-field"><span>Name *</span>
           <input value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Landlord · 국민건강보험공단" autoFocus /></label>
@@ -4360,7 +4409,7 @@ function PayeeForm({ initial, id, onClose, onSaved }: {
           <input value={f.contact} onChange={(e) => set("contact", e.target.value)} placeholder="Name · phone · email" /></label>
       </div>
       <label className="form-field" style={{ marginTop: 10 }}><span>Notes</span>
-        <textarea rows={2} value={f.notes} onChange={(e) => set("notes", e.target.value)} /></label>
+        <textarea rows={2} style={{ minHeight: 0, height: 64 }} value={f.notes} onChange={(e) => set("notes", e.target.value)} /></label>
       {id && initial.name && f.name.trim() !== initial.name ? (
         <p className="hint-inline">Renaming also renames the payee on its past payments.</p>
       ) : null}
@@ -4368,6 +4417,7 @@ function PayeeForm({ initial, id, onClose, onSaved }: {
       <div className="form-actions">
         <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
         <button className="btn primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+      </div>
       </div>
     </Modal>
   );
