@@ -26,6 +26,7 @@ function firstAllowed(): string {
     { key: "ar", href: "/project" },
     { key: "finance", href: "/finance" },
     { key: "marketing", href: "/marketing" },
+    { key: "schedule", href: "/schedule" },
   ];
   const hit = order.find((o) => can(o.key, "view"));
   return hit ? hit.href : "/login";

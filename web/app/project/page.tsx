@@ -6,6 +6,7 @@ import AppShell from "@/components/AppShell";
 import ProjectsScreen from "@/components/screens/ProjectsScreen";
 import ActivityScreen from "@/components/screens/ActivityScreen";
 import { HomeTab as DocumentsTab } from "@/components/screens/DashboardScreen";
+import { can } from "@/lib/auth";
 
 // 프로젝트 — /project. 딜을 다루는 화면을 한 메뉴 아래 탭으로 모았다(2026-11 메뉴 재편).
 //   Pipeline  : 딜 목록(Internal/Customer 전환은 표 도구줄 맨 앞)
@@ -23,7 +24,9 @@ const TABS: { key: HubTab; label: string }[] = [
   { key: "mail", label: "Mail" },
 ];
 const LAST_TAB_KEY = "ktms_project_tab";
-const isTab = (v: string | null): v is HubTab => TABS.some((t) => t.key === v);
+// Mail 탭은 권한표의 "Projects › Mail" 열람이 있어야 보인다.
+const visibleTabs = () => TABS.filter((t) => t.key !== "mail" || can("mail", "view"));
+const isTab = (v: string | null): v is HubTab => visibleTabs().some((t) => t.key === v);
 
 export default function Page() {
   // 표 보기에서만 화면을 채우는 배치(fill)를 쓴다 — 그래야 표 상자가 남은 높이를
@@ -72,7 +75,7 @@ function ProjectsHub({ onFill }: { onFill: (fill: boolean) => void }) {
   return (
     <>
       <div className="page-tabs">
-        {TABS.map((t) => (
+        {visibleTabs().map((t) => (
           <button key={t.key} className={tab === t.key ? "on" : ""} onClick={() => pick(t.key)}>
             {t.label}
           </button>

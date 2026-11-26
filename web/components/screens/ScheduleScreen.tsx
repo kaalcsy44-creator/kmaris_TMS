@@ -15,7 +15,7 @@ import {
   type ScheduleSave,
 } from "@/lib/api";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import { canEditDeal, getUser } from "@/lib/auth";
+import { can, canEditDeal, getUser } from "@/lib/auth";
 import type {
   ScheduleRow, ScheduleAgendaItem, CustomerOption, TripReport, TripReportOcr, TripRowsOcr,
   TripStop, TripExpense, TripMemo,
@@ -98,7 +98,7 @@ export function ScheduleModal({
         row={row}
         history={rows}
         customers={customers}
-        canEdit={row ? canEditDeal(row.owner_id) : true}
+        canEdit={row ? can("schedule", "edit") && canEditDeal(row.owner_id) : can("schedule", "create")}
         dirtyRef={dirty}
         onSaved={onSaved}
         onDeleted={() => {
@@ -166,9 +166,11 @@ export default function ScheduleScreen() {
           onRowClick={(r) => setEditing(r)}
           empty={view === "upcoming" ? "Nothing coming up. Click + Add schedule to create one." : "No schedule."}
           actions={
-            <button className="btn primary" onClick={() => setAdding(true)}>
-              + Add schedule
-            </button>
+            can("schedule", "create") ? (
+              <button className="btn primary" onClick={() => setAdding(true)}>
+                + Add schedule
+              </button>
+            ) : null
           }
         />
       )}

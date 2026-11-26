@@ -30,7 +30,7 @@ const ITEMS: Item[] = [
     sub: [
       { href: "/marketing", label: "Marketing", key: "marketing" },
       // 일정은 팀 공용 — Dashboard 를 볼 수 있으면 열린다.
-      { href: "/schedule", label: "Schedule", key: "schedule", perm: "dashboard" },
+      { href: "/schedule", label: "Schedule", key: "schedule" },
     ],
   },
   { href: "/finance", label: "Finance", key: "finance" },

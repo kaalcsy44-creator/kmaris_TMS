@@ -51,6 +51,7 @@ import { convertCurrency, USD_KRW_RATE } from "@/components/common/itemTable";
 import { tr } from "@/lib/labels";
 import CustomerName from "@/components/common/CustomerName";
 import ProjectMailPanel, { projectMailKey } from "@/components/common/ProjectMailPanel";
+import { can } from "@/lib/auth";
 import { FoldTitle, useSectionFold } from "@/components/common/SectionFold";
 import { fetchClaims } from "@/lib/api";
 import ActivityDesc from "@/components/common/ActivityDesc";
@@ -500,8 +501,10 @@ function Overview({
 }) {
   // 이 딜의 메일 — 아래 Mail 패널과 같은 캐시 키라 조회는 한 번이고, 거기서 Sync 를
   // 누르면 단계 보드의 메일 줄까지 함께 갱신된다.
+  // Mail 열람 권한이 없으면 부르지 않는다(403 대신 빈 메일).
+  const canMail = can("mail", "view");
   const { data: mail } = useCachedData(projectMailKey(row.rfq_id), () =>
-    fetchProjectMail(row.rfq_id));
+    canMail ? fetchProjectMail(row.rfq_id) : Promise.resolve(null));
   // 이 딜의 클레임(납품 후 하자) — 있으면 머리 줄에 표시하고 아래 섹션에 펼친다.
   // 클레임은 드문 사건이라 없을 때는 자리를 차지하지 않는다(섹션 자체가 서지 않는다).
   const { data: claims } = useCachedData(`claims:rfq:${row.rfq_id}`, () =>
@@ -612,7 +615,7 @@ function Overview({
 
       {/* 이 딜에서 고객·벤더와 오간 메일 — 단계 진행 바로 다음, 품목·금액 앞에 둔다.
           "무슨 일이 있었나"가 "얼마짜리인가"보다 먼저 읽히는 순서다. */}
-      <ProjectMailPanel rfqId={row.rfq_id} />
+      {canMail ? <ProjectMailPanel rfqId={row.rfq_id} /> : null}
 
       <ItemsSection
         stage={row.stage}

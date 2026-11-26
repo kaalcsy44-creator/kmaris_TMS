@@ -20,6 +20,7 @@ from _core import (
     EmailSyncState,
     HTTPException,
     RFQ,
+    UserRole,
     Vendor,
     _project_no_map,
     app,
@@ -28,6 +29,20 @@ from _core import (
     get_session,
     require_token,
 )
+
+
+def _deny_unless_pic(s, rfq_id: int | None, user: dict) -> None:
+    """본문으로 넘어온 딜(메일을 옮겨 갈 곳·함께 묶을 딜)도 담당자만 손댈 수 있다.
+
+    경로의 딜은 미들웨어(_perm_guard)가 이미 지킨다 — 이건 본문 쪽 딜 몫이다.
+    admin·PIC 미지정 딜은 통과(미들웨어와 같은 규칙)."""
+    if not rfq_id or user.get("role") == UserRole.ADMIN.value:
+        return
+    r = s.query(RFQ.created_by).filter_by(id=rfq_id).first()
+    if r and r[0] and r[0] != (user.get("id") or 0):
+        raise HTTPException(status_code=403, detail="담당자(PIC)만 이 건을 수정·삭제할 수 있습니다.")
+
+
 from services.mail_summary import ROLLUP_KEY as _ROLLUP_KEY, build_project_rollup, ensure_summaries
 from services import mail_auto, mail_sync, marketing_reply, promo_capture
 
@@ -957,7 +972,7 @@ class MailGroupUpdate(BaseModel):
 
 
 @app.put("/api/admin/mail/project/{rfq_id}/group", dependencies=[Depends(require_token)])
-def set_mail_group(rfq_id: int, body: MailGroupUpdate):
+def set_mail_group(rfq_id: int, body: MailGroupUpdate, user: dict = Depends(get_current_user)):
     """이 딜을 다른 딜과 같은 메일 묶음에 넣거나 뺀다.
 
     한 문의를 품목·제조사별로 쪼개 세운 딜들은 대화가 하나뿐이라 메일 이력을 함께
@@ -984,6 +999,7 @@ def set_mail_group(rfq_id: int, body: MailGroupUpdate):
             return {"ok": True, "group": [rfq_id]}
         if body.group_with == rfq_id:
             raise HTTPException(status_code=400, detail="자기 자신과는 묶을 수 없습니다.")
+        _deny_unless_pic(s, body.group_with, user)
         mate = s.query(RFQ).filter_by(id=body.group_with).first()
         if not mate:
             raise HTTPException(status_code=404, detail="함께 볼 프로젝트를 찾을 수 없습니다.")
@@ -1019,6 +1035,7 @@ def assign_mail(msg_id: int, body: MailAssign, user: dict = Depends(get_current_
             raise HTTPException(status_code=404, detail="메일을 찾을 수 없습니다.")
         if body.rfq_id and not s.query(RFQ.id).filter_by(id=body.rfq_id).first():
             raise HTTPException(status_code=404, detail="프로젝트를 찾을 수 없습니다.")
+        _deny_unless_pic(s, body.rfq_id, user)
         picked = {m.id, *(body.ids or [])}
         targets = {t.id: t for t in s.query(EmailMessage).filter(EmailMessage.id.in_(picked)).all()}
         if body.whole_thread:

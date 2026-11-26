@@ -443,7 +443,8 @@ def _authz_error(request: Request, status: int, detail: str) -> JSONResponse:
 
 # ── 권한 매트릭스 (역할 × 페이지 × 동작) ───────────────────────────────────────
 # 페이지(모듈)와 동작의 정본. 프런트 매트릭스 UI와 동일한 순서.
-PERM_MODULES = ["dashboard", "progress", "rfq", "po", "documents", "ar", "finance", "marketing", "settings"]
+PERM_MODULES = ["dashboard", "progress", "mail", "rfq", "po", "documents", "ar", "finance",
+                "marketing", "schedule", "settings"]
 PERM_ACTIONS = ["view", "create", "edit", "delete"]
 # dashboard 는 열람만 의미가 있다(입력/수정/삭제 없음) — UI에서 view만 노출.
 PERM_VIEW_ONLY = {"dashboard"}
@@ -460,7 +461,7 @@ def _full_perms(value: bool = True) -> dict:
 
 # 기본 권한(시드) — 기존 동작과 동일하게 맞춘다.
 def _default_perms(role: str) -> dict:
-    biz = ["progress", "rfq", "po", "documents", "ar", "marketing"]
+    biz = ["progress", "mail", "rfq", "po", "documents", "ar", "marketing", "schedule"]
     if role == UserRole.SALES.value:
         return _perm_grid(lambda m, a: (
             (m == "dashboard" and a == "view") or
@@ -484,8 +485,19 @@ def _normalize_perms(perms: dict | None) -> dict:
     def val(m, a):
         if m in PERM_VIEW_ONLY and a != "view":
             return False
+        if m not in perms and m in _PERM_INHERIT:
+            return _PERM_INHERIT[m](perms, a)
         return bool((perms.get(m) or {}).get(a, False))
     return _perm_grid(val)
+
+
+# 나중에 떼어 낸 모듈 — 저장값에 그 키가 아직 없으면 떼어 내기 전에 따르던 권한을 물려받는다
+# (2026-11-27: Mail 은 Projects 탭이라 progress, Schedule 은 열람 가드가 dashboard 였고
+#  등록·수정은 누구에게나 열려 있었으므로 dashboard 열람 여부 하나로).
+_PERM_INHERIT = {
+    "mail": lambda p, a: bool((p.get("progress") or {}).get(a, False)),
+    "schedule": lambda p, a: bool((p.get("dashboard") or {}).get("view", False)),
+}
 
 
 # 역할별 권한 캐시(요청마다 DB 조회를 피한다). PUT 시 _reload_perms() 로 갱신.
@@ -561,6 +573,7 @@ _ADMIN_ONLY_PREFIXES = ("/api/admin/settings/users", "/api/admin/settings/permis
 _CREATE_POST_EXACT = {
     "/api/admin/rfq", "/api/admin/orders", "/api/admin/vendor-pos", "/api/admin/ar",
     "/api/admin/marketing", "/api/admin/finance/payables",
+    "/api/admin/ap", "/api/admin/claims", "/api/admin/credit-notes", "/api/admin/schedule",
 }
 _CREATE_POST_SUFFIX = ("/vendor-rfq", "/customer-quote", "/vendor-quote",
                        "/ci", "/pl", "/sa", "/tax")
@@ -581,8 +594,17 @@ def _route_module(path: str) -> str | None:
     # 만지는 것이 문서이므로 7단계와 같은 documents 권한으로 지킨다.
     if path.startswith(("/api/admin/documents", "/api/admin/projects")):
         return "documents"
-    if path.startswith("/api/admin/ar"):
+    # 9단계 매입(AP)·클레임/크레딧노트는 AR 페이지 안의 작업이다.
+    if path.startswith(("/api/admin/ar", "/api/admin/ap", "/api/admin/claims",
+                        "/api/admin/credit-notes")):
         return "ar"
+    # 전 고객 이월(받을 돈) 목록은 Finance 몫(딜 안의 이월은 /projects/{id}/carry-overs).
+    if path.startswith("/api/admin/carry-overs"):
+        return "finance"
+    if path.startswith("/api/admin/mail"):
+        return "mail"
+    if path.startswith("/api/admin/schedule"):
+        return "schedule"
     if path.startswith("/api/admin/finance"):
         return "finance"
     if path.startswith("/api/admin/marketing"):
@@ -638,6 +660,7 @@ _PERM_DENY_MSG = {
 
 # 경로 첫 리소스/ID → 그 딜의 담당자(PIC=RFQ.created_by) 조회용. (소유권 게이트)
 _DEAL_PATH_RE = re.compile(r"^/api/admin/([a-z-]+)/(\d+)")
+_MAIL_DEAL_RE = re.compile(r"^/api/admin/mail/(?:project/(\d+)|(\d+))(?:/|$)")
 
 
 def _deal_owner_from_path(path: str) -> int | None:
@@ -647,10 +670,15 @@ def _deal_owner_from_path(path: str) -> int | None:
     rfq_id/order_id 로 RFQ 에 연결되므로 소유권은 항상 RFQ.created_by 로 귀결된다.
     None(신규 등록처럼 대상 딜이 없거나, PIC 미지정)이면 소유권 검사를 건너뛴다.
     """
-    m = _DEAL_PATH_RE.match(path)
-    if not m:
-        return None
-    res, rid = m.group(1), int(m.group(2))
+    mp = _MAIL_DEAL_RE.match(path)
+    if mp:
+        # /mail/project/{rfq_id}/… 는 그 딜, /mail/{msg_id}/… 는 그 메일이 붙은 딜.
+        res, rid = ("projects", int(mp.group(1))) if mp.group(1) else ("mail-msg", int(mp.group(2)))
+    else:
+        m = _DEAL_PATH_RE.match(path)
+        if not m:
+            return None
+        res, rid = m.group(1), int(m.group(2))
     s = get_session()
     try:
         rfq_id: int | None = None
@@ -688,6 +716,31 @@ def _deal_owner_from_path(path: str) -> int | None:
             if ar:
                 o = s.query(Order).filter_by(id=ar.order_id).first()
                 rfq_id = o.rfq_id if o else None
+        elif res == "ap":
+            ap = s.query(APRecord).filter_by(id=rid).first()
+            if ap and ap.order_id:
+                o = s.query(Order).filter_by(id=ap.order_id).first()
+                rfq_id = o.rfq_id if o else None
+        elif res == "claims":
+            c = s.query(Claim).filter_by(id=rid).first()
+            if c:
+                rfq_id = c.rfq_id
+                if rfq_id is None and c.order_id:
+                    o = s.query(Order).filter_by(id=c.order_id).first()
+                    rfq_id = o.rfq_id if o else None
+        elif res == "credit-notes":
+            cn = s.query(CreditNote).filter_by(id=rid).first()
+            if cn:
+                oid = cn.order_id
+                if not oid and cn.ar_id:
+                    ar = s.query(ARRecord).filter_by(id=cn.ar_id).first()
+                    oid = ar.order_id if ar else None
+                if oid:
+                    o = s.query(Order).filter_by(id=oid).first()
+                    rfq_id = o.rfq_id if o else None
+        elif res == "mail-msg":
+            em = s.query(EmailMessage).filter_by(id=rid).first()
+            rfq_id = em.rfq_id if em else None
         else:
             return None
         if rfq_id is None:
@@ -721,7 +774,7 @@ async def _perm_guard(request: Request, call_next):
         return _authz_error(request, 403, _PERM_DENY_MSG.get(action, "권한이 없습니다."))
     # 담당(PIC) 소유권 게이트: 비관리자는 본인이 담당인 딜만 편집/삭제(및 하위 등록) 가능.
     # 조회(view)는 기존 데이터 범위 그대로. 대상 딜이 없거나 PIC 미지정이면 통과.
-    if action != "view" and module in ("rfq", "po", "documents", "ar", "marketing"):
+    if action != "view" and module in ("rfq", "po", "documents", "ar", "marketing", "mail"):
         owner = _deal_owner_from_path(request.url.path)
         if owner is not None and owner != (user.get("id") or 0):
             return _authz_error(request, 403, "담당자(PIC)만 이 건을 수정·삭제할 수 있습니다.")

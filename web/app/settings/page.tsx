@@ -708,26 +708,30 @@ function UsersTab() {
 const MODULE_LABEL: Record<string, string> = {
   dashboard: "Dashboard",
   progress: "Projects",
+  mail: "Projects › Mail",
   rfq: "RFQ & Quotation",
   po: "P/O",
   documents: "Documents",
   ar: "AR",
   finance: "Finance",
   marketing: "Sales › Marketing",
+  schedule: "Sales › Schedule",
   settings: "Data & Settings",
 };
 // 메뉴명만으로 범위가 분명하지 않은 항목의 부연.
 const MODULE_HINT: Record<string, string> = {
-  dashboard: "Dashboard + Sales › Schedule",
-  progress: "Pipeline · Activity · Documents · Mail tabs",
-  settings: "Data › Partners · Items + Settings",
+  progress: "Pipeline · Activity · Documents tabs",
+  mail: "Mail tab · deal mail history · assign / group mail",
+  schedule: "Schedules & business trips",
+  finance: "Overview · Inflow/Outflow · Expenses · Payees · Claims · Profit · Closing · Calendar",
+  settings: "Data › Partners · Items + Settings (Consultant · Email templates)",
   rfq: "RFQ · vendor quotes · customer quotation",
   po: "Customer & vendor P/O · P/O rows in Projects › Documents",
-  documents: "PI · CI · PL",
-  ar: "Billing · receivables / payables · claims",
+  documents: "PI · CI · PL · freight",
+  ar: "Billing · receivables / payables · claims · credit notes",
 };
 // 표시 순서/그룹 — 상단 메뉴 순서대로 먼저, 단계별 작업 권한을 뒤에.
-const MENU_MODULES = ["dashboard", "progress", "marketing", "finance", "settings"];
+const MENU_MODULES = ["dashboard", "progress", "mail", "marketing", "schedule", "finance", "settings"];
 const STAGE_MODULES = ["rfq", "po", "documents", "ar"];
 
 /** 백엔드가 준 모듈 목록을 [메뉴 그룹, 단계 그룹]으로 재배열(모르는 키는 메뉴 그룹 끝). */
