@@ -4178,15 +4178,25 @@ const PAYEE_CATS = ["임차료", "급여", "세금", "공과금", "기타"];
 const EMPTY_PAYEE: PayeeSave = { name: "", category: "기타", bank_name: "", bank_account: "", bank_holder: "", swift: "", biz_no: "", contact: "", notes: "" };
 
 function PayeesTab() {
-  const { data, loading, error, refresh: reload } = useCachedData("finance:payees", fetchPayees);
+  const { data, error, refresh: reload } = useCachedData("finance:payees", fetchPayees);
   const [edit, setEdit] = useState<{ id: number; form: PayeeSave } | null>(null);
-  const [q, setQ] = useState("");
   const [msg, setMsg] = useState("");
   const canEdit = can("finance", "create") || can("finance", "edit");
-  const rows = (data?.rows ?? []).filter((p) => {
-    const k = q.trim().toLowerCase();
-    return !k || [p.name, p.category, p.bank_name, p.bank_account, p.bank_holder, p.contact].join(" ").toLowerCase().includes(k);
-  });
+  // 머리칸 정렬·필터 — Outflow 표와 같은 메뉴(분류·은행은 고르는 목록, 지급 수는 숫자 정렬).
+  const headCols = useMemo<HeadCol<Payee>[]>(() => [
+    { key: "name", text: (p) => p.name, filter: "facet" },
+    { key: "category", text: (p) => p.category || "", filter: "facet", emptyLabel: "Unspecified" },
+    { key: "bank", text: (p) => p.bank_name || "", filter: "facet", emptyLabel: "No account" },
+    { key: "account", text: (p) => p.bank_account || "" },
+    { key: "holder", text: (p) => p.bank_holder || "", filter: "facet", emptyLabel: "—" },
+    { key: "biz", text: (p) => p.biz_no || "" },
+    { key: "contact", text: (p) => p.contact || "" },
+    { key: "payments", text: (p) => String(p.payments), sortValue: (p) => p.payments },
+    { key: "last", text: (p) => p.last_due || "", filter: "date" },
+  ], []);
+  const head = useHeadMenu(headCols, "payees");
+  const shown = head.apply(data?.rows ?? []);
+
   async function remove(p: Payee) {
     if (!confirm(`Remove “${p.name}” from Payees?\nPast payments keep the name${p.bank_account ? " and get this account copied onto them" : ""}.`)) return;
     try {
@@ -4197,72 +4207,91 @@ function PayeesTab() {
       alert(e instanceof Error ? e.message : "Delete failed");
     }
   }
+  const openEdit = (p: Payee) => setEdit({ id: p.id, form: {
+    name: p.name, category: p.category, bank_name: p.bank_name, bank_account: p.bank_account,
+    bank_holder: p.bank_holder, swift: p.swift, biz_no: p.biz_no, contact: p.contact, notes: p.notes } });
+
+  if (error && !data) return <div className="state error">API error: {error.message}</div>;
+  if (!data) return <div className="state">Loading…</div>;
   return (
-    <div className="fin-payees">
-      <div className="fin-payees-bar">
-        <input className="fin-payees-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, bank, account…" />
-        {msg ? <span className="hint-inline">{msg}</span> : null}
-        {canEdit ? <button className="btn primary sm" onClick={() => setEdit({ id: 0, form: { ...EMPTY_PAYEE } })}>＋ Add payee</button> : null}
+    <div className="panel">
+      <div className="items-head">
+        <h3 className="form-title fin-page-title" style={{ margin: 0 }}>Payees</h3>
+        <div className="items-head-actions">
+          {msg ? <span className="hint-inline">{msg}</span> : null}
+          {canEdit ? <button className="btn primary sm" onClick={() => setEdit({ id: 0, form: { ...EMPTY_PAYEE } })}>+ Add payee</button> : null}
+        </div>
       </div>
       <p className="hint-inline fin-pe-hint">
         Who we pay outside of deals. Pick the name on an Outflow payment and this account is used — change it here once and
         every payment follows. Vendors keep theirs in Data › Partners.
       </p>
-      {error ? <div className="state error">{String(error)}</div> : loading && !data ? <div className="state">Loading…</div> : (
-        <section className="fin-sec">
-          <table className="mini fin-ledger fin-payees-tbl">
-            <thead>
-              <tr>
-                <th className="fin-pe-name">Payee</th>
-                <th className="fin-pe-cat">Category</th>
-                <th className="fin-pe-acc">Account</th>
-                <th className="fin-pe-holder">Holder</th>
-                <th>Biz no. · Contact</th>
-                <th className="num fin-pe-pay">Payments</th>
-                <th className="fin-pe-act" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((p) => (
-                <tr key={p.id}>
-                  <td className="fin-pe-name">
-                    <b>{p.name}</b>
-                    {p.notes ? <div className="muted fin-pe-note">{p.notes}</div> : null}
-                  </td>
-                  <td>{p.category || <span className="dash">—</span>}</td>
-                  <td>
-                    {p.bank_account || p.bank_name ? (
-                      <span className="fin-pe-bank">
-                        {p.bank_name ? <span className="muted">{p.bank_name}</span> : null}
-                        <span className="fin-pe-no">{p.bank_account}</span>
-                        {p.swift ? <span className="muted">SWIFT {p.swift}</span> : null}
-                      </span>
-                    ) : <span className="fin-pe-none">No account</span>}
-                  </td>
-                  <td>{p.bank_holder || <span className="dash">—</span>}</td>
-                  <td>{[p.biz_no, p.contact].filter(Boolean).join(" · ") || <span className="dash">—</span>}</td>
-                  <td className="num">
-                    <b>{p.payments}</b>
-                    {p.last_due ? <span className="muted"> · last {p.last_due}</span> : null}
-                    {p.overrides ? <div className="hint-inline" title="Payments with their own account — they don't follow this one">{p.overrides} with own account</div> : null}
-                  </td>
-                  <td className="fin-pe-act">
-                    {canEdit ? (
-                      <>
-                        <button className="btn xs" onClick={() => setEdit({ id: p.id, form: {
-                          name: p.name, category: p.category, bank_name: p.bank_name, bank_account: p.bank_account,
-                          bank_holder: p.bank_holder, swift: p.swift, biz_no: p.biz_no, contact: p.contact, notes: p.notes } })}>Edit</button>
-                        <button className="btn xs danger" onClick={() => void remove(p)}>Delete</button>
-                      </>
+      {head.filtersActive ? (
+        <div className="fin-head-filter-bar">
+          <span className="pl-search-count">{shown.length} / {data.rows.length}</span>
+          <button type="button" className="pl-filter-reset" onClick={head.resetFilters}>Reset column filters</button>
+        </div>
+      ) : null}
+      <section className="fin-sec">
+        <table className="mini fin-ledger fin-payees-tbl">
+          <thead>
+            <tr>
+              <HeadTh menu={head} col="name" className="fin-pe-w-name">Payee</HeadTh>
+              <HeadTh menu={head} col="category" className="fin-pe-w-cat">Category</HeadTh>
+              <HeadTh menu={head} col="bank" className="fin-pe-w-bank">Bank</HeadTh>
+              <HeadTh menu={head} col="account" className="fin-pe-w-acc">Account no.</HeadTh>
+              <HeadTh menu={head} col="holder" className="fin-pe-w-holder">Holder</HeadTh>
+              <HeadTh menu={head} col="biz" className="fin-pe-w-biz">Biz reg. no.</HeadTh>
+              <HeadTh menu={head} col="contact" className="fin-pe-w-contact">Contact · Notes</HeadTh>
+              <HeadTh menu={head} col="payments" className="num fin-pe-w-pay" numeric>Payments</HeadTh>
+              <HeadTh menu={head} col="last" className="fin-pe-w-last">Last due</HeadTh>
+              <th className="fin-pe-w-act" />
+            </tr>
+          </thead>
+          <tbody>
+            {shown.length === 0 ? (
+              <tr><td colSpan={10} className="mini-empty">{
+                head.filtersActive ? "No payee matches the column filters."
+                  : "No payees yet — add one, or just save an Outflow payment with a new name."}</td></tr>
+            ) : null}
+            {shown.map((p) => (
+              <tr key={p.id}>
+                <td className="fin-c-title">{p.name}</td>
+                <td>{p.category || "—"}</td>
+                <td>{p.bank_name || (p.bank_account ? "—" : <span className="fin-pe-none">No account</span>)}</td>
+                <td className="fin-pe-no">
+                  {p.bank_account || "—"}
+                  {p.swift ? <div className="muted">SWIFT {p.swift}</div> : null}
+                </td>
+                <td>{p.bank_holder || "—"}</td>
+                <td className="fin-pe-no">{p.biz_no || "—"}</td>
+                <td className="fin-c-sub">
+                  {p.contact || (p.notes ? null : "—")}
+                  {p.notes ? <div className="muted">{p.notes}</div> : null}
+                </td>
+                <td className="num">
+                  {p.payments}
+                  {p.overrides ? (
+                    <div className="muted" title="Payments with their own account — they don't follow this one">{p.overrides} own acct</div>
+                  ) : null}
+                </td>
+                <td>{p.last_due || "—"}</td>
+                <td className="fin-c-act">
+                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                    {can("finance", "edit") ? (
+                      <button className="btn tiny" title="Edit" aria-label="Edit" onClick={() => openEdit(p)}>✎</button>
                     ) : null}
-                  </td>
-                </tr>
-              ))}
-              {!rows.length ? <tr><td colSpan={7} className="muted">{q ? "No match." : "No payees yet — add one, or just save an Outflow payment with a new name."}</td></tr> : null}
-            </tbody>
-          </table>
-        </section>
-      )}
+                    {can("finance", "delete") ? (
+                      <button className="btn tiny danger" title="Delete" aria-label="Delete" onClick={() => void remove(p)}>×</button>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+      {head.renderMenu()}
       {edit ? (
         <PayeeForm initial={edit.form} id={edit.id} onClose={() => setEdit(null)}
                    onSaved={async (m) => { setEdit(null); setMsg(m); invalidateCache("finance:"); await reload(); }} />
