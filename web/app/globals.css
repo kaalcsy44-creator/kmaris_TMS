@@ -4481,6 +4481,8 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.on {
   overflow-x: auto;
   scrollbar-width: none;
   white-space: nowrap;
+  /* 가로 스크롤 영역은 세로도 잘라 낸다 — 로고·✓ 표시 위아래가 깎이지 않게 숨 쉴 틈. */
+  padding: 3px 0;
 }
 .deal-vstrip-track::-webkit-scrollbar { display: none; }
 .deal-vstrip-track > div { flex: none; }
@@ -22229,12 +22231,14 @@ table.mini tfoot .total-label .foot-charge-label {
 /* 거래 상대 줄 — 단계 본문을 내리면 접힌다(맨 위로 오면 다시 펼침). */
 .deal-parties-wrap {
   flex: none;
+  /* 당겨 올리는 음수 여백은 감싸는 쪽에 둔다 — 안쪽 줄에 두면 overflow:hidden 에 윗부분이 잘린다. */
+  margin-top: -6px;
   max-height: 40px;
   overflow: hidden;
   transition: max-height 0.18s ease, opacity 0.18s ease;
 }
-.deal-parties-wrap.hidden { max-height: 0; opacity: 0; }
-.deal-parties-wrap .deal-parties { margin: -6px 0 0; font-size: 13px; }
+.deal-parties-wrap.hidden { max-height: 0; opacity: 0; margin-top: 0; }
+.deal-parties-wrap .deal-parties { margin: 0; padding-top: 2px; padding-bottom: 2px; font-size: 13px; }
 
 /* 단계 스트립 양 끝 ‹ › — 단계 머리의 Prev/Next 를 대신한다. */
 .stage-strip-move {
