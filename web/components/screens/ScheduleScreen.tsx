@@ -243,9 +243,57 @@ function splitPeople(s: string | undefined): string[] {
   return (s || "").split(/[\n,]/).map((x) => x.trim()).filter(Boolean);
 }
 
+/* ── 안건 카테고리 ─────────────────────────────────────────────────────────
+   안건마다 cat 하나(Sales·Marketing…). 예전엔 본문 첫 줄에 "Sales / 배송관계"처럼 손으로
+   붙였다 — 그 접두어는 읽어서 cat 으로 옮기고 본문에선 뗀다. */
+const AGENDA_CATS = ["Sales", "Marketing", "Administration", "Finance", "Operations"];
+/** "Sales / 배송관계" → ["Sales", "배송관계"]. 영문 한 단어 + 양옆 띄운 빗금만("CI/PL"·"저/중/고"·한글 문장은 건드리지 않는다). */
+function splitCatPrefix(line: string): [string, string] | null {
+  const m = /^\s*([A-Za-z][A-Za-z&.]{1,19})\s+\/\s+(.*)$/.exec(line);
+  return m ? [m[1], m[2]] : null;
+}
+/** 카테고리 표기 맞추기 — 아는 이름이면 그 철자로(sales → Sales). */
+function normCat(c: string, known: string[]): string {
+  const t = c.trim();
+  return known.find((k) => k.toLowerCase() === t.toLowerCase()) ?? t;
+}
+/** 첫 줄 접두어를 cat 으로 옮긴다. cat 이 이미 있으면 같은 이름의 접두어만 뗀다. */
+function liftCat(a: ScheduleAgendaItem, known: string[]): ScheduleAgendaItem {
+  const [first, ...rest] = a.text.split("\n");
+  const hit = splitCatPrefix(first);
+  if (!hit) return a;
+  const cat = normCat(hit[0], known);
+  if (a.cat && a.cat.toLowerCase() !== cat.toLowerCase()) return a;
+  return { ...a, cat, text: [hit[1], ...rest].join("\n") };
+}
+/** 빈 줄로 나뉜 안건 → 덩어리마다 한 안건. 덩어리 첫 줄 접두어가 있으면 그 카테고리, 없으면 원래 것. 결과는 첫 조각이 갖는다. */
+function splitAgendaItem(a: ScheduleAgendaItem, known: string[]): ScheduleAgendaItem[] {
+  const blocks = a.text.split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean);
+  if (blocks.length < 2) return [a];
+  return blocks.map((text, k) => liftCat({ text, result: k === 0 ? a.result : "", cat: a.cat }, known));
+}
+const canSplitAgenda = (a: ScheduleAgendaItem) => a.text.trim().split(/\n\s*\n/).filter((b) => b.trim()).length > 1;
+/** 같은 카테고리를 한데 모은다 — 카테고리는 처음 나온 순서, 미분류는 맨 뒤, 안에서는 원래 순서. */
+function sortAgendaByCat(list: ScheduleAgendaItem[]): ScheduleAgendaItem[] {
+  const order: string[] = [];
+  for (const a of list) if (a.cat && !order.includes(a.cat)) order.push(a.cat);
+  const rank = (a: ScheduleAgendaItem) => (a.cat ? order.indexOf(a.cat) : order.length);
+  return list.map((a, i) => [a, i] as const).sort((x, y) => rank(x[0]) - rank(y[0]) || x[1] - y[1]).map(([a]) => a);
+}
+/** 카테고리 색 — 이름마다 늘 같은 색. */
+const CAT_TONES = ["#2563eb", "#059669", "#7c3aed", "#d97706", "#db2777", "#0891b2", "#4b5563"];
+function catTone(c: string): string {
+  const fixed = AGENDA_CATS.indexOf(c);
+  if (fixed >= 0) return CAT_TONES[fixed];
+  let h = 0;
+  for (const ch of c) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return CAT_TONES[h % CAT_TONES.length];
+}
+
 /** 안건 목록이 없던 예전 일정 — 평문 안건(notes)을 줄마다 한 항목으로, 앞 번호는 떼고. */
 function initialAgenda(row?: ScheduleRow): ScheduleAgendaItem[] {
-  if (row?.agenda?.length) return row.agenda.map((a) => ({ text: a.text, result: a.result }));
+  if (row?.agenda?.length)
+    return row.agenda.map((a) => liftCat({ text: a.text, result: a.result, cat: a.cat || "" }, AGENDA_CATS));
   const lines = (row?.notes || "")
     .split("\n")
     .map((l) => l.replace(/^\s*\d+\s*[.)]\s*/, "").trim())
@@ -278,8 +326,18 @@ function scheduleMinutesHtml(d: {
     cellPair("Status", escHtml(SCHEDULE_STATUS_LABEL[s.status || "planned"] || "Planned")) + cellPair("Prepared by", v(d.owner)),
     `<th>Attendees</th><td colspan="3">${people.length ? people.map(escHtml).join(", ") : "—"}</td>`,
   ];
+  // 카테고리가 하나라도 있으면 바뀌는 자리마다 묶음 머리 줄을 끼운다(번호는 이어서).
+  const grouped = items.some((a) => a.cat);
   const agendaRows = items.length
-    ? items.map((a, i) => `<tr><td class="no">${i + 1}</td><td>${v(a.text)}</td><td>${v(a.result)}</td></tr>`).join("")
+    ? items
+        .map((a, i) => {
+          const head =
+            grouped && (i === 0 || (items[i - 1].cat || "") !== (a.cat || ""))
+              ? `<tr class="grp"><td colspan="3">${escHtml(a.cat || "Other")}</td></tr>`
+              : "";
+          return `${head}<tr><td class="no">${i + 1}</td><td>${v(a.text)}</td><td>${v(a.result)}</td></tr>`;
+        })
+        .join("")
     : `<tr><td class="no">—</td><td colspan="2" class="muted">No agenda items</td></tr>`;
   const block = (title: string, body: string | undefined) =>
     body && body.trim() ? `<h2>${title}</h2><div class="box">${escHtml(body.trim())}</div>` : "";
@@ -303,6 +361,8 @@ function scheduleMinutesHtml(d: {
   .agenda thead th { background: #e8eef6; color: #0b1f3a; text-align: left; font-weight: 700; border-bottom: 2px solid #0b1f3a; }
   .agenda td.no, .agenda th.no { width: 42px; text-align: center; white-space: nowrap; }
   .agenda td:nth-child(2) { width: 42%; }
+  .agenda tr.grp td { background: #f3f6fa; color: #0b1f3a; font-weight: 700; font-size: 11.5px; letter-spacing: .03em; padding: 4px 8px; }
+  tr.grp { break-after: avoid; }
   tr { break-inside: avoid; }
   .box { border: 1px solid #d5dde8; border-radius: 4px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; break-inside: avoid; }
   .muted { color: #9ca3af; }
@@ -477,10 +537,36 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
       agendaRef.current?.querySelector<HTMLTextAreaElement>(`textarea[data-agenda="${i}"]`)?.focus(),
     );
   }
+  /** 끼워 넣은 줄은 바로 위 안건의 카테고리를 물려받는다(같은 묶음에 이어 적는 일이 대부분). */
   function insertAgenda(at: number) {
-    setAgenda((list) => [...list.slice(0, at), { text: "", result: "" }, ...list.slice(at)]);
+    setAgenda((list) => [...list.slice(0, at), { text: "", result: "", cat: list[at - 1]?.cat || "" }, ...list.slice(at)]);
     focusAgenda(at);
   }
+  function splitAgendaAt(i: number) {
+    setAgenda((list) => [...list.slice(0, i), ...splitAgendaItem(list[i], catOptions), ...list.slice(i + 1)]);
+  }
+  // 카테고리 후보 — 기본 다섯 + 예전 일정·지금 일정에서 쓴 이름.
+  const catOptions = useMemo(() => {
+    const seen = [...AGENDA_CATS];
+    for (const r of history) for (const a of r.agenda ?? []) if (a.cat && !seen.some((s) => s.toLowerCase() === a.cat!.toLowerCase())) seen.push(a.cat);
+    for (const a of agenda) if (a.cat && !seen.some((s) => s.toLowerCase() === a.cat!.toLowerCase())) seen.push(a.cat);
+    return seen;
+  }, [history, agenda]);
+  const hasCats = agenda.some((a) => a.cat);
+  // 같은 카테고리가 흩어져 있나 — 그때만 '카테고리별로 모으기'를 보인다.
+  const catsScattered = useMemo(() => {
+    const done = new Set<string>();
+    let prev = "";
+    for (const a of agenda) {
+      const c = a.cat || "";
+      if (c !== prev) {
+        if (done.has(c)) return true;
+        if (prev) done.add(prev);
+        prev = c;
+      }
+    }
+    return false;
+  }, [agenda]);
   function moveAgenda(from: number, to: number) {
     if (from === to || to < 0 || to >= agenda.length) return;
     setAgenda((list) => {
@@ -493,7 +579,7 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
 
   function body(): ScheduleSave {
     const items = agenda
-      .map((a) => ({ text: a.text.trim(), result: a.result.trim() }))
+      .map((a) => ({ text: a.text.trim(), result: a.result.trim(), ...(a.cat?.trim() ? { cat: a.cat.trim() } : {}) }))
       .filter((a) => a.text || a.result);
     const names = [...new Set(people.map((p) => p.trim()).filter(Boolean))];
     return {
@@ -759,10 +845,39 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
         </label>
       </section>
 
-      <div className="sched-l sched-sub">Agenda</div>
+      <div className="sched-l sched-sub sched-sub-row">
+        <span>Agenda</span>
+        {catsScattered ? (
+          <button
+            type="button"
+            className="btn tiny sched-add"
+            title="Move items of the same category next to each other (order inside each category is kept)"
+            onClick={() => setAgenda((list) => sortAgendaByCat(list))}
+          >
+            ⇅ Group by category
+          </button>
+        ) : null}
+      </div>
       <div className="sched-r sched-sub">Result per agenda item</div>
+      <datalist id="sched-cat-list">
+        {catOptions.map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
       {agenda.map((a, i) => (
         <Fragment key={i}>
+          {/* 묶음 머리 — 카테고리가 바뀌는 자리마다(하나라도 지정했을 때만). */}
+          {hasCats && (i === 0 || (agenda[i - 1].cat || "") !== (a.cat || "")) ? (
+            <>
+              <div className="sched-l sched-grp" style={{ "--cat": a.cat ? catTone(a.cat) : "#94a3b8" } as React.CSSProperties}>
+                <b>{a.cat || "Other"}</b>
+                <i>{(() => { let n = 0; for (let j = i; j < agenda.length && (agenda[j].cat || "") === (a.cat || ""); j++) n++; return n; })()}</i>
+              </div>
+              <div className="sched-r sched-grp sched-grp--r" style={{ "--cat": a.cat ? catTone(a.cat) : "#94a3b8" } as React.CSSProperties}>
+                <b>{a.cat || "Other"}</b>
+              </div>
+            </>
+          ) : null}
           <div
             className={`sched-l sched-item${dragOver === i && dragFrom !== null && dragFrom !== i ? (dragFrom < i ? " drop-below" : " drop-above") : ""}${dragFrom === i ? " dragging" : ""}`}
             onDragOver={(e) => {
@@ -796,6 +911,20 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
               ⠿
             </span>
             <span className="sched-no">{i + 1}.</span>
+            <input
+              type="text"
+              className="sched-cat"
+              list="sched-cat-list"
+              value={a.cat || ""}
+              placeholder="Category"
+              aria-label={`Category of agenda item ${i + 1}`}
+              style={a.cat ? ({ "--cat": catTone(normCat(a.cat, catOptions)) } as React.CSSProperties) : undefined}
+              onChange={(e) => setAgendaAt(i, { cat: e.target.value })}
+              onBlur={(e) => {
+                const c = normCat(e.target.value, catOptions);
+                if (c !== (a.cat || "")) setAgendaAt(i, { cat: c });
+              }}
+            />
             <textarea
               rows={1}
               value={a.text}
@@ -803,6 +932,11 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
               aria-label={`Agenda item ${i + 1}`}
               placeholder="What to discuss"
               onChange={(e) => setAgendaAt(i, { text: e.target.value })}
+              onBlur={() => {
+                // "Sales / …"처럼 적었으면 접두어를 카테고리 칸으로 옮긴다.
+                const lifted = liftCat(a, catOptions);
+                if (lifted !== a) setAgendaAt(i, { cat: lifted.cat, text: lifted.text });
+              }}
               onKeyDown={(e) => {
                 if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
                 e.preventDefault();
@@ -812,26 +946,39 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
                 focusAgenda(to);
               }}
             />
-            <button
-              type="button"
-              className="btn tiny sched-x sched-ins"
-              title="Insert a new item below this one"
-              aria-label={`Insert agenda item after ${i + 1}`}
-              onClick={() => insertAgenda(i + 1)}
-            >
-              +
-            </button>
-            <button
-              type="button"
-              className="btn tiny sched-x"
-              aria-label={`Remove agenda item ${i + 1}`}
-              disabled={agenda.length === 1 && !a.text && !a.result}
-              onClick={() =>
-                setAgenda((list) => (list.length > 1 ? list.filter((_, j) => j !== i) : [{ text: "", result: "" }]))
-              }
-            >
-              ×
-            </button>
+            <span className="sched-ctl">
+              <button
+                type="button"
+                className="btn tiny sched-x sched-ins"
+                title="Insert a new item below this one"
+                aria-label={`Insert agenda item after ${i + 1}`}
+                onClick={() => insertAgenda(i + 1)}
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className="btn tiny sched-x"
+                aria-label={`Remove agenda item ${i + 1}`}
+                disabled={agenda.length === 1 && !a.text && !a.result}
+                onClick={() =>
+                  setAgenda((list) => (list.length > 1 ? list.filter((_, j) => j !== i) : [{ text: "", result: "" }]))
+                }
+              >
+                ×
+              </button>
+              {canSplitAgenda(a) ? (
+                <button
+                  type="button"
+                  className="btn tiny sched-x sched-split"
+                  title="Split into separate items at each blank line (a first line like “Sales / …” sets that piece’s category)"
+                  aria-label={`Split agenda item ${i + 1}`}
+                  onClick={() => splitAgendaAt(i)}
+                >
+                  ✂ Split
+                </button>
+              ) : null}
+            </span>
           </div>
           <div className="sched-r sched-item">
             <span className="sched-no">{i + 1}.</span>
@@ -849,7 +996,10 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
         <button
           type="button"
           className="btn tiny sched-add"
-          onClick={() => setAgenda((list) => [...list, { text: "", result: "" }])}
+          onClick={() => {
+            setAgenda((list) => [...list, { text: "", result: "", cat: list[list.length - 1]?.cat || "" }]);
+            focusAgenda(agenda.length);
+          }}
         >
           + Add agenda item
         </button>

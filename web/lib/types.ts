@@ -2667,7 +2667,8 @@ export type ScheduleRow = {
   owner: string;
 };
 
-export type ScheduleAgendaItem = { text: string; result: string };
+/** cat = 안건 카테고리(Sales·Marketing… 선택, 빈 값 = 미분류). */
+export type ScheduleAgendaItem = { text: string; result: string; cat?: string };
 
 /** 출장 결과 보고서 — 엑셀 양식(결과보고서·출장일정·출장경비·업체별 미팅메모)과 같은 묶음.
  *  제목·시작일·지역(location)·출장자(attendees)·주요 결과(agenda)·종합 의견(outcome)은

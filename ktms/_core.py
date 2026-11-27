@@ -4268,15 +4268,19 @@ SCHEDULE_STATUSES = ("planned", "done", "cancelled")
 
 
 def _clean_agenda(raw) -> list[dict]:
-    """안건 목록 정리 — 안건·결과가 둘 다 빈 줄은 버린다."""
+    """안건 목록 정리 — 안건·결과가 둘 다 빈 줄은 버린다. cat = 안건 카테고리(선택)."""
     out = []
     for it in raw or []:
         if not isinstance(it, dict):
             continue
         text = str(it.get("text") or "").strip()
         result = str(it.get("result") or "").strip()
+        cat = str(it.get("cat") or "").strip()[:40]
         if text or result:
-            out.append({"text": text, "result": result})
+            row = {"text": text, "result": result}
+            if cat:
+                row["cat"] = cat
+            out.append(row)
     return out
 
 
