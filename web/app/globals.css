@@ -17075,6 +17075,12 @@ table.mini.fin-pl tr.fin-pl-item .tot { background: #f8fbfe; font-weight: 400; }
 /* 합계 밖의 참고 줄(중복이라 빼 둔 것, 세금에서 제외한 부가세) — 옅게 눕힌다. */
 table.mini.fin-pl tr.fin-pl-note td, table.mini.fin-pl tr.fin-pl-note .zero { color: var(--muted); }
 table.mini.fin-pl tr.fin-pl-note .neg { color: #d08a82; }
+/* 순수익에 미치는 쪽으로 칠한다 — 늘리면 녹색(매출·환급), 줄이면 빨강(매입·비용·세금).
+   소계·총계 줄의 navy 글자색보다 앞서도록 tr 까지 걸어 둔다. */
+table.mini.fin-pl tr .pl-up { color: #1e7a46; }
+table.mini.fin-pl tr .pl-down { color: #c0392b; }
+table.mini.fin-pl tr.fin-pl-item .pl-up { color: #4f9a6e; }
+table.mini.fin-pl tr.fin-pl-item .pl-down { color: #d0706a; }
 /* 막대 끝의 값 꼬리표 — 0선 위아래 어느 쪽이든 막대가 자란 쪽 바깥에 앉는다. */
 /* .fin-net-chart 는 이 블록보다 아래(Cash flow)에 있어 같은 명시도로는 지지 않는다 —
    두 클래스를 함께 걸어 키만 이 화면 몫으로 올린다(꼬리표가 앉을 자리가 필요하다). */
