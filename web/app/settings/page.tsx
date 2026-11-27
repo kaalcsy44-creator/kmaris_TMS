@@ -283,7 +283,7 @@ function Settings({ onFill }: { onFill: (v: boolean) => void }) {
       {tab === "email" && <EmailTemplatesTab initialType={params.get("type") || undefined} />}
       {tab === "account" && (
         <div className="panel">
-          <MyPasswordChange />
+          <MyPasswordChange bare />
         </div>
       )}
     </>
@@ -495,8 +495,8 @@ function UsersTab() {
 
   useEffect(load, []);
 
-  function openNew() {
-    setForm(EMPTY_USER);
+  function openNew(role?: string) {
+    setForm(role ? { ...EMPTY_USER, role } : EMPTY_USER);
     setPassword("");
     setErr("");
     setEditId(NEW_ID);
@@ -596,71 +596,27 @@ function UsersTab() {
     </Modal>
   ) : null;
 
-  // 계정과 역할 권한을 한 패널에 — 계정을 만들며 '이 역할이 뭘 할 수 있나'를 바로 아래서 본다.
-  // 역할마다 누가 그 역할인지는 권한표 머리칸에 이름으로 붙는다. 내 비밀번호는 성격이 달라 따로.
+  // 내 비밀번호를 먼저(누구나 쓰는 자리), 그 아래 계정·역할 권한을 한 표에.
+  // 계정은 권한표의 Accounts 줄에 역할별로 놓인다 — 사람을 보면 그 사람이 할 수 있는 일이
+  // 같은 열 아래로 바로 읽힌다. 이름을 누르면 편집, 각 역할의 + 로 그 역할 계정 추가.
   return (
     <>
       <div className="panel">
-        <div className="ms-toolbar">
-          <h3 className="form-title">Users &amp; Permissions</h3>
-          <button className="btn primary" onClick={openNew} disabled={editId === NEW_ID}>
-            + Add user
-          </button>
-        </div>
-        {editor}
-
-        <div className="up-section-head">
-          Accounts <span className="up-count">{rows.length}</span>
-        </div>
-        {rows.length === 0 ? (
-          <div className="state">No users registered.</div>
-        ) : (
-          <div className="table-wrap">
-            <table className="mini wide ms-table up-users">
-              <thead>
-                <tr>
-                  <th>Username</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th className="ms-actcol"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((u) => (
-                  <tr key={u.id} className={u.id === editId ? "sel" : ""} onClick={() => openEdit(u)}>
-                    <td>
-                      {u.username}
-                      {me?.id === u.id ? <span className="up-me">you</span> : null}
-                    </td>
-                    <td>{u.email || "—"}</td>
-                    <td><span className={`role-badge role-${u.role}`}>{u.role}</span></td>
-                    <td>
-                      <span className={`status-badge${u.is_active ? " on" : " off"}`}>
-                        {u.is_active ? "✓ Active" : "— Inactive"}
-                      </span>
-                    </td>
-                    <td className="ms-actcol" onClick={(e) => { e.stopPropagation(); openEdit(u); }}>
-                      <span className="ms-edit-btn" title="Edit">✎</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        <div className="up-section-head up-section-gap">
-          Role permissions
-          <span className="up-section-sub">
-            Applies to every account with that role · PIC rule: non-admins edit/delete only their own deals
-          </span>
-        </div>
-        <RolePermissions users={rows} />
+        <MyPasswordChange bare />
       </div>
 
       <div className="panel">
-        <MyPasswordChange />
+        <div className="ms-toolbar">
+          <h3 className="form-title">Users &amp; Permissions</h3>
+          <button className="btn primary" onClick={() => openNew()} disabled={editId === NEW_ID}>
+            + Add user
+          </button>
+          <span className="up-section-sub">
+            Role permissions apply to every account with that role · non-admins edit/delete only deals where they are PIC
+          </span>
+        </div>
+        {editor}
+        <RolePermissions users={rows} meId={me?.id ?? null} onEditUser={openEdit} onAddUser={openNew} />
       </div>
     </>
   );
@@ -730,7 +686,17 @@ function clonePerms(p: PermGrid): PermGrid {
   return JSON.parse(JSON.stringify(p));
 }
 
-function RolePermissions({ users }: { users: SettingsUser[] }) {
+function RolePermissions({
+  users,
+  meId,
+  onEditUser,
+  onAddUser,
+}: {
+  users: SettingsUser[];
+  meId: number | null;
+  onEditUser: (u: SettingsUser) => void;
+  onAddUser: (role: string) => void;
+}) {
   const [cfg, setCfg] = useState<PermissionsConfig | null>(null);
   const [draft, setDraft] = useState<Record<string, { perms: PermGrid; scope: string }>>({});
   const [saving, setSaving] = useState(false);
@@ -834,12 +800,6 @@ function RolePermissions({ users }: { users: SettingsUser[] }) {
                     {ROLE_BY_KEY[r.role] ? (
                       <div className="perm-role-purpose">{ROLE_BY_KEY[r.role].purpose}</div>
                     ) : null}
-                    <div className="perm-role-users">
-                      {(() => {
-                        const names = users.filter((u) => u.role === r.role).map((u) => u.username);
-                        return names.length ? names.join(" · ") : "No accounts";
-                      })()}
-                    </div>
                   </th>
                 ))}
               </tr>
@@ -854,6 +814,45 @@ function RolePermissions({ users }: { users: SettingsUser[] }) {
               </tr>
             </thead>
             <tbody>
+              <tr className="perm-accounts-row">
+                <td className="perm-mod">
+                  Accounts
+                  <span className="perm-mod-hint">Click a name to edit</span>
+                </td>
+                {roles.map((r) => {
+                  const list = users.filter((u) => u.role === r.role);
+                  return (
+                    <td key={r.role} colSpan={nAct} className="perm-role-start">
+                      <div className="perm-accounts">
+                        {list.map((u) => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            className={`perm-acct${u.is_active ? "" : " off"}`}
+                            title={`${u.email || "no email"}${u.is_active ? "" : " · inactive"} — edit`}
+                            onClick={() => onEditUser(u)}
+                          >
+                            <span className="perm-acct-name">
+                              {u.username}
+                              {meId === u.id ? <span className="up-me">you</span> : null}
+                              {!u.is_active ? <span className="perm-acct-off">inactive</span> : null}
+                            </span>
+                            <span className="perm-acct-mail">{u.email || "—"}</span>
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          className="perm-acct-add"
+                          title={`Add ${PERM_ROLE_LABEL[r.role] ?? r.role} account`}
+                          onClick={() => onAddUser(r.role)}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
               <tr className="perm-scope-row">
                 <td className="perm-mod">
                   Data scope
@@ -946,7 +945,8 @@ function RolePermissions({ users }: { users: SettingsUser[] }) {
   );
 }
 
-function MyPasswordChange() {
+// bare: 자기 패널 안에 혼자 설 때 — 위 구분선·여백(subpanel)을 뺀다.
+function MyPasswordChange({ bare = false }: { bare?: boolean } = {}) {
   const [oldPw, setOldPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [newPw2, setNewPw2] = useState("");
@@ -973,7 +973,7 @@ function MyPasswordChange() {
   }
 
   return (
-    <div className="subpanel" style={{ marginTop: 20 }}>
+    <div className={bare ? undefined : "subpanel"} style={bare ? undefined : { marginTop: 20 }}>
       <div className="sub-h">Change my password{me ? ` — ${me.username}` : ""}</div>
       {/*
         진짜 <form> 으로 감싸고 계정 칸을 함께 둔다 — 모양 때문이 아니라 브라우저 때문이다.

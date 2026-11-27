@@ -23302,3 +23302,23 @@ table.perm-matrix th.perm-role { text-align: left; vertical-align: top; padding:
 .perm-role-users { font-size: 11.5px; font-weight: 600; color: #44515f; margin-top: 3px; white-space: normal; }
 table.perm-matrix tr.perm-scope-row td { border-top: 0; border-bottom: 1px solid var(--line); background: #fbfcfe; }
 table.perm-matrix tr.perm-scope-row .perm-scope-opts { flex-direction: row; gap: 14px; }
+
+/* 권한표 Accounts 줄 — 역할 열 아래 그 역할의 계정 */
+table.perm-matrix tr.perm-accounts-row td { border-bottom: 1px solid var(--line); vertical-align: top; }
+.perm-accounts { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; text-align: left; }
+.perm-acct {
+  display: flex; flex-direction: column; align-items: flex-start;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  padding: 4px 9px; cursor: pointer; font: inherit; text-align: left;
+}
+.perm-acct:hover { border-color: #9bb6dc; background: #f6f9fe; }
+.perm-acct.off { opacity: 0.6; }
+.perm-acct-name { font-size: 12.5px; font-weight: 700; color: #2c3a4b; display: inline-flex; align-items: center; }
+.perm-acct-mail { font-size: 11px; color: var(--muted); }
+.perm-acct-off { margin-left: 6px; font-size: 10.5px; font-weight: 700; color: #b4532a; }
+.perm-acct-add {
+  min-width: 34px; border: 1px dashed #b9c4d2; border-radius: 8px; background: transparent;
+  color: var(--muted); font-size: 16px; font-weight: 700; cursor: pointer;
+}
+.perm-acct-add:hover { border-color: #245fa8; color: #245fa8; }
+.panel .ms-toolbar .up-section-sub { margin-left: 4px; }
