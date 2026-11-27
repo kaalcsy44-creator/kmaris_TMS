@@ -859,11 +859,6 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
         ) : null}
       </div>
       <div className="sched-r sched-sub">Result per agenda item</div>
-      <datalist id="sched-cat-list">
-        {catOptions.map((c) => (
-          <option key={c} value={c} />
-        ))}
-      </datalist>
       {agenda.map((a, i) => (
         <Fragment key={i}>
           {/* 묶음 머리 — 카테고리가 바뀌는 자리마다(하나라도 지정했을 때만). */}
@@ -911,20 +906,19 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
               ⠿
             </span>
             <span className="sched-no">{i + 1}.</span>
-            <input
-              type="text"
+            {/* 앱 공용 ComboBox(참석자 칸과 같은 목록) — 브라우저 기본 datalist 드롭다운은 쓰지 않는다. */}
+            <span
               className="sched-cat"
-              list="sched-cat-list"
-              value={a.cat || ""}
-              placeholder="Category"
-              aria-label={`Category of agenda item ${i + 1}`}
               style={a.cat ? ({ "--cat": catTone(normCat(a.cat, catOptions)) } as React.CSSProperties) : undefined}
-              onChange={(e) => setAgendaAt(i, { cat: e.target.value })}
-              onBlur={(e) => {
-                const c = normCat(e.target.value, catOptions);
-                if (c !== (a.cat || "")) setAgendaAt(i, { cat: c });
-              }}
-            />
+            >
+              <ComboBox
+                value={a.cat || ""}
+                options={catOptions}
+                placeholder="Category"
+                // 아는 이름과 대소문자만 다르면 그 철자로(sales → Sales).
+                onChange={(v) => setAgendaAt(i, { cat: catOptions.find((k) => k.toLowerCase() === v.trim().toLowerCase()) ?? v })}
+              />
+            </span>
             <textarea
               rows={1}
               value={a.text}

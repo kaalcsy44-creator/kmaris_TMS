@@ -21745,20 +21745,18 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
 .sched-ctl { flex: none; display: flex; flex-wrap: wrap; gap: 4px; width: 52px; justify-content: flex-start; }
 .sched-ctl .sched-split { width: 100%; font-size: 11px; white-space: nowrap; padding: 0 2px; }
 /* 안건 카테고리 칩 — 고르기(datalist) + 직접 입력. 색은 카테고리마다 고정(--cat). */
-.sched-cat {
-  flex: none;
-  width: 104px;
+.sched-cat { flex: none; width: 118px; }
+.sched-cat .combobox-input {
   height: 30px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
+  padding-left: 8px;
   border-left: 3px solid var(--cat, #cbd5e1);
-  border-radius: 6px;
   font-size: 12px;
   font-weight: 700;
-  color: var(--cat, var(--muted));
-  background: #fff;
+  color: var(--cat, var(--ink));
 }
-.sched-cat::placeholder { color: #b6c2d1; font-weight: 400; }
+.sched-cat .combobox-input::placeholder { color: #b6c2d1; font-weight: 400; }
+/* 목록은 칩보다 넓게 — 긴 이름(Administration)이 잘리지 않게. */
+.sched-cat .combobox-menu { right: auto; min-width: 160px; }
 /* 카테고리 묶음 머리 — 바뀌는 자리마다 한 줄. 오른쪽(결과) 칸에도 같은 이름을 옅게. */
 .sched-grp { display: flex; align-items: baseline; gap: 6px; margin-top: 6px; }
 .sched-grp b {
@@ -21771,7 +21769,6 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
 .sched-sub-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 /* 읽기모드 — 카테고리는 묶음 머리가 보여 주니 칸마다 칩은 뺀다. */
 .form-fieldset.vm-read .sched-cat,
-.form-fieldset.vm-read .sched-cat + .vm-text,
 .form-fieldset.vm-read .sched-ctl { display: none; }
 .form-fieldset.vm-read .sched-grip { display: none; }
 .sched-other { margin-top: 2px; }
@@ -21781,7 +21778,7 @@ table.pipeline tbody tr.service .pl-stage-segs .seg.half {
   .sched-l, .sched-r { grid-column: 1; padding: 0; border-left: 0; }
   .sched-r.sched-item { padding-left: 40px; }
   .sched-grp--r { display: none; }
-  .sched-cat { width: 84px; }
+  .sched-cat { width: 96px; }
   .sched-when { flex-wrap: wrap; }
 }
 /* 목록의 진행 상태 칩. */
