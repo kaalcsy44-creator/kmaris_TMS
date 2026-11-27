@@ -135,7 +135,10 @@ type Line = {
 function plCell(n: number, dir?: 1 | -1): ReactNode {
   if (!dir || !Math.round(n)) return cell(n);
   const s = Math.abs(Math.round(n)).toLocaleString();
-  return <span className={n * dir > 0 ? "pl-up" : "pl-down"}>{n < 0 ? `−${s}` : s}</span>;
+  // 빼는 줄(비용·세금)에서 음수는 순수익을 되돌려 주는 값(부가세 환급 등)이다. "−"를 붙이면
+  // 녹색인데 빼기처럼 읽혀 헷갈리므로 "+"로 적는다 — 녹색 숫자에는 빼기 표시가 없다.
+  const text = n < 0 ? (dir < 0 ? `+${s}` : `−${s}`) : s;
+  return <span className={n * dir > 0 ? "pl-up" : "pl-down"}>{text}</span>;
 }
 
 /**
@@ -216,6 +219,8 @@ export default function FinanceProfitTab() {
           kind: "note",
           hint: "not revenue — money put in, not sold",
           detail: "investment",
+          // 합계 밖이지만 들어온 돈이라 녹색으로 둔다.
+          dir: 1,
         }]
       : [];
 
@@ -280,7 +285,7 @@ export default function FinanceProfitTab() {
     // 합계 밖의 참고 줄(note)은 색을 입히지 않는다 — 순수익에 들어가지 않는다.
     let side: 1 | -1 = 1;
     for (const l of lines) {
-      if (l.kind !== "note") l.dir = l.kind === "grand" ? 1 : side;
+      if (l.kind !== "note" && !l.dir) l.dir = l.kind === "grand" ? 1 : side;
       if (l.name === "Revenue") side = -1;
     }
 
