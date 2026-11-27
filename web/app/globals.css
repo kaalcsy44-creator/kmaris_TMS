@@ -2875,12 +2875,20 @@ table.perm-matrix td {
   text-align: center;
   padding: 7px 8px;
 }
+table.perm-matrix {
+  table-layout: fixed;
+  min-width: 1100px;
+}
+table.perm-matrix col.perm-col-page { width: 25%; }
 table.perm-matrix th.perm-page,
 table.perm-matrix td.perm-mod {
   text-align: left;
   font-weight: 600;
-  min-width: 240px;
+  white-space: normal;
 }
+table.perm-matrix th.perm-page { vertical-align: top; padding-top: 10px; }
+/* 페이지 이름(검은 글자)만 표 기본 12px 보다 1 크게 — 아래 설명(hint)은 그대로 */
+table.perm-matrix td.perm-mod { font-size: 13px; }
 /* 세 역할을 한 표에 — 역할 머리칸은 역할 색, 역할마다 첫 칸에 세로 구분선 */
 table.perm-matrix th.perm-role {
   font-size: 13px;
@@ -23322,3 +23330,39 @@ table.perm-matrix tr.perm-accounts-row td { border-bottom: 1px solid var(--line)
 }
 .perm-acct-add:hover { border-color: #245fa8; color: #245fa8; }
 .panel .ms-toolbar .up-section-sub { margin-left: 4px; }
+
+/* 묶음 제목 줄의 View~Delete — 체크박스 바로 위 머리줄 */
+table.perm-matrix tr.perm-group td.perm-act {
+  text-align: center;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #44515f;
+}
+table.perm-matrix tr.perm-group td { background: #f7f9fc; }
+/* 역할 머리칸 계정 — 세로 나열 */
+table.perm-matrix th.perm-role .perm-accounts {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  margin-top: 8px;
+}
+table.perm-matrix th.perm-role .perm-acct {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+table.perm-matrix th.perm-role .perm-acct-mail { overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+table.perm-matrix th.perm-role .perm-acct .up-me,
+table.perm-matrix th.perm-role .perm-acct .perm-acct-off { margin-left: auto; }
+table.perm-matrix th.perm-role .perm-acct-add {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  text-align: left;
+  min-width: 0;
+}

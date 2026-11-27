@@ -787,72 +787,56 @@ function RolePermissions({
       {err ? <div className="action-err" style={{ marginBottom: 10 }}>{err}</div> : null}
       <div className="perm-card">
         <div className="table-wrap">
+          {/* 고정 배치: Page 25%, 나머지 12칸 균등 — 그래야 세 역할 폭이 같다(머리칸 글 길이에 끌려가지 않게). */}
           <table className="mini perm-matrix">
+            <colgroup>
+              <col className="perm-col-page" />
+              {roles.map((r) => cfg.actions.map((a) => <col key={`${r.role}-${a}`} />))}
+            </colgroup>
             <thead>
               <tr>
-                <th rowSpan={2} className="perm-page">Page</th>
-                {roles.map((r) => (
-                  <th key={r.role} colSpan={nAct} className={`perm-role role-${r.role}`}>
-                    <div className="perm-role-name">
-                      {PERM_ROLE_LABEL[r.role] ?? r.role}
-                      {!r.editable ? <span className="perm-locked">always full access</span> : null}
-                    </div>
-                    {ROLE_BY_KEY[r.role] ? (
-                      <div className="perm-role-purpose">{ROLE_BY_KEY[r.role].purpose}</div>
-                    ) : null}
-                  </th>
-                ))}
-              </tr>
-              <tr>
-                {roles.map((r) =>
-                  cfg.actions.map((a, i) => (
-                    <th key={`${r.role}-${a}`} className={i === 0 ? "perm-role-start" : undefined}>
-                      {ACTION_LABEL[a] ?? a}
-                    </th>
-                  ))
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="perm-accounts-row">
-                <td className="perm-mod">
-                  Accounts
-                  <span className="perm-mod-hint">Click a name to edit</span>
-                </td>
+                <th className="perm-page">Page</th>
                 {roles.map((r) => {
                   const list = users.filter((u) => u.role === r.role);
                   return (
-                    <td key={r.role} colSpan={nAct} className="perm-role-start">
+                    <th key={r.role} colSpan={nAct} className={`perm-role role-${r.role}`}>
+                      <div className="perm-role-name">
+                        {PERM_ROLE_LABEL[r.role] ?? r.role}
+                        {!r.editable ? <span className="perm-locked">always full access</span> : null}
+                      </div>
+                      {ROLE_BY_KEY[r.role] ? (
+                        <div className="perm-role-purpose">{ROLE_BY_KEY[r.role].purpose}</div>
+                      ) : null}
+                      {/* 그 역할의 계정 — 세로로 나열, 누르면 편집 */}
                       <div className="perm-accounts">
                         {list.map((u) => (
                           <button
                             key={u.id}
                             type="button"
                             className={`perm-acct${u.is_active ? "" : " off"}`}
-                            title={`${u.email || "no email"}${u.is_active ? "" : " · inactive"} — edit`}
+                            title="Edit account"
                             onClick={() => onEditUser(u)}
                           >
-                            <span className="perm-acct-name">
-                              {u.username}
-                              {meId === u.id ? <span className="up-me">you</span> : null}
-                              {!u.is_active ? <span className="perm-acct-off">inactive</span> : null}
-                            </span>
+                            <span className="perm-acct-name">{u.username}</span>
                             <span className="perm-acct-mail">{u.email || "—"}</span>
+                            {meId === u.id ? <span className="up-me">you</span> : null}
+                            {!u.is_active ? <span className="perm-acct-off">inactive</span> : null}
                           </button>
                         ))}
                         <button
                           type="button"
                           className="perm-acct-add"
-                          title={`Add ${PERM_ROLE_LABEL[r.role] ?? r.role} account`}
                           onClick={() => onAddUser(r.role)}
                         >
-                          +
+                          + Add {PERM_ROLE_LABEL[r.role] ?? r.role}
                         </button>
                       </div>
-                    </td>
+                    </th>
                   );
                 })}
               </tr>
+            </thead>
+            <tbody>
               <tr className="perm-scope-row">
                 <td className="perm-mod">
                   Data scope
@@ -890,8 +874,16 @@ function RolePermissions({
               </tr>
               {groupModules(cfg.modules).map((g) => (
                 <Fragment key={g.title}>
+                  {/* 묶음 제목 줄이 곧 View~Delete 머리줄 — 체크박스 바로 위에 선다 */}
                   <tr className="perm-group">
-                    <td colSpan={1 + nAct * roles.length}>{g.title}</td>
+                    <td>{g.title}</td>
+                    {roles.map((r) =>
+                      cfg.actions.map((a, i) => (
+                        <td key={`${r.role}-${a}`} className={`perm-act${i === 0 ? " perm-role-start" : ""}`}>
+                          {ACTION_LABEL[a] ?? a}
+                        </td>
+                      ))
+                    )}
                   </tr>
                   {g.modules.map((m) => (
                     <tr key={m}>
