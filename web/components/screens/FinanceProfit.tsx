@@ -123,6 +123,8 @@ type Line = {
   detail?: string;
   /** 순수익에 더하는 줄(1: 매출 쪽)인지 빼는 줄(-1: 비용·세금 쪽)인지. 참고 줄은 없음. */
   dir?: 1 | -1;
+  /** 부호 없이 빨간 숫자로만 적는 줄(부가세). */
+  plain?: boolean;
 };
 
 /**
@@ -132,9 +134,12 @@ type Line = {
  * 순수익에 미치는 쪽으로 칠한다: 매출 +는 녹색, 비용·세금 +는 빨강, 부가세 환급(−)은
  * 순수익을 늘리므로 녹색. 적힌 숫자와 부호는 그대로 둔다.
  */
-function plCell(n: number, dir?: 1 | -1): ReactNode {
-  if (!dir || !Math.round(n)) return cell(n);
+function plCell(n: number, dir?: 1 | -1, plain?: boolean): ReactNode {
+  if (!Math.round(n)) return cell(n);
   const s = Math.abs(Math.round(n)).toLocaleString();
+  // 부가세 줄 — 환급(−)·납부(+)를 부호로 가르면 헷갈려서 빨간 숫자로만 적는다.
+  if (plain) return <span className="pl-down">{s}</span>;
+  if (!dir) return cell(n);
   // 빼는 줄(비용·세금)에서 음수는 순수익을 되돌려 주는 값(부가세 환급 등)이다. "−"를 붙이면
   // 녹색인데 빼기처럼 읽혀 헷갈리므로 "+"로 적는다 — 녹색 숫자에는 빼기 표시가 없다.
   const text = n < 0 ? (dir < 0 ? `+${s}` : `−${s}`) : s;
@@ -269,6 +274,7 @@ export default function FinanceProfitTab() {
         hint: withVat ? undefined : "not counted — tax payments only",
         // 이 줄의 내역은 거래선이 아니라 뺄셈이다 — 받은 세액에서 낸 세액 둘을 뺀 것.
         detail: "vat",
+        plain: true,
       },
       { name: "Tax payments", values: data.taxes.payments, detail: "tax_payments" },
       {
@@ -488,12 +494,12 @@ export default function FinanceProfitTab() {
                             "그게 누구 건인가"라서. 내역이 없는 줄(소계·부가세)은 그냥 둔다. */}
                         {l.values.map((v, i) => (
                           <td key={i} className="num" title={tip(model.details, l, i)}>
-                            {plCell(v, l.dir)}
+                            {plCell(v, l.dir, l.plain)}
                           </td>
                         ))}
                         {/* 누적 줄의 합계 칸은 더한 값이 아니라 구간 끝의 누계다. */}
                         <td className="num tot">
-                          {plCell(l.kind === "cum" ? l.values[l.values.length - 1] ?? 0 : sumOf(l.values), l.dir)}
+                          {plCell(l.kind === "cum" ? l.values[l.values.length - 1] ?? 0 : sumOf(l.values), l.dir, l.plain)}
                         </td>
                       </tr>
                       {/* 펼친 보기 — 그 줄을 이룬 것들이 바로 아래에 한 줄씩. 같은 칸을
@@ -502,8 +508,8 @@ export default function FinanceProfitTab() {
                         ? (model.breakdown[l.detail] ?? []).map((b) => (
                           <tr key={`${l.name}:${b.name}`} className="fin-pl-item">
                             <td className="fin-pl-name">{b.name}</td>
-                            {b.values.map((v, i) => <td key={i} className="num">{plCell(v, l.dir)}</td>)}
-                            <td className="num tot">{plCell(sumOf(b.values), l.dir)}</td>
+                            {b.values.map((v, i) => <td key={i} className="num">{plCell(v, l.dir, l.plain)}</td>)}
+                            <td className="num tot">{plCell(sumOf(b.values), l.dir, l.plain)}</td>
                           </tr>
                         ))
                         : null}
