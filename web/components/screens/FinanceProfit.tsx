@@ -164,9 +164,11 @@ function tip(details: FinanceProfit["details"], line: Line, month: number): stri
 export default function FinanceProfitTab() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
-  // 추정 부가세를 세금에 넣을지. 부가세를 실제 납부한 달에 '세금' 분류로 등록해 두었다면
-  // 두 번 빠지므로 끌 수 있어야 한다(어느 쪽을 쓰든 줄은 표에 그대로 남는다).
-  const [withVat, setWithVat] = useState(true);
+  // 추정 부가세를 세금에 넣을지. 기본은 끔 — 매출·매입·운영비가 모두 공급가(부가세 뺀 값)라
+  // 부가세는 손익이 아니라 거쳐 가는 돈이다: 매입 때 낸 부가세를 비용으로 세지 않았으니
+  // 환급도 수익이 아니고, 매출 때 받은 부가세를 수익으로 세지 않았으니 납부도 비용이 아니다.
+  // 켜면 수출(영세율) 위주의 해에는 환급이 순수익을 부풀린다. 줄은 참고로 표에 남는다.
+  const [withVat, setWithVat] = useState(false);
   // 법인세 시뮬레이션을 세금에 넣을지. 추정일 뿐이라(세무조정 전) 끄고 볼 수 있어야 한다.
   const [withTax, setWithTax] = useState(true);
   // 칸의 크기 — 달/분기/반기/연간. 서버는 늘 열두 달을 주고 묶기만 여기서 한다.
