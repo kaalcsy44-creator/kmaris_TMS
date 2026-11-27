@@ -864,7 +864,7 @@ function PermissionsTab() {
           <table className="mini perm-matrix">
             <thead>
               <tr>
-                <th rowSpan={2}>Page</th>
+                <th rowSpan={2} className="perm-page">Page</th>
                 {roles.map((r) => (
                   <th key={r.role} colSpan={nAct} className={`perm-role role-${r.role}`}>
                     {PERM_ROLE_LABEL[r.role] ?? r.role}

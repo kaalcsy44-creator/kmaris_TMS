@@ -2875,7 +2875,7 @@ table.perm-matrix td {
   text-align: center;
   padding: 7px 8px;
 }
-table.perm-matrix th:first-child,
+table.perm-matrix th.perm-page,
 table.perm-matrix td.perm-mod {
   text-align: left;
   font-weight: 600;
