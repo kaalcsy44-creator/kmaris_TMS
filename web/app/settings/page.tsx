@@ -469,35 +469,12 @@ function CompanyTab() {
 const EMPTY_USER: SettingsUser = { id: 0, username: "", email: "", role: "sales", is_active: true };
 
 // 역할별 권한 설명 — admin 이 계정에 권한을 부여할 때 참고. (백엔드 RBAC 와 일치)
-const ROLE_INFO: { key: string; title: string; perms: string[] }[] = [
-  {
-    key: "admin",
-    title: "Admin",
-    perms: [
-      "All deals: create / edit / delete",
-      "Settings: company, users, master data (customers·vendors·vessels·items)",
-      "Assign roles to other accounts",
-    ],
-  },
-  {
-    key: "sales",
-    title: "Sales",
-    perms: [
-      "Deals: create / edit / delete (RFQ·Quotation·P/O·AR·Documents)",
-      "Sees ONLY their own deals",
-      "Master data (customer·vendor·vessel·item) if granted in Permissions",
-      "No company / user / permission settings",
-    ],
-  },
-  {
-    key: "viewer",
-    title: "Viewer",
-    perms: [
-      "Read-only — can view all screens",
-      "Cannot create / edit / delete anything",
-      "No access to settings",
-    ],
-  },
+// 역할의 '쓰임' 한 줄 — 실제로 무엇을 할 수 있는지는 권한표가 정본이라 여기 적지 않는다
+// (예전 범례는 손으로 적은 목록이라 권한표를 바꾸면 말이 어긋났다).
+const ROLE_INFO: { key: string; title: string; purpose: string }[] = [
+  { key: "admin", title: "Admin", purpose: "Full access · manages users & permissions" },
+  { key: "sales", title: "Sales", purpose: "Works deals · edits only deals where they are PIC" },
+  { key: "viewer", title: "Viewer", purpose: "Looks only · as granted below" },
 ];
 const ROLE_BY_KEY = Object.fromEntries(ROLE_INFO.map((r) => [r.key, r]));
 
@@ -597,12 +574,8 @@ function UsersTab() {
       </div>
       {ROLE_BY_KEY[form.role] ? (
         <div className="role-perm-note">
-          <span className="role-perm-title">{ROLE_BY_KEY[form.role].title} can:</span>
-          <ul>
-            {ROLE_BY_KEY[form.role].perms.map((p) => (
-              <li key={p}>{p}</li>
-            ))}
-          </ul>
+          <span className="role-perm-title">{ROLE_BY_KEY[form.role].title}</span> —{" "}
+          {ROLE_BY_KEY[form.role].purpose}. Exact access: Role permissions table.
         </div>
       ) : null}
       <div className="form-actions">
@@ -623,78 +596,72 @@ function UsersTab() {
     </Modal>
   ) : null;
 
+  // 계정과 역할 권한을 한 패널에 — 계정을 만들며 '이 역할이 뭘 할 수 있나'를 바로 아래서 본다.
+  // 역할마다 누가 그 역할인지는 권한표 머리칸에 이름으로 붙는다. 내 비밀번호는 성격이 달라 따로.
   return (
     <>
-    <div className="panel">
-      <div className="ms-toolbar">
-        <h3 className="form-title">User management</h3>
-        <button className="btn primary" onClick={openNew} disabled={editId === NEW_ID}>
-          + Add user
-        </button>
-      </div>
-
-      {/* 역할별 권한 범례 — 계정을 만들며 "어느 역할을 줄까"를 정할 때 읽는 요약이다.
-          손으로 적어 둔 글이라, 아래 매트릭스를 고치면 이 요약과 어긋날 수 있다.
-          그래서 같은 화면에 둔 김에 어느 쪽이 진짜인지 한 줄로 밝혀 둔다. */}
-      <div className="role-legend">
-        {ROLE_INFO.map((r) => (
-          <div key={r.key} className="role-legend-card">
-            <div className={`role-legend-head role-${r.key}`}>{r.title}</div>
-            <ul>
-              {r.perms.map((p) => (
-                <li key={p}>{p}</li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-      <p className="hint-inline role-legend-note">
-        What each role is meant for. What it can actually do is the matrix below — edit it there.
-      </p>
-
-      {editor}
-
-      {rows.length === 0 ? (
-        <div className="state">No users registered.</div>
-      ) : (
-        <div className="table-wrap">
-          <table className="mini wide ms-table">
-            <thead>
-              <tr>
-                <th>Username</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th className="ms-actcol"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((u) => (
-                <tr key={u.id} className={u.id === editId ? "sel" : ""} onClick={() => openEdit(u)}>
-                  <td>{u.username}</td>
-                  <td>{u.email || "—"}</td>
-                  <td><span className={`role-badge role-${u.role}`}>{u.role}</span></td>
-                  <td>
-                    <span className={`status-badge${u.is_active ? " on" : " off"}`}>
-                      {u.is_active ? "✓ Active" : "— Inactive"}
-                    </span>
-                  </td>
-                  <td className="ms-actcol" onClick={(e) => { e.stopPropagation(); openEdit(u); }}>
-                    <span className="ms-edit-btn" title="Edit">✎</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className="panel">
+        <div className="ms-toolbar">
+          <h3 className="form-title">Users &amp; Permissions</h3>
+          <button className="btn primary" onClick={openNew} disabled={editId === NEW_ID}>
+            + Add user
+          </button>
         </div>
-      )}
+        {editor}
 
-      <MyPasswordChange />
-    </div>
-      {/* 역할이 실제로 무엇을 할 수 있는지 — 위의 범례가 말로 요약한 것의 원본이다.
-          계정을 만드는 자리와 그 계정이 할 수 있는 일을 정하는 자리를 갈라 두면,
-          역할을 고르다 말고 다른 탭으로 건너가 확인하고 돌아와야 했다. */}
-      <PermissionsTab />
+        <div className="up-section-head">
+          Accounts <span className="up-count">{rows.length}</span>
+        </div>
+        {rows.length === 0 ? (
+          <div className="state">No users registered.</div>
+        ) : (
+          <div className="table-wrap">
+            <table className="mini wide ms-table up-users">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th className="ms-actcol"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((u) => (
+                  <tr key={u.id} className={u.id === editId ? "sel" : ""} onClick={() => openEdit(u)}>
+                    <td>
+                      {u.username}
+                      {me?.id === u.id ? <span className="up-me">you</span> : null}
+                    </td>
+                    <td>{u.email || "—"}</td>
+                    <td><span className={`role-badge role-${u.role}`}>{u.role}</span></td>
+                    <td>
+                      <span className={`status-badge${u.is_active ? " on" : " off"}`}>
+                        {u.is_active ? "✓ Active" : "— Inactive"}
+                      </span>
+                    </td>
+                    <td className="ms-actcol" onClick={(e) => { e.stopPropagation(); openEdit(u); }}>
+                      <span className="ms-edit-btn" title="Edit">✎</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="up-section-head up-section-gap">
+          Role permissions
+          <span className="up-section-sub">
+            Applies to every account with that role · PIC rule: non-admins edit/delete only their own deals
+          </span>
+        </div>
+        <RolePermissions users={rows} />
+      </div>
+
+      <div className="panel">
+        <MyPasswordChange />
+      </div>
     </>
   );
 }
@@ -763,7 +730,7 @@ function clonePerms(p: PermGrid): PermGrid {
   return JSON.parse(JSON.stringify(p));
 }
 
-function PermissionsTab() {
+function RolePermissions({ users }: { users: SettingsUser[] }) {
   const [cfg, setCfg] = useState<PermissionsConfig | null>(null);
   const [draft, setDraft] = useState<Record<string, { perms: PermGrid; scope: string }>>({});
   const [saving, setSaving] = useState(false);
@@ -849,14 +816,7 @@ function PermissionsTab() {
   const nAct = cfg.actions.length;
 
   return (
-    <div className="panel">
-      <div className="ms-toolbar">
-        <h3 className="form-title">Role permissions</h3>
-      </div>
-      <p className="hint-inline" style={{ display: "block", marginBottom: 12 }}>
-        Set per-page View / Create / Edit / Delete for each role, plus whether they see all deals or only their own.
-        Admin always has full access. (페이지별 열람·입력·수정·삭제 권한을 역할마다 지정)
-      </p>
+    <>
       {msg ? <div className="action-ok" style={{ marginBottom: 10 }}>{msg}</div> : null}
       {err ? <div className="action-err" style={{ marginBottom: 10 }}>{err}</div> : null}
       <div className="perm-card">
@@ -867,8 +827,19 @@ function PermissionsTab() {
                 <th rowSpan={2} className="perm-page">Page</th>
                 {roles.map((r) => (
                   <th key={r.role} colSpan={nAct} className={`perm-role role-${r.role}`}>
-                    {PERM_ROLE_LABEL[r.role] ?? r.role}
-                    {!r.editable ? <span className="perm-locked"> · always full access</span> : null}
+                    <div className="perm-role-name">
+                      {PERM_ROLE_LABEL[r.role] ?? r.role}
+                      {!r.editable ? <span className="perm-locked">always full access</span> : null}
+                    </div>
+                    {ROLE_BY_KEY[r.role] ? (
+                      <div className="perm-role-purpose">{ROLE_BY_KEY[r.role].purpose}</div>
+                    ) : null}
+                    <div className="perm-role-users">
+                      {(() => {
+                        const names = users.filter((u) => u.role === r.role).map((u) => u.username);
+                        return names.length ? names.join(" · ") : "No accounts";
+                      })()}
+                    </div>
                   </th>
                 ))}
               </tr>
@@ -883,6 +854,41 @@ function PermissionsTab() {
               </tr>
             </thead>
             <tbody>
+              <tr className="perm-scope-row">
+                <td className="perm-mod">
+                  Data scope
+                  <span className="perm-mod-hint">Which deals they see</span>
+                </td>
+                {roles.map((r) => {
+                  const st = roleState(r)!;
+                  return (
+                    <td key={r.role} colSpan={nAct} className="perm-role-start">
+                      <div className="perm-scope-opts">
+                        <label>
+                          <input
+                            type="radio"
+                            name={`scope-${r.role}`}
+                            checked={st.scope === "all"}
+                            disabled={!r.editable}
+                            onChange={() => setScope(r.role, "all")}
+                          />
+                          All deals
+                        </label>
+                        <label>
+                          <input
+                            type="radio"
+                            name={`scope-${r.role}`}
+                            checked={st.scope === "own"}
+                            disabled={!r.editable}
+                            onChange={() => setScope(r.role, "own")}
+                          />
+                          Own deals only
+                        </label>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
               {groupModules(cfg.modules).map((g) => (
                 <Fragment key={g.title}>
                   <tr className="perm-group">
@@ -924,41 +930,6 @@ function PermissionsTab() {
                   ))}
                 </Fragment>
               ))}
-              <tr className="perm-scope-row">
-                <td className="perm-mod">
-                  Data scope
-                  <span className="perm-mod-hint">Which deals they see</span>
-                </td>
-                {roles.map((r) => {
-                  const st = roleState(r)!;
-                  return (
-                    <td key={r.role} colSpan={nAct} className="perm-role-start">
-                      <div className="perm-scope-opts">
-                        <label>
-                          <input
-                            type="radio"
-                            name={`scope-${r.role}`}
-                            checked={st.scope === "all"}
-                            disabled={!r.editable}
-                            onChange={() => setScope(r.role, "all")}
-                          />
-                          All deals
-                        </label>
-                        <label>
-                          <input
-                            type="radio"
-                            name={`scope-${r.role}`}
-                            checked={st.scope === "own"}
-                            disabled={!r.editable}
-                            onChange={() => setScope(r.role, "own")}
-                          />
-                          Own deals only
-                        </label>
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
             </tbody>
           </table>
         </div>
@@ -971,7 +942,7 @@ function PermissionsTab() {
           </button>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

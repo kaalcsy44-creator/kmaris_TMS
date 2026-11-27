@@ -23259,3 +23259,46 @@ table.mini.items-edit.rre-table td.rre-st select { width: 100%; height: 28px; bo
 .fin-exp-due input { height: 32px; padding: 3px 8px; border: 1px solid #cdd9e8; border-radius: 6px; font: inherit; }
 .trip-exp-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 .trip-exp-msg { color: #1d4ed8; }
+
+/* Settings › Users & Permissions — 계정 목록과 역할 권한표를 한 패널에 */
+.up-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  font-weight: 800;
+  color: #2c3a4b;
+  margin: 4px 0 8px;
+}
+.up-section-gap { margin-top: 22px; }
+.up-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  background: #f1f4f8;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.up-section-sub {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.up-me {
+  margin-left: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+table.up-users td:last-child,
+table.up-users th:last-child { width: 1%; }
+table.perm-matrix th.perm-role { text-align: left; vertical-align: top; padding: 8px 10px; }
+.perm-role-name { display: flex; align-items: baseline; gap: 8px; }
+.perm-role-purpose { font-size: 11.5px; font-weight: 500; opacity: 0.85; margin-top: 2px; white-space: normal; }
+.perm-role-users { font-size: 11.5px; font-weight: 600; color: #44515f; margin-top: 3px; white-space: normal; }
+table.perm-matrix tr.perm-scope-row td { border-top: 0; border-bottom: 1px solid var(--line); background: #fbfcfe; }
+table.perm-matrix tr.perm-scope-row .perm-scope-opts { flex-direction: row; gap: 14px; }
