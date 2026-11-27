@@ -290,13 +290,13 @@ export default function UnmatchedMailPanel({
               title="Show the mailbox connection — daily run, last runs, folder errors"
               onClick={() => setShowConn((v) => !v)}
             >
-              {status?.account}
+              {mailboxes(status)}
               {lastSync(status) ? ` · last sync ${lastSync(status)}` : ""}
               <span className="umail-caret">{showConn ? "▾" : "▸"}</span>
             </button>
           ) : (
             <span className="hint-inline">
-              {status?.account}
+              {mailboxes(status)}
               {lastSync(status) ? ` · last sync ${lastSync(status)}` : ""}
             </span>
           )}
@@ -621,7 +621,7 @@ function MailboxConnection({ status, onRefresh }: { status: MailStatus; onRefres
         <tbody>
           <tr>
             <th>Account</th>
-            <td>{status.account || "—"} <span className="muted">@ {status.host}</span></td>
+            <td>{mailboxes(status) || "—"} <span className="muted">@ {status.host}</span></td>
           </tr>
           <tr>
             <th>Stored mail</th>
@@ -681,6 +681,12 @@ function MailboxConnection({ status, onRefresh }: { status: MailStatus; onRefres
       </table>
     </div>
   );
+}
+
+// 머리줄에 읽는 사서함을 전부 — 첫 계정만 보이면 둘째 계정(samcho@)을 안 읽는 줄 안다.
+function mailboxes(status: MailStatus | null): string {
+  const list = status?.accounts?.length ? status.accounts : status?.account ? [status.account] : [];
+  return list.join(" · ");
 }
 
 function lastSync(status: MailStatus | null): string {

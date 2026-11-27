@@ -3004,6 +3004,8 @@ export type MailStatus = {
   configured: boolean;
   host: string;
   account: string;
+  /** 함께 읽는 사서함 전부(첫 계정 + IMAP_USER_2…). */
+  accounts?: string[];
   total: number;
   unmatched: number;
   unknown: number;              // 등록되지 않은 상대 수 — 그만큼의 메일이 버려지고 있다
