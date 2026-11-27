@@ -468,6 +468,28 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
     setAgenda((list) => list.map((a, j) => (j === i ? { ...a, ...patch } : a)));
     if (patch.result?.trim() && status === "planned") setStatus("done");
   }
+  /* 안건 줄 끼워 넣기·순서 바꾸기 — 안건과 그 결과는 한 묶음이라 같이 움직인다. */
+  const agendaRef = useRef<HTMLDivElement>(null);
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+  function focusAgenda(i: number) {
+    requestAnimationFrame(() =>
+      agendaRef.current?.querySelector<HTMLTextAreaElement>(`textarea[data-agenda="${i}"]`)?.focus(),
+    );
+  }
+  function insertAgenda(at: number) {
+    setAgenda((list) => [...list.slice(0, at), { text: "", result: "" }, ...list.slice(at)]);
+    focusAgenda(at);
+  }
+  function moveAgenda(from: number, to: number) {
+    if (from === to || to < 0 || to >= agenda.length) return;
+    setAgenda((list) => {
+      const next = [...list];
+      const [it] = next.splice(from, 1);
+      next.splice(to, 0, it);
+      return next;
+    });
+  }
 
   function body(): ScheduleSave {
     const items = agenda
@@ -670,7 +692,7 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
   /* 2단 격자 — 왼쪽 칸은 예정(Plan), 오른쪽 칸은 진행 후 기록(Result).
      안건은 줄마다 왼쪽에 안건, 같은 줄 오른쪽에 그 안건의 결과가 선다. */
   const planBody = (
-    <div className="sched-form">
+    <div className="sched-form" ref={agendaRef}>
       <h4 className="sched-col-title sched-l">Plan</h4>
       <h4 className="sched-col-title sched-r">Result</h4>
 
@@ -741,15 +763,64 @@ function ScheduleEditor({ row, history, customers, canEdit, dirtyRef, onSaved, o
       <div className="sched-r sched-sub">Result per agenda item</div>
       {agenda.map((a, i) => (
         <Fragment key={i}>
-          <div className="sched-l sched-item">
+          <div
+            className={`sched-l sched-item${dragOver === i && dragFrom !== null && dragFrom !== i ? (dragFrom < i ? " drop-below" : " drop-above") : ""}${dragFrom === i ? " dragging" : ""}`}
+            onDragOver={(e) => {
+              if (dragFrom === null) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              if (dragOver !== i) setDragOver(i);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (dragFrom !== null) moveAgenda(dragFrom, i);
+              setDragFrom(null);
+              setDragOver(null);
+            }}
+          >
+            <span
+              className="sched-grip"
+              draggable
+              title="Drag to reorder (or Alt+↑ / Alt+↓ in the text box)"
+              aria-hidden
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", String(i));
+                setDragFrom(i);
+              }}
+              onDragEnd={() => {
+                setDragFrom(null);
+                setDragOver(null);
+              }}
+            >
+              ⠿
+            </span>
             <span className="sched-no">{i + 1}.</span>
             <textarea
               rows={1}
               value={a.text}
+              data-agenda={i}
               aria-label={`Agenda item ${i + 1}`}
               placeholder="What to discuss"
               onChange={(e) => setAgendaAt(i, { text: e.target.value })}
+              onKeyDown={(e) => {
+                if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+                e.preventDefault();
+                const to = e.key === "ArrowUp" ? i - 1 : i + 1;
+                if (to < 0 || to >= agenda.length) return;
+                moveAgenda(i, to);
+                focusAgenda(to);
+              }}
             />
+            <button
+              type="button"
+              className="btn tiny sched-x sched-ins"
+              title="Insert a new item below this one"
+              aria-label={`Insert agenda item after ${i + 1}`}
+              onClick={() => insertAgenda(i + 1)}
+            >
+              +
+            </button>
             <button
               type="button"
               className="btn tiny sched-x"
