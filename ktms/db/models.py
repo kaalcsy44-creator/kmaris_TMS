@@ -143,6 +143,10 @@ class Customer(Base):
     # 회사 단위 값이라 Company info 창에서 같은 회사 전 레코드에 한 번에 넣는다. 비면 name.
     short_name = Column(String(80))
     created_at = Column(DateTime, default=datetime.utcnow)
+    # 처음 등록한 계정(users.id). 요청한 사람을 _core 의 before_insert 훅이 자동으로
+    # 찍는다 — 등록 경로(직접 입력·Import·명부 사이 복사·RFQ 자동접수)가 여럿이라 한 곳에서.
+    # NULL = 이 칸이 생기기 전에 등록됐거나 사람 없이(자동 작업) 생긴 줄.
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
 
 class Vendor(Base):
@@ -202,6 +206,7 @@ class Vendor(Base):
     bank_holder    = Column(String(120))   # 예금주(회사명과 다를 수 있다)
     bank_swift     = Column(String(40))    # 해외 송금용 SWIFT/BIC
     created_at     = Column(DateTime, default=datetime.utcnow)
+    created_by     = Column(Integer, ForeignKey("users.id"), nullable=True)  # 처음 등록한 계정(Customer 주석)
 
 
 class Maker(Base):
@@ -252,6 +257,7 @@ class Maker(Base):
     note           = Column(Text)          # 회사 소개 요약
     logo           = Column(Text)          # 회사 로고(data URL)
     created_at     = Column(DateTime, default=datetime.utcnow)
+    created_by     = Column(Integer, ForeignKey("users.id"), nullable=True)  # 처음 등록한 계정(Customer 주석)
 
 
 class Consultant(Base):

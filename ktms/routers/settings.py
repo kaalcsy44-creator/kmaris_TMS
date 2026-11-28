@@ -251,6 +251,7 @@ def settings_customers():
     try:
         deals = _customer_deal_counts(s)
         twins = _company_twin_kinds(s)
+        names = _creator_names(s)
         return [{"id": c.id, "name": c.name, "contact": c.contact or "",
                  "duty": getattr(c, "duty", None) or "",
                  "contact_phone": getattr(c, "contact_phone", None) or "",
@@ -277,13 +278,27 @@ def settings_customers():
                  # 이 담당자가 준 문의와 그 결과. 회사 줄의 합계는 화면에서 더한다 —
                  # RFQ 는 고객 담당자 하나에만 매이므로 담당자별 수를 더해도 겹치지 않는다
                  # (벤더 쪽은 한 프로젝트가 담당자 둘에 걸릴 수 있어 서버에서 합집합을 센다).
-                 **deals.get(c.id, _EMPTY_DEALS)}
+                 **deals.get(c.id, _EMPTY_DEALS),
+                 **_created_out(c, names)}
                 for c in s.query(Customer).order_by(Customer.name).all()]
     finally:
         s.close()
 
 
 _EMPTY_DEALS = {"inquiries": 0, "won": 0, "lost": 0}
+
+
+def _creator_names(s) -> dict[int, str]:
+    """users.id → 표시 이름(계정명). 등록자 칸이 쓴다."""
+    return {u.id: (u.username or "") for u in s.query(User).all()}
+
+
+def _created_out(row, names: dict[int, str]) -> dict:
+    """처음 등록한 시각(UTC, ISO+Z — 화면이 현지 시각으로 바꾼다)과 그 계정."""
+    at = getattr(row, "created_at", None)
+    uid = getattr(row, "created_by", None)
+    return {"created_at": (at.isoformat(timespec="seconds") + "Z") if at else "",
+            "created_by": names.get(uid, "") if uid else ""}
 
 
 def _customer_deal_counts(s) -> dict:
@@ -721,6 +736,7 @@ def settings_vendors():
         asked, answered = _vendor_deal_counts(s)
         twins = _company_twin_kinds(s)
         vendors = s.query(Vendor).order_by(Vendor.name).all()
+        names = _creator_names(s)
         # 회사 단위 합계 — 목록이 회사로 묶여 보이는데, 한 회사의 담당자 둘에게 같은
         # 프로젝트를 물었으면 담당자별 수를 더한 값은 그 프로젝트를 두 번 센다. 그래서
         # 회사 칸은 더하지 않고 프로젝트 id 를 합집합으로 모아 다시 센다.
@@ -766,7 +782,8 @@ def settings_vendors():
                  "co_deals": len(co_asked.get((v.name or "").strip(), ())),
                  "co_deals_answered": len(co_answered.get((v.name or "").strip(), ())),
                  # 같은 이름으로 다른 명부에도 서 있는가(고객 명부와 같은 취급).
-                 "twins": _twins_of(twins, v.name or "", "vendors")}
+                 "twins": _twins_of(twins, v.name or "", "vendors"),
+                 **_created_out(v, names)}
                 for v in vendors]
     finally:
         s.close()
@@ -1429,8 +1446,10 @@ def settings_makers():
         agencies = _maker_agencies(s)
         twins = _company_twin_kinds(s)
         rows = s.query(Maker).order_by(Maker.name, Maker.id).all()
+        names = _creator_names(s)
         return [{**_maker_row(m, counts, agencies),
-                 "twins": _twins_of(twins, m.name or "", "makers")} for m in rows]
+                 "twins": _twins_of(twins, m.name or "", "makers"),
+                 **_created_out(m, names)} for m in rows]
     finally:
         s.close()
 

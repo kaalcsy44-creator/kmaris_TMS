@@ -88,6 +88,8 @@ _MIGRATIONS = {
         "bad_emails": "JSON",
         # 약칭(드라이브 폴더명의 고객사 칸). 기존 행은 NULL = 회사명 전체를 쓴다.
         "short_name": "VARCHAR(80)",
+        # 처음 등록한 계정(users.id). 기존 행은 NULL = 누가 넣었는지 기록 전.
+        "created_by": "INTEGER",
     },
     "vendors": {
         # 대금을 보낼 계좌(회사 단위) — 매입 청구(AP) 지급용. Finance 캘린더 상세 창에서 편집.
@@ -115,6 +117,7 @@ _MIGRATIONS = {
         # 이 거래선이 곧 그 제조사(makers.id) — 메이커에 직접 물어보고 사는 경우.
         # 기존 행은 NULL = 보통의 거래선.
         "maker_id": "INTEGER",
+        "created_by": "INTEGER",   # 처음 등록한 계정. 기존 행은 NULL
     },
     "schedule_events": {
         # 일정의 시간·장소·참석자와 진행 후 기록(상태·회의록·결과). 기존 행은 NULL = 예정.
@@ -214,6 +217,7 @@ _MIGRATIONS = {
         "sent_email_id": "INTEGER",
     },
     "makers": {
+        "created_by": "INTEGER",   # 처음 등록한 계정. 기존 행은 NULL
         # 담당자 — 메이커도 거래선과 같이 레코드 1건 = 담당자 1명이 됐다.
         # 기존 행은 NULL = 회사 대표 창구(담당자 이름 없이 회사만 적힌 줄).
         "contact": "VARCHAR(100)",

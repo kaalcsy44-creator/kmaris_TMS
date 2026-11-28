@@ -91,6 +91,10 @@ export type SettingsCustomer = {
   /** 같은 이름으로 다른 명부에도 서 있는 곳("customers"|"vendors"|"makers").
    *  회사 정보를 고칠 때 저쪽에도 함께 옮길지 묻는 자리가 이 값을 쓴다. */
   twins?: string[];
+  /** 처음 등록한 시각(UTC ISO, 읽기전용 — 서버가 자동 기록). 빈 값 = 기록 없음. */
+  created_at?: string;
+  /** 처음 등록한 계정명(읽기전용). 빈 값 = 이 기록이 생기기 전 등록·자동 작업. */
+  created_by?: string;
 };
 export type SettingsVendor = {
   id: number;
@@ -133,6 +137,10 @@ export type SettingsVendor = {
   /** 같은 이름으로 다른 명부에도 서 있는 곳("customers"|"vendors"|"makers").
    *  회사 정보를 고칠 때 저쪽에도 함께 옮길지 묻는 자리가 이 값을 쓴다. */
   twins?: string[];
+  /** 처음 등록한 시각(UTC ISO, 읽기전용 — 서버가 자동 기록). 빈 값 = 기록 없음. */
+  created_at?: string;
+  /** 처음 등록한 계정명(읽기전용). 빈 값 = 이 기록이 생기기 전 등록·자동 작업. */
+  created_by?: string;
 };
 /**
  * 제조사(메이커) — 물건을 만든 회사. 거래선과 다른 축이다: 같은 MAN B&W 부품을 여러
@@ -168,6 +176,10 @@ export type SettingsMaker = {
    *  거래선의 'Makers supplied'(maker_ids)를 서버가 거꾸로 읽어 준 값이라, 여기서
    *  고치지 않는다 — 고치는 자리는 언제나 그 거래선의 회사 창이다. */
   agencies?: string[];
+  /** 처음 등록한 시각(UTC ISO, 읽기전용 — 서버가 자동 기록). 빈 값 = 기록 없음. */
+  created_at?: string;
+  /** 처음 등록한 계정명(읽기전용). 빈 값 = 이 기록이 생기기 전 등록·자동 작업. */
+  created_by?: string;
 };
 
 export type SettingsVessel = {

@@ -276,6 +276,38 @@ async def _bump_gen_on_write(request: Request, call_next):
     return response
 
 
+# ── 등록자 자동 기록(고객·거래선·메이커) ──────────────────────────────────────────
+# 명부에 줄이 생기는 길은 여럿이다 — 직접 입력, 엑셀 Import, 명부 사이 복사, 메이커를
+# 거래선으로 세우기, 짝 명부의 담당자 동기화, RFQ 자동접수. 경로마다 created_by 를
+# 넣으면 하나를 빠뜨리기 쉬워, 요청한 사람을 요청 단위로 들고 있다가 INSERT 직전에
+# 한 곳에서 찍는다. 사람 없이 도는 일(예약 작업)은 값이 없어 NULL 로 남는다.
+import contextvars as _ctxvars
+
+_REQ_USER_ID: "_ctxvars.ContextVar[int | None]" = _ctxvars.ContextVar("ktms_req_user_id", default=None)
+
+
+@app.middleware("http")
+async def _remember_request_user(request: Request, call_next):
+    user = _user_from_auth(request.headers.get("authorization"))
+    uid = int(user.get("id") or 0) if user else 0
+    tok = _REQ_USER_ID.set(uid or None)   # id 0 = 정적 토큰(dev) — 실제 계정이 아니다
+    try:
+        return await call_next(request)
+    finally:
+        _REQ_USER_ID.reset(tok)
+
+
+def _stamp_created_by(_mapper, _conn, target) -> None:
+    if getattr(target, "created_by", None) is None:
+        uid = _REQ_USER_ID.get()
+        if uid:
+            target.created_by = uid
+
+
+for _m in (Customer, Vendor, Maker):
+    _sa_event.listen(_m, "before_insert", _stamp_created_by)
+
+
 @app.on_event("startup")
 def _sync_schema() -> None:
     """배포된 DB 스키마를 모델과 동기화한다.

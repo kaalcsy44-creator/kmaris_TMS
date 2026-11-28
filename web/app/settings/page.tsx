@@ -1258,6 +1258,7 @@ export function MakersTab({ newFlow }: { newFlow?: PartnerNewFlow } = {}) {
           <span key="s" className="ms-group-sub">
             {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
           </span>,
+          <CreatedCell key="cr" row={firstCreated(rs)} rows={rs} />,
         ],
         flat: true,
         onRowClick: (_rs, nav) => { savedName.current = ""; setCompany(nav); },
@@ -1302,6 +1303,7 @@ export function MakersTab({ newFlow }: { newFlow?: PartnerNewFlow } = {}) {
         // Makes = 이 회사가 무엇을 만드는가. 트리에 자리가 없는 것(기종·브랜드 이름)이
         // 여기 적힌다 — "HiMSEN Engine", "2 Stroke Engine".
         ["specialization", "Makes", undefined, "ms-spec"],
+        ["created_at", "Registered", (r) => <CreatedCell row={r} />, "ms-created"],
       ]}
       // 처음 등록할 때 보이는 칸 = 🏭 Maker 창이 든 칸 그대로, 그 차례대로.
       fields={[
@@ -1539,6 +1541,7 @@ export function CustomersTab({ newFlow }: { newFlow?: PartnerNewFlow } = {}) {
           <span key="s" className="ms-group-sub">
             {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
           </span>,
+          <CreatedCell key="cr" row={firstCreated(rs)} rows={rs} />,
         ],
         flat: true,
         onRowClick: (_rs, nav) => { savedName.current = ""; setCompany(nav); },
@@ -1601,6 +1604,7 @@ export function CustomersTab({ newFlow }: { newFlow?: PartnerNewFlow } = {}) {
           ),
           "ms-deals"],
         ["specialization", "Specialization", undefined, "ms-spec"],
+        ["created_at", "Registered", (r) => <CreatedCell row={r} />, "ms-created"],
       ]}
       // 처음 등록할 때 보이는 칸 = 🏢 Company info 창이 든 칸 그대로, 그 차례대로
       // (거래선 쪽과 같은 규칙). 둘이 달랐던 동안에는 고객사를 새로 만들면서 홈페이지·
@@ -1922,6 +1926,42 @@ function siteLabel(site: string): string {
 
 /** 목록의 홈페이지 칸. 줄을 누르면 회사 정보 창이 열리는 표들이라(고객·거래선·제조사)
  *  링크를 누른 것이 줄을 누른 것으로 번지지 않게 막는다 — 창과 새 탭이 함께 열린다. */
+/** 처음 등록한 시각(서버 UTC ISO) → 이 PC 시각 "YYYY-MM-DD HH:mm". 값이 없으면 "". */
+function createdText(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+type Created = { created_at?: string; created_by?: string; contact?: string };
+
+/** 회사가 처음 명부에 오른 줄 — 담당자 줄 가운데 가장 먼저 등록된 것. */
+function firstCreated<T extends Created>(rows: T[]): T | undefined {
+  return rows.filter((r) => r.created_at).sort((a, b) => (a.created_at! < b.created_at! ? -1 : 1))[0];
+}
+
+/** Registered 칸 — 윗줄 등록 시각, 아랫줄 등록한 계정. title 에는 담당자별 등록 내역. */
+function CreatedCell({ row, rows }: { row?: Created; rows?: Created[] }) {
+  const when = createdText(row?.created_at);
+  if (!when) return <span className="dash">—</span>;
+  const tip = (rows && rows.length > 1)
+    ? rows.map((r) => `${r.contact || "(company)"} — ${createdText(r.created_at) || "?"} · ${r.created_by || "unknown"}`).join("\n")
+    : `Registered ${when}${row?.created_by ? ` by ${row.created_by}` : ""}`;
+  return (
+    <span title={tip}>
+      <span className="ms-created-at">{when}</span>
+      <span className="ms-created-by">{row?.created_by || "—"}</span>
+    </span>
+  );
+}
+
+/** 머리 칸 규칙 — 등록일로 정렬·기간 필터(text 가 "YYYY-MM-DD…" 로 시작해야 한다). */
+function createdHeadCol<T extends Created>(): HeadCol<T> {
+  return { key: "created_at", text: (r) => createdText(r.created_at), filter: "date" };
+}
+
 function SiteCell({ value }: { value: string }) {
   const site = (value || "").trim();
   if (!site) return <span className="dash">—</span>;
@@ -3561,6 +3601,7 @@ export function VendorsTab({ newFlow }: { newFlow?: PartnerNewFlow } = {}) {
           <span key="s" className="ms-group-sub">
             {summarize(uniqStrings(rs.map((r) => r.specialization)), " · ", 2)}
           </span>,
+          <CreatedCell key="cr" row={firstCreated(rs)} rows={rs} />,
         ],
         flat: true,
         onRowClick: (_rs, nav) => { savedName.current = ""; setCompany(nav); },
@@ -3608,6 +3649,7 @@ export function VendorsTab({ newFlow }: { newFlow?: PartnerNewFlow } = {}) {
         ["maker_ids", "Maker", undefined, "ms-maker"],
         ["category_ids", "Category", undefined, "ms-cat"],
         ["specialization", "Specialization", undefined, "ms-spec"],
+        ["created_at", "Registered", (r) => <CreatedCell row={r} />, "ms-created"],
       ]}
       // 처음 등록할 때 보이는 칸 = 🏢 Company info 창이 든 칸 그대로, 그 차례대로.
       // 둘이 달랐던 동안에는 회사를 새로 만들면서 홈페이지·결제조건·로고·취급 분류·
@@ -4251,6 +4293,7 @@ const customerHeadCols: HeadCol<SettingsCustomer>[] = [
     sortValue: (r) => r.inquiries ?? 0, filter: "facet", emptyLabel: "No inquiry yet" },
   { key: "specialization", text: (r) => r.specialization || "", filter: "facet",
     emptyLabel: "Unspecified" },
+  createdHeadCol(),
 ];
 
 /** 공급사 목록의 머리 칸 규칙. 고객과 같은 얼개에 배지 열의 뜻만 다르다.
@@ -4274,6 +4317,7 @@ const vendorHeadCols = (
     facetValues: (r) => catNames(r.category_ids), emptyLabel: "Untagged" },
   { key: "specialization", text: (r) => r.specialization || "", filter: "facet",
     emptyLabel: "Unspecified" },
+  createdHeadCol(),
 ];
 
 /** 제조사 목록의 머리 칸 규칙 — 거래선과 같은 얼개, 배지 열의 뜻만 다르다(Items). */
@@ -4293,6 +4337,7 @@ const makerHeadCols = (
     facetValues: (r) => r.agencies ?? [], emptyLabel: "No agency" },
   { key: "specialization", text: (r) => r.specialization || "", filter: "facet",
     emptyLabel: "Unspecified" },
+  createdHeadCol(),
 ];
 
 /** 회사 단위 태그(분류·제조사)를 담당자 줄들에서 읽는다 — 가진 줄 중 첫 번째.
@@ -4354,6 +4399,14 @@ function useCategoryText(): (ids?: number[] | null) => string {
   return (ids) => joinNames(names(ids));
 }
 
+/** 인쇄물의 등록 칸 — 시각과 계정을 따로 적는다. */
+function createdPrintCols<T extends Created>(): PrintCol<T>[] {
+  return [
+    { label: "Registered", value: (r) => createdText(r.created_at), width: 1.4 },
+    { label: "By", value: (r) => r.created_by || "", width: 1.0 },
+  ];
+}
+
 const customerPrintCols: PrintCol<SettingsCustomer>[] = [
   { label: "Company", value: (r) => r.name, width: 2.4 },
   { label: "Region", value: (r) => partyRegions(r).filter(Boolean).join(" · "), width: 1.3 },
@@ -4367,6 +4420,7 @@ const customerPrintCols: PrintCol<SettingsCustomer>[] = [
   { label: "Specialization", value: (r) => r.specialization, width: 2.2 },
   { label: "Inquiries → Orders", align: "right", width: 1.1,
     value: (r) => ratioText(r.inquiries ?? 0, r.won ?? 0, r.lost ? ` · ${r.lost} lost` : "") },
+  ...createdPrintCols<SettingsCustomer>(),
 ];
 
 const vendorPrintCols = (
@@ -4386,6 +4440,7 @@ const vendorPrintCols = (
   { label: "Specialization", value: (r) => r.specialization, width: 2.2 },
   { label: "Projects → Quoted", align: "right", width: 1.1,
     value: (r) => ratioText(r.deals ?? 0, r.deals_answered ?? 0) },
+  ...createdPrintCols<SettingsVendor>(),
 ];
 
 const makerPrintCols = (cat: (ids?: number[] | null) => string): PrintCol<SettingsMaker>[] => [
@@ -4401,6 +4456,7 @@ const makerPrintCols = (cat: (ids?: number[] | null) => string): PrintCol<Settin
   { label: "Agency", value: (r) => (r.agencies ?? []).join(", "), width: 1.8 },
   { label: "Makes", value: (r) => r.specialization, width: 2.0 },
   { label: "Items", align: "right", width: 0.8, value: (r) => (r.items ? String(r.items) : "") },
+  ...createdPrintCols<SettingsMaker>(),
 ];
 
 // 품목 목록의 머리 칸 정렬·필터 규칙. 표에 그리는 열(columns)과 key 로 짝지어진다.
