@@ -2474,7 +2474,15 @@ export type RfqDetail = {
   source_files: RfqSourceFile[];
   /** 공유 드라이브 프로젝트 폴더 링크(비면 아직 없음). */
   drive_folder_url?: string;
-  vendor_rfqs: { id: number; vendor: string; at: string; round?: number }[];
+  vendor_rfqs: {
+    id: number; vendor: string; at: string; round?: number;
+    /** 보낸 일시 "YYYY-MM-DDTHH:MM"(KST). */
+    sent_at?: string;
+    /** 물은 라인 범위("L01–L14, L32") · 줄 수 · 첫 품목명 — 같은 벤더 RFQ 를 가려 보는 힌트. */
+    lines?: string; n_items?: number; first_item?: string;
+    /** 이 RFQ 에 이미 등록된 벤더 견적 수. */
+    quotes?: number;
+  }[];
   /** 지금 RFQ 가 몇 번째인가(1 = 재요청 없음) · RFQ 전부(앞선 것은 품목까지). */
   round_no?: number;
   rounds?: RfqRound[];

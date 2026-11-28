@@ -4469,12 +4469,17 @@ function VendorQuoteAction({
               {/* 옵션 라벨이 벤더명이라 벤더 로고를 함께 보여준다(값은 Vendor RFQ id). */}
               <VendorSelect
                 value={vrfqId}
-                options={[...vendorRfqs].sort((a, b) => (b.round ?? 1) - (a.round ?? 1)).map((v) => ({
+                options={[...vendorRfqs]
+                  .sort((a, b) => (b.round ?? 1) - (a.round ?? 1)
+                    || (b.sent_at ?? "").localeCompare(a.sent_at ?? ""))
+                  .map((v) => ({
                   id: v.id,
                   name: v.vendor,
-                  // 재요청이 있던 딜은 같은 벤더가 두 번 선다 — 몇 번째 RFQ 로 물은 것인지 붙인다.
-                  label: vendorRfqs.some((x) => (x.round ?? 1) > 1)
-                    ? <>{v.vendor}<RoundTag round={v.round ?? 1} /></> : undefined,
+                  search: `${v.lines ?? ""} ${v.first_item ?? ""}`,
+                  // 같은 벤더에 여러 번 물은 딜은 이름이 줄줄이 선다 — 보낸 일시·물은 라인·
+                  // 첫 품목·견적 등록 여부를 아랫줄에 붙여 어느 RFQ 인지 가려 보게 한다.
+                  // 재요청이 있던 딜은 몇 번째 RFQ 로 물은 것인지도 붙인다.
+                  label: <VendorRfqOptionLabel v={v} showRound={vendorRfqs.some((x) => (x.round ?? 1) > 1)} />,
                 }))}
                 placeholder="Select Vendor RFQ…"
                 onChange={setVrfqId}
@@ -7241,4 +7246,34 @@ function recomputeCustomerQuoteItems(
     const unit = calcUnitPrice(cost, Number(it.margin_pct || 0), costCur, saleCur, it.round_digits ?? roundDigits, rate);
     return { ...it, cost_price: cost, unit_price: unit, amount: unit * Number(it.qty || 1) };
   });
+}
+
+
+/** Vendor RFQ 고르기 한 줄 — 윗줄 벤더명(+RFQ 회차), 아랫줄 "26.11.09 15:13 · L34–L37 (4) ·
+ *  Impeller nut · ✓ Quoted". 같은 벤더에 같은 날 두 번 보낸 일도 있어 날짜만으로는 모자라고,
+ *  라인 번호가 4단계 견적서·소싱보드와 같은 열쇠라 그것으로 가려 본다. */
+function VendorRfqOptionLabel({ v, showRound }: {
+  v: RfqDetailT["vendor_rfqs"][number];
+  showRound: boolean;
+}) {
+  const iso = v.sent_at ?? "";
+  const when = iso.length >= 16 ? `${iso.slice(2, 4)}.${iso.slice(5, 7)}.${iso.slice(8, 10)} ${iso.slice(11, 16)}` : v.at;
+  const n = v.n_items ?? 0;
+  const bits = [
+    when,
+    v.lines ? `${v.lines}${n ? ` (${n})` : ""}` : n ? `${n} item${n > 1 ? "s" : ""}` : "",
+    v.first_item ?? "",
+  ].filter(Boolean);
+  return (
+    <span className="vrfq-opt">
+      <span className="vrfq-opt-name">
+        {v.vendor}
+        {showRound ? <RoundTag round={v.round ?? 1} /> : null}
+      </span>
+      <span className="vrfq-opt-hint" title={bits.join(" · ")}>
+        {bits.join(" · ")}
+        {v.quotes ? <span className="vrfq-opt-quoted"> · ✓ Quoted{v.quotes > 1 ? ` ×${v.quotes}` : ""}</span> : null}
+      </span>
+    </span>
+  );
 }

@@ -9925,6 +9925,14 @@ table.mini .num {
   flex-shrink: 0;
   object-fit: contain;
 }
+/* Vendor RFQ 고르기 — 벤더명 아래 작은 회색 줄로 보낸 일시·라인·첫 품목을 붙인다. */
+.vrfq-opt { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.vrfq-opt-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vrfq-opt-hint {
+  font-size: 12px; color: #8a94a6; font-weight: 400;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vrfq-opt-quoted { color: #1f8a4c; }
 /* 로고 없는 벤더도 이름 시작 위치가 같도록 빈 자리를 남긴다. */
 .vsel-logo-blank {
   display: inline-block;

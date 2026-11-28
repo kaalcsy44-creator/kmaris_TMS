@@ -12,7 +12,8 @@ import { useVendorLogo } from "@/lib/vendorLogos";
 // 같이 보여줘야 하면 label 로 표시 내용을 따로 넘긴다.
 // uses = 그 벤더와의 거래 건수(서버 집계). 넘어오면 자주 거래하는 벤더를 위쪽
 // 그룹으로 올린다 — 벤더가 수십 곳이라 이름순만으로는 매번 스크롤해야 해서다.
-export type VendorSelectOption = { id: number; name: string; logo?: string; label?: ReactNode; uses?: number };
+// search = 이름 말고도 검색에 걸리게 할 글(예: Vendor RFQ 의 라인 번호·품목명).
+export type VendorSelectOption = { id: number; name: string; logo?: string; label?: ReactNode; uses?: number; search?: string };
 
 // 상단 그룹에 올릴 최대 벤더 수. 너무 길면 "위쪽 = 자주 쓰는 것" 이라는 이점이 사라진다.
 const FREQUENT_MAX = 8;
@@ -77,7 +78,7 @@ export default function VendorSelect({
     if (!searching) return grouped;
     const words = norm(q).split(" ").filter(Boolean);
     return options.filter((o) => {
-      const hay = norm(o.name);
+      const hay = norm(`${o.name} ${o.search ?? ""}`);
       return words.every((w) => hay.includes(w));
     });
   }, [searching, q, grouped, options]);

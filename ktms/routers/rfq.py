@@ -1,6 +1,7 @@
 """K-Maris TMS — rfq routes (split from admin_api.py; behavior unchanged)."""
 from __future__ import annotations
 import os
+import re
 
 from _core import (
     RfqItemIn,
@@ -209,6 +210,35 @@ def next_rfq_no_endpoint():
         s.close()
 
 
+def _vrfq_lines_hint(items) -> dict:
+    """Vendor RFQ 가 물은 품목 요약 — 라인 범위("L01–L14, L32"), 줄 수, 첫 품목명."""
+    rows = [it for it in (items or []) if isinstance(it, dict)
+            and (it.get("row_kind") or "item") == "item"
+            and (str(it.get("description") or "").strip() or str(it.get("part_no") or "").strip())]
+    nums, other = [], []
+    for it in rows:
+        lid = str(it.get("lid") or "").strip().upper()
+        m = re.fullmatch(r"L(\d+)", lid)
+        if m:
+            nums.append((int(m.group(1)), len(m.group(1))))
+        elif lid:
+            other.append(lid)
+    parts: list[str] = []
+    seq = sorted(set(nums))
+    i = 0
+    while i < len(seq):
+        j = i
+        while j + 1 < len(seq) and seq[j + 1][0] == seq[j][0] + 1:
+            j += 1
+        a_, b_ = seq[i], seq[j]
+        fmt = lambda x: f"L{str(x[0]).zfill(x[1])}"
+        parts.append(fmt(a_) if i == j else f"{fmt(a_)}–{fmt(b_)}")
+        i = j + 1
+    parts += other
+    first = next((str(it.get("description") or it.get("part_no") or "").strip() for it in rows), "")
+    return {"lines": ", ".join(parts), "n_items": len(rows), "first_item": first[:60]}
+
+
 @app.get("/api/admin/rfq/{rfq_id}", dependencies=[Depends(require_token)])
 def rfq_detail(rfq_id: int):
     """RFQ 1건 상세 — 품목, 12단계 진행, 연결 문서(Vendor RFQ/Quote/Quotation)."""
@@ -228,11 +258,22 @@ def rfq_detail(rfq_id: int):
         vrfqs = (s.query(VendorRFQ).filter_by(rfq_id=r.id)
                  .order_by(VendorRFQ.id.desc()).all())
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
+        # 같은 벤더에 여러 번 물은 딜(품목을 나눠 보내거나 다시 물은 경우)은 고르는 목록에
+        # 같은 이름이 줄줄이 선다 — 보낸 날짜·물은 라인·첫 품목·견적 등록 여부를 실어
+        # 어느 RFQ 인지 가려 보게 한다(같은 날 두 번 보낸 일도 있어 날짜만으로는 모자란다).
+        quoted_n: dict[int, int] = {}
+        if vrfqs:
+            for (vid,) in (s.query(VendorQuote.vendor_rfq_id)
+                           .filter(VendorQuote.vendor_rfq_id.in_([v.id for v in vrfqs])).all()):
+                quoted_n[vid] = quoted_n.get(vid, 0) + 1
         vrfq_view = [{
             "id": v.id,
             "vendor": vendor_names.get(v.vendor_id, "—"),
             "at": _fmt_received(_vrfq_sent_iso(v)),
             "round": round_of(r, _vrfq_sent_iso(v)),
+            "sent_at": _vrfq_sent_iso(v) or "",
+            **_vrfq_lines_hint(v.items),
+            "quotes": quoted_n.get(v.id, 0),
         } for v in vrfqs]
 
         vrfq_ids = [v.id for v in vrfqs]
