@@ -22,6 +22,7 @@ import { fetchFxRate, fetchLineBoard, saveLineAwards, saveLineMode, type PrintBo
 import type { BoardLine, LineAlt, LineBoard as LineBoardData, LineCell } from "@/lib/types";
 import VendorName from "@/components/common/VendorName";
 import PrintListButton from "@/components/common/PrintListModal";
+import { compactLids } from "@/lib/lineIds";
 
 export type LineBoardMode = "coverage" | "award";
 
@@ -46,27 +47,6 @@ const CELL_TITLE: Record<LineCell["state"], string> = {
 /** 비교 통화 선택지 — 견적에 실제로 나온 통화가 여기에 없으면 목록 끝에 붙는다. */
 const CMP_CHOICES = ["USD", "KRW", "EUR", "JPY", "CNY", "SGD", "GBP"];
 const CMP_KEY = "lb-cmp-cur";
-/** 라인 ID 묶음을 짧게 — ["L01","L02","L03","L32"] → "L01–L03, L32". */
-function compactLids(lids: string[]): string {
-  const nums: { n: number; w: number }[] = [];
-  const other: string[] = [];
-  for (const id of lids) {
-    const m = /^L(\d+)$/i.exec(id.trim());
-    if (m) nums.push({ n: Number(m[1]), w: m[1].length });
-    else if (id.trim()) other.push(id.trim());
-  }
-  nums.sort((a, b) => a.n - b.n);
-  const fmt = (x: { n: number; w: number }) => `L${String(x.n).padStart(x.w, "0")}`;
-  const parts: string[] = [];
-  for (let i = 0; i < nums.length; ) {
-    let j = i;
-    while (j + 1 < nums.length && nums[j + 1].n === nums[j].n + 1) j++;
-    parts.push(i === j ? fmt(nums[i]) : `${fmt(nums[i])}–${fmt(nums[j])}`);
-    i = j + 1;
-  }
-  return [...parts, ...other].join(", ");
-}
-
 /** 숨긴 공급사 열 — 딜마다 따로 기억한다(같은 딜을 다시 열어도 고른 비교 그대로). */
 const HIDE_KEY = (rfqId: number) => `lb-hidden-vendors.${rfqId}`;
 /** 소수 없이 읽는 통화 — 환산값을 원 단위까지만 보인다. */

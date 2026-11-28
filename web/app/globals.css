@@ -20351,6 +20351,11 @@ tr.alt-off td.seq .alt-pick { color: #b25f00; }
 .vqm-table th, .vqm-table td { white-space: nowrap; }
 .vqm-table .vqm-fit { width: 1%; }
 .vqm-table .vqm-vendor { width: auto; min-width: 180px; }
+/* 견적이 값을 준 라인("L18–L22") — 흩어진 라인은 길어지니 폭을 묶고 넘치면 …(전체는 title). */
+.vqm-table .vqm-lines {
+  width: 1%; max-width: 170px; overflow: hidden; text-overflow: ellipsis;
+  font-family: var(--mono); font-size: 12px; color: #45526a;
+}
 .vqm-cur { margin-left: 6px; font-size: 11.5px; color: #8a94a6; display: inline-block; min-width: 26px; text-align: left; }
 .vqm-empty { text-align: center; color: #8a94a6; padding: 18px 0; }
 .vqm-bad { background: #fff5f5; }

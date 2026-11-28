@@ -21,6 +21,7 @@ import Modal from "@/components/common/Modal";
 import VendorName from "@/components/common/VendorName";
 import { hasSource } from "@/lib/quoteMerge";
 import { countedItems } from "@/lib/quoteOptions";
+import { compactLids } from "@/lib/lineIds";
 import { canConvert, type Fx } from "@/components/common/itemTable";
 import type { CostSource, SyncChange } from "@/lib/quoteMerge";
 import type { CustomerQuoteItem, VendorQuoteForImport } from "@/lib/types";
@@ -98,6 +99,8 @@ export default function VendorQuoteMergeModal({
                 <th className="vqm-fit">Received</th>
                 <th className="vqm-vendor">Vendor</th>
                 <th className="vqm-fit">Quote No.</th>
+                {/* 같은 공급사가 여러 장 보낸 딜에서 어느 견적인지 가리는 열 — 견적이 값을 준 라인. */}
+                <th className="vqm-lines">Lines</th>
                 <th className="vqm-fit num">Items</th>
                 <th className="vqm-fit num">Total</th>
                 <th className="vqm-fit">In this quotation</th>
@@ -105,7 +108,7 @@ export default function VendorQuoteMergeModal({
             </thead>
             <tbody>
               {quotes.length === 0 ? (
-                <tr><td colSpan={7} className="vqm-empty">No vendor quote has been received for this deal yet.</td></tr>
+                <tr><td colSpan={8} className="vqm-empty">No vendor quote has been received for this deal yet.</td></tr>
               ) : quotes.map((q) => {
                 const loaded = hasSource(items, q.id);
                 return (
@@ -121,6 +124,13 @@ export default function VendorQuoteMergeModal({
                     <td className="vqm-fit">{q.received_date || "—"}</td>
                     <td className="vqm-vendor"><VendorName name={q.vendor} /></td>
                     <td className="vqm-fit">{q.vendor_quote_no || "—"}</td>
+                    <td className="vqm-lines">
+                      {(() => {
+                        const ls = compactLids(q.items.filter((it) => String(it.row_kind || "") !== "option")
+                          .flatMap((it) => (it.lids?.length ? it.lids : [it.lid])));
+                        return ls ? <span title={ls}>{ls}</span> : <span className="muted">—</span>;
+                      })()}
+                    </td>
                     <td className="vqm-fit num">{q.items.length}</td>
                     <td className="vqm-fit num">
                       {(() => { const t = quoteTotal(q.items); return t ? fmtTotal(t, q.currency) : "—"; })()}
