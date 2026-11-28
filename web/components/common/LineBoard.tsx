@@ -679,7 +679,12 @@ export default function LineBoard({
               <div className="lb-vpick-menu" role="menu"
                    style={{ top: pickVOpen.top, right: pickVOpen.right, maxHeight: `calc(100vh - ${pickVOpen.top + 16}px)` }}>
                 <div className="lb-vpick-quick">
-                  <button type="button" className="link-btn" onClick={() => saveHidden(new Set())}>Show all</button>
+                  {/* 전체 선택 · 전체 해제 — 해제해 두고 견줄 곳만 다시 켜는 쪽이 빠를 때가 많다. */}
+                  <button type="button" className="link-btn" onClick={() => saveHidden(new Set())}>Select all</button>
+                  <button type="button" className="link-btn"
+                          onClick={() => saveHidden(new Set(allVendors.map((v) => v.key)))}>
+                    Clear all
+                  </button>
                   <button type="button" className="link-btn"
                           onClick={() => saveHidden(new Set(allVendors.filter((v) => !v.quotes.length || v.declined).map((v) => v.key)))}>
                     Quoted only
