@@ -46,6 +46,27 @@ const CELL_TITLE: Record<LineCell["state"], string> = {
 /** 비교 통화 선택지 — 견적에 실제로 나온 통화가 여기에 없으면 목록 끝에 붙는다. */
 const CMP_CHOICES = ["USD", "KRW", "EUR", "JPY", "CNY", "SGD", "GBP"];
 const CMP_KEY = "lb-cmp-cur";
+/** 라인 ID 묶음을 짧게 — ["L01","L02","L03","L32"] → "L01–L03, L32". */
+function compactLids(lids: string[]): string {
+  const nums: { n: number; w: number }[] = [];
+  const other: string[] = [];
+  for (const id of lids) {
+    const m = /^L(\d+)$/i.exec(id.trim());
+    if (m) nums.push({ n: Number(m[1]), w: m[1].length });
+    else if (id.trim()) other.push(id.trim());
+  }
+  nums.sort((a, b) => a.n - b.n);
+  const fmt = (x: { n: number; w: number }) => `L${String(x.n).padStart(x.w, "0")}`;
+  const parts: string[] = [];
+  for (let i = 0; i < nums.length; ) {
+    let j = i;
+    while (j + 1 < nums.length && nums[j + 1].n === nums[j].n + 1) j++;
+    parts.push(i === j ? fmt(nums[i]) : `${fmt(nums[i])}–${fmt(nums[j])}`);
+    i = j + 1;
+  }
+  return [...parts, ...other].join(", ");
+}
+
 /** 숨긴 공급사 열 — 딜마다 따로 기억한다(같은 딜을 다시 열어도 고른 비교 그대로). */
 const HIDE_KEY = (rfqId: number) => `lb-hidden-vendors.${rfqId}`;
 /** 소수 없이 읽는 통화 — 환산값을 원 단위까지만 보인다. */
@@ -172,6 +193,19 @@ export default function LineBoard({
   const vendors = useMemo(() => allVendors.filter((v) => !hiddenV.has(v.key)), [allVendors, hiddenV]);
   // 창은 화면 기준(fixed)으로 띄운다 — 보드(.lb)가 overflow:hidden 이라 줄이 적은 표에서는
   // 그 안에 띄운 목록이 잘린다. 열 때 단추 자리를 재서 그 아래 오른쪽 끝에 맞춘다.
+  // 공급사 열의 꼬리표 — RFQ 번호 대신 "보낸 날짜 · 물은 라인". 같은 공급사에 여러 번 물은 딜에서
+  // 어느 열이 어느 RFQ 인지 가려 주는 것은 번호가 아니라 언제 무엇을 물었나다.
+  // 같은 공급사에 같은 날 두 번 보냈으면 시각까지 붙인다.
+  const vendorHint = (v: LineBoardData["vendors"][number]): string => {
+    const iso = v.sent_at || "";
+    const day = iso.length >= 10 ? `${iso.slice(2, 4)}.${iso.slice(5, 7)}.${iso.slice(8, 10)}` : "";
+    const twin = allVendors.some((x) => x.vendor_id === v.vendor_id && x.vrfq_id !== v.vrfq_id
+      && (x.sent_at || "").slice(0, 10) === iso.slice(0, 10));
+    const when = day && twin && iso.length >= 16 ? `${day} ${iso.slice(11, 16)}` : day;
+    const cs = data?.cells ?? {};
+    const lids = lines.filter((l) => cs[l.lid]?.[v.key]).map((l) => l.lid);
+    return [when, compactLids(lids)].filter(Boolean).join(" · ");
+  };
   const [pickVOpen, setPickVOpen] = useState<{ top: number; right: number } | null>(null);
   const pickVRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -588,7 +622,7 @@ export default function LineBoard({
         { label: "Description", width: 16 },
         { label: "Qty", width: 4, align: "right" },
         ...vendors.flatMap((v) => Array.from({ length: spanOf(v.key) }, (_, i) => ({
-          label: `${v.vendor}${spanOf(v.key) > 1 ? ` (${i + 1})` : ""}\n${v.kmaris_rfq_no}`,
+          label: `${v.vendor}${spanOf(v.key) > 1 ? ` (${i + 1})` : ""}\n${vendorHint(v)}`,
           width: 11,
           align: "right" as const,
         }))),
@@ -658,7 +692,7 @@ export default function LineBoard({
                     <span className="lb-vpick-state">
                       {v.declined ? "no quote" : v.quotes.length ? "quoted" : "waiting"}
                     </span>
-                    <span className="lb-vpick-no">{v.kmaris_rfq_no}</span>
+                    <span className="lb-vpick-no">{vendorHint(v)}</span>
                   </label>
                 ))}
               </div>
@@ -736,7 +770,7 @@ export default function LineBoard({
                           title={`Hide ${v.vendor} — bring it back from the Vendors button`} aria-label={`Hide ${v.vendor}`}>
                     ✕
                   </button>
-                  <span className="lb-v-no">{v.kmaris_rfq_no}</span>
+                  <span className="lb-v-no" title={`Sent ${(v.sent_at || "").replace("T", " ")} — lines asked`}>{vendorHint(v)}</span>
                   {v.currency_split ? (
                     <span className="lb-v-cur" title={`This vendor sent separate quotes in different currencies — this column is the ${v.currency_split} quote (${v.quotes.map((q) => q.vendor_quote_no).filter(Boolean).join(", ") || "no ref."})`}>
                       {v.currency_split} quote

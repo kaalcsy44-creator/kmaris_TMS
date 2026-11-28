@@ -20202,6 +20202,10 @@ tr.alt-off td.seq .alt-pick { color: #b25f00; }
   font-weight: 400;
   color: var(--muted);
   font-family: var(--mono);
+  /* "26.11.09 · L01–L14, L32…" — 라인이 흩어진 RFQ 는 길어지므로 열을 벌리지 않고 접는다. */
+  white-space: normal;
+  max-width: 190px;
+  margin: 0 auto;
 }
 .lb-table tbody tr:hover td { background: var(--hover); }
 /* 아직 아무 데도 안 물어본 줄 — 표에서 바로 눈에 걸리게 왼쪽에 표시를 세운다. */
