@@ -1650,8 +1650,11 @@ table.mini.wide.ms-table td.ms-created:not(.ms-actcol) {
   min-width: 0;
   white-space: nowrap;
 }
-.ms-created-at { font-variant-numeric: tabular-nums; color: #45526a; }
-.ms-created-by { display: block; font-size: 11.5px; color: #8a94a6; }
+/* 등록 시각·계정은 늘 보통 굵기 — 회사 줄(굵게 그리는 줄)이나 회사 창 안에서도. */
+.ms-created-at { font-variant-numeric: tabular-nums; color: #45526a; font-weight: 400; }
+.ms-created-by { display: block; font-size: 11.5px; color: #8a94a6; font-weight: 400; }
+.ms-created-by-inline { font-weight: 400; }
+td.ms-created, td.ms-created *, td.co-created, td.co-created * { font-weight: 400 !important; }
 .co-contacts td.co-created { white-space: nowrap; }
 /* Customer·Vendor 목록의 거래관계 배지 — 왼쪽은 건수(고객=문의, 벤더=물어본 프로젝트),
    오른쪽은 그 결과(고객=오더로 간 수, 벤더=견적이 돌아온 수). 두 목록이 같은 모양을 쓴다. */

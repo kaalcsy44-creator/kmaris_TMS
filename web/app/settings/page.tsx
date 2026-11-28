@@ -1965,7 +1965,7 @@ function CreatedLine({ row }: { row?: Created }) {
     <span>
       <span className="ms-created-at">{when}</span>
       {" · "}
-      {row?.created_by ? <>by <b>{row.created_by}</b></> : <span className="dash">account not recorded</span>}
+      {row?.created_by ? <span className="ms-created-by-inline">by {row.created_by}</span> : <span className="dash">account not recorded</span>}
     </span>
   );
 }
