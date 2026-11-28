@@ -1957,6 +1957,19 @@ function CreatedCell({ row, rows }: { row?: Created; rows?: Created[] }) {
   );
 }
 
+/** 회사 창의 읽기 줄 — "2026-11-28 16:16 · by SAM_CHO" 한 줄. */
+function CreatedLine({ row }: { row?: Created }) {
+  const when = createdText(row?.created_at);
+  if (!when) return <span className="dash">—</span>;
+  return (
+    <span>
+      <span className="ms-created-at">{when}</span>
+      {" · "}
+      {row?.created_by ? <>by <b>{row.created_by}</b></> : <span className="dash">account not recorded</span>}
+    </span>
+  );
+}
+
 /** 머리 칸 규칙 — 등록일로 정렬·기간 필터(text 가 "YYYY-MM-DD…" 로 시작해야 한다). */
 function createdHeadCol<T extends Created>(): HeadCol<T> {
   return { key: "created_at", text: (r) => createdText(r.created_at), filter: "date" };
@@ -2172,6 +2185,9 @@ function CompanyInfoModal<
     payment_terms?: string;
     // 반송된 주소들(고객사 전용). 거래선 표에는 이 칸이 없어 선택 항목으로 둔다.
     bad_emails?: string[];
+    // 처음 등록한 시각·계정(서버 자동 기록, 읽기전용).
+    created_at?: string;
+    created_by?: string;
   }
 >({
   rows,
@@ -2606,6 +2622,9 @@ function CompanyInfoModal<
           : []),
       ...(areas ?? []).map((a) => [a.label, vals[String(a.key)]
         ? <span className="co-para">{vals[String(a.key)]}</span> : null] as [string, React.ReactNode]),
+      // 회사가 처음 명부에 오른 때와 그 계정 — 담당자 줄 가운데 가장 먼저 등록된 것.
+      // 담당자마다의 등록은 아래 명단의 Registered 칸이 든다.
+      ["Registered", <CreatedLine key="reg" row={firstCreated(contacts)} />],
     ];
     // 폼 팝업 기본폭(560px)보다 넓게 — 아래 담당자 표가 이름·담당분야·메일·연락처·
     // 지역 다섯 칸이라 기본폭에서는 칸마다 두세 줄로 접힌다.
@@ -2655,7 +2674,7 @@ function CompanyInfoModal<
             <table className="mini">
               <thead>
                 <tr>
-                  <th>Name</th><th>In charge of</th><th>Email</th><th>Phone</th><th>Region</th>
+                  <th>Name</th><th>In charge of</th><th>Email</th><th>Phone</th><th>Region</th><th>Registered</th>
                   {onSaveContact || onDeleteContact ? <th className="co-edit-col" /> : null}
                 </tr>
               </thead>
@@ -2692,12 +2711,13 @@ function CompanyInfoModal<
                                             values={draft.regions}
                                             onChange={(regions) => set({ regions })} />
                         </td>
+                        <td className="co-created"><CreatedCell row={r} /></td>
                         {/* 손잡이는 아래 한 줄로 내린다 — 마지막 칸에 밀어 넣으면
                             칸이 좁아 단추가 세로로 쌓인다. */}
                         <td className="co-edit-col" />
                       </tr>
                       <tr key={`${r.id}-tools`} className="co-row-tools">
-                        <td colSpan={6}>
+                        <td colSpan={7}>
                           <div className="co-tools">
                             {/* 저장·취소는 오른쪽 끝 — 창 아래 Close·Edit 와 같은 자리 감각. */}
                             <span className="co-tools-gap" />
@@ -2733,6 +2753,7 @@ function CompanyInfoModal<
                           : <span className="dash">—</span>}
                       </td>
                       <td>{regions.join(" · ") || <span className="dash">—</span>}</td>
+                      <td className="co-created"><CreatedCell row={r} /></td>
                       {onSaveContact || onDeleteContact ? (
                         <td className="co-edit-col">
                           {onSaveContact && canEditCompany ? (
@@ -2789,12 +2810,13 @@ function CompanyInfoModal<
                                         values={draft.regions}
                                         onChange={(regions) => setDraft({ ...draft, regions })} />
                     </td>
+                    <td className="co-created"><span className="dash">—</span></td>
                     <td className="co-edit-col" />
                   </tr>
                 ) : null}
                 {addingNew && draft ? (
                   <tr className="co-row-tools co-row-tools--new">
-                    <td colSpan={6}>
+                    <td colSpan={7}>
                       <div className="co-tools">
                         {/* 명함 스캔은 남긴다 — 새 사람을 만드는 가장 빠른 길이고, 창을
                             없앴다고 그 길까지 없앨 이유는 없다. 회사는 이미 정해져 있으므로
@@ -2818,7 +2840,7 @@ function CompanyInfoModal<
                 ) : null}
                 {contacts.length === 0 && !addingNew ? (
                   <tr>
-                    <td colSpan={6} className="co-contacts-none">
+                    <td colSpan={7} className="co-contacts-none">
                       No contact left — this company is gone from the list.
                     </td>
                   </tr>

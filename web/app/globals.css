@@ -1652,6 +1652,7 @@ table.mini.wide.ms-table td.ms-created:not(.ms-actcol) {
 }
 .ms-created-at { font-variant-numeric: tabular-nums; color: #45526a; }
 .ms-created-by { display: block; font-size: 11.5px; color: #8a94a6; }
+.co-contacts td.co-created { white-space: nowrap; }
 /* Customer·Vendor 목록의 거래관계 배지 — 왼쪽은 건수(고객=문의, 벤더=물어본 프로젝트),
    오른쪽은 그 결과(고객=오더로 간 수, 벤더=견적이 돌아온 수). 두 목록이 같은 모양을 쓴다. */
 .pt-deal { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
