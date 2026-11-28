@@ -20171,6 +20171,31 @@ tr.alt-off td.seq .alt-pick { color: #b25f00; }
   border-left: 1px solid var(--line);
 }
 .lb-table th.lb-v.out { opacity: 0.6; }
+/* 공급사 열 숨기기 — 머리칸 ✕(마우스를 올리면 진해진다) + 도구줄 Vendors 고르기 창. */
+.lb-v-hide {
+  border: 0; background: none; cursor: pointer; padding: 0 3px; margin-left: 4px;
+  font-size: 11px; line-height: 1; color: #9aa4b5; opacity: 0.35; vertical-align: middle;
+}
+.lb-table th.lb-v:hover .lb-v-hide { opacity: 1; }
+.lb-v-hide:hover { color: #c0392b; }
+.lb-vpick { position: relative; }
+.lb-vpick > .btn.on { border-color: var(--blue); color: var(--blue); }
+.lb-vpick-menu {
+  position: fixed; z-index: 1300;
+  min-width: 320px; overflow: auto;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(20, 30, 50, 0.16); padding: 6px 0;
+}
+.lb-vpick-quick { display: flex; gap: 14px; padding: 4px 12px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.lb-vpick-row {
+  display: grid; grid-template-columns: auto 1fr auto; column-gap: 8px; align-items: center;
+  padding: 5px 12px; cursor: pointer; font-size: 13px;
+}
+.lb-vpick-row:hover { background: var(--hover); }
+.lb-vpick-row.out .lb-vpick-name { color: var(--muted); text-decoration: line-through; }
+.lb-vpick-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-vpick-state { font-size: 11.5px; color: var(--muted); }
+.lb-vpick-no { grid-column: 2 / 4; font-size: 10.5px; color: var(--muted); font-family: var(--mono); }
 .lb-v-no {
   display: block;
   font-size: 10.5px;

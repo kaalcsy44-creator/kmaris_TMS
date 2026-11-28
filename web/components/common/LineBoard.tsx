@@ -46,6 +46,8 @@ const CELL_TITLE: Record<LineCell["state"], string> = {
 /** 비교 통화 선택지 — 견적에 실제로 나온 통화가 여기에 없으면 목록 끝에 붙는다. */
 const CMP_CHOICES = ["USD", "KRW", "EUR", "JPY", "CNY", "SGD", "GBP"];
 const CMP_KEY = "lb-cmp-cur";
+/** 숨긴 공급사 열 — 딜마다 따로 기억한다(같은 딜을 다시 열어도 고른 비교 그대로). */
+const HIDE_KEY = (rfqId: number) => `lb-hidden-vendors.${rfqId}`;
 /** 소수 없이 읽는 통화 — 환산값을 원 단위까지만 보인다. */
 const WHOLE = new Set(["KRW", "JPY"]);
 
@@ -145,7 +147,41 @@ export default function LineBoard({
   useEffect(() => { load(); }, [load, reloadKey]);
 
   const lines = data?.lines ?? [];
-  const vendors = data?.vendors ?? [];
+  const allVendors = data?.vendors ?? [];
+  // 공급사 열 보이기·숨기기 — 견줄 곳만 남겨 한 화면에 들어오게 한다. 숨긴 열은 표·합계·
+  // 최저가(★)·Take lowest·인쇄에서 모두 빠진다(보이는 것끼리 비교한다는 뜻이라서).
+  const [hiddenV, setHiddenV] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(HIDE_KEY(rfqId));
+      setHiddenV(new Set(raw ? (JSON.parse(raw) as string[]) : []));
+    } catch { setHiddenV(new Set()); }
+  }, [rfqId]);
+  const saveHidden = (next: Set<string>) => {
+    setHiddenV(next);
+    try {
+      if (next.size) localStorage.setItem(HIDE_KEY(rfqId), JSON.stringify([...next]));
+      else localStorage.removeItem(HIDE_KEY(rfqId));
+    } catch { /* 저장소 없음 */ }
+  };
+  const toggleVendor = (key: string) => {
+    const next = new Set(hiddenV);
+    if (!next.delete(key)) next.add(key);
+    saveHidden(next);
+  };
+  const vendors = useMemo(() => allVendors.filter((v) => !hiddenV.has(v.key)), [allVendors, hiddenV]);
+  // 창은 화면 기준(fixed)으로 띄운다 — 보드(.lb)가 overflow:hidden 이라 줄이 적은 표에서는
+  // 그 안에 띄운 목록이 잘린다. 열 때 단추 자리를 재서 그 아래 오른쪽 끝에 맞춘다.
+  const [pickVOpen, setPickVOpen] = useState<{ top: number; right: number } | null>(null);
+  const pickVRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!pickVOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (pickVRef.current && !pickVRef.current.contains(e.target as Node)) setPickVOpen(null);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [pickVOpen]);
   const cells = data?.cells ?? {};
 
   // 옛 딜은 품목 줄에 이름이 없다 — 보기는 되지만 채택은 저장할 곳이 없다.
@@ -369,12 +405,12 @@ export default function LineBoard({
         const b = cmpBest.get(l.lid);
         const id = b ? cells[l.lid]?.[b.vrfq]?.vendor_quote_id : undefined;
         if (b && id) out.push({ lid: l.lid, vendor_quote_id: id, alt: b.alt });
-      } else if (l.best?.vendor_quote_id) {
+      } else if (l.best?.vendor_quote_id && !hiddenV.has(l.best.col ?? String(l.best.vrfq_id))) {
         out.push({ lid: l.lid, vendor_quote_id: l.best.vendor_quote_id, alt: l.best.alt_low ?? null });
       }
     }
     return out;
-  }, [lines, cells, cmpCur, cmpBest]);
+  }, [lines, cells, cmpCur, cmpBest, hiddenV]);
   const bestCount = bestTodo.length;
   const isBestCell = (l: BoardLine, vrfqId: string, alt: number | null = null) => {
     const b = cmpCur ? cmpBest.get(l.lid) : null;
@@ -595,6 +631,39 @@ export default function LineBoard({
           <span className="lb-total">of {data.lines_total} lines</span>
         </div>
         <div className="lb-actions">
+          <div className="lb-vpick" ref={pickVRef}>
+            <button type="button" className={"btn sm" + (hiddenV.size ? " on" : "")}
+                    onClick={(e) => {
+                if (pickVOpen) { setPickVOpen(null); return; }
+                const r = e.currentTarget.getBoundingClientRect();
+                setPickVOpen({ top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) });
+              }}
+                    title="Choose which vendor columns to show — hide the ones you are not comparing">
+              Vendors {vendors.length}/{allVendors.length} ▾
+            </button>
+            {pickVOpen ? (
+              <div className="lb-vpick-menu" role="menu"
+                   style={{ top: pickVOpen.top, right: pickVOpen.right, maxHeight: `calc(100vh - ${pickVOpen.top + 16}px)` }}>
+                <div className="lb-vpick-quick">
+                  <button type="button" className="link-btn" onClick={() => saveHidden(new Set())}>Show all</button>
+                  <button type="button" className="link-btn"
+                          onClick={() => saveHidden(new Set(allVendors.filter((v) => !v.quotes.length || v.declined).map((v) => v.key)))}>
+                    Quoted only
+                  </button>
+                </div>
+                {allVendors.map((v) => (
+                  <label key={v.key} className={"lb-vpick-row" + (v.declined ? " out" : "")}>
+                    <input type="checkbox" checked={!hiddenV.has(v.key)} onChange={() => toggleVendor(v.key)} />
+                    <span className="lb-vpick-name">{v.vendor}{v.currency_split ? ` (${v.currency_split})` : ""}</span>
+                    <span className="lb-vpick-state">
+                      {v.declined ? "no quote" : v.quotes.length ? "quoted" : "waiting"}
+                    </span>
+                    <span className="lb-vpick-no">{v.kmaris_rfq_no}</span>
+                  </label>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <label className="lb-cmp" title="Show every quote converted to one currency as well — the quoted currency stays as it is">
             Compare in
             <select value={cmpCur} onChange={(e) => chooseCmp(e.target.value)}>
@@ -663,6 +732,10 @@ export default function LineBoard({
               {vendors.map((v) => (
                 <th key={v.key} colSpan={spanOf(v.key)} className={"lb-v" + (v.declined ? " out" : "") + (v.old ? " old" : "")}>
                   <VendorName entries={[{ name: v.vendor, state: v.declined ? "declined" : v.quotes.length ? "quoted" : "plain" }]} />
+                  <button type="button" className="lb-v-hide" onClick={() => toggleVendor(v.key)}
+                          title={`Hide ${v.vendor} — bring it back from the Vendors button`} aria-label={`Hide ${v.vendor}`}>
+                    ✕
+                  </button>
                   <span className="lb-v-no">{v.kmaris_rfq_no}</span>
                   {v.currency_split ? (
                     <span className="lb-v-cur" title={`This vendor sent separate quotes in different currencies — this column is the ${v.currency_split} quote (${v.quotes.map((q) => q.vendor_quote_no).filter(Boolean).join(", ") || "no ref."})`}>
