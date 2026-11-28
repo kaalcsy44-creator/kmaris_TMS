@@ -1926,12 +1926,14 @@ function siteLabel(site: string): string {
 
 /** 목록의 홈페이지 칸. 줄을 누르면 회사 정보 창이 열리는 표들이라(고객·거래선·제조사)
  *  링크를 누른 것이 줄을 누른 것으로 번지지 않게 막는다 — 창과 새 탭이 함께 열린다. */
-/** 처음 등록한 시각(서버 UTC ISO) → 이 PC 시각 "YYYY-MM-DD HH:mm". 값이 없으면 "". */
-function createdText(iso?: string): string {
+/** 처음 등록한 시각(서버 UTC ISO) → 이 PC 시각. 화면·인쇄는 짧게 "yy.mm.dd",
+ *  full 은 "YYYY-MM-DD HH:mm"(툴팁 · 머리칸 기간 필터가 이 꼴을 읽는다). 값이 없으면 "". */
+function createdText(iso?: string, full = false): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const p = (n: number) => String(n).padStart(2, "0");
+  if (!full) return `${p(d.getFullYear() % 100)}.${p(d.getMonth() + 1)}.${p(d.getDate())}`;
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
@@ -1947,8 +1949,8 @@ function CreatedCell({ row, rows }: { row?: Created; rows?: Created[] }) {
   const when = createdText(row?.created_at);
   if (!when) return <span className="dash">—</span>;
   const tip = (rows && rows.length > 1)
-    ? rows.map((r) => `${r.contact || "(company)"} — ${createdText(r.created_at) || "?"} · ${r.created_by || "unknown"}`).join("\n")
-    : `Registered ${when}${row?.created_by ? ` by ${row.created_by}` : ""}`;
+    ? rows.map((r) => `${r.contact || "(company)"} — ${createdText(r.created_at, true) || "?"} · ${r.created_by || "unknown"}`).join("\n")
+    : `Registered ${createdText(row?.created_at, true)}${row?.created_by ? ` by ${row.created_by}` : ""}`;
   return (
     <span title={tip}>
       <span className="ms-created-at">{when}</span>
@@ -1957,7 +1959,7 @@ function CreatedCell({ row, rows }: { row?: Created; rows?: Created[] }) {
   );
 }
 
-/** 회사 창의 읽기 줄 — "2026-11-28 16:16 · by SAM_CHO" 한 줄. */
+/** 회사 창의 읽기 줄 — "26.11.28 · by SAM_CHO" 한 줄. */
 function CreatedLine({ row }: { row?: Created }) {
   const when = createdText(row?.created_at);
   if (!when) return <span className="dash">—</span>;
@@ -1972,7 +1974,7 @@ function CreatedLine({ row }: { row?: Created }) {
 
 /** 머리 칸 규칙 — 등록일로 정렬·기간 필터(text 가 "YYYY-MM-DD…" 로 시작해야 한다). */
 function createdHeadCol<T extends Created>(): HeadCol<T> {
-  return { key: "created_at", text: (r) => createdText(r.created_at), filter: "date" };
+  return { key: "created_at", text: (r) => createdText(r.created_at, true), filter: "date" };
 }
 
 function SiteCell({ value }: { value: string }) {
