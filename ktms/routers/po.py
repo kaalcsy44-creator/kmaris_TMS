@@ -51,6 +51,7 @@ from _core import (
     _project_no_for_order,
     _project_no_map,
     _quotation_total,
+    _own_uid,
     _rfq_for_order,
     _rfq_no_disp,
     _status_label,
@@ -87,8 +88,9 @@ from services.item_ledger import apply_line_categories
 
 
 @app.get("/api/admin/po-overview", dependencies=[Depends(require_token)])
-def po_overview():
+def po_overview(user: dict = Depends(get_current_user)):
     """고객 P/O · Vendor P/O 현황 — RFQ → Order → PurchaseOrder 체인."""
+    own = _own_uid(user)
     s = get_session()
     try:
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
@@ -97,6 +99,8 @@ def po_overview():
 
         rows = []
         for r in s.query(RFQ).order_by(RFQ.id.desc()).all():
+            if own is not None and r.created_by != own:
+                continue  # 조회 범위 'own' — 본인 담당 딜만
             # 한 프로젝트에 고객 P/O(오더)가 여러 건이면 PO No.별로 각각 한 행씩 올린다.
             orders = _orders_for_rfq(s, r.id)
 
@@ -1031,8 +1035,9 @@ def set_tax_issued(order_id: int, body: StageCompleteBody):
 
 
 @app.get("/api/admin/vendor-po-overview", dependencies=[Depends(require_token)])
-def vendor_po_overview():
+def vendor_po_overview(user: dict = Depends(get_current_user)):
     """Vendor P/O 발신 내역 — PurchaseOrder 1건당 1행(생성·발송 포함 전체)."""
+    own = _own_uid(user)
     s = get_session()
     try:
         vendor_names = {v.id: v.name for v in s.query(Vendor).all()}
@@ -1042,6 +1047,10 @@ def vendor_po_overview():
         rows = []
         for po in s.query(PurchaseOrder).order_by(PurchaseOrder.id.desc()).all():
             o = ord_map.get(po.order_id)
+            if own is not None:
+                rr = _rfq_for_order(s, o) if o else None
+                if not rr or rr.created_by != own:
+                    continue  # 조회 범위 'own' — 본인 담당 딜만
             rows.append({
                 "id": po.id,
                 "po_no": po.po_no or "",

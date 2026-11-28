@@ -85,12 +85,14 @@ class RolePermission(Base):
       action ∈ view·create·edit·delete
     scope: 데이터 범위 "own"(본인 담당만) | "all"(전체) — 조회 범위.
     edit_scope: 편집 범위 "own"(본인이 PIC인 딜만) | "all"(남의 딜도 수정·삭제).
+    download: 파일(PDF·XLSX·첨부) 내려받기 허용 — False 면 목록·화면만 본다.
     admin 역할은 항상 전체 권한이므로 저장/적용 대상에서 제외(코드에서 우회)."""
     __tablename__ = "role_permissions"
     role       = Column(String(32), primary_key=True)
     perms      = Column(JSON, default=dict)
     scope      = Column(String(8), default="all")
     edit_scope = Column(String(8), default="own")
+    download   = Column(Boolean, default=True)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
 

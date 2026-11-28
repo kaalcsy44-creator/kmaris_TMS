@@ -701,15 +701,18 @@ function RolePermissions({
   onAddUser: (role: string) => void;
 }) {
   const [cfg, setCfg] = useState<PermissionsConfig | null>(null);
-  const [draft, setDraft] = useState<Record<string, { perms: PermGrid; scope: string; edit_scope: string }>>({});
+  const [draft, setDraft] = useState<Record<string, { perms: PermGrid; scope: string; edit_scope: string; download: boolean }>>({});
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
   function loadInto(c: PermissionsConfig) {
-    const d: Record<string, { perms: PermGrid; scope: string; edit_scope: string }> = {};
+    const d: Record<string, { perms: PermGrid; scope: string; edit_scope: string; download: boolean }> = {};
     c.roles.filter((r) => r.editable).forEach((r) => {
-      d[r.role] = { perms: clonePerms(r.perms), scope: r.scope, edit_scope: r.edit_scope || "own" };
+      d[r.role] = {
+        perms: clonePerms(r.perms), scope: r.scope, edit_scope: r.edit_scope || "own",
+        download: r.download !== false,
+      };
     });
     setDraft(d);
   }
@@ -751,6 +754,13 @@ function RolePermissions({
     setMsg("");
   }
 
+  function setDownload(role: string, download: boolean) {
+    setDraft((prev) =>
+      prev[role] ? { ...prev, [role]: { ...prev[role], download } } : prev
+    );
+    setMsg("");
+  }
+
   function setEditScope(role: string, edit_scope: string) {
     setDraft((prev) =>
       prev[role] ? { ...prev, [role]: { ...prev[role], edit_scope } } : prev
@@ -768,7 +778,9 @@ function RolePermissions({
     try {
       for (const role of roleKeys) {
         const d = draft[role];
-        await updateRolePermissions({ role, perms: d.perms, scope: d.scope, edit_scope: d.edit_scope });
+        await updateRolePermissions({
+          role, perms: d.perms, scope: d.scope, edit_scope: d.edit_scope, download: d.download,
+        });
       }
       // Reset 이 방금 저장한 값으로 돌아가게 기준값도 갱신.
       setCfg({
@@ -780,6 +792,7 @@ function RolePermissions({
                 perms: clonePerms(draft[r.role].perms),
                 scope: draft[r.role].scope as RolePermRow["scope"],
                 edit_scope: draft[r.role].edit_scope as RolePermRow["edit_scope"],
+                download: draft[r.role].download,
               }
             : r
         ),
@@ -794,7 +807,7 @@ function RolePermissions({
 
   // 역할별 현재 값 — 편집 가능한 역할은 초안, admin 은 서버 값(항상 전체).
   const roleState = (row: RolePermRow) =>
-    row.editable ? draft[row.role] : { perms: row.perms, scope: row.scope, edit_scope: "all" };
+    row.editable ? draft[row.role] : { perms: row.perms, scope: row.scope, edit_scope: "all", download: true };
   const roles = cfg.roles.filter((r) => roleState(r));
   const nAct = cfg.actions.length;
 
@@ -919,6 +932,42 @@ function RolePermissions({
                             onChange={() => setEditScope(r.role, "own")}
                           />
                           Own deals (PIC) only
+                        </label>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+              {/* 파일 내려받기 — 끄면 목록·화면만 보고 PDF·XLSX·첨부는 못 받는다(서버가 막는다). */}
+              <tr className="perm-scope-row">
+                <td className="perm-mod">
+                  File download
+                  <span className="perm-mod-hint">PDF · Excel · attachments</span>
+                </td>
+                {roles.map((r) => {
+                  const st = roleState(r)!;
+                  return (
+                    <td key={r.role} colSpan={nAct} className="perm-role-start">
+                      <div className="perm-scope-opts">
+                        <label>
+                          <input
+                            type="radio"
+                            name={`dl-${r.role}`}
+                            checked={st.download}
+                            disabled={!r.editable}
+                            onChange={() => setDownload(r.role, true)}
+                          />
+                          Allowed
+                        </label>
+                        <label>
+                          <input
+                            type="radio"
+                            name={`dl-${r.role}`}
+                            checked={!st.download}
+                            disabled={!r.editable}
+                            onChange={() => setDownload(r.role, false)}
+                          />
+                          List only
                         </label>
                       </div>
                     </td>

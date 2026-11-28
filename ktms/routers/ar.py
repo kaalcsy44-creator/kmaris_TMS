@@ -26,6 +26,8 @@ from _core import (
     _first_rfq_iso,
     _project_no_for_order,
     _project_no_map,
+    _own_uid,
+    get_current_user,
     _rfq_for_order,
     app,
     date,
@@ -51,8 +53,9 @@ def _ap_progress(po_ids: list, ap_by_po: dict) -> dict:
 
 
 @app.get("/api/admin/ar-overview", dependencies=[Depends(require_token)])
-def ar_overview():
+def ar_overview(user: dict = Depends(get_current_user)):
     """미수금(AR) 현황 — 청구/수금/연체."""
+    own = _own_uid(user)
     s = get_session()
     try:
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
@@ -87,6 +90,10 @@ def ar_overview():
         overdue_usd = 0.0
         for r in s.query(ARRecord).order_by(ARRecord.id.desc()).all():
             o = ord_map.get(r.order_id)
+            if own is not None:
+                rr = _rfq_for_order(s, o) if o else None
+                if not rr or rr.created_by != own:
+                    continue  # 조회 범위 'own' — 본인 담당 딜만(KPI 합계도 같은 범위)
             cust = cust_names.get(o.customer_id, "—") if o else "—"
             # 받을 돈 = 청구액 − 수금액 − 크레딧(클레임 상계).
             outstanding = _ar_outstanding(r)

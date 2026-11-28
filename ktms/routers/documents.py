@@ -65,6 +65,8 @@ from _core import (
     _project_pi,
     _counted_rows,
     cached_aggregate,
+    _own_uid,
+    get_current_user,
     _rfq_for_order,
     _total_amount,
     _tracking_url,
@@ -128,8 +130,9 @@ def _fill_attn(s, order, sh: dict) -> dict:
 
 
 @app.get("/api/admin/documents-overview", dependencies=[Depends(require_token)])
-def documents_overview():
+def documents_overview(user: dict = Depends(get_current_user)):
     """문서 현황 — 오더별 CI/PL/SA/Tax 생성 여부와 문서번호."""
+    own = _own_uid(user)
     s = get_session()
     try:
         cust_names = {c.id: c.name for c in s.query(Customer).all()}
@@ -177,6 +180,8 @@ def documents_overview():
             ci_id = ci.id if ci else None
             # 업무타입(서비스)·서비스 단계(7·8 수동완료) 상태 — 이 고객 P/O(오더) 기준
             rfq = _rfq_for_order(s, o)
+            if own is not None and (not rfq or rfq.created_by != own):
+                continue  # 조회 범위 'own' — 본인 담당 딜만
             wt = _enum_val(rfq.work_type) if (rfq and rfq.work_type) else "부품공급"
             sd = manual_stage_dates(rfq, o)
             svc = getattr(o, "service_info", None) or {}
@@ -216,7 +221,7 @@ def documents_overview():
 
 @app.get("/api/admin/documents-registry", dependencies=[Depends(require_token)])
 @cached_aggregate()
-def documents_registry():
+def documents_registry(user: dict = Depends(get_current_user)):
     """발행 문서 대장 — PI·CI·PL 을 문서 1건 = 1행으로 (Dashboard › Documents 탭).
     견적서·고객 P/O 는 각자의 overview API 를 화면에서 그대로 합친다."""
     s = get_session()
@@ -281,6 +286,10 @@ def documents_registry():
                 "date": pl.date or "", "currency": "", "amount": None,
                 "item_count": counted(pl.items), **ctx(ci_order.get(pl.ci_id)),
             })
+        own = _own_uid(user)
+        if own is not None:  # 조회 범위 'own' — 본인 담당 딜의 문서만
+            rows = [x for x in rows
+                    if x.get("rfq_id") and getattr(rfqs.get(x["rfq_id"]), "created_by", None) == own]
         return {"rows": rows}
     finally:
         s.close()

@@ -494,6 +494,11 @@ def _default_edit_scope(role: str) -> str:
     return "all" if role == UserRole.MANAGER.value else "own"
 
 
+def _default_download(role: str) -> bool:
+    """파일 내려받기 기본값 — Viewer 는 목록만(내려받기 없음)."""
+    return role != UserRole.VIEWER.value
+
+
 # 권한표에서 편집할 수 있는 역할(admin 은 고정 전체 권한이라 제외). 표의 열 순서.
 EDITABLE_ROLES = [UserRole.MANAGER.value, UserRole.SALES.value, UserRole.VIEWER.value]
 
@@ -534,6 +539,8 @@ def _reload_perms() -> None:
                     "perms": _normalize_perms(rp.perms),
                     "scope": rp.scope or _default_scope(rp.role),
                     "edit_scope": rp.edit_scope or _default_edit_scope(rp.role),
+                    "download": (_default_download(rp.role) if rp.download is None
+                                 else bool(rp.download)),
                 }
         finally:
             s.close()
@@ -551,7 +558,8 @@ def _seed_perms() -> None:
             if not s.query(RolePermission).filter_by(role=role).first():
                 s.add(RolePermission(role=role, perms=_default_perms(role),
                                      scope=_default_scope(role),
-                                     edit_scope=_default_edit_scope(role)))
+                                     edit_scope=_default_edit_scope(role),
+                                     download=_default_download(role)))
         s.commit()
     finally:
         s.close()
@@ -575,11 +583,39 @@ def _scope_for(role: str) -> str:
     return entry["scope"] if entry else _default_scope(role)
 
 
+def _own_uid(user: dict | None) -> int | None:
+    """조회 범위가 'own' 인 비관리자면 그 사용자 id(본인 담당 딜만 보인다), 아니면 None(전체)."""
+    if not user:
+        return None
+    role = user.get("role", "")
+    if role == UserRole.ADMIN.value or _scope_for(role) != "own":
+        return None
+    return user.get("id") or 0
+
+
 def _edit_scope_for(role: str) -> str:
     if role == UserRole.ADMIN.value:
         return "all"
     entry = _PERM_CACHE.get(role)
     return entry.get("edit_scope", "own") if entry else _default_edit_scope(role)
+
+
+def _download_for(role: str) -> bool:
+    if role == UserRole.ADMIN.value:
+        return True
+    entry = _PERM_CACHE.get(role)
+    return entry.get("download", True) if entry else _default_download(role)
+
+
+# 파일을 내려주는 경로 — 문서 PDF·XLSX, 업로드 파일(POD·운임·마케팅 자료), 경비 영수증.
+_DOWNLOAD_TAILS = ("/pdf", "/xlsx", "/file", ".pdf", ".xlsx")
+
+
+def _is_download_path(path: str) -> bool:
+    if not path.startswith("/api/admin/"):
+        return False
+    return (path.endswith(_DOWNLOAD_TAILS) or "/vendor-rfq-xlsx/" in path
+            or path.startswith("/api/admin/expenses/receipts/"))
 
 
 def _edits_any_deal(user: dict) -> bool:
@@ -792,7 +828,8 @@ async def _perm_guard(request: Request, call_next):
     settings/users·settings/permissions 는 매트릭스와 무관하게 admin 전용.
     인증(토큰 유효성)은 별도로 각 엔드포인트의 require_token 도 검사한다."""
     need = _route_perm(request.method, request.url.path)
-    if need is None:
+    dl = request.method != "OPTIONS" and _is_download_path(request.url.path)
+    if need is None and not dl:
         return await call_next(request)
     user = _user_from_auth(request.headers.get("authorization"))
     if user is None:
@@ -800,11 +837,24 @@ async def _perm_guard(request: Request, call_next):
     role = user.get("role", "")
     if role == UserRole.ADMIN.value:
         return await call_next(request)
+    # 파일 내려받기 — 역할 설정(File download)이 꺼져 있으면 목록·화면만 본다.
+    if dl and not _download_for(role):
+        return _authz_error(request, 403, "파일 다운로드 권한이 없습니다.")
+    if need is None:
+        return await call_next(request)
     module, action = need
     if module == "__admin__":
         return _authz_error(request, 403, "관리자 권한이 필요합니다.")
     if not _can(role, module, action):
         return _authz_error(request, 403, _PERM_DENY_MSG.get(action, "권한이 없습니다."))
+    # 조회 범위 게이트: 'own' 역할은 남의 딜을 주소(id)로 직접 열어도 못 본다.
+    # 목록은 각 overview 가 거르고, 여기는 상세·PDF·메일 등 딜 하나를 가리키는 경로 몫.
+    if action == "view" and module in ("rfq", "po", "documents", "ar", "mail"):
+        own = _own_uid(user)
+        if own is not None:
+            owner = _deal_owner_from_path(request.url.path)
+            if owner is not None and owner != own:
+                return _authz_error(request, 403, "본인 담당 딜만 볼 수 있습니다.")
     # 담당(PIC) 소유권 게이트: 비관리자는 본인이 담당인 딜만 편집/삭제(및 하위 등록) 가능.
     # 조회(view)는 기존 데이터 범위 그대로. 대상 딜이 없거나 PIC 미지정이면 통과.
     if (action != "view" and module in ("rfq", "po", "documents", "ar", "marketing", "mail")
@@ -4988,6 +5038,7 @@ class RolePermSave(BaseModel):
     perms: dict
     scope: str = "all"
     edit_scope: str = "own"
+    download: bool = True
 
 
 class PasswordChangeReq(BaseModel):

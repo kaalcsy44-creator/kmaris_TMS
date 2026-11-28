@@ -71,6 +71,7 @@ from _core import (
     _reload_perms,
     _scope_for,
     _edit_scope_for,
+    _download_for,
     EDITABLE_ROLES,
     _write_company_profile,
     _doc_file_response,
@@ -3184,12 +3185,12 @@ def settings_permissions(user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Admin only")
     roles = [{
         "role": UserRole.ADMIN.value, "perms": _full_perms(True),
-        "scope": "all", "edit_scope": "all", "editable": False,
+        "scope": "all", "edit_scope": "all", "download": True, "editable": False,
     }]
     for r in EDITABLE_ROLES:
         roles.append({
             "role": r, "perms": _perms_for(r), "scope": _scope_for(r),
-            "edit_scope": _edit_scope_for(r), "editable": True,
+            "edit_scope": _edit_scope_for(r), "download": _download_for(r), "editable": True,
         })
     return {
         "roles": roles,
@@ -3219,16 +3220,17 @@ def update_permissions(body: RolePermSave, user: dict = Depends(get_current_user
             rp.perms = perms
             rp.scope = scope
             rp.edit_scope = edit_scope
+            rp.download = bool(body.download)
             rp.updated_at = datetime.utcnow()
         else:
             s.add(RolePermission(role=role, perms=perms, scope=scope,
-                                 edit_scope=edit_scope))
+                                 edit_scope=edit_scope, download=bool(body.download)))
         s.commit()
     finally:
         s.close()
     _reload_perms()
     return {"ok": True, "role": role, "perms": _perms_for(role), "scope": _scope_for(role),
-            "edit_scope": _edit_scope_for(role)}
+            "edit_scope": _edit_scope_for(role), "download": _download_for(role)}
 
 
 @app.get("/api/admin/assignable-users", dependencies=[Depends(require_token)])

@@ -20,7 +20,7 @@ import {
 } from "@/lib/api";
 import { stageDateOf } from "@/lib/deal";
 import { useCachedData, invalidateCache } from "@/lib/useCachedData";
-import { can, getToken, isAdmin } from "@/lib/auth";
+import { can, getToken, isAdmin, canDownload } from "@/lib/auth";
 import type {
   PipelineRow, StatisticsData, CurrencyKey, StatCurKey,
   StatDebugData,
@@ -124,7 +124,8 @@ async function downloadPdf(url: string, fallback: string) {
   const token = getToken();
   const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   if (!res.ok) {
-    alert(`Download failed (${res.status})`);
+    const e = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    alert(typeof e.detail === "string" ? e.detail : `Download failed (${res.status})`);
     return;
   }
   const blob = await res.blob();
@@ -335,7 +336,7 @@ export function HomeTab() {
       file: {
         key: "file", label: "File", text: () => "",
         render: (r) =>
-          r.pdfUrl ? (
+          r.pdfUrl && canDownload() ? (
             <button
               className="btn sm"
               onClick={(e) => {

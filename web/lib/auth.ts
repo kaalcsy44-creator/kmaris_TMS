@@ -5,6 +5,7 @@ const USER_KEY = "ktms_user";
 const PERMS_KEY = "ktms_perms";
 const SCOPE_KEY = "ktms_scope";
 const EDIT_SCOPE_KEY = "ktms_edit_scope";
+const DOWNLOAD_KEY = "ktms_download";
 
 export type AuthUser = {
   id: number;
@@ -93,6 +94,13 @@ export function canEditAnyDeal(): boolean {
   return localStorage.getItem(EDIT_SCOPE_KEY) === "all";
 }
 
+/** 파일(PDF·XLSX·첨부) 내려받기 허용 여부 — 꺼진 역할(Viewer 기본)은 목록·화면만. */
+export function canDownload(): boolean {
+  if (isAdmin()) return true;
+  if (typeof window === "undefined") return true;
+  return localStorage.getItem(DOWNLOAD_KEY) !== "0";
+}
+
 /** 본인 담당 건만 강제로 보이는 역할인지(데이터 범위 own). */
 export function isOwnScoped(): boolean {
   return dataScope() === "own" && !isAdmin();
@@ -116,6 +124,7 @@ export function clearAuth(): void {
   localStorage.removeItem(PERMS_KEY);
   localStorage.removeItem(SCOPE_KEY);
   localStorage.removeItem(EDIT_SCOPE_KEY);
+  localStorage.removeItem(DOWNLOAD_KEY);
 }
 
 function storeAuth(data: {
@@ -124,6 +133,7 @@ function storeAuth(data: {
   permissions?: PermGrid;
   scope?: string;
   edit_scope?: string;
+  download?: boolean;
 }): void {
   if (data.token) localStorage.setItem(TOKEN_KEY, data.token);
   if (data.user) localStorage.setItem(USER_KEY, JSON.stringify(data.user));
@@ -131,6 +141,7 @@ function storeAuth(data: {
     localStorage.setItem(PERMS_KEY, JSON.stringify(data.permissions));
   if (data.scope) localStorage.setItem(SCOPE_KEY, data.scope);
   if (data.edit_scope) localStorage.setItem(EDIT_SCOPE_KEY, data.edit_scope);
+  if (typeof data.download === "boolean") localStorage.setItem(DOWNLOAD_KEY, data.download ? "1" : "0");
 }
 
 export async function login(
@@ -152,6 +163,7 @@ export async function login(
     permissions?: PermGrid;
     scope?: string;
     edit_scope?: string;
+    download?: boolean;
   };
   storeAuth(data);
   return data.user;
@@ -166,8 +178,12 @@ export async function refreshPermissions(): Promise<void> {
     cache: "no-store",
   });
   if (!res.ok) return;
-  const data = (await res.json()) as { permissions?: PermGrid; scope?: string; edit_scope?: string };
-  storeAuth({ permissions: data.permissions, scope: data.scope, edit_scope: data.edit_scope });
+  const data = (await res.json()) as {
+    permissions?: PermGrid; scope?: string; edit_scope?: string; download?: boolean;
+  };
+  storeAuth({
+    permissions: data.permissions, scope: data.scope, edit_scope: data.edit_scope, download: data.download,
+  });
 }
 
 export function logout(): void {

@@ -312,6 +312,8 @@ _MIGRATIONS = {
     "role_permissions": {
         # 편집 범위 — "all" 이면 PIC 가 아닌 딜도 수정·삭제(Manager 등급).
         "edit_scope": "VARCHAR(8) DEFAULT 'own'",
+        # 파일 내려받기 허용(False = 목록만 — Viewer 기본).
+        "download": "BOOLEAN DEFAULT TRUE",
     },
     "delivery_proofs": {
         "ci_id": "INTEGER",      # 포장별 POD — NULL = 오더 전체
