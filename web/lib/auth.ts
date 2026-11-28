@@ -4,6 +4,7 @@ const TOKEN_KEY = "ktms_token";
 const USER_KEY = "ktms_user";
 const PERMS_KEY = "ktms_perms";
 const SCOPE_KEY = "ktms_scope";
+const EDIT_SCOPE_KEY = "ktms_edit_scope";
 
 export type AuthUser = {
   id: number;
@@ -30,7 +31,7 @@ export function getUser(): AuthUser | null {
   return raw ? (JSON.parse(raw) as AuthUser) : null;
 }
 
-/** 현재 사용자 역할(admin | sales | viewer). 비로그인 시 빈 문자열. */
+/** 현재 사용자 역할(admin | manager | sales | viewer). 비로그인 시 빈 문자열. */
 export function getRole(): string {
   return getUser()?.role ?? "";
 }
@@ -51,7 +52,7 @@ export function getUserId(): number {
  * (백엔드가 최종 강제하며, 이 함수는 UI 버튼 활성/비활성용.)
  */
 export function canEditDeal(assigneeId: number | null | undefined): boolean {
-  if (isAdmin()) return true;
+  if (canEditAnyDeal()) return true;
   if (assigneeId == null || assigneeId === 0) return true; // 담당자 미지정 = 열림(백엔드와 일치)
   return getUserId() === assigneeId;
 }
@@ -85,6 +86,13 @@ export function dataScope(): "own" | "all" {
   return localStorage.getItem(SCOPE_KEY) === "own" ? "own" : "all";
 }
 
+/** 편집 범위 — PIC 가 아닌 딜도 수정·삭제할 수 있는가(admin·Manager 등 edit_scope=all). */
+export function canEditAnyDeal(): boolean {
+  if (isAdmin()) return true;
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(EDIT_SCOPE_KEY) === "all";
+}
+
 /** 본인 담당 건만 강제로 보이는 역할인지(데이터 범위 own). */
 export function isOwnScoped(): boolean {
   return dataScope() === "own" && !isAdmin();
@@ -107,6 +115,7 @@ export function clearAuth(): void {
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(PERMS_KEY);
   localStorage.removeItem(SCOPE_KEY);
+  localStorage.removeItem(EDIT_SCOPE_KEY);
 }
 
 function storeAuth(data: {
@@ -114,12 +123,14 @@ function storeAuth(data: {
   user?: AuthUser;
   permissions?: PermGrid;
   scope?: string;
+  edit_scope?: string;
 }): void {
   if (data.token) localStorage.setItem(TOKEN_KEY, data.token);
   if (data.user) localStorage.setItem(USER_KEY, JSON.stringify(data.user));
   if (data.permissions)
     localStorage.setItem(PERMS_KEY, JSON.stringify(data.permissions));
   if (data.scope) localStorage.setItem(SCOPE_KEY, data.scope);
+  if (data.edit_scope) localStorage.setItem(EDIT_SCOPE_KEY, data.edit_scope);
 }
 
 export async function login(
@@ -140,6 +151,7 @@ export async function login(
     user: AuthUser;
     permissions?: PermGrid;
     scope?: string;
+    edit_scope?: string;
   };
   storeAuth(data);
   return data.user;
@@ -154,8 +166,8 @@ export async function refreshPermissions(): Promise<void> {
     cache: "no-store",
   });
   if (!res.ok) return;
-  const data = (await res.json()) as { permissions?: PermGrid; scope?: string };
-  storeAuth({ permissions: data.permissions, scope: data.scope });
+  const data = (await res.json()) as { permissions?: PermGrid; scope?: string; edit_scope?: string };
+  storeAuth({ permissions: data.permissions, scope: data.scope, edit_scope: data.edit_scope });
 }
 
 export function logout(): void {

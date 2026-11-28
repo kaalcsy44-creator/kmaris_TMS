@@ -70,6 +70,8 @@ from _core import (
     _read_company_profile,
     _reload_perms,
     _scope_for,
+    _edit_scope_for,
+    EDITABLE_ROLES,
     _write_company_profile,
     _doc_file_response,
     app,
@@ -3180,14 +3182,14 @@ def settings_permissions(user: dict = Depends(get_current_user)):
     """역할별 권한 매트릭스(admin 전용 조회). admin 행은 전체 고정(편집 불가)."""
     if user.get("role") != UserRole.ADMIN.value:
         raise HTTPException(status_code=403, detail="Admin only")
-    editable = [UserRole.SALES.value, UserRole.VIEWER.value]
     roles = [{
         "role": UserRole.ADMIN.value, "perms": _full_perms(True),
-        "scope": "all", "editable": False,
+        "scope": "all", "edit_scope": "all", "editable": False,
     }]
-    for r in editable:
+    for r in EDITABLE_ROLES:
         roles.append({
-            "role": r, "perms": _perms_for(r), "scope": _scope_for(r), "editable": True,
+            "role": r, "perms": _perms_for(r), "scope": _scope_for(r),
+            "edit_scope": _edit_scope_for(r), "editable": True,
         })
     return {
         "roles": roles,
@@ -3205,9 +3207,10 @@ def update_permissions(body: RolePermSave, user: dict = Depends(get_current_user
     role = (body.role or "").strip()
     if role == UserRole.ADMIN.value:
         raise HTTPException(status_code=400, detail="admin 역할의 권한은 변경할 수 없습니다.")
-    if role not in (UserRole.SALES.value, UserRole.VIEWER.value):
+    if role not in EDITABLE_ROLES:
         raise HTTPException(status_code=400, detail=f"알 수 없는 역할: {role}")
     scope = "own" if body.scope == "own" else "all"
+    edit_scope = "all" if body.edit_scope == "all" else "own"
     perms = _normalize_perms(body.perms)
     s = get_session()
     try:
@@ -3215,14 +3218,17 @@ def update_permissions(body: RolePermSave, user: dict = Depends(get_current_user
         if rp:
             rp.perms = perms
             rp.scope = scope
+            rp.edit_scope = edit_scope
             rp.updated_at = datetime.utcnow()
         else:
-            s.add(RolePermission(role=role, perms=perms, scope=scope))
+            s.add(RolePermission(role=role, perms=perms, scope=scope,
+                                 edit_scope=edit_scope))
         s.commit()
     finally:
         s.close()
     _reload_perms()
-    return {"ok": True, "role": role, "perms": _perms_for(role), "scope": _scope_for(role)}
+    return {"ok": True, "role": role, "perms": _perms_for(role), "scope": _scope_for(role),
+            "edit_scope": _edit_scope_for(role)}
 
 
 @app.get("/api/admin/assignable-users", dependencies=[Depends(require_token)])

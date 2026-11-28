@@ -309,6 +309,10 @@ _MIGRATIONS = {
         # 이 메일을 읽어 온 사서함(sales@·samcho@…) — 첨부를 다시 받을 때 열 곳.
         "received_account": "VARCHAR(200)",
     },
+    "role_permissions": {
+        # 편집 범위 — "all" 이면 PIC 가 아닌 딜도 수정·삭제(Manager 등급).
+        "edit_scope": "VARCHAR(8) DEFAULT 'own'",
+    },
     "delivery_proofs": {
         "ci_id": "INTEGER",      # 포장별 POD — NULL = 오더 전체
     },
@@ -1125,6 +1129,22 @@ def migrate_widen_activity_type():
     print("[OK] marketing_activities.activity_type widened to VARCHAR(200).")
 
 
+def migrate_userrole_manager():
+    """users.role 의 PG enum(userrole)에 MANAGER 추가. 멱등(IF NOT EXISTS).
+
+    SQLAlchemy Enum 은 멤버 '이름'을 저장하므로 값('manager')이 아닌 'MANAGER'.
+    SQLite 는 enum 을 VARCHAR 로 두므로 no-op."""
+    eng = get_engine()
+    if eng.dialect.name != "postgresql":
+        return
+    with eng.connect() as conn:
+        conn = conn.execution_options(isolation_level="AUTOCOMMIT")
+        exists = conn.execute(text(
+            "SELECT 1 FROM pg_type WHERE typname='userrole'")).first()
+        if exists:
+            conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'MANAGER'"))
+
+
 def migrate_widen_close_reason():
     """rfqs.close_reason 을 VARCHAR(200)으로 확장(복수 선택 join 대비).
 
@@ -1861,6 +1881,7 @@ if __name__ == "__main__":
     migrate_vessel_system_categories()
     migrate_widen_activity_type()
     migrate_widen_close_reason()
+    migrate_userrole_manager()
     migrate_widen_specialization()
     migrate_normalize_incoterms()
     migrate_split_stage_dates_to_orders()

@@ -291,10 +291,12 @@ def _sync_schema() -> None:
             migrate_reset_mail_sync_cursor, migrate_seed_mail_groups,
             migrate_split_stage_dates_to_orders, migrate_seed_line_ids,
             migrate_merge_tax_stage, migrate_seed_project_codes, migrate_seed_finance_payees,
+            migrate_userrole_manager,
         )
 
         Base.metadata.create_all(bind=get_engine())
         migrate_columns()
+        migrate_userrole_manager()  # users.role enum 에 MANAGER 추가(멱등)
         migrate_normalize_incoterms()   # 'EXW Busan' 등 기존 incoterms 값 표준 라벨로 1회 정규화
         migrate_split_stage_dates_to_orders()  # 단계 완료 표시를 프로젝트 → 고객 P/O 단위로 이관
         migrate_merge_tax_stage()  # 옛 10단계(Tax Invoice)를 9단계로 흡수 — 저장된 단계 번호 11→10
@@ -462,6 +464,14 @@ def _full_perms(value: bool = True) -> dict:
 # 기본 권한(시드) — 기존 동작과 동일하게 맞춘다.
 def _default_perms(role: str) -> dict:
     biz = ["progress", "mail", "rfq", "po", "documents", "ar", "marketing", "schedule"]
+    if role == UserRole.MANAGER.value:
+        # 팀장: 거래 모듈 전체 + Finance 열람 + Data 등록·수정(삭제 제외).
+        return _perm_grid(lambda m, a: (
+            (m == "dashboard" and a == "view") or
+            (m in biz) or
+            (m == "finance" and a == "view") or
+            (m == "settings" and a != "delete")
+        ))
     if role == UserRole.SALES.value:
         return _perm_grid(lambda m, a: (
             (m == "dashboard" and a == "view") or
@@ -477,6 +487,15 @@ def _default_perms(role: str) -> dict:
 
 def _default_scope(role: str) -> str:
     return "own" if role == UserRole.SALES.value else "all"
+
+
+def _default_edit_scope(role: str) -> str:
+    """편집 범위 기본값 — Manager 만 남의 딜도 고친다."""
+    return "all" if role == UserRole.MANAGER.value else "own"
+
+
+# 권한표에서 편집할 수 있는 역할(admin 은 고정 전체 권한이라 제외). 표의 열 순서.
+EDITABLE_ROLES = [UserRole.MANAGER.value, UserRole.SALES.value, UserRole.VIEWER.value]
 
 
 def _normalize_perms(perms: dict | None) -> dict:
@@ -514,6 +533,7 @@ def _reload_perms() -> None:
                 cache[rp.role] = {
                     "perms": _normalize_perms(rp.perms),
                     "scope": rp.scope or _default_scope(rp.role),
+                    "edit_scope": rp.edit_scope or _default_edit_scope(rp.role),
                 }
         finally:
             s.close()
@@ -527,10 +547,11 @@ def _seed_perms() -> None:
     """sales/viewer 기본 권한 행이 없으면 시드(관리자가 편집할 베이스라인)."""
     s = get_session()
     try:
-        for role in (UserRole.SALES.value, UserRole.VIEWER.value):
+        for role in EDITABLE_ROLES:
             if not s.query(RolePermission).filter_by(role=role).first():
                 s.add(RolePermission(role=role, perms=_default_perms(role),
-                                     scope=_default_scope(role)))
+                                     scope=_default_scope(role),
+                                     edit_scope=_default_edit_scope(role)))
         s.commit()
     finally:
         s.close()
@@ -552,6 +573,18 @@ def _scope_for(role: str) -> str:
         return "all"
     entry = _PERM_CACHE.get(role)
     return entry["scope"] if entry else _default_scope(role)
+
+
+def _edit_scope_for(role: str) -> str:
+    if role == UserRole.ADMIN.value:
+        return "all"
+    entry = _PERM_CACHE.get(role)
+    return entry.get("edit_scope", "own") if entry else _default_edit_scope(role)
+
+
+def _edits_any_deal(user: dict) -> bool:
+    """PIC 가 아닌 딜도 수정·삭제할 수 있는 사용자인가(admin·편집 범위 all 역할)."""
+    return _edit_scope_for(user.get("role", "")) == "all"
 
 
 def _can(role: str, module: str, action: str) -> bool:
@@ -774,7 +807,8 @@ async def _perm_guard(request: Request, call_next):
         return _authz_error(request, 403, _PERM_DENY_MSG.get(action, "권한이 없습니다."))
     # 담당(PIC) 소유권 게이트: 비관리자는 본인이 담당인 딜만 편집/삭제(및 하위 등록) 가능.
     # 조회(view)는 기존 데이터 범위 그대로. 대상 딜이 없거나 PIC 미지정이면 통과.
-    if action != "view" and module in ("rfq", "po", "documents", "ar", "marketing", "mail"):
+    if (action != "view" and module in ("rfq", "po", "documents", "ar", "marketing", "mail")
+            and not _edits_any_deal(user)):
         owner = _deal_owner_from_path(request.url.path)
         if owner is not None and owner != (user.get("id") or 0):
             return _authz_error(request, 403, "담당자(PIC)만 이 건을 수정·삭제할 수 있습니다.")
@@ -4333,8 +4367,8 @@ def _schedule_row(e: ScheduleEvent, cust_names: dict, user_names: dict) -> dict:
 
 
 def _schedule_guard(e: ScheduleEvent, user: dict) -> None:
-    """작성자(owner) 또는 admin 만 수정·삭제 가능."""
-    if user.get("role") == UserRole.ADMIN.value:
+    """작성자(owner) 또는 admin·편집 범위 all 역할만 수정·삭제 가능."""
+    if _edits_any_deal(user):
         return
     if (e.owner_id or 0) != (user.get("id") or 0):
         raise HTTPException(status_code=403, detail="작성자(PIC)만 이 일정을 수정·삭제할 수 있습니다.")
@@ -4953,6 +4987,7 @@ class RolePermSave(BaseModel):
     role: str
     perms: dict
     scope: str = "all"
+    edit_scope: str = "own"
 
 
 class PasswordChangeReq(BaseModel):

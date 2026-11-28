@@ -407,7 +407,7 @@ export type SettingsUser = {
   id: number;
   username: string;
   email: string;
-  role: "admin" | "sales" | "viewer" | string;
+  role: "admin" | "manager" | "sales" | "viewer" | string;
   is_active: boolean;
 };
 

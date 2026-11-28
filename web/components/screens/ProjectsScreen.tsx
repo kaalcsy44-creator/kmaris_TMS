@@ -73,7 +73,7 @@ import DriveFolderChip from "@/components/common/DriveFolderChip";
 import DealPartiesLine from "@/components/common/DealPartiesLine";
 import FloatingHScroll from "@/components/common/FloatingHScroll";
 import { tr } from "@/lib/labels";
-import { getUser, can, isOwnScoped, isAdmin } from "@/lib/auth";
+import { getUser, can, isOwnScoped, canEditAnyDeal } from "@/lib/auth";
 
 // 고객확인용 7단계(RFQ 3 + Order 4) — 내부확인용과 동일한 표를 쓰되 단계만 7개.
 const CUSTOMER_STEPS = [
@@ -2560,8 +2560,9 @@ export function PipelineModal({
     if (!r.cancelled) setReasonOpen(true);
     else setReactivateOpen(true);
   }
-  // 담당자(PIC) 재지정 — 우측 상단 PIC 칩에서 어느 단계에서도 변경(admin 전용).
-  const canEditPic = !isNewProject && isAdmin();
+  // 담당자(PIC) 재지정 — 우측 상단 PIC 칩에서 어느 단계에서도 변경
+  // (admin·Manager — 남의 딜도 고칠 수 있는 역할만, 인수인계용).
+  const canEditPic = !isNewProject && canEditAnyDeal() && can("rfq", "edit");
   const [picUsers, setPicUsers] = useState<{ id: number; username: string }[]>([]);
   const [picBusy, setPicBusy] = useState(false);
   useEffect(() => {

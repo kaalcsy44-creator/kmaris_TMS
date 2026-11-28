@@ -2763,6 +2763,10 @@ table.mini.wide td.ms-actcol {
   background: #eae3f7;
   color: #6b3fa3;
 }
+.role-badge.role-manager {
+  background: #e2f3ee;
+  color: #1f7a5c;
+}
 .role-badge.role-sales {
   background: #e3eefb;
   color: #245fa8;
@@ -2860,6 +2864,7 @@ table.mini.wide td.ms-actcol {
   border-bottom: 1px solid var(--line);
 }
 .perm-card-head.role-admin { background: #f3eefb; color: #6b3fa3; }
+.perm-card-head.role-manager { background: #edf8f4; color: #1f7a5c; }
 .perm-card-head.role-sales { background: #eef4fc; color: #245fa8; }
 .perm-card-head.role-viewer { background: #f4f6f9; color: #5c6b7d; }
 .perm-locked {
@@ -2896,6 +2901,7 @@ table.perm-matrix th.perm-role {
   border-bottom: 1px solid var(--line);
 }
 table.perm-matrix th.perm-role.role-admin { background: #f3eefb; color: #6b3fa3; }
+table.perm-matrix th.perm-role.role-manager { background: #edf8f4; color: #1f7a5c; }
 table.perm-matrix th.perm-role.role-sales { background: #eef4fc; color: #245fa8; }
 table.perm-matrix th.perm-role.role-viewer { background: #f4f6f9; color: #5c6b7d; }
 table.perm-matrix th.perm-role,

@@ -2661,6 +2661,7 @@ export type RolePermRow = {
   role: string;
   perms: PermGrid;
   scope: "own" | "all";
+  edit_scope: "own" | "all";
   editable: boolean;
 };
 export type PermissionsConfig = {
@@ -2677,7 +2678,8 @@ export function updateRolePermissions(body: {
   role: string;
   perms: PermGrid;
   scope: string;
-}): Promise<{ ok: boolean; role: string; perms: PermGrid; scope: string }> {
+  edit_scope: string;
+}): Promise<{ ok: boolean; role: string; perms: PermGrid; scope: string; edit_scope: string }> {
   return put("/api/admin/settings/permissions", body);
 }
 

@@ -12,6 +12,7 @@ from _core import (
     User,
     _make_jwt,
     _perms_for,
+    _edit_scope_for,
     _scope_for,
     app,
     bcrypt,
@@ -36,7 +37,8 @@ def admin_login(body: LoginRequest):
         u = {"id": user.id, "username": user.username,
              "role": role, "email": user.email or ""}
         return {"token": _make_jwt(u), "user": u,
-                "permissions": _perms_for(role), "scope": _scope_for(role)}
+                "permissions": _perms_for(role), "scope": _scope_for(role),
+                "edit_scope": _edit_scope_for(role)}
     finally:
         s.close()
 
@@ -54,6 +56,7 @@ def my_permissions(user: dict = Depends(get_current_user)):
         "role": role,
         "permissions": _perms_for(role),
         "scope": _scope_for(role),
+        "edit_scope": _edit_scope_for(role),
         "modules": PERM_MODULES,
         "actions": PERM_ACTIONS,
         "view_only": sorted(PERM_VIEW_ONLY),

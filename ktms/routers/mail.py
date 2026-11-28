@@ -22,6 +22,7 @@ from _core import (
     RFQ,
     UserRole,
     Vendor,
+    _edits_any_deal,
     _project_no_map,
     app,
     cached_aggregate,
@@ -36,7 +37,7 @@ def _deny_unless_pic(s, rfq_id: int | None, user: dict) -> None:
 
     경로의 딜은 미들웨어(_perm_guard)가 이미 지킨다 — 이건 본문 쪽 딜 몫이다.
     admin·PIC 미지정 딜은 통과(미들웨어와 같은 규칙)."""
-    if not rfq_id or user.get("role") == UserRole.ADMIN.value:
+    if not rfq_id or _edits_any_deal(user):
         return
     r = s.query(RFQ.created_by).filter_by(id=rfq_id).first()
     if r and r[0] and r[0] != (user.get("id") or 0):

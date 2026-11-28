@@ -473,6 +473,7 @@ const EMPTY_USER: SettingsUser = { id: 0, username: "", email: "", role: "sales"
 // (예전 범례는 손으로 적은 목록이라 권한표를 바꾸면 말이 어긋났다).
 const ROLE_INFO: { key: string; title: string; purpose: string }[] = [
   { key: "admin", title: "Admin", purpose: "Full access · manages users & permissions" },
+  { key: "manager", title: "Manager", purpose: "Team lead · works every deal · no user/permission admin" },
   { key: "sales", title: "Sales", purpose: "Works deals · edits only deals where they are PIC" },
   { key: "viewer", title: "Viewer", purpose: "Looks only · as granted below" },
 ];
@@ -552,6 +553,7 @@ function UsersTab() {
           <span>Role</span>
           <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
             <option value="admin">admin</option>
+            <option value="manager">manager</option>
             <option value="sales">sales</option>
             <option value="viewer">viewer</option>
           </select>
@@ -612,7 +614,7 @@ function UsersTab() {
             + Add user
           </button>
           <span className="up-section-sub">
-            Role permissions apply to every account with that role · non-admins edit/delete only deals where they are PIC
+            Role permissions apply to every account with that role · Edit scope decides who may edit/delete deals they are not PIC of
           </span>
         </div>
         {editor}
@@ -678,6 +680,7 @@ const ACTION_LABEL: Record<string, string> = {
 };
 const PERM_ROLE_LABEL: Record<string, string> = {
   admin: "Admin",
+  manager: "Manager",
   sales: "Sales",
   viewer: "Viewer",
 };
@@ -698,15 +701,15 @@ function RolePermissions({
   onAddUser: (role: string) => void;
 }) {
   const [cfg, setCfg] = useState<PermissionsConfig | null>(null);
-  const [draft, setDraft] = useState<Record<string, { perms: PermGrid; scope: string }>>({});
+  const [draft, setDraft] = useState<Record<string, { perms: PermGrid; scope: string; edit_scope: string }>>({});
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
   function loadInto(c: PermissionsConfig) {
-    const d: Record<string, { perms: PermGrid; scope: string }> = {};
+    const d: Record<string, { perms: PermGrid; scope: string; edit_scope: string }> = {};
     c.roles.filter((r) => r.editable).forEach((r) => {
-      d[r.role] = { perms: clonePerms(r.perms), scope: r.scope };
+      d[r.role] = { perms: clonePerms(r.perms), scope: r.scope, edit_scope: r.edit_scope || "own" };
     });
     setDraft(d);
   }
@@ -748,6 +751,13 @@ function RolePermissions({
     setMsg("");
   }
 
+  function setEditScope(role: string, edit_scope: string) {
+    setDraft((prev) =>
+      prev[role] ? { ...prev, [role]: { ...prev[role], edit_scope } } : prev
+    );
+    setMsg("");
+  }
+
   // 편집 가능한 역할(sales·viewer)을 한 번에 저장한다 — 표가 하나라 저장 버튼도 하나.
   async function saveAll() {
     const roleKeys = Object.keys(draft);
@@ -758,13 +768,20 @@ function RolePermissions({
     try {
       for (const role of roleKeys) {
         const d = draft[role];
-        await updateRolePermissions({ role, perms: d.perms, scope: d.scope });
+        await updateRolePermissions({ role, perms: d.perms, scope: d.scope, edit_scope: d.edit_scope });
       }
       // Reset 이 방금 저장한 값으로 돌아가게 기준값도 갱신.
       setCfg({
         ...cfg,
         roles: cfg.roles.map((r) =>
-          draft[r.role] ? { ...r, perms: clonePerms(draft[r.role].perms), scope: draft[r.role].scope as RolePermRow["scope"] } : r
+          draft[r.role]
+            ? {
+                ...r,
+                perms: clonePerms(draft[r.role].perms),
+                scope: draft[r.role].scope as RolePermRow["scope"],
+                edit_scope: draft[r.role].edit_scope as RolePermRow["edit_scope"],
+              }
+            : r
         ),
       });
       setMsg("Permissions saved.");
@@ -777,7 +794,7 @@ function RolePermissions({
 
   // 역할별 현재 값 — 편집 가능한 역할은 초안, admin 은 서버 값(항상 전체).
   const roleState = (row: RolePermRow) =>
-    row.editable ? draft[row.role] : { perms: row.perms, scope: row.scope };
+    row.editable ? draft[row.role] : { perms: row.perms, scope: row.scope, edit_scope: "all" };
   const roles = cfg.roles.filter((r) => roleState(r));
   const nAct = cfg.actions.length;
 
@@ -866,6 +883,42 @@ function RolePermissions({
                             onChange={() => setScope(r.role, "own")}
                           />
                           Own deals only
+                        </label>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+              {/* 편집 범위 — 조회 범위와 별개. "Any deal" 이면 PIC 가 아닌 딜도 수정·삭제(Manager). */}
+              <tr className="perm-scope-row">
+                <td className="perm-mod">
+                  Edit scope
+                  <span className="perm-mod-hint">Whose deals they may edit/delete</span>
+                </td>
+                {roles.map((r) => {
+                  const st = roleState(r)!;
+                  return (
+                    <td key={r.role} colSpan={nAct} className="perm-role-start">
+                      <div className="perm-scope-opts">
+                        <label>
+                          <input
+                            type="radio"
+                            name={`escope-${r.role}`}
+                            checked={st.edit_scope === "all"}
+                            disabled={!r.editable}
+                            onChange={() => setEditScope(r.role, "all")}
+                          />
+                          Any deal
+                        </label>
+                        <label>
+                          <input
+                            type="radio"
+                            name={`escope-${r.role}`}
+                            checked={st.edit_scope !== "all"}
+                            disabled={!r.editable}
+                            onChange={() => setEditScope(r.role, "own")}
+                          />
+                          Own deals (PIC) only
                         </label>
                       </div>
                     </td>

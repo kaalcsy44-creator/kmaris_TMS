@@ -13,8 +13,9 @@ from db.engine import Base
 # ── Enumerations ─────────────────────────────────────────────────────────────
 
 class UserRole(str, enum.Enum):
-    ADMIN  = "admin"
-    SALES  = "sales"
+    ADMIN   = "admin"
+    MANAGER = "manager"   # 2026-11-28: 팀장 — 모든 딜 열람·편집, 사용자·권한 관리는 불가
+    SALES   = "sales"
     VIEWER = "viewer"
 
 
@@ -82,12 +83,14 @@ class RolePermission(Base):
     perms 구조: {module: {action: bool}}
       module ∈ dashboard·progress·rfq·po·documents·ar·settings
       action ∈ view·create·edit·delete
-    scope: 데이터 범위 "own"(본인 담당만) | "all"(전체).
+    scope: 데이터 범위 "own"(본인 담당만) | "all"(전체) — 조회 범위.
+    edit_scope: 편집 범위 "own"(본인이 PIC인 딜만) | "all"(남의 딜도 수정·삭제).
     admin 역할은 항상 전체 권한이므로 저장/적용 대상에서 제외(코드에서 우회)."""
     __tablename__ = "role_permissions"
     role       = Column(String(32), primary_key=True)
     perms      = Column(JSON, default=dict)
     scope      = Column(String(8), default="all")
+    edit_scope = Column(String(8), default="own")
     updated_at = Column(DateTime, default=datetime.utcnow)
 
 
